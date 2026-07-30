@@ -1,6 +1,6 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
-import {render, screen} from '@testing-library/react';
+import {render, screen} from '../test-utils';
 import {usePages, useDriveTemperature, useDriveHealth} from './customHooks';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';

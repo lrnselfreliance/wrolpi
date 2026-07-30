@@ -1,12 +1,15 @@
 import React from 'react';
-import {fireEvent, render, screen} from '@testing-library/react';
-import {MemoryRouter} from 'react-router';
+import {fireEvent, render, screen} from '../test-utils';
 import {SearchFilterButton} from './Files';
-import {QueryContext, ThemeContext} from '../contexts/contexts';
+import {QueryContext} from '../contexts/contexts';
 
 // Render SearchFilterButton with a controlled QueryContext so the search hooks
 // (useSearchFilter/useSearchOrder/useSearchDate/useSearch) can read the URL
 // query params without a real router/provider.
+//
+// `render` here comes from `../test-utils`, which already supplies MantineProvider
+// (needed by components under src/components/ui, e.g. the Toggle/Switch) and a
+// BrowserRouter, plus a default ThemeContext -- so only QueryContext needs wiring here.
 function renderButton(props = {}, initialParams = {}, onUpdateQuery = null) {
     const params = new URLSearchParams(initialParams);
 
@@ -29,17 +32,10 @@ function renderButton(props = {}, initialParams = {}, onUpdateQuery = null) {
             });
             setSearchParams(next);
         };
-        const theme = {
-            i: {}, s: {}, t: {}, theme: 'light', inverted: false, setInverted: () => {},
-        };
         return (
-            <MemoryRouter>
-                <ThemeContext.Provider value={theme}>
-                    <QueryContext.Provider value={{searchParams, updateQuery, getLocationStr: () => '/'}}>
-                        {children}
-                    </QueryContext.Provider>
-                </ThemeContext.Provider>
-            </MemoryRouter>
+            <QueryContext.Provider value={{searchParams, updateQuery, getLocationStr: () => '/'}}>
+                {children}
+            </QueryContext.Provider>
         );
     }
 
@@ -126,7 +122,7 @@ describe('SearchFilterButton', () => {
         fireEvent.click(screen.getByText('Filter'));
         // The Availability section/toggle is shown.
         expect(screen.getByText('Availability')).toBeInTheDocument();
-        fireEvent.mouseUp(screen.getByTestId('toggle'));
+        fireEvent.click(screen.getByTestId('toggle'));
         // Draft only — nothing applied yet.
         expect(spy).not.toHaveBeenCalled();
 
@@ -156,7 +152,7 @@ describe('SearchFilterButton', () => {
         fireEvent.click(screen.getByText('Filter'));
         // The Search Depth section/toggle is shown.
         expect(screen.getByText('Search Depth')).toBeInTheDocument();
-        fireEvent.mouseUp(screen.getByTestId('toggle'));
+        fireEvent.click(screen.getByTestId('toggle'));
         // Draft only — nothing applied yet.
         expect(spy).not.toHaveBeenCalled();
 

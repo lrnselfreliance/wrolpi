@@ -2,7 +2,6 @@ import React from 'react';
 import {
     createMockDomain,
     createTestForm,
-    hasInvertedStyling,
     render,
     renderInDarkMode,
     renderInLightMode,
@@ -210,7 +209,11 @@ describe('CollectionEditForm', () => {
     });
 
     describe('Theme Integration', () => {
-        it('applies inverted styling to Segment in dark mode', () => {
+        // Panel/Header are token-driven (see ui/Surfaces.tsx): their colors come from CSS
+        // variables scoped on `[data-theme]`, not from JS branching on the theme. There is
+        // no more "inverted" prop/class to assert on -- just that the same markup renders
+        // in both modes.
+        it('renders a token-driven Panel in dark mode', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInDarkMode(
@@ -219,12 +222,10 @@ describe('CollectionEditForm', () => {
                 </CollectionEditForm>
             );
 
-            const segment = container.querySelector('.ui.segment');
-            expect(segment).toBeInTheDocument();
-            expect(hasInvertedStyling(segment)).toBe(true);
+            expect(container.querySelector('.wrolpi-panel')).toBeInTheDocument();
         });
 
-        it('does not apply inverted styling in light mode', () => {
+        it('renders a token-driven Panel in light mode', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInLightMode(
@@ -233,12 +234,10 @@ describe('CollectionEditForm', () => {
                 </CollectionEditForm>
             );
 
-            const segment = container.querySelector('.ui.segment');
-            expect(segment).toBeInTheDocument();
-            expect(hasInvertedStyling(segment)).toBe(false);
+            expect(container.querySelector('.wrolpi-panel')).toBeInTheDocument();
         });
 
-        it('applies dark theme styling to Header in dark mode', () => {
+        it('renders a token-driven Header for the title', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInDarkMode(
@@ -247,9 +246,9 @@ describe('CollectionEditForm', () => {
                 </CollectionEditForm>
             );
 
-            const header = container.querySelector('.ui.header');
+            const header = container.querySelector('.wrolpi-header');
             expect(header).toBeInTheDocument();
-            expect(header.style.color).toBe('rgb(238, 238, 238)');  // #eeeeee
+            expect(header).toHaveTextContent('Test Collection');
         });
     });
 

@@ -1,83 +1,52 @@
 import React, {useContext, useEffect, useState} from "react";
-import {
-    AccordionContent,
-    AccordionTitle,
-    BreadcrumbSection,
-    Button as SButton,
-    ButtonGroup,
-    Card,
-    Container,
-    Dimmer,
-    DimmerDimmable,
-    Dropdown,
-    GridColumn,
-    GridRow,
-    Icon as SIcon,
-    IconGroup,
-    Input,
-    Label,
-    Pagination,
-    Search,
-    Transition
-} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
-import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
-    Breadcrumb,
+    Breadcrumbs as UIBreadcrumbs,
     Button,
-    Card as ThemedCard,
+    ButtonGroup,
+    CardGroup,
     Confirm,
-    Form,
     Header,
     Icon,
-    Loader,
+    IconButton,
+    IconStack,
+    Label,
+    Loading,
     Menu,
+    Message,
     Modal,
-    Popup,
-    Segment,
+    Pagination,
+    Panel,
+    SearchBox,
     Statistic,
-    systemTheme,
-    themeChoices
-} from "./Theme";
+    TabBar,
+    tabClassName,
+    TextInput,
+    Toggle as UIToggle,
+    Tooltip,
+} from "./ui";
+import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
+import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
+import {themeChoices} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads, unlockCookies} from "../api";
-import {allFrequencyOptions, HELP_VIEWER_URI, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {allFrequencyOptions, HELP_VIEWER_URI, NAME, validUrlRegex} from "./Vars";
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
-    const handlePageChange = (e, {activePage}) => {
-        onPageChange(activePage);
-    }
+    // Fewer page numbers on a phone: the strip has to fit without wrapping.
+    const pager = (siblingRange) => <Pagination
+        activePage={activePage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        siblingRange={siblingRange}
+        showFirstAndLast={showFirstAndLast}
+    />;
 
     return <>
-        <Media at='mobile'>
-            <Pagination
-                activePage={activePage}
-                boundaryRange={1}
-                onPageChange={handlePageChange}
-                size={size}
-                siblingRange={2}
-                totalPages={totalPages || 1}
-                firstItem={showFirstAndLast ? undefined : null}
-                lastItem={showFirstAndLast ? undefined : null}
-            />
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Pagination
-                activePage={activePage}
-                boundaryRange={1}
-                onPageChange={handlePageChange}
-                size={size}
-                siblingRange={5}
-                totalPages={totalPages || 1}
-                firstItem={showFirstAndLast ? undefined : null}
-                lastItem={showFirstAndLast ? undefined : null}
-            />
-        </Media>
+        <Media at='mobile'>{pager(1)}</Media>
+        <Media greaterThanOrEqual='tablet'>{pager(3)}</Media>
     </>
 }
 
@@ -142,11 +111,9 @@ export function secondsToElapsedPopup(seconds) {
     if (!elapsed) {
         return <></>;
     }
-    return <Popup
-        content={secondsToTimestamp(seconds)}
-        on='hover'
-        trigger={<span>{elapsed}</span>}
-    />
+    return <Tooltip label={secondsToTimestamp(seconds)}>
+        <span>{elapsed}</span>
+    </Tooltip>
 }
 
 export function isoDatetimeToElapsedPopup(dt) {
@@ -161,12 +128,9 @@ export function isoDatetimeToAgoPopup(dt, short = true) {
     if (seconds === 0 || !elapsed) {
         return <></>;
     }
-    const trigger = <span>{isoDatetimeToString(dt)}</span>;
-    return <Popup
-        content={<span>{elapsed} ago</span>}
-        on='hover'
-        trigger={trigger}
-    />
+    return <Tooltip label={`${elapsed} ago`}>
+        <span>{isoDatetimeToString(dt)}</span>
+    </Tooltip>
 }
 
 export function secondsToHMS(totalSeconds) {
@@ -431,86 +395,37 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', clearDisabled = null, inputRef = null) => {
+/**
+ * Shared behaviour for the search inputs: keep a local value so typing is not
+ * throttled by the parent, but follow `searchStr` when it changes underneath.
+ */
+const useSearchValue = (searchStr, onChange) => {
     const [value, setValue] = useState(searchStr || '');
-    const [submitted, setSubmitted] = useState(false);
 
     React.useEffect(() => {
-        // `searchStr` is the source of truth from the parent (often an async URL query param).
-        // Depend ONLY on `searchStr` -- never on `value` -- otherwise a transient render where the
-        // local `value` has advanced (e.g. "ex") but `searchStr` still trails ("e") fires this
-        // effect and reverts `value`, garbling fast typing (flaky filter test).
+        // `searchStr` is the source of truth from the parent (often an async URL query
+        // param).  Depend ONLY on `searchStr` -- never on `value` -- otherwise a transient
+        // render where the local `value` has advanced ("ex") but `searchStr` still trails
+        // ("e") fires this effect and reverts `value`, garbling fast typing.
         if ((searchStr || '') !== value) {
             setValue(searchStr || '');
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchStr]);
 
-    const handleChange = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setValue(e.target.value);
-        setSubmitted(false);
+    const handleChange = (newValue) => {
+        setValue(newValue);
         if (onChange) {
             // Try to call the remote function, don't let its failure break this.
             try {
-                onChange(e.target.value);
+                onChange(newValue);
             } catch (e) {
-                console.error(`Call to ${onChange} failed`);
+                console.error('Call to onChange failed', e);
             }
         }
     }
 
-    const handleClearSearch = (e) => {
-        e.preventDefault();
-        // Clear the input when the "clear" button is clicked, search again.
-        setValue('');
-        setSubmitted(false);
-        if (onSubmit) {
-            onSubmit('');
-        }
-        if (onClear) {
-            onClear();
-        }
-    }
-
-    const localOnSubmit = (e) => {
-        // Send the value up when submitting.
-        e.preventDefault();
-        setSubmitted(true);
-        if (onSubmit) {
-            onSubmit(value);
-        } else {
-            console.debug('No onSubmit defined');
-        }
-    }
-
-    const clearButton = <Button
-        icon='close'
-        size={size}
-        onClick={handleClearSearch}
-        type='button'
-        // If `clearDisabled` is provided, use it to disable the clear button.  Fallback to disabling if there is no
-        // search value.
-        disabled={clearDisabled !== null ? clearDisabled : !!!value}
-        className='search-clear'
-    />;
-
-    // Can only clear after submitting.
-    let action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
-
-    const input = <Input fluid
-                         placeholder={placeholder}
-                         type='text'
-                         onChange={handleChange}
-                         value={value}
-                         size={size}
-                         className='search-input'
-                         action={action}
-                         ref={inputRef}
-    />;
-
-    return {value, submitted, clearButton, input, localOnSubmit, handleChange}
+    return {value, setValue, handleChange};
 }
 
 export function SearchInput({
@@ -518,18 +433,30 @@ export function SearchInput({
                                 onSubmit,
                                 onChange,
                                 onClear,
-                                size = 'small',
                                 placeholder = 'Search...',
-                                icon = 'search',
                                 inputRef = null,
                                 ...props
                             }) {
-    // A Semantic <Input> with a Clear button as the action.
-    let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, null, inputRef);
+    const {value, setValue, handleChange} = useSearchValue(searchStr, onChange);
 
-    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
-        {input}
-    </Form>
+    const handleClear = () => {
+        setValue('');
+        if (onClear) {
+            onClear();
+        }
+    }
+
+    return <div className='search-container' {...props}>
+        <SearchBox
+            value={value}
+            onChange={handleChange}
+            onSubmit={onSubmit}
+            onClear={handleClear}
+            placeholder={placeholder}
+            inputRef={inputRef}
+            clearable
+        />
+    </div>
 }
 
 export function SearchResultsInput({
@@ -537,66 +464,54 @@ export function SearchResultsInput({
                                        onSubmit,
                                        onClear = null,
                                        onChange = null,
-                                       size = 'small',
                                        placeholder = 'Search...',
-                                       icon = 'search',
-                                       action,
-                                       actionIcon,
                                        clearable = false,
                                        clearDisabled = null,
                                        results = undefined,
                                        handleResultSelect = null,
-                                       resultRenderer = undefined,
                                        loading = false,
                                        inputRef = null,
                                        ...props
                                    }) {
-    // A Semantic <Search> input with a Clear button.
-    let {
-        value,
-        clearButton,
-        localOnSubmit,
-        handleChange,
-    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, clearDisabled);
+    const {value, setValue, handleChange} = useSearchValue(searchStr, onChange);
 
-    // Show a "Loading" message rather than "No results" while results are pending.
-    const loadingResults = {'loading': {name: 'Loading', results: [{title: 'Results are pending...'}]}};
-
-    const localHandleResultSelect = (e, data) => {
-        if (e) {
-            e.preventDefault();
+    const handleClear = () => {
+        setValue('');
+        if (onClear) {
+            onClear();
         }
+    }
+
+    const localHandleResultSelect = (result) => {
         if (handleResultSelect) {
-            console.debug(`Selected result`, data);
-            handleResultSelect(data);
+            handleResultSelect(result);
         } else {
             console.error('No handleResultSelect defined!');
         }
     }
 
-    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
-        <Search category
-                input={{fluid: true, icon: icon, ref: inputRef}}
-                placeholder={placeholder}
-                type='text'
-                onSearchChange={handleChange}
-                onResultSelect={localHandleResultSelect}
-                value={value}
-                size={size}
-                results={_.isEmpty(results) ? loadingResults : results}
-                resultRenderer={resultRenderer}
-                className='search-input'
-                loading={loading}
+    return <div className='search-container' {...props}>
+        <SearchBox
+            value={value}
+            onChange={handleChange}
+            onSubmit={onSubmit}
+            onResultSelect={localHandleResultSelect}
+            onClear={handleClear}
+            results={results}
+            loading={loading}
+            placeholder={placeholder}
+            clearable={clearable}
+            clearDisabled={clearDisabled}
+            inputRef={inputRef}
         />
-        {clearable === true && <div style={{marginLeft: '1em'}}>{clearButton}</div>}
-    </Form>
+    </div>
 }
 
 export function WROLModeMessage({content}) {
     const wrolModeEnabled = useWROLMode();
 
     if (wrolModeEnabled) {
-        return <Message icon='lock' header='WROL Mode Enabled' content={content}/>
+        return <Message kind='warning' icon='lock' title='WROL Mode Enabled'>{content}</Message>
     }
     return null;
 }
@@ -606,8 +521,9 @@ export function DownloadWindowMessage() {
     const downloads = status ? status.downloads : null;
 
     if (downloads && downloads.outside_download_window) {
-        return <Message icon='clock outline' header='Outside Download Window'
-                        content='Downloads are paused because the current time is outside the configured download window.'/>
+        return <Message kind='info' icon='history' title='Outside Download Window'>
+            Downloads are paused because the current time is outside the configured download window.
+        </Message>
     }
     return null;
 }
@@ -617,8 +533,10 @@ export function DailyLimitMessage() {
     const downloads = status ? status.downloads : null;
 
     if (downloads && downloads.daily_limit_reached && !downloads.disabled && !downloads.stopped) {
-        return <Message icon='pause circle outline' header='Max Daily Downloads Reached'
-                        content='Downloads are paused because the daily download limit has been reached. Downloads will resume tomorrow.'/>
+        return <Message kind='info' icon='stop' title='Max Daily Downloads Reached'>
+            Downloads are paused because the daily download limit has been reached. Downloads will
+            resume tomorrow.
+        </Message>
     }
     return null;
 }
@@ -653,27 +571,26 @@ export function CookiesUnlockModal({open, onClose, onSuccess}) {
     return <Modal open={open} onClose={onClose} size='tiny'>
         <Modal.Header>Unlock Cookies</Modal.Header>
         <Modal.Content>
-            <Form>
-                <Form.Input
-                    input={{ref: passwordRef}}
-                    label='Password'
-                    type='password'
-                    placeholder='Enter your encryption password'
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
-                />
-            </Form>
+            <TextInput
+                ref={passwordRef}
+                label='Password'
+                type='password'
+                placeholder='Enter your encryption password'
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+            />
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
             <Button
-                color='green'
+                role='save'
+                icon='unlock'
                 onClick={handleUnlock}
                 loading={submitting}
                 disabled={!password || submitting}
             >
-                <SIcon name='unlock'/> Unlock
+                Unlock
             </Button>
         </Modal.Actions>
     </Modal>;
@@ -691,16 +608,12 @@ export function CookiesLockedMessage() {
     }
 
     return <>
-        <Message warning icon>
-            <SIcon name='lock'/>
-            <Message.Content>
-                <Message.Header>Cookies Locked</Message.Header>
-                You have encrypted cookies stored, but they are currently locked.
-                <a style={{marginLeft: '0.5em', cursor: 'pointer'}}
-                   onClick={() => setModalOpen(true)}>
-                    <SIcon name='unlock'/> Unlock Cookies
-                </a>
-            </Message.Content>
+        <Message kind='warning' icon='lock' title='Cookies Locked'>
+            You have encrypted cookies stored, but they are currently locked.
+            <Button role='cancel' icon='unlock' size='xs' style={{marginLeft: '0.7em'}}
+                    onClick={() => setModalOpen(true)}>
+                Unlock Cookies
+            </Button>
         </Message>
 
         <CookiesUnlockModal open={modalOpen} onClose={() => setModalOpen(false)}/>
@@ -722,53 +635,34 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links, right}) {
-    return <Menu tabular>
+    return <TabBar right={right}>
         {links.map((link) => <NavLink
             to={link.to}
-            style={{padding: '1em'}}
             key={link.to}
             end={link.end === true ? true : null}
-            className={({isActive}) => {
-                const active = link.isActive ? link.isActive() : isActive;
-                return active ? 'item active' : 'item';
-            }}
+            className={({isActive}) => tabClassName(link.isActive ? link.isActive() : isActive)}
         >
             {link.text}
         </NavLink>)}
-        {right &&
-            <Menu.Menu position='right'>
-                <Menu.Item style={{padding: '0.5em'}}>{right}</Menu.Item>
-            </Menu.Menu>}
-    </Menu>
+    </TabBar>
 }
 
 export function PageContainer(props) {
     return <>
         <Media at='mobile'>
-            <Container style={{marginTop: '1em', padding: 0}}>
-                {props.children}
-            </Container>
+            <div style={{marginTop: '1em', padding: 0}}>{props.children}</div>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
-                {props.children}
-            </Container>
+            <div style={{marginTop: '1em', padding: '1em'}}>{props.children}</div>
         </Media>
     </>;
 }
 
 export function CardGroupCentered(props) {
+    // One responsive grid; it centres what it cannot fill, so the two viewports no
+    // longer need separate markup.
     return <div style={{marginTop: '1em'}}>
-        <Media at='mobile'>
-            <Card.Group centered>
-                {props.children}
-            </Card.Group>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Card.Group>
-                {props.children}
-            </Card.Group>
-        </Media>
+        <CardGroup>{props.children}</CardGroup>
     </div>
 }
 
@@ -832,14 +726,12 @@ export function findPosterPath(file) {
 }
 
 export function CardPoster({to, file}) {
-    const {s} = useContext(ThemeContext);
     // Used to center posters in CardIcon.
-    const style = {display: 'flex', justifyContent: 'center', ...s['style']};
+    const style = {display: 'flex', justifyContent: 'center'};
     const navigate = useNavigate();
 
-    const cardTagIcon = <div className="ui green left corner label">
-        <i aria-hidden="true" className="tag icon"></i>
-    </div>;
+    // Marks a tagged file, pinned to the poster's corner.
+    const cardTagIcon = <div className='wrolpi-card-tag'><Icon name='tag' size={14} label='Tagged'/></div>;
     let imageLabel = !_.isEmpty(file.tags) ? cardTagIcon : null;
 
     let posterPath = findPosterPath(file);
@@ -872,18 +764,18 @@ export function CardPoster({to, file}) {
         if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {
             // "to" is a downloadable file outside the app, preview the file.
             return <PreviewLink file={file}>
-                <ThemedCard.Icon>
+                <div className='wrolpi-card-icon'>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </ThemedCard.Icon>
+                </div>
             </PreviewLink>
         } else if (!posterPath && to) {
             // Link to the full page in this App.
             return <Link to={to}>
-                <ThemedCard.Icon onClick={() => navigate(to)}>
+                <div className='wrolpi-card-icon' onClick={() => navigate(to)}>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </ThemedCard.Icon>
+                </div>
             </Link>
         }
     }
@@ -899,16 +791,10 @@ export function InfoPopup({
                               iconStyle = { margin: '0.5em'},
                               ...props
                           }) {
-    const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;
-    return <Popup
-        content={content}
-        size={size}
-        position={position}
-        header={header || null}
-        trigger={trigger}
-        hoverable={true}
-        {...props}
-    />
+    return <Tooltip label={header ? <><strong>{header}</strong><br/>{content}</> : content}
+                    multiline w={260} {...props}>
+        <span style={iconStyle}><Icon name={icon} size={iconSize || 'small'}/></span>
+    </Tooltip>
 }
 
 export function InfoHeader({
@@ -946,7 +832,8 @@ export function HelpModal({
     const style = {position: 'relative', height: '75vh', width: '100%', border: 'none'};
 
     return <>
-        <Icon link name={icon} size={iconSize} style={iconStyle} onClick={() => setOpen(true)}/>
+        <IconButton icon={icon} label={title || 'Help'} variant='subtle'
+                    style={iconStyle} onClick={() => setOpen(true)}/>
         <Modal open={open} onClose={() => setOpen(false)} size={modalSize} closeIcon>
             {title && <Modal.Header>{title}</Modal.Header>}
             <Modal.Content>
@@ -1007,12 +894,13 @@ function SubsystemToggle({label, on, onChange, unsupportedMessage, info = null, 
         {confirmStop && <Confirm
             open={confirmOpen}
             onCancel={() => setConfirmOpen(false)}
-            onClose={() => setConfirmOpen(false)}
             onConfirm={handleConfirm}
-            header={confirmStop.header}
-            content={confirmStop.content}
-            confirmButton={confirmStop.button}
-        />}
+            title={confirmStop.header}
+            confirmLabel={confirmStop.button}
+            destructive
+        >
+            {confirmStop.content}
+        </Confirm>}
         <Toggle
             label={label}
             disabled={disabled === null ? unsupported : disabled}
@@ -1095,58 +983,24 @@ export function VncToggle() {
 }
 
 export function Toggle({label, checked, disabled, onChange, icon, popupContent = null, info = null}) {
-    // Custom toggle because Semantic UI does not handle inverted labels correctly.
-    const {t, inverted} = useContext(ThemeContext);
-
-    let style = {marginLeft: '1em'};
-    if (t && t.style) {
-        style = {...t.style, ...style};
-    }
-
-    disabled = disabled === true ? 'disabled' : '';
-
-    let inputClassName = `${disabled} ${inverted}`;
-    let sliderClassName = `${disabled} ${inverted} slider`;
-    if (inverted) {
-        style['color'] = '#dddddd';
-    }
-    if (disabled && inverted) {
-        style['color'] = '#888888';
-    }
-
-    let onMouseUp = () => {
-    };
-    if (onChange) {
-        onMouseUp = (e) => {
-            if (disabled) {
-                return;
-            }
-            e.preventDefault();
-            if (onChange) {
-                onChange(!checked);
-            }
-        }
-    }
-
-    if (icon) {
-        icon = <Icon name={icon}/>
-    }
-
-    const body = <span>
-        <div className='toggle' onMouseUp={onMouseUp}>
-            <input type="checkbox" className={inputClassName} checked={checked} onChange={onMouseUp}
-                   data-testid='toggle'/>
-            <span className={sliderClassName}></span>
-        </div>
-        <span style={style} data-testid='toggle-label'>
-            {icon}
-            {label}
-            {info && <InfoPopup content={info}/>}
-        </span>
-    </span>
+    // Keeps this call signature -- `onChange` receives the new boolean, not an event --
+    // because a dozen call sites are written against it.
+    const body = <span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+        <UIToggle
+            label={<span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+                {icon && <Icon name={icon}/>}
+                {label}
+            </span>}
+            checked={checked === true}
+            disabled={disabled === true}
+            onChange={(e) => onChange && onChange(e.currentTarget.checked)}
+            data-testid='toggle'
+        />
+        {info && <InfoPopup content={info}/>}
+    </span>;
 
     if (popupContent) {
-        return <Popup on='hover' trigger={body} content={popupContent}/>
+        return <Tooltip label={popupContent}>{body}</Tooltip>
     }
     return body
 }
@@ -1170,14 +1024,12 @@ export function DisableDownloadsToggle() {
     }
 
     const on = downloads && downloads['disabled'] === false && downloads['stopped'] === false;
-    return <Form>
-        <Toggle
-            label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
-            disabled={wrolModeEnabled || pending || downloads === null}
-            checked={on === true}
-            onChange={setDownloads}
-        />
-    </Form>;
+    return <Toggle
+        label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
+        disabled={wrolModeEnabled || pending || downloads === null}
+        checked={on === true}
+        onChange={setDownloads}
+    />;
 }
 
 export function emptyToNull(obj) {
@@ -1356,26 +1208,34 @@ export function fileSuffixIconName(filename) {
     return 'file';
 }
 
-export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
-    // Default to a grey file icon.
+export function FileIcon({file, disabled = true, size = 48, ...props}) {
     const {mimetype, path, primary_path} = file;
     // `file` may be a file_group or a file.
     const lowerPath = primary_path ? primary_path.toLocaleString() : path.toLowerCase();
-    props['name'] = mimetypeIconName(mimetype, lowerPath);
-    props['color'] = mimetypeColor(mimetype, lowerPath);
-    return <Icon disabled={disabled} size={size} {...props}/>
+    const name = mimetypeIconName(mimetype, lowerPath);
+    // The mimetype picks a hue; the token picks what that hue is in this theme.
+    const color = mimetypeColor(mimetype, lowerPath);
+    return <Icon
+        name={name}
+        size={size}
+        style={{color: `var(--${color})`, opacity: disabled ? 0.75 : 1}}
+        {...props}
+    />
 }
 
 export function LoadStatistic({label, value, cores, ...props}) {
+    // Load is a warning above half the cores, and a problem above three quarters.
     const quarter = cores / 4;
+    let color;
     if (cores && value >= (quarter * 3)) {
-        props['color'] = 'red';
+        color = 'red';
     } else if (cores && value >= (quarter * 2)) {
-        props['color'] = 'orange';
+        color = 'orange';
     }
     return <Statistic
         label={label}
         value={value ? parseFloat(value).toFixed(1) : '?'}
+        color={color}
         {...props}/>;
 }
 
@@ -1383,23 +1243,29 @@ export function DarkModeToggle() {
     const {savedTheme, setTheme} = useContext(ThemeContext);
     const active = themeChoices.find(i => i.value === savedTheme) || themeChoices[0];
 
-    return <Dropdown
-        item
-        icon={<Icon name={active.icon} style={{margin: 0}}/>}
-        title={`Theme: ${active.text}`}
-        style={{padding: 0, marginRight: '0.8em'}}
-    >
-        <Dropdown.Menu>
-            <Dropdown.Header content='Theme'/>
-            {themeChoices.map(choice => <Dropdown.Item
+    return <Menu position='bottom-end' withinPortal>
+        <Menu.Target>
+            <IconButton
+                icon={active.icon}
+                label={`Theme: ${active.text}`}
+                variant='subtle'
+                style={{marginRight: '0.8em'}}
+            />
+        </Menu.Target>
+        <Menu.Dropdown>
+            <Menu.Label>Theme</Menu.Label>
+            {themeChoices.map(choice => <Menu.Item
                 key={choice.value}
-                icon={choice.icon}
-                text={choice.text}
-                active={choice.value === active.value}
+                leftSection={<Icon name={choice.icon}/>}
                 onClick={() => setTheme(choice.value)}
-            />)}
-        </Dropdown.Menu>
-    </Dropdown>
+                // The chosen theme is marked by weight as well as color, so the mark
+                // survives in the monochrome themes.
+                style={choice.value === active.value ? {fontWeight: 700} : undefined}
+            >
+                {choice.text}
+            </Menu.Item>)}
+        </Menu.Dropdown>
+    </Menu>
 }
 
 
@@ -1408,26 +1274,34 @@ export function UnsupportedModal(header, message, icon) {
     const onOpen = () => setOpen(true);
     const onClose = () => setOpen(false);
 
-    const modal = <Modal basic closeIcon
-                         onOpen={onOpen}
-                         onClose={onClose}
-                         open={open}
-    >
-        <Header>
-            <Icon name={icon || 'exclamation triangle'}/>
-            {header || 'Unsupported'}
-        </Header>
-        <Modal.Content>
-            <Modal.Description>
-                {message}
-            </Modal.Description>
-        </Modal.Content>
+    const modal = <Modal open={open} onClose={onClose} size='tiny'>
+        <Modal.Header>
+            <span style={{display: 'inline-flex', alignItems: 'center', gap: 8}}>
+                <Icon name={icon || 'exclamation triangle'}/>
+                {header || 'Unsupported'}
+            </span>
+        </Modal.Header>
+        <Modal.Content>{message}</Modal.Content>
         <Modal.Actions>
-            <Button basic inverted onClick={onClose}>Ok</Button>
+            <Button role='cancel' onClick={onClose}>Ok</Button>
         </Modal.Actions>
     </Modal>;
 
     return {modal, doClose: onClose, doOpen: onOpen};
+}
+
+/**
+ * The hotspot glyph in the nav bar: a wifi icon with a corner mark for the state.
+ * A button, not an anchor -- every one of these opens a dialog or toggles the
+ * hotspot, and `<a href='#'>` was neither keyboard-honest nor navigable.
+ */
+function HotspotButton({label, corner, on, onClick}) {
+    const wifi = <Icon name='wifi' size='large' style={{opacity: on ? 1 : 0.55}}/>;
+    return <IconButton label={label} variant='subtle' onClick={onClick} icon={() =>
+        corner
+            ? <IconStack corner={<Icon name={corner} size={12}/>} label={label}>{wifi}</IconStack>
+            : wifi
+    }/>
 }
 
 export function HotspotStatusIcon() {
@@ -1459,55 +1333,39 @@ export function HotspotStatusIcon() {
         return <>
             <Confirm open={inUseOpen}
                      onCancel={() => setInUseOpen(false)}
-                     onClose={() => setInUseOpen(false)}
                      onConfirm={handleConfirmInUse}
-                     header='Wifi is in-use'
-                     content={content}
-                     confirmButton='Start Hotspot'
-            />
-            <a href='#' onClick={() => setInUseOpen(true)}>
-                <IconGroup size='large'>
-                    <Icon name='wifi' disabled/>
-                    <Icon corner name='exclamation'/>
-                </IconGroup>
-            </a>
+                     title='Wifi is in-use'
+                     confirmLabel='Start Hotspot'
+            >
+                {content}
+            </Confirm>
+            <HotspotButton label='Wifi is in use; start the hotspot' corner='exclamation'
+                           onClick={() => setInUseOpen(true)}/>
         </>
     } else if (dockerized === false && on === true) {
         return <>
             <Confirm
                 open={stopHotspotOpen}
                 onCancel={() => setStopHotspotOpen(false)}
-                onClose={() => setStopHotspotOpen(false)}
                 onConfirm={handleConfirmStop}
-                header='Stop the hotspot'
-                content='You will be disconnected when using the hotspot. Are you sure?'
-                confirmButton='Stop'
-            />
-            <a href='#' onClick={() => setStopHotspotOpen(true)}>
-                <IconGroup size='large'>
-                    <Icon name='wifi' disabled={on !== true}/>
-                    {on === false && <Icon corner name='x'/>}
-                    {on === null && <Icon corner name='question'/>}
-                </IconGroup>
-            </a>
+                title='Stop the hotspot'
+                confirmLabel='Stop'
+                destructive
+            >
+                You will be disconnected when using the hotspot. Are you sure?
+            </Confirm>
+            <HotspotButton label='Hotspot is on; stop it' on
+                           onClick={() => setStopHotspotOpen(true)}/>
         </>
     } else if (dockerized === false && on === false) {
-        return <a href='#' onClick={() => setHotspot(true)}>
-            <IconGroup size='large'>
-                <Icon name='wifi' disabled/>
-                <Icon corner name='x'/>
-            </IconGroup>
-        </a>
+        return <HotspotButton label='Hotspot is off; start it' corner='x'
+                              onClick={() => setHotspot(true)}/>
     }
 
     // Hotspot is not available, or, status has not yet been fetched.
     return <>
-        <a href='#' onClick={openUnsupportedModal}>
-            <IconGroup size='large'>
-                <Icon name='wifi' disabled/>
-                <Icon corner name='question'/>
-            </IconGroup>
-        </a>
+        <HotspotButton label='Hotspot status is unknown' corner='question'
+                       onClick={openUnsupportedModal}/>
         {unsupportedModal}
     </>
 }
@@ -1566,8 +1424,6 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
             const newDirectory = isDir ? {} : {
                 newDirectory: {
                     name: 'New Directory',
-                    // title must not be null; an unset form field passes a null value and
-                    // Semantic UI's Search crashes reading null.length.
                     results: [{title: directoryName || ''}],
                 }
             };
@@ -1601,21 +1457,15 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         loading,
     ]);
 
-    const handleSearchChange = (e, data) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setDirectoryName(data.value);
+    const handleSearchChange = (value) => {
+        setDirectoryName(value);
     }
 
-    const handleResultSelect = (e, data) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setDirectoryName(data.result.title);
+    const handleResultSelect = (result) => {
+        setDirectoryName(result.title);
         // title is the relative path.
         if (onSelect) {
-            onSelect(data.result.title);
+            onSelect(result.title);
         }
     }
 
@@ -1626,22 +1476,23 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         }
     }
 
-    return <Search category
-                   placeholder='Search directory names...'
-                   onSearchChange={handleSearchChange}
-                   onResultSelect={handleResultSelect}
-                   onBlur={handleBlur}
-                   loading={loading}
-                   value={directoryName || ''}
-                   results={results}
-                   disabled={disabled}
-                   {...props}
+    return <SearchBox
+        placeholder='Search directory names...'
+        onChange={handleSearchChange}
+        onResultSelect={handleResultSelect}
+        onBlur={handleBlur}
+        loading={loading}
+        value={directoryName || ''}
+        results={results}
+        disabled={disabled}
+        required={required}
+        {...props}
     />
 }
 
 export const BackButton = ({...props}) => {
     const navigate = useNavigate();
-    return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
+    return <Button role='cancel' icon='arrow left' onClick={() => navigate(-1)} {...props}>Back</Button>;
 }
 
 export const filterToMimetypes = (filter) => {
@@ -1750,7 +1601,8 @@ export function SortButton({sorts = []}) {
     let sortFields;
     if (sorts && sorts.length) {
         sortFields = sorts.map((i) => {
-            return <Button key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</Button>
+            return <Button key={i['value']} role='cancel' fullWidth
+                           onClick={() => handleSortButton(i['value'])}>{i['text']}</Button>
         })
     }
 
@@ -1764,17 +1616,21 @@ export function SortButton({sorts = []}) {
                 {sortFields}
             </Modal.Content>
         </Modal>
-        <ButtonGroup icon>
-            <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>
-            <Button content={selectedSort['short'] || selectedSort['text']} onClick={() => setOpen(true)}/>
+        <ButtonGroup>
+            <IconButton
+                icon={desc ? 'arrow down' : 'arrow up'}
+                label={desc ? 'Sort descending' : 'Sort ascending'}
+                onClick={() => toggleDesc()}
+            />
+            <Button role='cancel' onClick={() => setOpen(true)}>
+                {selectedSort['short'] || selectedSort['text']}
+            </Button>
         </ButtonGroup>
     </>
 }
 
 export function TagIcon() {
-    return <Label circular color='green' style={{padding: '0.5em', marginRight: '0.5em'}}>
-        <Icon name='tag' style={{margin: 0}}/>
-    </Label>
+    return <Label color='green' icon='tag' className='wrolpi-tag-icon'/>
 }
 
 export function normalizeEstimate(estimate) {
@@ -1805,8 +1661,6 @@ export function useAPIButton(
 
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
-    const [animation, setAnimation] = React.useState('jiggle');
-    const [animationVisible, setAnimationVisible] = React.useState(true);
     const [showSuccess, setShowSuccess] = React.useState(false);
     const [showFailure, setShowFailure] = React.useState(false);
 
@@ -1824,15 +1678,11 @@ export function useAPIButton(
 
     const setSuccess = () => {
         setShowSuccess(true);
-        setAnimation('pulse');
-        setAnimationVisible(!animationVisible);
         setTimeout(reset, 2000);
     }
 
     const setFailure = () => {
         setShowFailure(true);
-        setAnimation('shake');
-        setAnimationVisible(!animationVisible);
         setTimeout(reset, 2000);
     }
 
@@ -1875,50 +1725,50 @@ export function useAPIButton(
         }
     }
 
-    // Create button with or without theme.  Pass all props to the <Button/> (except props.children).
+    // `color` was a Semantic color name; a role carries the meaning instead, and a
+    // caller that really wants a color can still pass one through `props`.
     const buttonArgs = {
-        color, onClick: localOnClick, disabled, loading, size, floated, type,
-        ...props
+        onClick: localOnClick, disabled, loading, type,
+        ...props,
     };
-
     if (id) {
         buttonArgs['id'] = id;
+    }
+    if (!props.color && !props.role) {
+        buttonArgs['role'] = 'primary';
+    }
+
+    // The result is shown as the icon rather than an animation: the outcome should be
+    // legible at a glance, and in night mode a moving element is the last thing wanted.
+    const outcomeIcon = showSuccess ? 'check' : showFailure ? 'close' : null;
+    const outcomeColor = showSuccess ? 'green' : showFailure ? 'red' : undefined;
+    if (outcomeColor) {
+        buttonArgs['color'] = outcomeColor;
     }
 
     let buttonContent = props.children || null;
     if (icon) {
-        // Send Icon as Button properties.
-        buttonContent = null;
-        buttonArgs['icon'] = showSuccess ? 'check' : showFailure ? 'close' : icon;
-    } else if (showSuccess || showFailure) {
-        // Show ✔ or ✖ overtop the contents after API call has completed.
-        buttonContent = <>
-            <Icon style={{position: 'absolute'}} name={showSuccess ? 'check' : 'close'}/>
-            {/* Keep contents to avoid resizing button */}
-            <div style={{opacity: 0}}>{buttonContent}</div>
-        </>
+        // Icon-only: swap the glyph for the outcome.
+        buttonArgs['icon'] = outcomeIcon || icon;
+    } else if (outcomeIcon) {
+        buttonArgs['icon'] = outcomeIcon;
     }
 
-    let button = themed ?
-        <Button ref={ref} {...buttonArgs}>{buttonContent}</Button>
-        : <SButton ref={ref} {...buttonArgs}>{buttonContent}</SButton>;
-    // Wrap button in <Transition/> to show success or failure animations.
-    button = <Transition animation={animation} duration={500} visible={animationVisible}>
-        {button}
-    </Transition>;
+    let button = <Button ref={ref} {...buttonArgs}>{buttonContent}</Button>;
 
     if (confirmContent) {
         // Wrap button with <Confirm/>
         button = <>
             {button}
             <Confirm open={confirmOpen}
-                     content={confirmContent}
-                     onClose={() => setConfirmOpen(false)}
                      onCancel={() => setConfirmOpen(false)}
                      onConfirm={localOnConfirm}
-                     confirmButton={confirmButton}
-                     header={confirmHeader}
-            />
+                     confirmLabel={confirmButton}
+                     title={confirmHeader}
+                     destructive
+            >
+                {confirmContent}
+            </Confirm>
         </>
     }
 
@@ -1971,65 +1821,45 @@ export const useMessageDismissal = (messageName) => {
     }
 }
 
-export function InfoMessage({children, size = null, storageName = null, icon = 'info circle'}) {
+/** A dismissible note.  `storageName` makes the dismissal stick across reloads. */
+function DismissibleMessage({kind, icon, children, storageName}) {
     const {dismissed, setDismissed} = useMessageDismissal(storageName);
 
     if (dismissed) {
         return <React.Fragment/>
     }
 
-    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
+    return <Message
+        kind={kind}
+        icon={icon}
+        onDismiss={storageName ? () => setDismissed(true) : undefined}
+    >
+        {children}
     </Message>
+}
+
+export function InfoMessage({children, size = null, storageName = null, icon = 'warning circle'}) {
+    return <DismissibleMessage kind='info' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function HandPointMessage({children, size = null, storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name='hand point right'/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='info' icon='hand point right' storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function WarningMessage({children, size = null, icon = 'exclamation', storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    // Use color='yellow' because "warning" does not work.
-    return <Message color='yellow' icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='warning' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function ErrorMessage({children, size = null, icon = 'exclamation', storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    return <Message negative icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='error' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 function levenshteinDistance(a, b) {
@@ -2116,8 +1946,7 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
     const [contentAvailable, setContentAvailable] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    const {s} = React.useContext(ThemeContext);
-    fallback = fallback || <pre {...s}>Frame could not load.</pre>;
+    fallback = fallback || <pre>Frame could not load.</pre>;
 
     useEffect(() => {
         const controller = new AbortController();  // To manage fetch timeout
@@ -2148,7 +1977,7 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
         width: '100%',
         border: 'none',
         padding: 0,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'var(--panel)',
     };
     // Allow provided `style` to overwrite.
     mobileStyle = style ? {...mobileStyle, ...style} : mobileStyle;
@@ -2164,9 +1993,8 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
         </Media>
     </>;
 
-    const dimmer = <DimmerDimmable as={Segment} dimmed={true}><Dimmer active><Loader/></Dimmer></DimmerDimmable>;
     return <>
-        {loading ? dimmer
+        {loading ? <Panel><Loading/></Panel>
             : contentAvailable ? iframeMedia
                 : fallback
         }
@@ -2179,26 +2007,21 @@ export function roundDigits(value, decimals = 2) {
 
 
 export function Breadcrumbs({crumbs, size = undefined}) {
-    function getSection(crumb) {
+    function getSection(crumb, index) {
         const {text, link, icon} = crumb;
-        let contents = text;
         if (link) {
-            contents = <Link to={link}>
+            return <Link key={index} to={link} style={{display: 'inline-flex', alignItems: 'center', gap: 4}}>
                 {icon && <Icon name={icon}/>}
                 {text}
             </Link>;
         }
-        return <BreadcrumbSection>{contents}</BreadcrumbSection>
+        return <span key={index}>{text}</span>
     }
 
-    return <Breadcrumb size={size}>
-        {crumbs.map((crumb, index) => (
-            <React.Fragment key={index}>
-                {getSection(crumb)}
-                {index < crumbs.length - 1 && <Breadcrumb.Divider icon='right chevron'/>}
-            </React.Fragment>
-        ))}
-    </Breadcrumb>
+    // The separator is a chevron rather than Semantic's slash, matching the icon set.
+    return <UIBreadcrumbs separator={<Icon name='chevron right' size={14}/>}>
+        {crumbs.map(getSection)}
+    </UIBreadcrumbs>
 }
 
 export function validURL(url) {
@@ -2261,19 +2084,11 @@ export function useLocalStorageInt(key, initialValue) {
 }
 
 export function SimpleAccordion({title = 'Advanced', ...props}) {
-    const [active, setActive] = React.useState(false);
-
-    return <Accordion>
-        <AccordionTitle
-            active={active}
-            onClick={() => setActive(!active)}
-        >
-            <Icon name='dropdown'/>
-            {title}
-        </AccordionTitle>
-        <AccordionContent active={active}>
-            {props.children}
-        </AccordionContent>
+    return <Accordion chevronPosition='left'>
+        <Accordion.Item value='content'>
+            <Accordion.Control>{title}</Accordion.Control>
+            <Accordion.Panel>{props.children}</Accordion.Panel>
+        </Accordion.Item>
     </Accordion>
 }
 
@@ -2381,18 +2196,12 @@ export const RefreshHeader = ({header, headerSize = 'h2', onRefresh, popupConten
     const refreshButton = <APIButton icon='refresh' onClick={onRefresh}/>;
     let popup;
     if (popupContents) {
-        popup = <Popup
-            content={popupContents}
-            on='hover'
-            trigger={refreshButton}
-        />;
+        popup = <Tooltip label={popupContents}>{refreshButton}</Tooltip>;
     }
-    return <Grid columns={2}>
-        <GridRow>
-            <GridColumn>
-                <Header as={headerSize}>{header}</Header>
-            </GridColumn>
-            <GridColumn textAlign='right'>{popup || refreshButton}</GridColumn>
-        </GridRow>
-    </Grid>
+    return <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    }}>
+        <Header as={headerSize}>{header}</Header>
+        {popup || refreshButton}
+    </div>
 }

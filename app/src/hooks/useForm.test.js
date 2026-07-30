@@ -1044,7 +1044,7 @@ describe('Form Components', () => {
                 />
             );
 
-            expect(screen.getByRole('checkbox')).toBeInTheDocument();
+            expect(screen.getByRole('switch')).toBeInTheDocument();
         });
     });
 

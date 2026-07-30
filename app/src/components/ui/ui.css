@@ -275,7 +275,12 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
     top: 100%;
     left: 0;
     right: 0;
-    max-height: 320px;
+    /*
+     * Tall enough for a full set of grouped suggestions -- directories, channels and
+     * domains together run past 320px, and the last group was being clipped -- but
+     * still capped so a long list cannot cover the page.
+     */
+    max-height: min(60vh, 480px);
     overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--border);

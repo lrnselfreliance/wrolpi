@@ -573,6 +573,20 @@ describe('SearchBox', () => {
             expect.objectContaining({title: 'videos/RoseRed'}));
     });
 
+    it('lets a caller render a suggestion its own way', async () => {
+        // The search suggestions render a tag as a chip rather than a line of text; a
+        // dropped resultRenderer loses that presentation silently.
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={results}
+                            onResultSelect={jest.fn()}
+                            resultRenderer={result => <em>{`custom: ${result.title}`}</em>}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+
+        expect(screen.getByText('custom: videos/Wranglerstar').tagName).toBe('EM');
+        // The default title/description markup is replaced, not wrapped.
+        expect(document.querySelector('.wrolpi-searchbox-result-title')).not.toBeInTheDocument();
+    });
+
     it('closes on Escape without clearing what was typed', async () => {
         const onChange = jest.fn();
         renderUI(<SearchBox value='vid' onChange={onChange} results={results}

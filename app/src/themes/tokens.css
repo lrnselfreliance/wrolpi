@@ -173,12 +173,27 @@ body {
  * luminance onto the red channel and drives green and blue to zero.  Nothing
  * a user opens can break their dark adaptation.
  *
- * Tag the media element (or its immediate wrapper) with `.media`.  Never
- * filter an app-level ancestor: a CSS filter creates a containing block, which
- * breaks `position: fixed` descendants like modals and the nav bar.
+ * This targets the element types rather than an opt-in class on purpose: night
+ * mode has to fail safe.  A library of thousands of files reaches the screen
+ * through many components, and one that forgot to opt in would undo half an
+ * hour of dark adaptation.  `.media` stays available for a wrapper that needs
+ * filtering as a unit (a player with custom controls, say).
+ *
+ * Only leaf media is filtered, never an app-level ancestor: a CSS filter
+ * creates a containing block, which would break `position: fixed` descendants
+ * like modals and the nav bar.  These elements have no such descendants — an
+ * iframe's contents are a separate document with their own viewport.
  *
  * Filter definitions live in <MediaFilterDefs/> (mounted once by App).
  */
-html[data-theme="night"] .media {
+html[data-theme="night"] :is(img, video, canvas, iframe, embed, object, .media):not(.night-unfiltered) {
+    filter: url(#wrolpi-night-red);
+}
+
+/*
+ * A filter on an ancestor stops applying once the browser promotes a video to
+ * native fullscreen, so the filter is restated on the fullscreened element.
+ */
+html[data-theme="night"] :fullscreen:not(.night-unfiltered) {
     filter: url(#wrolpi-night-red);
 }

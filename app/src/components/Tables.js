@@ -1,27 +1,26 @@
-import {Table} from "./Theme";
-import {Checkbox, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
+import {Checkbox, Table} from "./ui";
 import React from "react";
 
 export function SelectableTable({headerContents, selectOn, onSelect, selectedKeys, footer, rows}) {
-    footer = footer ? <TableFooter>
-        <TableRow>
+    footer = footer ? <Table.Footer>
+        <Table.Row>
             {footer}
-        </TableRow>
-    </TableFooter> : null;
+        </Table.Row>
+    </Table.Footer> : null;
 
-    return <Table unstackable striped compact='very'>
-        <TableHeader>
-            <TableRow>
-                {selectOn && <TableHeaderCell/>}
-                {headerContents.map(i => <TableHeaderCell key={i}>{i}</TableHeaderCell>)}
-            </TableRow>
-        </TableHeader>
-        <TableBody>
+    return <Table>
+        <Table.Header>
+            <Table.Row>
+                {selectOn && <Table.HeaderCell/>}
+                {headerContents.map(i => <Table.HeaderCell key={i}>{i}</Table.HeaderCell>)}
+            </Table.Row>
+        </Table.Header>
+        <Table.Body>
             {rows.map(row =>
                 <SelectableRow key={row.key} selectOn={selectOn} onSelect={onSelect} selectedKeys={selectedKeys}>
                     {row}
                 </SelectableRow>)}
-        </TableBody>
+        </Table.Body>
         {footer}
     </Table>
 }
@@ -32,19 +31,19 @@ function SelectableRow(props) {
     const c = selectedKeys && selectedKeys.indexOf(key) >= 0;
     let selectCell;
     if (selectOn) {
-        const localOnSelect = (e, {checked}) => {
+        const localOnSelect = (e) => {
             try {
-                onSelect(key, checked);
+                onSelect(key, e.currentTarget.checked);
             } catch (e) {
                 console.error('No onSelect declared');
             }
         };
-        selectCell = <TableCell>
+        selectCell = <Table.Cell>
             <Checkbox onChange={localOnSelect} checked={c}/>
-        </TableCell>;
+        </Table.Cell>;
     }
-    return <TableRow key={key}>
+    return <Table.Row key={key}>
         {selectCell}
         {props.children}
-    </TableRow>
+    </Table.Row>
 }

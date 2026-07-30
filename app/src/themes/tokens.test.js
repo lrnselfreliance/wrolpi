@@ -103,7 +103,9 @@ describe('media filter rules', () => {
             .map(match => match[1]);
 
         expect(filterRules.length).toBeGreaterThan(0);
-        filterRules.forEach(selector => expect(selector).toMatch(/^data-media-filter=/));
+        // With or without a value: the reset rule for nested media keys on the bare
+        // attribute.  What matters is that no filter rule keys on `data-theme`.
+        filterRules.forEach(selector => expect(selector).toMatch(/^data-media-filter/));
     });
 
     it('has a rule for every filter a theme offers', () => {
@@ -115,6 +117,14 @@ describe('media filter rules', () => {
             expect(tokensCss).toMatch(
                 new RegExp(`html\\[data-media-filter="${filter.id}"] :fullscreen`));
         });
+    });
+
+    it('does not filter leaf media twice inside a filtered wrapper', () => {
+        // A `.media` wrapper filters its subtree as a unit; the img/video inside it also
+        // matches the element-type rule, and two passes of the matrix take the luminance
+        // of an already-red pixel, leaving that image much darker than its surroundings.
+        expect(tokensCss).toMatch(
+            /html\[data-media-filter] \.media :is\([^)]*\)\s*{\s*filter:\s*none/);
     });
 
     it('never filters an ancestor, only leaf media', () => {

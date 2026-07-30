@@ -1,7 +1,8 @@
 import React from "react";
 import {Link, NavLink} from "react-router";
-import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
-import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
+import {IconMenu2, IconPlugOff, IconTemperature, IconTemperaturePlus} from "@tabler/icons-react";
+import {Icon, IconButton, Menu, Tooltip} from "./ui";
+import {Media, SettingsContext, StatusContext} from "../contexts/contexts";
 import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {
@@ -16,7 +17,6 @@ import {
 } from "../hooks/customHooks";
 import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
-import {Icon, Popup} from "./Theme";
 import {HELP_VIEWER_URI, NAME, semanticUIColorMap} from "./Vars";
 import {useOverflowNav} from "../hooks/useOverflowNav";
 import _ from "lodash";
@@ -44,6 +44,10 @@ function updateFavicon(colorName) {
     if (themeColorMeta) themeColorMeta.content = hexColor;
 }
 
+// A theme token name, or null to inherit the surrounding text/icon color (never
+// literally "var(--null)").
+const colorVar = (color) => color ? `var(--${color})` : undefined;
+
 const help = {to: HELP_VIEWER_URI, text: 'Help', key: 'help', target: '_blank'};
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [help, admin];
@@ -61,30 +65,68 @@ const allLinks = [
     {to: '/more/statistics', text: 'Statistics', key: 'statistics', end: true},
 ];
 
-function DropdownLinks({link}) {
-    return <Dropdown item text={link.text} direction='left'>
-        <Dropdown.Menu>
-            {link.links.map(l => <MenuLink key={l.to} link={l}/>)}
-        </Dropdown.Menu>
-    </Dropdown>
-}
-
 function MenuLink({link}) {
-    // Wrapper around NavLink to handle Navlink/Dropdown change.
+    // A top-level tab rendered directly in the bar (not inside a dropdown).
     if (link.links) {
         return <DropdownLinks link={link}/>
-    } else {
-        const end = link.end ? {end: true} : {end: undefined};
-        const target = link.target ? {target: link.target} : {};
-        return <NavLink
-            className='item'
-            to={link.to}
-            {...end}
-            {...target}
-        >
-            {link.text}
-        </NavLink>
     }
+    const end = link.end ? {end: true} : {};
+    const target = link.target ? {target: link.target, rel: 'noopener noreferrer'} : {};
+    return <NavLink
+        className='wrolpi-navbar-link'
+        to={link.to}
+        {...end}
+        {...target}
+    >
+        {link.text}
+    </NavLink>
+}
+
+function DropdownMenuItem({link}) {
+    // An item inside a Menu.Dropdown: the mobile hamburger menu, or the desktop
+    // "More" overflow menu.
+    if (link.links) {
+        // Mantine's Menu does not nest submenus without extra plumbing; a labelled,
+        // indented group stands in for Semantic's nested Dropdown.  No current data
+        // uses this path (no allLinks entry has its own `links`).
+        return <React.Fragment>
+            <Menu.Label>{link.text}</Menu.Label>
+            {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}
+        </React.Fragment>
+    }
+    const end = link.end ? {end: true} : {};
+    const target = link.target ? {target: link.target, rel: 'noopener noreferrer'} : {};
+    return <Menu.Item component={NavLink} to={link.to} {...end} {...target}>
+        {link.text}
+    </Menu.Item>
+}
+
+function DropdownLinks({link}) {
+    // A labelled dropdown trigger: the desktop "More" overflow, or any nested
+    // link group handed to MenuLink.
+    return <Menu position='bottom-end' withinPortal>
+        <Menu.Target>
+            <button type='button' className='wrolpi-navbar-link wrolpi-navbar-link-button'>
+                {link.text}
+                <Icon name='dropdown' size='small' style={{marginLeft: '0.35em'}}/>
+            </button>
+        </Menu.Target>
+        <Menu.Dropdown>
+            {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}
+        </Menu.Dropdown>
+    </Menu>
+}
+
+function MobileMenu({links}) {
+    // The mobile hamburger menu: an icon-only trigger holding every link.
+    return <Menu position='bottom-end' withinPortal>
+        <Menu.Target>
+            <IconButton icon={IconMenu2} label='Menu' variant='subtle'/>
+        </Menu.Target>
+        <Menu.Dropdown>
+            {links.map(link => <DropdownMenuItem key={link.key} link={link}/>)}
+        </Menu.Dropdown>
+    </Menu>
 }
 
 function NavIconWrapper({children}) {
@@ -123,10 +165,9 @@ export function NavBar() {
     const navColor = useNavColorSetting();
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
-    const topNavText = wrolModeEnabled ? <>{name}&nbsp; <SIcon name='lock'/></> : name;
-    const {i} = React.useContext(ThemeContext);
+    const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
 
-    const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
+    const homeLink = <NavLink className='wrolpi-navbar-link' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}
     </NavLink>;
 
@@ -143,9 +184,10 @@ export function NavBar() {
         // System load is high, display a warning icon.
         const color = highLoad ? highWarningColor : lowWarningColor;
         const icon = <Link to='/admin/status'>
-            <Icon name='tachometer alternate' size='large' color={color}/>
+            <Icon name='tachometer alternate' size='large' style={{color: colorVar(color)}}
+                  label='System load warning'/>
         </Link>;
-        systemLoadIcon = <Popup content={`Load: ${minute_1}`} trigger={icon}/>
+        systemLoadIcon = <Tooltip label={`Load: ${minute_1}`}>{icon}</Tooltip>
     }
 
     // RAM consumption.
@@ -154,9 +196,9 @@ export function NavBar() {
     if (memoryPercent > 80) {
         const color = memoryPercent > 90 ? highWarningColor : lowWarningColor;
         const icon = <Link to='/admin/status' color={color}>
-            <Icon name='microchip' size='large'/>
+            <Icon name='microchip' size='large' label='Memory usage warning'/>
         </Link>;
-        memoryIcon = <Popup content={`System Memory: ${memoryPercent.toFixed()}%`} trigger={icon}/>
+        memoryIcon = <Tooltip label={`System Memory: ${memoryPercent.toFixed()}%`}>{icon}</Tooltip>
     }
 
     // Any disk is busy and processes are waiting.
@@ -166,9 +208,9 @@ export function NavBar() {
         // Processes are waiting on disk, display a warning icon.
         const color = percentIOWait > 75 ? highWarningColor : lowWarningColor;
         const icon = <Link to='/admin/status'>
-            <Icon name='disk' size='large' color={color}/>
+            <Icon name='disk' size='large' style={{color: colorVar(color)}} label='Disk I/O wait warning'/>
         </Link>;
-        diskWaitIcon = <Popup content={`Processes waiting on disk: ${percentIOWait.toFixed()}%`} trigger={icon}/>
+        diskWaitIcon = <Tooltip label={`Processes waiting on disk: ${percentIOWait.toFixed()}%`}>{icon}</Tooltip>
     }
 
     // CPU temperature.
@@ -177,10 +219,11 @@ export function NavBar() {
     if (temperature && temperature >= highTemperature) {
         // CPU temperature is high, display a warning icon.
         const color = temperature >= criticalTemperature ? highWarningColor : lowWarningColor;
-        const name = temperature >= criticalTemperature ? 'thermometer' : 'thermometer half';
-        const icon = <Icon data-testid='cpuTemperatureIcon' name={name} size='large' color={color}/>
+        const temperatureComponent = temperature >= criticalTemperature ? IconTemperaturePlus : IconTemperature;
+        const icon = <Icon data-testid='cpuTemperatureIcon' component={temperatureComponent} size='large'
+                            style={{color: colorVar(color)}} label='CPU temperature warning'/>
         const link = <Link to='/admin/status'>{icon}</Link>;
-        temperatureIcon = <Popup content={`CPU: ${temperature.toFixed()}°C`} trigger={link}/>;
+        temperatureIcon = <Tooltip label={`CPU: ${temperature.toFixed()}°C`}>{link}</Tooltip>;
     }
 
     // Hard-drive temperature.  An overheating drive risks data loss.
@@ -193,9 +236,10 @@ export function NavBar() {
     let driveTemperatureIcon;
     if (driveTemperature && driveTemperature >= driveHighTemperature) {
         const color = driveTemperature >= driveCriticalTemperature ? highWarningColor : lowWarningColor;
-        const icon = <Icon data-testid='driveTemperatureIcon' name='hdd' size='large' color={color}/>
+        const icon = <Icon data-testid='driveTemperatureIcon' name='hdd' size='large'
+                            style={{color: colorVar(color)}} label='Drive temperature warning'/>
         const link = <Link to='/admin/controller'>{icon}</Link>;
-        driveTemperatureIcon = <Popup content={`${hotDrive}: ${driveTemperature.toFixed()}°C`} trigger={link}/>;
+        driveTemperatureIcon = <Tooltip label={`${hotDrive}: ${driveTemperature.toFixed()}°C`}>{link}</Tooltip>;
     }
 
     // A drive's SMART health is degraded.  FAIL is an imminent failure (back
@@ -206,31 +250,36 @@ export function NavBar() {
     const {failingDevices, failing: driveFailing, warningDevices, warning: driveWarning} = useDriveHealth();
     let driveHealthIcon;
     if (driveFailing) {
-        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large' color={highWarningColor}/>;
+        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large'
+                            style={{color: colorVar(highWarningColor)}} label='Drive health failing'/>;
         const link = <Link to='/admin/controller'>{icon}</Link>;
         const message = failingDevices.length === 1
             ? `Drive ${failingDevices[0]} is failing its SMART health check! Back up your data.`
             : `Drives failing SMART health check: ${failingDevices.join(', ')}. Back up your data.`;
-        driveHealthIcon = <Popup content={message} trigger={link}/>;
+        driveHealthIcon = <Tooltip label={message}>{link}</Tooltip>;
     } else if (driveWarning) {
-        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large' color={lowWarningColor}/>;
+        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large'
+                            style={{color: colorVar(lowWarningColor)}} label='Drive health warning'/>;
         const link = <Link to='/admin/controller'>{icon}</Link>;
         const message = warningDevices.length === 1
             ? `Drive ${warningDevices[0]} has unreadable or pending sectors — check its SMART health.`
             : `Drives with unreadable or pending sectors: ${warningDevices.join(', ')}. Check their SMART health.`;
-        driveHealthIcon = <Popup content={message} trigger={link}/>;
+        driveHealthIcon = <Tooltip label={message}>{link}</Tooltip>;
     }
 
     // Power issues, this is always displayed if detected.
     const {underVoltage, overCurrent} = usePowerStats();
     let powerIcon;
     if (underVoltage || overCurrent) {
-        const name = underVoltage ? 'power cord' : 'lightning';
-        const icon = <Icon name={name} size='large' color={highWarningColor}/>;
+        const icon = underVoltage
+            ? <Icon component={IconPlugOff} size='large' style={{color: colorVar(highWarningColor)}}
+                    label='Under-voltage warning'/>
+            : <Icon name='lightning' size='large' style={{color: colorVar(highWarningColor)}}
+                    label='Over-current warning'/>;
         const message = underVoltage
             ? 'Under-voltage detected! Your power supply is insufficient!'
             : 'Over-current detected! Your peripherals are using too much power!';
-        powerIcon = <Popup content={message} trigger={icon}/>;
+        powerIcon = <Tooltip label={message}><span>{icon}</span></Tooltip>;
     }
 
     // Display the temperature icon first because it can cause the system to throttle.  The rest are in order of effects
@@ -269,15 +318,14 @@ export function NavBar() {
     }
     const processingIcon = processingLink &&
         <Link to={processingLink}>
-            <Icon loading name='circle notch' size='large'/>
+            <Icon loading name='circle notch' size='large' label='File worker busy'/>
         </Link>;
 
     let apiDownIcon;
     if (window.apiDown) {
-        apiDownIcon = <Popup
-            content='API is not responding'
-            trigger={<Icon name='plug' color={highWarningColor}/>}
-        />
+        apiDownIcon = <Tooltip label='API is not responding'>
+            <span><Icon name='plug' style={{color: colorVar(highWarningColor)}} label='API is not responding'/></span>
+        </Tooltip>
     }
 
     // Upgrade available notification - only show on native (non-Docker) installs and when WROL Mode is disabled
@@ -286,12 +334,12 @@ export function NavBar() {
         const commitsBehind = status.commits_behind || 0;
         const branch = status.git_branch || 'unknown';
         const icon = <Link to='/admin/settings#upgrade'>
-            <Icon name='arrow alternate circle up' size='large' color='green'/>
+            <Icon name='arrow alternate circle up' size='large' style={{color: 'var(--green)'}}
+                  label='Upgrade available'/>
         </Link>;
-        upgradeIcon = <Popup
-            content={`Upgrade available: ${commitsBehind} commit(s) behind on ${branch}`}
-            trigger={icon}
-        />;
+        upgradeIcon = <Tooltip label={`Upgrade available: ${commitsBehind} commit(s) behind on ${branch}`}>
+            {icon}
+        </Tooltip>;
     }
 
     const icons = <React.Fragment>
@@ -308,27 +356,23 @@ export function NavBar() {
 
     return <>
         <Media between={['mobile', 'tablet']}>
-            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
+            <nav className='wrolpi-navbar' id='global_navbar'
+                 style={{background: `var(--${navColor})`, color: 'var(--btn-text)'}}>
                 {homeLink}
-                <Menu.Menu position='right'>
+                <div className='wrolpi-navbar-right'>
                     {icons}
                     <SearchIconButton/>
-                    <Dropdown item icon="bars">
-                        <Dropdown.Menu>
-                            {allLinks.map(i => <MenuLink link={i} key={i.key}/>)}
-                            {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
-                        </Dropdown.Menu>
-                    </Dropdown>
-                </Menu.Menu>
-            </Menu>
+                    <MobileMenu links={[...allLinks, ...rightLinks]}/>
+                </div>
+            </nav>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <DesktopNav i={i} navColor={navColor} homeLink={homeLink} icons={icons}/>
+            <DesktopNav navColor={navColor} homeLink={homeLink} icons={icons}/>
         </Media>
     </>
 }
 
-function DesktopNav({i, navColor, homeLink, icons}) {
+function DesktopNav({navColor, homeLink, icons}) {
     const containerRef = React.useRef(null);
     const homeRef = React.useRef(null);
     const rightMenuRef = React.useRef(null);
@@ -343,7 +387,8 @@ function DesktopNav({i, navColor, homeLink, icons}) {
 
     return (
         <div ref={containerRef}>
-            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
+            <nav className='wrolpi-navbar' id='global_navbar'
+                 style={{background: `var(--${navColor})`, color: 'var(--btn-text)'}}>
                 <span ref={homeRef} style={{display: 'contents'}}>{homeLink}</span>
                 {(isReady ? visibleLinks : allLinks).map((link, idx) => (
                     <span
@@ -355,16 +400,16 @@ function DesktopNav({i, navColor, homeLink, icons}) {
                     </span>
                 ))}
                 {!isReady && <span ref={moreRef} style={{visibility: 'hidden', flexShrink: 0}}>
-                    <Dropdown item text='More'><Dropdown.Menu/></Dropdown>
+                    <button type='button' className='wrolpi-navbar-link wrolpi-navbar-link-button'>More</button>
                 </span>}
                 {isReady && overflowLinks.length > 0 &&
                     <DropdownLinks link={{text: 'More', key: 'more', links: overflowLinks}}/>}
-                <div ref={rightMenuRef} className='right menu'>
+                <div ref={rightMenuRef} className='wrolpi-navbar-right'>
                     {icons}
                     <SearchIconButton/>
                     {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
                 </div>
-            </Menu>
+            </nav>
         </div>
     );
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
-import {DirectorySearch} from './Common';
+import {DirectorySearch, SearchResultsInput} from './Common';
 
 // Mock debounce to make tests run faster
 jest.mock('lodash/debounce', () => jest.fn(fn => {
@@ -440,5 +440,42 @@ describe('DirectorySearch', () => {
 
             expect(mockSetDirectoryName).toHaveBeenCalled();
         });
+    });
+});
+
+describe('SearchResultsInput', () => {
+    const results = {
+        tags: {name: 'Tags', results: [{type: 'tag', title: 'Cooking'}]},
+        videos: {name: 'Videos', results: [
+            {title: 'How To Sharpen An Axe', description: 'Wranglerstar', location: '/videos/1'},
+        ]},
+    };
+
+    it('hands the selected suggestion to its caller as {result}', async () => {
+        /*
+         * Regression: the migration passed the bare result, but every caller destructures
+         * `{result}` (see Search.js), so `result.location` was undefined and clicking a
+         * search suggestion navigated nowhere.
+         */
+        const handleResultSelect = jest.fn();
+        render(<SearchResultsInput searchStr='axe' onSubmit={jest.fn()} results={results}
+                                   handleResultSelect={handleResultSelect}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+        await userEvent.click(screen.getByText('How To Sharpen An Axe'));
+
+        expect(handleResultSelect).toHaveBeenCalledWith(
+            {result: expect.objectContaining({location: '/videos/1'})});
+    });
+
+    it('forwards resultRenderer so a caller keeps its own suggestion markup', async () => {
+        // Search.js renders a tag suggestion as a tag chip, not a line of text.
+        const resultRenderer = (result) => <span>rendered:{result.title}</span>;
+        render(<SearchResultsInput searchStr='cook' onSubmit={jest.fn()} results={results}
+                                   handleResultSelect={jest.fn()} resultRenderer={resultRenderer}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+
+        expect(screen.getByText('rendered:Cooking')).toBeInTheDocument();
     });
 });

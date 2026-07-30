@@ -469,6 +469,7 @@ export function SearchResultsInput({
                                        clearDisabled = null,
                                        results = undefined,
                                        handleResultSelect = null,
+                                       resultRenderer = undefined,
                                        loading = false,
                                        inputRef = null,
                                        ...props
@@ -484,7 +485,10 @@ export function SearchResultsInput({
 
     const localHandleResultSelect = (result) => {
         if (handleResultSelect) {
-            handleResultSelect(result);
+            // Semantic handed its callers `{result}`, and they destructure it -- passing the
+            // bare result silently broke navigation from the search suggestions.  The shape
+            // stays until the call sites are ready to change together.
+            handleResultSelect({result});
         } else {
             console.error('No handleResultSelect defined!');
         }
@@ -498,6 +502,7 @@ export function SearchResultsInput({
             onResultSelect={localHandleResultSelect}
             onClear={handleClear}
             results={results}
+            resultRenderer={resultRenderer}
             loading={loading}
             placeholder={placeholder}
             clearable={clearable}

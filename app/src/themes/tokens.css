@@ -45,6 +45,9 @@ html[data-theme="light"] {
 
     /* Text drawn on top of a filled color button. */
     --btn-text: #ffffff;
+
+    /* Switch thumbs and slider handles. */
+    --knob: #ffffff;
 }
 
 /*
@@ -83,6 +86,7 @@ html[data-theme="dark"] {
     --white: #e6e8e6;
 
     --btn-text: #1c1f21;
+    --knob: var(--text);
 }
 
 /*
@@ -115,6 +119,7 @@ html[data-theme="night"] {
     --white: #ff8a8a;
 
     --btn-text: #0a0000;
+    --knob: var(--text);
 }
 
 /* Amber: a monochrome amber terminal palette, same flat style as the rest. */
@@ -143,6 +148,7 @@ html[data-theme="amber"] {
     --white: #ffc875;
 
     --btn-text: #0d0600;
+    --knob: var(--text);
 
     /* Amber assigns the mono face to the body role; that is its character. */
     --font-body: var(--font-system-mono);

@@ -6,7 +6,9 @@ import {VideosTabLayout, VideosPage, VideosSettingsPage, VideosStatistics, Video
 import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
-// Theme tokens load after Semantic so the shell's colors win over Semantic's defaults.
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+// Theme tokens load last so they win over both component libraries.
 import './themes/fonts.css';
 import './themes/tokens.css';
 import {MediaFilterDefs} from "./themes/MediaFilterDefs";
@@ -22,6 +24,7 @@ import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./
 import {Header, ThemeProvider} from "./components/Theme";
 import {DashboardPage} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
+import {ThemeSamplePage} from "./components/ThemeSamplePage";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
@@ -92,6 +95,10 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='donate' element={<DonatePage/>}/>
+    {/* Component gallery for reviewing the design in each theme.  Unlinked, and left out
+        of production builds so it cannot ship to users. */}
+    {process.env.NODE_ENV === 'development' &&
+        <Route path='theme-sample' element={<ErrorBoundary><ThemeSamplePage/></ErrorBoundary>}/>}
     <Route path='videos'>
         <Route element={<ErrorBoundary><VideosTabLayout/></ErrorBoundary>}>
             <Route index element={<ErrorBoundary><VideosPage/></ErrorBoundary>}/>

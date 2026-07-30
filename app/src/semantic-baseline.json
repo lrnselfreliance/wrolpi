@@ -4,7 +4,6 @@
   "src/components/Docs.js",
   "src/components/FileBrowser.js",
   "src/components/FilePreview.js",
-  "src/components/Flasher.js",
   "src/components/Nav.js",
   "src/components/Playlists.js",
   "src/components/Theme.tsx",

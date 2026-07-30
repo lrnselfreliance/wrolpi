@@ -410,6 +410,9 @@ export function ThemeSamplePage() {
                 <Row>
                     <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
                 </Row>
+                <div style={{marginTop: 12, maxWidth: 320}}>
+                    <Progress indeterminate label='Uploading…'/>
+                </div>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
                     Semantic's compound shape is kept — Modal.Header, Modal.Content,
                     Modal.Actions — so the 34 call sites written against it migrate by import.

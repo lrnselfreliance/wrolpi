@@ -205,6 +205,19 @@ html[data-media-filter="amber-mono"] :is(img, video, canvas, iframe, embed, obje
 }
 
 /*
+ * A `.media` wrapper filters its whole subtree as one unit, so the leaf media inside
+ * it must not be filtered a second time.  Two passes of a luminance-to-red matrix is
+ * not the same as one: the second pass takes the luminance of an already-red pixel
+ * (0.2126 of it) and the image comes out markedly darker than everything around it.
+ *
+ * The audio player's poster is the case that found this — the poster sits under
+ * custom control glyphs, so the wrapper is filtered to keep the two tinted together.
+ */
+html[data-media-filter] .media :is(img, video, canvas, iframe, embed, object) {
+    filter: none;
+}
+
+/*
  * A filter on an ancestor stops applying once the browser promotes a video to
  * native fullscreen, so the filter is restated on the fullscreened element.
  */

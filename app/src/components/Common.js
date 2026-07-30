@@ -28,7 +28,7 @@ import {
 } from "./ui";
 import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {themeChoices} from "./Theme";
+import {themeChoices} from "../themes/names";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads, unlockCookies} from "../api";
@@ -472,6 +472,7 @@ export function SearchResultsInput({
                                        resultRenderer = undefined,
                                        loading = false,
                                        inputRef = null,
+                                       autoFocus = false,
                                        ...props
                                    }) {
     const {value, setValue, handleChange} = useSearchValue(searchStr, onChange);
@@ -508,6 +509,7 @@ export function SearchResultsInput({
             clearable={clearable}
             clearDisabled={clearDisabled}
             inputRef={inputRef}
+            autoFocus={autoFocus}
         />
     </div>
 }

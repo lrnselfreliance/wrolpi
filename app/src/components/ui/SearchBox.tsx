@@ -146,6 +146,16 @@ export function SearchBox({
             }
         } else if (event.key === 'Escape') {
             // Closes the list; the typed text is left alone.
+            if (open) {
+                /*
+                 * Escape dismisses the suggestions and nothing more.  Without this the
+                 * event carries on to whatever contains the box — inside the search modal
+                 * that meant one Escape closed the list and the modal together, so a user
+                 * correcting a mistyped query lost the whole modal.  A second Escape, with
+                 * the list already closed, still closes it.
+                 */
+                event.stopPropagation();
+            }
             setOpen(false);
             setHighlighted(-1);
         }
@@ -177,6 +187,13 @@ export function SearchBox({
                 disabled={disabled}
                 required={required}
                 autoFocus={autoFocus}
+                /*
+                 * Inside a modal, Mantine's focus trap moves focus itself and overrides the
+                 * input's own autoFocus — it honours this attribute instead.  Setting both
+                 * means the field is focused whether or not it is inside a modal, which is
+                 * what a caller asking for autoFocus means.
+                 */
+                data-autofocus={autoFocus ? true : undefined}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 // Open on focus when there is something to say — suggestions, or the fact

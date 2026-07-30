@@ -35,7 +35,10 @@ class SettingsResponse:
     check_for_upgrades: bool
     ignore_outdated_zims: bool
     ignored_directories: List[str]
-    log_level: str
+    # A Python logging integer (INFO is 20), not a name.  Declared `str` here while
+    # SettingsRequest.log_level already said int, and the frontend converts it numerically --
+    # so the fixture was carrying 'info', which fromApiLogLevel() maps to undefined.
+    log_level: int
     map_default_location: Optional[dict]
     nav_color: str
     media_directory: str
@@ -194,6 +197,20 @@ class DiskBandwidthStatusStat:
 
 
 @dataclass
+class DownloadsSummaryResponse:
+    """`DownloadManager.get_summary()`, which /api/status returns as `downloads`.
+
+    It is an empty object while the database is down.
+    """
+    pending: int
+    recurring: int
+    disabled: bool
+    stopped: bool
+    outside_download_window: bool
+    daily_limit_reached: bool
+
+
+@dataclass
 class StatusResponse:
     """The response of GET /api/status.
 
@@ -209,7 +226,9 @@ class StatusResponse:
     """
     cpu_stats: CPUStatusResponse
     dockerized: bool
-    downloads: int
+    # Declared `int` for a long time while the handler sent the summary object, so the published
+    # contract promised a generated client a number where it gets a dict.
+    downloads: DownloadsSummaryResponse
     drives_stats: List[DriveStatusStat]
     flags: FlagsStatusResponse
     is_rpi4: bool
@@ -221,7 +240,8 @@ class StatusResponse:
     processes_stats: List[ProcessStatusStat]
     sanic_workers: dict
     version: str
-    wrol_mode: str
+    # `str` here was wrong too; wrol_mode_enabled() returns a bool.
+    wrol_mode: bool
     # Upgrade info, seeded in contexts.py and refreshed by the upgrade check.
     commits_behind: int
     current_commit: Optional[str]

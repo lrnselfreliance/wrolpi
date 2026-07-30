@@ -7,8 +7,10 @@ import {ThemeContext} from '../../contexts/contexts';
 import {cssVariablesResolver, mantineTheme, semanticColorNames} from '../../themes/mantine';
 import {themeChoices} from '../../themes/names';
 import {
+    ActionInput,
     Button,
     Confirm,
+    Header,
     Icon,
     IconButton,
     Label,
@@ -128,6 +130,78 @@ describe('Message', () => {
         renderUI(<Message kind='error' title='Failed'>Try again</Message>);
 
         expect(screen.getByRole('alert')).toHaveClass('wrolpi-message-error');
+    });
+
+    it('dismisses when asked', async () => {
+        const onDismiss = jest.fn();
+        renderUI(<Message title='Install the extension' onDismiss={onDismiss}/>);
+
+        await userEvent.click(screen.getByRole('button', {name: 'Dismiss'}));
+
+        expect(onDismiss).toHaveBeenCalled();
+    });
+
+    it('offers no dismiss button when the message cannot be cleared', () => {
+        renderUI(<Message title='Refresh running'/>);
+
+        expect(screen.queryByRole('button', {name: 'Dismiss'})).not.toBeInTheDocument();
+    });
+
+    it('renders a leading icon when given one', () => {
+        const {container} = renderUI(<Message icon='puzzle piece' title='Extension'/>);
+
+        expect(container.querySelector('.wrolpi-message-icon svg')).toBeInTheDocument();
+    });
+});
+
+describe('Header', () => {
+    it('renders the requested heading level', () => {
+        renderUI(<Header as='h1'>Browser Extension</Header>);
+
+        expect(screen.getByRole('heading', {level: 1, name: 'Browser Extension'})).toBeInTheDocument();
+    });
+
+    it('defaults to h3 so a call site that omits the level still nests sanely', () => {
+        renderUI(<Header>Firefox</Header>);
+
+        expect(screen.getByRole('heading', {level: 3, name: 'Firefox'})).toBeInTheDocument();
+    });
+
+    it('takes its size from the level, not from the call site', () => {
+        // The class is what ui.css keys the type scale on; a call site passing its own
+        // font-size is the thing this component exists to prevent.
+        const {container} = renderUI(<Header as='h4'>Install steps</Header>);
+
+        expect(container.querySelector('.wrolpi-header-h4')).toBeInTheDocument();
+    });
+
+    it('renders an icon and a subheader', () => {
+        const {container} = renderUI(<Header icon='globe' subheader='Paste this into the extension'>
+            This WROLPi's URL
+        </Header>);
+
+        expect(container.querySelector('svg')).toBeInTheDocument();
+        expect(screen.getByText('Paste this into the extension')).toBeInTheDocument();
+    });
+});
+
+describe('ActionInput', () => {
+    it('joins the input and its action into one control', () => {
+        const {container} = renderUI(
+            <ActionInput label='URL' value='https://wrolpi.local' readOnly
+                         action={<Button role='cancel'>Copy</Button>}/>
+        );
+
+        expect(container.querySelector('.wrolpi-action-input')).toBeInTheDocument();
+        expect(screen.getByRole('textbox', {name: 'URL'})).toHaveValue('https://wrolpi.local');
+        expect(screen.getByRole('button', {name: 'Copy'})).toBeInTheDocument();
+    });
+
+    it('is a plain input when no action is given', () => {
+        const {container} = renderUI(<ActionInput label='URL'/>);
+
+        expect(container.querySelector('.wrolpi-action-input')).not.toBeInTheDocument();
+        expect(screen.getByRole('textbox', {name: 'URL'})).toBeInTheDocument();
     });
 });
 

@@ -1,6 +1,6 @@
 import React from "react";
 import {Link} from "react-router";
-import {Button, Icon, Message} from "semantic-ui-react";
+import {Button, Message} from "../ui";
 import {useLocalStorage} from "../Common";
 import {useExtensionInstalled} from "../../hooks/customHooks";
 import {isExtensionSupportedBrowser} from "./browserDetect";
@@ -25,18 +25,19 @@ export function ExtensionInstallSuggestion() {
     // Also skip on browsers that cannot install the extension (e.g. Safari).
     if (installed !== false || dismissed || !isExtensionSupportedBrowser()) return null;
 
-    return <Message info icon onDismiss={() => setDismissed(true)}>
-        <Icon name='puzzle piece'/>
-        <Message.Content>
-            <Message.Header>Install the WROLPi browser extension</Message.Header>
-            <p>
-                Send pages, videos, and feeds to this WROLPi straight from any
-                tab. Open-source and not distributed via the official browser
-                stores.
-            </p>
-            <Button as={Link} to='/admin/extension' primary size='small'>
-                Open install page
-            </Button>
-        </Message.Content>
+    return <Message
+        kind='info'
+        icon='puzzle piece'
+        title='Install the WROLPi browser extension'
+        onDismiss={() => setDismissed(true)}
+    >
+        <p>
+            Send pages, videos, and feeds to this WROLPi straight from any
+            tab. Open-source and not distributed via the official browser
+            stores.
+        </p>
+        <Button component={Link} to='/admin/extension' role='primary' size='xs'>
+            Open install page
+        </Button>
     </Message>;
 }

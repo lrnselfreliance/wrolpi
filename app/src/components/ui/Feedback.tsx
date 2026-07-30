@@ -25,10 +25,14 @@ export interface MessageProps {
     kind?: MessageKind;
     title?: React.ReactNode;
     children?: React.ReactNode;
+    /** Semantic icon name or a Tabler component, shown to the left of the text. */
+    icon?: string | React.ComponentType<any>;
+    /** Renders a dismiss button.  Omit for messages the user cannot clear. */
+    onDismiss?: () => void;
     className?: string;
 }
 
-export function Message({kind = 'info', title, children, className}: MessageProps) {
+export function Message({kind = 'info', title, children, icon, onDismiss, className}: MessageProps) {
     return <div
         // Errors and warnings interrupt; info and success are announced politely.
         role={kind === 'error' ? 'alert' : 'status'}
@@ -36,8 +40,21 @@ export function Message({kind = 'info', title, children, className}: MessageProp
             .filter(Boolean).join(' ')}
         style={{['--message-color' as string]: messageColors[kind]}}
     >
-        {title && <div className='wrolpi-message-title'>{title}</div>}
-        {children && <div className='wrolpi-message-body'>{children}</div>}
+        {icon && <div className='wrolpi-message-icon'>
+            {typeof icon === 'string' ? <Icon name={icon} size={20}/> : <Icon component={icon} size={20}/>}
+        </div>}
+        <div className='wrolpi-message-content'>
+            {title && <div className='wrolpi-message-title'>{title}</div>}
+            {children && <div className='wrolpi-message-body'>{children}</div>}
+        </div>
+        {onDismiss && <button
+            type='button'
+            className='wrolpi-message-dismiss'
+            aria-label='Dismiss'
+            onClick={onDismiss}
+        >
+            <Icon name='close' size={16}/>
+        </button>}
     </div>
 }
 
@@ -135,6 +152,28 @@ export interface LoaderProps {
 
 export function Loader({size = 'sm', label}: LoaderProps) {
     return <MLoader size={size} color='var(--blue)' aria-label={label ?? 'Loading'}/>
+}
+
+export interface LoadingProps {
+    /** What is being waited on: "Loading backups…".  Also the accessible name. */
+    children?: React.ReactNode;
+    size?: LoaderProps['size'];
+    /** Vertical padding around the loader. */
+    padding?: number | string;
+}
+
+/**
+ * A centered loader with a caption, for a region that has nothing to show yet.
+ * Replaces Semantic's `<Loader active inline='centered'>`, which 19 call sites
+ * used with their own wrapper div.
+ */
+export function Loading({children, size = 'sm', padding = '2em'}: LoadingProps) {
+    return <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding,
+    }}>
+        <Loader size={size} label={typeof children === 'string' ? children : undefined}/>
+        {children && <div style={{fontSize: 13, color: 'var(--muted)'}}>{children}</div>}
+    </div>
 }
 
 /** Placeholder for content that has not arrived.  Replaces Semantic's Placeholder. */

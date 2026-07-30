@@ -261,8 +261,15 @@ html[data-media-filter="amber-mono"] :is(img, video, canvas, iframe, embed, obje
  *
  * The audio player's poster is the case that found this — the poster sits under
  * custom control glyphs, so the wrapper is filtered to keep the two tinted together.
+ *
+ * The trailing `:not(.night-unfiltered)` is here for specificity, not for its meaning.
+ * The rule above scores (0,3,1) — an attribute, a `.media` inside `:is()`, and a `:not()`
+ * — so this reset had to reach three class-level components to win it; without the extra
+ * one it scored (0,2,2) and silently lost every time, which is exactly what it did until
+ * a browser test measured the leaf and found it filtered twice.  jsdom cannot catch this:
+ * it never resolves `filter` at all.
  */
-html[data-media-filter] .media :is(img, video, canvas, iframe, embed, object) {
+html[data-media-filter] .media :is(img, video, canvas, iframe, embed, object):not(.night-unfiltered) {
     filter: none;
 }
 

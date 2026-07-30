@@ -120,11 +120,52 @@ describe('media filter rules', () => {
     });
 
     it('does not filter leaf media twice inside a filtered wrapper', () => {
-        // A `.media` wrapper filters its subtree as a unit; the img/video inside it also
-        // matches the element-type rule, and two passes of the matrix take the luminance
-        // of an already-red pixel, leaving that image much darker than its surroundings.
-        expect(tokensCss).toMatch(
-            /html\[data-media-filter] \.media :is\([^)]*\)\s*{\s*filter:\s*none/);
+        /*
+         * A `.media` wrapper filters its subtree as a unit; the img/video inside it also
+         * matches the element-type rule, and two passes of the matrix take the luminance of
+         * an already-red pixel, leaving that image much darker than its surroundings.
+         *
+         * This used to assert only that the reset rule's text was present, and so it passed
+         * for as long as the rule existed -- including the whole time the rule lost on
+         * specificity and never applied to anything.  Presence is not effect.  What has to
+         * hold is that the reset outranks the rule it is correcting, which is computable
+         * from the selectors themselves.  ui-layout.cy.js measures the resulting `filter` in
+         * a real browser, which is the only place the effect itself is observable.
+         */
+        const specificity = (selector) => {
+            // Enough of the algorithm for these selectors: :is() and :not() contribute the
+            // highest specificity among their arguments.
+            let classes = 0, elements = 0;
+            const counted = selector.replace(/:(is|not)\(([^)]*)\)/g, (_, __, args) => {
+                const best = args.split(',')
+                    .map(arg => specificity(arg.trim()))
+                    .sort((a, b) => (b.classes - a.classes) || (b.elements - a.elements))[0];
+                classes += best.classes;
+                elements += best.elements;
+                return ' ';
+            });
+            classes += (counted.match(/\.[\w-]+|\[[^\]]*]|:[\w-]+/g) || []).length;
+            elements += (counted.match(/(^|[\s>+~])[a-z][\w-]*/gi) || []).length;
+            return {classes, elements};
+        };
+        const rank = (selector) => {
+            const {classes, elements} = specificity(selector);
+            return classes * 1000 + elements;
+        };
+
+        const selectorFor = (needle) => {
+            const match = tokensCss.split('}')
+                .map(block => block.split('{')[0].trim())
+                .filter(Boolean)
+                .find(selector => selector.includes(needle));
+            if (!match) throw new Error(`tokens.css has no rule matching ${needle}`);
+            return match.split('\n').pop().trim();
+        };
+
+        const reset = selectorFor('.media :is(img');
+        const filtered = selectorFor('[data-media-filter="night-red"] :is(img');
+
+        expect(rank(reset)).toBeGreaterThan(rank(filtered));
     });
 
     it('never filters an ancestor, only leaf media', () => {

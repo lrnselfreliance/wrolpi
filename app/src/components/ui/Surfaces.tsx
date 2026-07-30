@@ -1,11 +1,48 @@
 import React from 'react';
 import {Card as MCard, Tabs as MTabs, Accordion as MAccordion, Breadcrumbs} from '@mantine/core';
+import {Icon} from './Icon';
 
 /*
- * Surfaces and structure: panels, cards, statistics, tabs, accordions,
+ * Surfaces and structure: headers, panels, cards, statistics, tabs, accordions,
  * breadcrumbs.  Elevation is expressed with borders and background steps —
  * never a shadow (shadows are zeroed in the Mantine bridge).
  */
+
+// ------------------------------------------------------------------- Headers
+
+export type HeaderLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5';
+
+export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElement>, 'color'> {
+    /** Heading level.  Also the visual size — pick it for the outline, not the look. */
+    as?: HeaderLevel;
+    /** Semantic icon name or a Tabler component, shown before the text. */
+    icon?: string | React.ComponentType<any>;
+    /** Secondary line below, in muted text. */
+    subheader?: React.ReactNode;
+    /** Hairline rule underneath, separating the section from what follows. */
+    dividing?: boolean;
+}
+
+/**
+ * A section heading.  Named and shaped like Semantic's Header (`as`, `icon`,
+ * `subheader`, `dividing`) so the app's 47 call sites migrate by import.
+ *
+ * Sizes come from ui.css, keyed on the level, rather than each call site
+ * choosing — that is what keeps the type scale a scale.
+ */
+export function Header({as = 'h3', icon, subheader, dividing, className, children, ...props}: HeaderProps) {
+    const Tag = as;
+    return <div className={['wrolpi-header', dividing ? 'wrolpi-header-dividing' : '', className]
+        .filter(Boolean).join(' ')}>
+        <Tag className={`wrolpi-header-text wrolpi-header-${as}`} {...props}>
+            {icon && (typeof icon === 'string'
+                ? <Icon name={icon} size='medium'/>
+                : <Icon component={icon} size='medium'/>)}
+            <span>{children}</span>
+        </Tag>
+        {subheader && <div className='wrolpi-header-sub'>{subheader}</div>}
+    </div>
+}
 
 // -------------------------------------------------------------------- Panels
 

@@ -6,7 +6,9 @@
 import React, {createContext, useContext} from 'react';
 import {render} from '@testing-library/react';
 import {BrowserRouter} from 'react-router';
+import {MantineProvider} from '@mantine/core';
 import {MediaContextProvider, ThemeContext} from './contexts/contexts';
+import {cssVariablesResolver, mantineTheme} from './themes/mantine';
 
 // Mock FileWorkerStatusContext for tests - avoids API calls during testing
 const MockFileWorkerStatusContext = createContext(null);
@@ -83,13 +85,21 @@ export function renderWithProviders(
     };
 
     function Wrapper({children}) {
+        // MantineProvider, configured exactly as ThemeProvider configures it: components
+        // from src/components/ui render Mantine internals and need it in the tree.
         const content = (
             <BrowserRouter>
-                <MockFileWorkerStatusProvider>
-                    <ThemeContext.Provider value={defaultThemeContext}>
-                        {children}
-                    </ThemeContext.Provider>
-                </MockFileWorkerStatusProvider>
+                <MantineProvider
+                    theme={mantineTheme}
+                    cssVariablesResolver={cssVariablesResolver}
+                    forceColorScheme={inverted ? 'dark' : 'light'}
+                >
+                    <MockFileWorkerStatusProvider>
+                        <ThemeContext.Provider value={defaultThemeContext}>
+                            {children}
+                        </ThemeContext.Provider>
+                    </MockFileWorkerStatusProvider>
+                </MantineProvider>
             </BrowserRouter>
         );
 

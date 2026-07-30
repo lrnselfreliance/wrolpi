@@ -110,6 +110,49 @@ html[data-theme="amber"] .wrolpi-theme-option-active {
     line-height: 1.4;
 }
 
+/* ---------------------------------------------------------------- Modals */
+/*
+ * Actions sit below the body, separated by a hairline rather than a raised bar.
+ * Right-aligned, so the confirming action lands where the eye finishes reading.
+ */
+
+.wrolpi-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    /* Bleed back out through the modal body's own padding so the rule spans the
+       full width; -1 * whatever Mantine padded the body with. */
+    margin: 18px calc(var(--mantine-spacing-md) * -1) calc(var(--mantine-spacing-md) * -1);
+    padding: 12px var(--mantine-spacing-md);
+    border-top: 1px solid var(--border);
+}
+
+/* ---------------------------------------------------------- Action inputs */
+/*
+ * Input and button share one outline: the input gives up its right border and
+ * the button's left border becomes the seam between them.
+ */
+
+.wrolpi-action-input {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+}
+
+.wrolpi-action-input > .mantine-TextInput-root {
+    flex: 1;
+    min-width: 0;
+}
+
+.wrolpi-action-input .mantine-TextInput-input {
+    border-right-width: 0;
+}
+
+.wrolpi-action-input > :not(.mantine-TextInput-root) {
+    flex: none;
+}
+
 /* --------------------------------------------------------------- Switches */
 /*
  * Mantine's unchecked track is a gray from its own palette, which would put a
@@ -165,14 +208,107 @@ html[data-theme="night"] .wrolpi-label {
     border-color: var(--label-color);
 }
 
+/* ---------------------------------------------------------------- Headers */
+
+.wrolpi-header {
+    margin: 0 0 10px;
+}
+
+.wrolpi-header-dividing {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+}
+
+.wrolpi-header-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    /*
+     * Stated explicitly because semantic.min.css sets `h1,h2,h3,h4,h5 { font-family:
+     * Lato }` and loads after Mantine's element rule, so headings would ignore the
+     * theme's body face — visible in amber, where the body is mono and headings were
+     * not.  A class outranks the element selector.  Can go once Semantic is gone.
+     */
+    font-family: var(--font-body);
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--text);
+    text-wrap: balance;
+}
+
+/* The scale lives here so no call site invents a size of its own. */
+.wrolpi-header-h1 {
+    font-size: 26px;
+}
+
+.wrolpi-header-h2 {
+    font-size: 21px;
+}
+
+.wrolpi-header-h3 {
+    font-size: 17px;
+}
+
+.wrolpi-header-h4 {
+    font-size: 14px;
+}
+
+.wrolpi-header-h5 {
+    font-size: 13px;
+    letter-spacing: 0.02em;
+}
+
+.wrolpi-header-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
 /* --------------------------------------------------------------- Messages */
 
 .wrolpi-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     border: 1px solid var(--border);
     border-left: 3px solid var(--message-color, var(--border));
     background: var(--panel);
     padding: 10px 14px;
     font-size: 13px;
+}
+
+.wrolpi-message-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* The icon repeats what the border color already says, so it takes that color. */
+.wrolpi-message-icon {
+    color: var(--message-color, var(--text));
+    display: flex;
+    padding-top: 1px;
+}
+
+.wrolpi-message-dismiss {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    /* Widen the tap target past the glyph without moving it. */
+    margin: -6px -6px -6px 0;
+    padding: 6px;
+}
+
+.wrolpi-message-dismiss:hover {
+    color: var(--text);
+}
+
+.wrolpi-message-dismiss:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
 }
 
 .wrolpi-message-title {

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {themeNames, themeSessionKey} from '../components/Theme';
+import {mediaFilterSessionKey, themeMediaFilter} from './names';
 
 const readFile = (...parts) => fs.readFileSync(path.join(__dirname, ...parts), 'utf8');
 
@@ -72,5 +73,53 @@ describe('pre-paint theme script', () => {
     it('stamps data-theme before the bundle loads', () => {
         const head = indexHtml.slice(0, indexHtml.indexOf('</head>'));
         expect(head).toContain("document.documentElement.setAttribute('data-theme'");
+    });
+
+    it('stamps the media filter before the bundle loads too', () => {
+        // Otherwise night mode paints a screen of unfiltered thumbnails while the bundle
+        // arrives, which costs the user the dark adaptation the theme exists to protect.
+        const head = indexHtml.slice(0, indexHtml.indexOf('</head>'));
+        expect(head).toContain("document.documentElement.setAttribute('data-media-filter'");
+        expect(head).toContain(`localStorage.getItem('${mediaFilterSessionKey}')`);
+    });
+
+    it('duplicates the same filter ids and defaults the app uses', () => {
+        // The script cannot import from names.ts, so it restates both.  These assertions
+        // fail if a theme's filter id or default changes on only one side.
+        themeNames.forEach(theme => {
+            const filter = themeMediaFilter(theme);
+            if (!filter) return;
+            expect(indexHtml).toContain(`${theme}: '${filter.id}'`);
+            expect(indexHtml).toContain(`${theme}: ${filter.defaultOn}`);
+        });
+    });
+});
+
+describe('media filter rules', () => {
+    it('keys on the filter, not on the theme', () => {
+        // Filtering is a per-theme setting the user controls, so a rule keyed on
+        // `data-theme` could not be turned off.
+        const filterRules = [...tokensCss.matchAll(/^html\[([^\]]+)][^{]*{\s*filter:/gm)]
+            .map(match => match[1]);
+
+        expect(filterRules.length).toBeGreaterThan(0);
+        filterRules.forEach(selector => expect(selector).toMatch(/^data-media-filter=/));
+    });
+
+    it('has a rule for every filter a theme offers', () => {
+        themeNames.forEach(theme => {
+            const filter = themeMediaFilter(theme);
+            if (!filter) return;
+            expect(tokensCss).toContain(`html[data-media-filter="${filter.id}"]`);
+            // Restated for native fullscreen, where an ancestor's filter stops applying.
+            expect(tokensCss).toMatch(
+                new RegExp(`html\\[data-media-filter="${filter.id}"] :fullscreen`));
+        });
+    });
+
+    it('never filters an ancestor, only leaf media', () => {
+        // A CSS filter creates a containing block, which would break `position: fixed`
+        // descendants — the nav bar and every modal.
+        expect(tokensCss).not.toMatch(/data-media-filter="[^"]+"]\s*{\s*filter:/);
     });
 });

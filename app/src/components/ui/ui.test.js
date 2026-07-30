@@ -322,7 +322,13 @@ describe('Toggle', () => {
 describe('ThemePicker', () => {
     const renderPicker = (themeContext = {}) => {
         const setTheme = jest.fn();
-        const value = {savedTheme: null, setTheme, ...themeContext};
+        const value = {
+            savedTheme: null,
+            setTheme,
+            mediaFilterEnabled: false,
+            setMediaFilterEnabled: jest.fn(),
+            ...themeContext,
+        };
         render(
             <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
                 <ThemeContext.Provider value={value}><ThemePicker/></ThemeContext.Provider>
@@ -367,6 +373,39 @@ describe('ThemePicker', () => {
         renderPicker();
 
         expect(screen.getByText(/night vision/i)).toBeInTheDocument();
+    });
+
+    it('offers the media filter toggle in a theme that has one', () => {
+        renderPicker({
+            theme: 'night',
+            mediaFilter: {id: 'night-red', defaultOn: true, label: 'Filter media to red',
+                description: 'Videos, images, documents, and maps are remapped to red.'},
+            mediaFilterEnabled: true,
+        });
+
+        expect(screen.getByRole('switch', {name: /filter media to red/i})).toBeChecked();
+    });
+
+    it('offers no toggle in a theme with no filter to offer', () => {
+        // Light and dark have no monochrome media treatment, so there is nothing to say.
+        renderPicker({theme: 'light', mediaFilter: undefined, mediaFilterEnabled: false});
+
+        expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    });
+
+    it('turns the filter off when the user flips the toggle', async () => {
+        const setMediaFilterEnabled = jest.fn();
+        renderPicker({
+            theme: 'night',
+            mediaFilter: {id: 'night-red', defaultOn: true, label: 'Filter media to red',
+                description: 'Videos, images, documents, and maps are remapped to red.'},
+            mediaFilterEnabled: true,
+            setMediaFilterEnabled,
+        });
+
+        await userEvent.click(screen.getByRole('switch', {name: /filter media to red/i}));
+
+        expect(setMediaFilterEnabled).toHaveBeenCalledWith(false);
     });
 });
 

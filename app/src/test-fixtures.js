@@ -28,10 +28,26 @@ import {defaultTheme} from './themes/names';
 /* API shapes                                                                   */
 /* --------------------------------------------------------------------------- */
 
+/*
+ * GET /api/settings and GET /api/status.
+ *
+ * Every field each endpoint returns, and nothing it does not.  Held to the API's own OpenAPI
+ * spec by wrolpi/test/test_api_fixtures.py, which is where drift now surfaces: seven settings
+ * fields were missing from this file, and the status fixture had two -- `cpu_percent` and
+ * `memory_percent` -- that no endpoint has ever returned and no component has ever read.  They
+ * came from a hand-written cypress body and had been copied onwards since.
+ *
+ * A missing field is invisible in the frontend suite: the component reads `undefined` from a
+ * body the real API would have filled in, and every assertion about everything else still
+ * passes.
+ */
+
 /** GET /api/settings */
 export const settingsFixture = (overrides = {}) => ({
     archive_destination: 'archive/%(domain_tag)s/%(domain)s',
     check_for_upgrades: true,
+    download_daily_limit_global: null,
+    download_daily_limit_per_domain: null,
     download_manager_disabled: false,
     download_manager_stopped: false,
     download_on_startup: true,
@@ -44,16 +60,22 @@ export const settingsFixture = (overrides = {}) => ({
     hotspot_password: 'wrolpi hotspot',
     hotspot_ssid: 'WROLPi',
     ignore_outdated_zims: false,
+    // Relative to the media directory, as the API returns them.
+    ignored_directories: [],
     log_level: 'info',
+    map_default_location: null,
     map_destination: 'map',
     // `/media/wrolpi` on a Pi, but the API is the authority on this and a test that
     // hardcodes it elsewhere is asserting its own guess.
     media_directory: '/media/wrolpi',
     nav_color: 'violet',
     playlists_destination: 'playlists',
+    require_cookies_unlocked: false,
+    require_media_mounted: false,
     save_ffprobe_json: true,
     tags_directory: true,
     throttle_on_startup: false,
+    timezone: null,
     version: '1.0.0',
     videos_destination: 'videos/%(channel_tag)s/%(channel_name)s',
     wrol_mode: false,
@@ -61,12 +83,25 @@ export const settingsFixture = (overrides = {}) => ({
     ...overrides,
 });
 
-/** GET /api/status */
+/**
+ * GET /api/status
+ *
+ * The stats are empty and the counters idle: a healthy machine with nothing happening, which is
+ * the state most specs want as a starting point.  A spec testing a warning threshold or an
+ * available upgrade overrides the one field it is about.
+ */
 export const statusFixture = (overrides = {}) => ({
-    version: '1.0.0',
-    flags: {},
-    cpu_percent: 10,
-    memory_percent: 30,
+    cpu_stats: {
+        cores: 4,
+        cur_frequency: 1500,
+        max_frequency: 1800,
+        min_frequency: 600,
+        percent: 10,
+        temperature: 45,
+        high_temperature: 75,
+        critical_temperature: 85,
+    },
+    dockerized: false,
     downloads: {
         pending: 0,
         recurring: 0,
@@ -74,6 +109,24 @@ export const statusFixture = (overrides = {}) => ({
         stopped: false,
         outside_download_window: false,
     },
+    drives_stats: [],
+    flags: {},
+    is_rpi: false,
+    is_rpi4: false,
+    is_rpi5: false,
+    load_stats: {minute_1: 0.1, minute_5: 0.1, minute_15: 0.1},
+    local_time: '2026-07-30T12:00:00-06:00',
+    memory_stats: {total: 4000000000, used: 1000000000, free: 3000000000, cached: 500000000},
+    processes_stats: [],
+    sanic_workers: {},
+    version: '1.0.0',
+    wrol_mode: false,
+    // Upgrade info, seeded by the API and refreshed by its upgrade check.
+    commits_behind: 0,
+    current_commit: null,
+    git_branch: null,
+    latest_commit: null,
+    update_available: false,
     ...overrides,
 });
 

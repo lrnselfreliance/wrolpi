@@ -104,8 +104,9 @@ Cypress.Commands.add('shouldNotOverlap', {prevSubject: false}, (firstSelector, s
         cy.get(secondSelector).then(($second) => {
             const a = $first[0].getBoundingClientRect();
             const b = $second[0].getBoundingClientRect();
-            const overlaps = a.right > b.left + 0.5 && b.right > a.left + 0.5
-                && a.bottom > b.top + 0.5 && b.bottom > a.top + 0.5;
+            const overlapsHorizontally = (a.right > b.left + 0.5) && (b.right > a.left + 0.5);
+            const overlapsVertically = (a.bottom > b.top + 0.5) && (b.bottom > a.top + 0.5);
+            const overlaps = overlapsHorizontally && overlapsVertically;
             expect(
                 overlaps,
                 `${firstSelector} [${a.left}, ${a.right}] must not overlap `

@@ -759,25 +759,25 @@ export function SettingsPage() {
 
                 <Grid>
                     <Grid.Col span={{base: 12, sm: 6}}>
-                        <label>
-                            Archive Directory
-                            <InfoPopup
-                                w={340}
-                                content={<>
-                                    <p>Variables:</p>
-                                    <ul>
-                                        <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
-                                        <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no
-                                            tag)
-                                        </li>
-                                        <li><code>%(tag)s</code> - Alias for the tag name</li>
-                                        <li><code>%(name)s</code> - Alias for the domain name</li>
-                                    </ul>
-                                </>}
-                                position='top'
-                            />
-                        </label>
                         <PathInput
+                            label={<>
+                                Archive Directory
+                                <InfoPopup
+                                    w={340}
+                                    content={<>
+                                        <p>Variables:</p>
+                                        <ul>
+                                            <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
+                                            <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no
+                                                tag)
+                                            </li>
+                                            <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                            <li><code>%(name)s</code> - Alias for the domain name</li>
+                                        </ul>
+                                    </>}
+                                    position='top'
+                                />
+                            </>}
                             prefix={mediaDirectoryLabel}
                             value={state.archive_destination}
                             disabled={!editSpecialDirectories}
@@ -785,26 +785,26 @@ export function SettingsPage() {
                         />
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
-                        <label>
-                            Videos Directory
-                            <InfoPopup
-                                w={340}
-                                content={<>
-                                    <p>Variables:</p>
-                                    <ul>
-                                        <li><code>%(channel_name)s</code> - Channel name</li>
-                                        <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no
-                                            tag)
-                                        </li>
-                                        <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
-                                        <li><code>%(tag)s</code> - Alias for the tag name</li>
-                                        <li><code>%(name)s</code> - Alias for the channel name</li>
-                                    </ul>
-                                </>}
-                                position='top'
-                            />
-                        </label>
                         <PathInput
+                            label={<>
+                                Videos Directory
+                                <InfoPopup
+                                    w={340}
+                                    content={<>
+                                        <p>Variables:</p>
+                                        <ul>
+                                            <li><code>%(channel_name)s</code> - Channel name</li>
+                                            <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no
+                                                tag)
+                                            </li>
+                                            <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
+                                            <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                            <li><code>%(name)s</code> - Alias for the channel name</li>
+                                        </ul>
+                                    </>}
+                                    position='top'
+                                />
+                            </>}
                             prefix={mediaDirectoryLabel}
                             value={state.videos_destination}
                             disabled={!editSpecialDirectories}
@@ -812,8 +812,8 @@ export function SettingsPage() {
                         />
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
-                        <label>Map Directory</label>
                         <PathInput
+                            label='Map Directory'
                             prefix={mediaDirectoryLabel}
                             value={state.map_destination}
                             disabled={!editSpecialDirectories}
@@ -821,8 +821,8 @@ export function SettingsPage() {
                         />
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
-                        <label>Zims Directory</label>
                         <PathInput
+                            label='Zims Directory'
                             prefix={mediaDirectoryLabel}
                             value={state.zims_destination}
                             disabled={!editSpecialDirectories}
@@ -830,8 +830,8 @@ export function SettingsPage() {
                         />
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
-                        <label>Playlists Directory</label>
                         <PathInput
+                            label='Playlists Directory'
                             prefix={mediaDirectoryLabel}
                             value={state.playlists_destination}
                             disabled={!editSpecialDirectories}

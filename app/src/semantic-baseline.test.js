@@ -48,6 +48,24 @@ describe('Semantic UI removal', () => {
         expect(stale).toEqual([]);
     });
 
+    it('has nobody left calling the Semantic toast library', () => {
+        /*
+         * This one is a ratchet at zero, not a shrinking list.
+         *
+         * The Semantic toasts only appear if `<SemanticToastContainer/>` is mounted, and
+         * that container came out of App.js when App.js migrated.  Any file that goes back
+         * to importing `toast` from react-semantic-toasts-2 would therefore raise
+         * notifications that silently never appear — no error, no warning, just a delete
+         * or a failure the user is never told about.  Import `toast` from
+         * `src/components/ui` instead; it takes the same options.
+         */
+        const TOASTS = /from ['"]react-semantic-toasts-2/;
+        const importers = sourceFiles()
+            .filter(file => TOASTS.test(fs.readFileSync(path.join(SRC, '..', file), 'utf8')));
+
+        expect(importers).toEqual([]);
+    });
+
     it('declares every migrated file that still leans on Semantic CSS classes', () => {
         /*
          * A file can stop importing semantic-ui-react and still depend on its stylesheet

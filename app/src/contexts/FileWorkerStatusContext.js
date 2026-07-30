@@ -1,7 +1,13 @@
 import React, {createContext, useContext, useState, useEffect, useCallback, useRef} from 'react';
 import {fetchFilesProgress} from '../api';
 
-const FileWorkerStatusContext = createContext(null);
+/*
+ * Exported so a test can wrap a component in the real provider holding a fixture value.  While
+ * this was private the only way to render a consumer was `jest.mock` on this whole module,
+ * which replaces the provider and the hooks together and has to be rewritten in every spec
+ * that needs it.
+ */
+export const FileWorkerStatusContext = createContext(null);
 
 export function FileWorkerStatusProvider({children, pollInterval = 3000}) {
     const [status, setStatus] = useState(null);

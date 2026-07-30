@@ -1,16 +1,17 @@
 import React from 'react';
 import {createMockDomain, createTestForm, render, screen} from '../test-utils';
+import {tagsContextFixture} from '../test-fixtures';
+import {TagsContext} from '../Tags';
 import {CollectionEditForm} from './collections/CollectionEditForm';
 import {DomainsPage} from './Archive';
 
-// Mock the TagsContext
-jest.mock('../Tags', () => ({
-    TagsContext: {
-        _currentValue: {
-            SingleTag: ({name}) => <span data-testid="applied-tag">{name}</span>
-        }
-    },
-}));
+/*
+ * The Tags context used to be faked here as a bare object with a `_currentValue` and no
+ * `.Provider`, which worked only because `useContext` reads that React internal.  It is now
+ * the real context carrying a fixture value, passed in by this spec rather than by the harness
+ * so that it is the same module instance the component reads -- see test-utils.js.
+ */
+const withTags = {contexts: [[TagsContext, tagsContextFixture()]]};
 
 // Mock the DirectorySearch and DestinationForm components
 jest.mock('./Common', () => ({
@@ -96,7 +97,8 @@ describe('Domain Tagging Logic', () => {
                     appliedTagName="News"
                 >
                     <div data-testid="child-content">Child content</div>
-                </CollectionEditForm>
+                </CollectionEditForm>,
+                withTags,
             );
 
             // Should render title
@@ -105,8 +107,8 @@ describe('Domain Tagging Logic', () => {
             // Should render children
             expect(screen.getByTestId('child-content')).toBeInTheDocument();
 
-            // Should render applied tag
-            expect(screen.getByTestId('applied-tag')).toHaveTextContent('News');
+            // The tag name a user would see, rather than a test id the old mock invented.
+            expect(screen.getByText('News')).toBeInTheDocument();
 
             // Should render Save button
             expect(screen.getByRole('button', {name: /save/i})).toBeInTheDocument();
@@ -148,7 +150,7 @@ describe('Domain Tagging Logic', () => {
                 </CollectionEditForm>
             );
 
-            expect(screen.queryByTestId('applied-tag')).not.toBeInTheDocument();
+            expect(screen.queryByText('News')).not.toBeInTheDocument();
         });
     });
 

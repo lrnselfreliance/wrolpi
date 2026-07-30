@@ -152,6 +152,30 @@ describe('Button', () => {
         expect(screen.getByRole('button', {name: 'New'})).toHaveAttribute('data-size', 'sm');
     });
 
+    it('renders an anchor when given an href, without being told twice', () => {
+        /*
+         * Mantine drops `href` unless it also gets `component='a'`, so a button carrying
+         * only an href looked like a link and navigated nowhere.  Semantic spelled this
+         * `as='a'`, so every migrated call site that kept just the href was silently
+         * broken — a download button that downloads nothing.
+         */
+        renderUI(<>
+            <Button href='/media/thing.pdf'>Download</Button>
+            <IconButton icon='download' label='Save file' href='/media/other.pdf'/>
+        </>);
+
+        const link = screen.getByRole('link', {name: 'Download'});
+        expect(link.tagName).toBe('A');
+        expect(link).toHaveAttribute('href', '/media/thing.pdf');
+        expect(screen.getByRole('link', {name: 'Save file'}).tagName).toBe('A');
+    });
+
+    it('is still a button when there is no href', () => {
+        renderUI(<Button onClick={jest.fn()}>Save</Button>);
+
+        expect(screen.getByRole('button', {name: 'Save'}).tagName).toBe('BUTTON');
+    });
+
     it('gives icon-only buttons an accessible name', () => {
         renderUI(<IconButton icon='trash' label='Delete channel'/>);
 
@@ -268,6 +292,17 @@ describe('Progress', () => {
         renderUI(<Progress percent={undefined}/>);
 
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+    });
+
+    it('reports no value when the size is unknown', () => {
+        // Semantic called this `indicating`.  An upload that has not reported its size
+        // would otherwise sit at 0% and read as stalled, and `aria-valuenow=0` would tell
+        // a screen reader the same wrong thing.
+        renderUI(<Progress indeterminate label='Uploading…'/>);
+
+        const bar = screen.getByRole('progressbar');
+        expect(bar).not.toHaveAttribute('aria-valuenow');
+        expect(bar).toHaveClass('wrolpi-progress-indeterminate');
     });
 
     it('shows arbitrary label text instead of the percentage', () => {

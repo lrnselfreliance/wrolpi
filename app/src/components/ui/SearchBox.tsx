@@ -42,6 +42,12 @@ export interface SearchBoxProps {
     onResultSelect?: (result: SearchResult) => void;
     onBlur?: React.FocusEventHandler<HTMLInputElement>;
     results?: SearchResults;
+    /**
+     * Render one suggestion's contents.  Callers use this to give a kind of result its
+     * own presentation — a tag chip rather than a line of text, say.  Falls back to
+     * the title and description.
+     */
+    resultRenderer?: (result: SearchResult) => React.ReactNode;
     /** Suggestions are being fetched; shows a spinner rather than "no results". */
     loading?: boolean;
     placeholder?: string;
@@ -71,6 +77,7 @@ export function SearchBox({
     onResultSelect,
     onBlur,
     results,
+    resultRenderer,
     loading,
     placeholder = 'Search...',
     clearable,
@@ -217,10 +224,12 @@ export function SearchBox({
                             }}
                             onMouseEnter={() => setHighlighted(optionIndex)}
                         >
-                            <div className='wrolpi-searchbox-result-title'>{result.title}</div>
-                            {result.description && <div className='wrolpi-searchbox-result-description'>
-                                {result.description}
-                            </div>}
+                            {resultRenderer ? resultRenderer(result) : <>
+                                <div className='wrolpi-searchbox-result-title'>{result.title}</div>
+                                {result.description && <div className='wrolpi-searchbox-result-description'>
+                                    {result.description}
+                                </div>}
+                            </>}
                         </div>
                     })}
                 </div>

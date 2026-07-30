@@ -343,6 +343,42 @@ describe('PathInput', () => {
         expect(screen.getByText('Not a directory')).toBeInTheDocument();
     });
 
+    it('reads out its help text as well as the prefix', () => {
+        /*
+         * Rendering the description on screen is not the same as announcing it.  Unless it is
+         * referenced, a screen reader user hears the label and the prefix and never learns
+         * what the field expects -- the help text is the part that explains the variables
+         * these paths are allowed to contain.
+         */
+        renderUI(<PathInput
+            prefix='/media/wrolpi/'
+            label='Archive Directory'
+            description='Accepts %(domain)s and %(tag)s.'
+            value=''
+            onChange={jest.fn()}
+        />);
+
+        expect(screen.getByLabelText(/Archive Directory/))
+            .toHaveAccessibleDescription('/media/wrolpi/ Accepts %(domain)s and %(tag)s.');
+    });
+
+    it('announces the reason a path was rejected', () => {
+        // The dashed border and red text carry the failure for sighted users; without the
+        // error in the accessible description nothing carries it for anyone else.
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Zims Directory'
+                            error='Not a directory' value='' onChange={jest.fn()}/>);
+
+        const input = screen.getByLabelText(/Zims Directory/);
+        expect(input).toHaveAccessibleDescription(/Not a directory/);
+        expect(input).toBeInvalid();
+    });
+
+    it('is not marked invalid when there is nothing wrong with it', () => {
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Fine' value='' onChange={jest.fn()}/>);
+
+        expect(screen.getByLabelText(/Fine/)).toBeValid();
+    });
+
     it('forwards a ref to the input, for callers that focus it', () => {
         const ref = React.createRef();
         renderUI(<PathInput ref={ref} prefix='/media/wrolpi/' label='Focusable'

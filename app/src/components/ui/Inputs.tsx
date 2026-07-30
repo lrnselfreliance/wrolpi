@@ -90,6 +90,20 @@ export const PathInput = forwardRef<HTMLInputElement, PathInputProps>((
     const generated = useId();
     const inputId = id ?? `${generated}-input`;
     const prefixId = `${generated}-prefix`;
+    const descriptionId = `${generated}-description`;
+    const errorId = `${generated}-error`;
+
+    /*
+     * Everything that explains the field, in reading order.  Drawing the description and the
+     * error on screen does not announce them -- an unreferenced element is invisible to a
+     * screen reader, which would leave a user hearing the label and the prefix but never the
+     * variables the path accepts, nor the reason a path was just rejected.
+     */
+    const describedBy = [
+        prefixId,
+        description ? descriptionId : null,
+        error ? errorId : null,
+    ].filter(Boolean).join(' ');
 
     return <div className={['wrolpi-path-input', className].filter(Boolean).join(' ')}>
         {label && <label className='wrolpi-path-input-label' htmlFor={inputId}>
@@ -100,20 +114,27 @@ export const PathInput = forwardRef<HTMLInputElement, PathInputProps>((
             {/*
               Described rather than hidden: a screen reader should hear which directory the
               typed path is relative to, since that is the whole point of showing it.
+
+              `title` carries the full path because the prefix truncates when it is long --
+              the media directory is whatever the API reports, and a prefix that refused to
+              shrink took the entire row and left the input 18px wide.
             */}
-            <span className='wrolpi-path-input-prefix' id={prefixId}>{prefix}</span>
+            <span className='wrolpi-path-input-prefix' id={prefixId} title={prefix}>{prefix}</span>
             <input
                 ref={ref}
                 id={inputId}
                 type='text'
                 required={required}
                 disabled={disabled}
-                aria-describedby={prefixId}
+                aria-describedby={describedBy}
+                aria-invalid={error ? true : undefined}
                 {...props}
             />
         </div>
-        {description && <div className='wrolpi-path-input-description'>{description}</div>}
-        {error && <div className='wrolpi-path-input-error'>{error}</div>}
+        {description && <div className='wrolpi-path-input-description' id={descriptionId}>
+            {description}
+        </div>}
+        {error && <div className='wrolpi-path-input-error' id={errorId}>{error}</div>}
     </div>
 });
 PathInput.displayName = 'PathInput';

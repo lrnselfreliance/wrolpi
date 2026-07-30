@@ -1,8 +1,7 @@
 import React from "react";
-import {Icon, Loader, Message, Placeholder, PlaceholderLine} from "semantic-ui-react";
 import {downloadArchiveMember, getArchiveContents} from "../api";
 import {fileSuffixIconName, humanFileSize} from "./Common";
-import {Modal, Segment, Table} from "./Theme";
+import {Icon, Message, Modal, Panel, Placeholder, Table} from "./ui";
 
 function ArchiveEntry({entry, depth, archivePath}) {
     const [expanded, setExpanded] = React.useState(depth === 0);
@@ -19,9 +18,9 @@ function ArchiveEntry({entry, depth, archivePath}) {
                 <Table.Cell className='file-path'>
                     {indent}
                     <Icon name={expanded ? 'folder open' : 'folder'}/>
-                    {entry.name}/
+                    {' '}{entry.name}/
                 </Table.Cell>
-                <Table.Cell collapsing textAlign='right'>
+                <Table.Cell numeric>
                     &mdash;
                 </Table.Cell>
             </Table.Row>
@@ -37,11 +36,11 @@ function ArchiveEntry({entry, depth, archivePath}) {
         <Table.Cell className='file-path' onClick={handleDownload} style={{cursor: 'pointer'}}>
             {indent}
             <Icon name={fileSuffixIconName(entry.name)}/>
-            {entry.name}
+            {' '}{entry.name}
             {' '}
-            <Icon name='download' size='small' color='grey'/>
+            <Icon name='download' size='small'/>
         </Table.Cell>
-        <Table.Cell collapsing textAlign='right'>
+        <Table.Cell numeric>
             {humanFileSize(entry.size)}
         </Table.Cell>
     </Table.Row>
@@ -52,7 +51,7 @@ function SkeletonRows() {
         {[1, 2, 3].map(i =>
             <Table.Row key={i}>
                 <Table.Cell colSpan={2}>
-                    <Placeholder><PlaceholderLine/></Placeholder>
+                    <Placeholder lines={1}/>
                 </Table.Cell>
             </Table.Row>
         )}
@@ -88,24 +87,24 @@ export function ArchivePreviewContent({previewFile}) {
 
     if (error) {
         return <Modal.Content>
-            <Message negative>
-                <Message.Header>Cannot read archive</Message.Header>
+            <Message kind='error' title='Cannot read archive'>
                 <p>{error}</p>
             </Message>
         </Modal.Content>
     }
 
     return <Modal.Content scrolling>
-        {!loading && contents && <Segment>
+        {!loading && contents && <Panel>
             <Icon name='archive'/>
+            {' '}
             <strong>{contents.total_files}</strong> files,{' '}
             <strong>{humanFileSize(contents.total_size)}</strong> total
-        </Segment>}
-        <Table striped selectable unstackable>
+        </Panel>}
+        <Table>
             <Table.Header>
                 <Table.Row>
                     <Table.HeaderCell>Name</Table.HeaderCell>
-                    <Table.HeaderCell collapsing textAlign='right'>Size</Table.HeaderCell>
+                    <Table.HeaderCell>Size</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
             <Table.Body>

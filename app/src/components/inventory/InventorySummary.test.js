@@ -1,5 +1,6 @@
 import React from "react";
-import {fireEvent, render, screen} from "@testing-library/react";
+import {fireEvent, screen} from "@testing-library/react";
+import {renderWithProviders} from "../../test-utils";
 import {InventorySummary} from "./InventorySummary";
 
 // Group by the first text field (category); two groups with different item counts and size totals.
@@ -19,12 +20,12 @@ const groupOrder = () =>
 
 describe('InventorySummary sortable columns', () => {
     test('defaults to group name ascending', () => {
-        render(<InventorySummary fields={FIELDS} items={ITEMS}/>);
+        renderWithProviders(<InventorySummary fields={FIELDS} items={ITEMS}/>);
         expect(groupOrder()).toEqual(['beans', 'grains']);
     });
 
     test('sorting by Items uses the numeric count', () => {
-        render(<InventorySummary fields={FIELDS} items={ITEMS}/>);
+        renderWithProviders(<InventorySummary fields={FIELDS} items={ITEMS}/>);
         fireEvent.click(screen.getByText('Items'));       // first click -> descending
         expect(groupOrder()).toEqual(['grains', 'beans']); // grains has 2 items, beans 1
         fireEvent.click(screen.getByText('Items'));       // toggle -> ascending
@@ -32,7 +33,7 @@ describe('InventorySummary sortable columns', () => {
     });
 
     test('sorting by Total uses the summed magnitude, not the formatted string', () => {
-        render(<InventorySummary fields={FIELDS} items={ITEMS}/>);
+        renderWithProviders(<InventorySummary fields={FIELDS} items={ITEMS}/>);
         fireEvent.click(screen.getByText('Total'));        // descending
         expect(groupOrder()).toEqual(['beans', 'grains']); // beans 100 lb > grains 30 lb
     });

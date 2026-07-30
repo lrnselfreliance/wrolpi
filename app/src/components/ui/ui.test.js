@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -78,6 +80,30 @@ describe('Icon', () => {
         expect(unmapped.map(c => `${c.text}: ${c.icon}`)).toEqual([]);
     });
 
+    it('maps every name the mimetype and file-suffix helpers can return', () => {
+        // These two build icon names from arbitrary files in the user's library, so an
+        // unmapped one is not hypothetical — it is a console error and a fallback glyph
+        // the moment somebody opens a folder containing that file type.
+        const common = fs.readFileSync(path.join(__dirname, '..', 'Common.js'), 'utf8');
+        const section = common.slice(
+            common.indexOf('export function mimetypeIconName'),
+            common.indexOf('export function FileIcon'));
+        const returned = [...new Set([...section.matchAll(/return '([^']+)'/g)].map(m => m[1]))];
+
+        expect(returned.length).toBeGreaterThan(10);
+        expect(returned.filter(name => !resolveIconName(name))).toEqual([]);
+    });
+
+    it('points every mapped name at a Tabler component that exists', () => {
+        // A typo in the map resolves to undefined and renders the fallback glyph, which
+        // looks like a design choice rather than a bug.
+        const source = fs.readFileSync(path.join(__dirname, 'Icon.tsx'), 'utf8');
+        const names = [...source.matchAll(/^ {4}'([^']+)': '([^']+)',$/gm)].map(m => m[1]);
+
+        expect(names.length).toBeGreaterThan(100);
+        expect(names.filter(name => !resolveIconName(name))).toEqual([]);
+    });
+
     it('reports an unknown name instead of failing silently', () => {
         const error = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -114,6 +140,16 @@ describe('Button', () => {
 
         expect(container.querySelector('svg')).toBeInTheDocument();
         expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
+    });
+
+    it('translates Semantic size names, which Mantine would otherwise ignore', () => {
+        // Unmigrated call sites still pass size='tiny'.  Mantine drops a size it does not
+        // recognise without warning, so the button quietly renders at the default size.
+        renderUI(<><Button size='tiny'>Old</Button><Button size='sm'>New</Button></>);
+
+        expect(screen.getByRole('button', {name: 'Old'})).toHaveAttribute('data-size', 'xs');
+        // A Mantine size still passes through untouched.
+        expect(screen.getByRole('button', {name: 'New'})).toHaveAttribute('data-size', 'sm');
     });
 
     it('gives icon-only buttons an accessible name', () => {

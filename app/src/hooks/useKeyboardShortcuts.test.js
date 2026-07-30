@@ -1,6 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, act} from '@testing-library/react';
-import {MemoryRouter} from 'react-router';
+import {render, screen, fireEvent, act} from '../test-utils';
 import {KeyboardShortcutsContext} from '../contexts/KeyboardShortcutsContext';
 import {KeyboardShortcutsProvider, SHORTCUTS} from '../components/KeyboardShortcutsProvider';
 import {ThemeContext} from '../contexts/contexts';
@@ -43,17 +42,15 @@ function TestWrapper({children}) {
     };
 
     return (
-        <MemoryRouter>
-            <ThemeContext.Provider value={mockThemeContext}>
-                <QueryContext.Provider value={mockQueryContext}>
-                    <TagsContext.Provider value={mockTagsContext}>
-                        <KeyboardShortcutsProvider>
-                            {children}
-                        </KeyboardShortcutsProvider>
-                    </TagsContext.Provider>
-                </QueryContext.Provider>
-            </ThemeContext.Provider>
-        </MemoryRouter>
+        <ThemeContext.Provider value={mockThemeContext}>
+            <QueryContext.Provider value={mockQueryContext}>
+                <TagsContext.Provider value={mockTagsContext}>
+                    <KeyboardShortcutsProvider>
+                        {children}
+                    </KeyboardShortcutsProvider>
+                </TagsContext.Provider>
+            </QueryContext.Provider>
+        </ThemeContext.Provider>
     );
 }
 

@@ -48,6 +48,23 @@ describe('Semantic UI removal', () => {
         expect(stale).toEqual([]);
     });
 
+    it('declares every migrated file that still leans on Semantic CSS classes', () => {
+        /*
+         * A file can stop importing semantic-ui-react and still depend on its stylesheet
+         * by writing `className="ui stackable grid"`.  The import ratchet above cannot see
+         * that, so when Phase 4 deletes semantic.min.css the layout would silently
+         * collapse.  Anything on this list is a deliberate bridge that must be revisited
+         * then; anything NOT on it is an accident.
+         */
+        const allowed = ['src/components/collections/CollectionEditForm.js'];
+
+        const bridges = sourceFiles()
+            .filter(file => !baseline.includes(file))
+            .filter(file => /className=["']ui /.test(fs.readFileSync(path.join(SRC, '..', file), 'utf8')));
+
+        expect(bridges.sort()).toEqual(allowed.sort());
+    });
+
     it('reports how much of the migration is left', () => {
         // Not an assertion so much as a progress readout in the test output.
         const remaining = importers().length;

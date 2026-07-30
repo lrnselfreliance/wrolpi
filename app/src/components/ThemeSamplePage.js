@@ -21,6 +21,7 @@ import {
     TextInput,
     Textarea,
     Checkbox,
+    ThemePicker,
     Toggle,
     Tooltip,
     toast,
@@ -28,11 +29,14 @@ import {
 import {semanticColorNames} from '../themes/mantine';
 
 /*
- * A gallery of every component in the new library, in the current theme.
+ * A gallery of every component in the library, in the current theme.
  *
- * Reachable at /theme-sample.  This exists to review the design and to catch a
- * component that looks wrong in one of the four themes; it is not linked from
- * the navigation.
+ * Reachable at /theme-sample and linked from Settings, so a user can see a theme
+ * before committing to it.
+ *
+ * EVERY new component belongs here.  It is how we review the design and how we
+ * catch a component that only looks wrong in one of the four themes — which has
+ * already happened more than once.
  */
 
 const Section = ({label, children}) => <section style={{marginBottom: 34}}>
@@ -56,20 +60,18 @@ export function ThemeSamplePage() {
     return <div style={{maxWidth: 1060, margin: '0 auto', padding: '20px 16px 60px', color: 'var(--text)'}}>
         <h1 style={{fontSize: 21, fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
         <p style={{color: 'var(--muted)', fontSize: 13, marginTop: 0}}>
-            Every component in the new library, rendered in the <strong>{theme}</strong> theme.
+            Every component in the WROLPi interface library, rendered in the <strong>{theme}</strong> theme.
             Switch themes here or from the navigation bar.
         </p>
 
-        <Section label='Themes'>
-            <Row>
-                {['light', 'dark', 'night', 'amber'].map(name => <Button
-                    key={name}
-                    variant={theme === name ? 'filled' : 'default'}
-                    onClick={() => setTheme(name)}
-                >
-                    {name}
-                </Button>)}
-            </Row>
+        <Section label='Theme picker'>
+            <Panel>
+                <ThemePicker/>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                    The same picker the Settings page uses. The navigation bar has a compact
+                    version; both read the same list of themes.
+                </p>
+            </Panel>
         </Section>
 
         <Section label='Statistics'>

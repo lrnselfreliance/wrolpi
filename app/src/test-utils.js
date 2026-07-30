@@ -32,6 +32,7 @@ import {
     ThemeContext,
 } from './contexts/contexts';
 import {cssVariablesResolver, mantineTheme} from './themes/mantine';
+import {darkTheme, isDarkTheme, lightTheme} from './themes/names';
 import {
     domainFixture,
     domainsFixture,
@@ -127,12 +128,28 @@ export function renderWithProviders(
     // this by hand.
     if (route) window.history.pushState({}, '', route);
 
+    /*
+     * The theme decides the colour scheme, rather than the two being set independently.
+     *
+     * `inverted` used to drive Mantine's scheme on its own, so asking for night or amber
+     * through the theme option produced a tree that reported a dark theme while Mantine
+     * rendered its light one -- a combination production cannot reach.  A harness inventing
+     * states the app never has is worse than one that is merely incomplete: what a test proves
+     * about that tree is true of nothing.
+     *
+     * `isDark` follows from the theme name, but only as a default: a spec deliberately checking
+     * what a component does when the two disagree can still say so.
+     */
+    const requestedTheme = theme.theme ?? themeContext.theme ?? (inverted ? darkTheme : lightTheme);
     const themeValue = themeContextFixture({
-        theme: inverted ? 'dark' : 'light',
-        isDark: inverted,
+        theme: requestedTheme,
+        isDark: isDarkTheme(requestedTheme),
         ...themeContext,
         ...theme,
     });
+    // Every token table and the whole night-mode treatment key on this attribute, so a
+    // component test that leaves it unset cannot exercise any of them.
+    document.documentElement.dataset.theme = requestedTheme;
     const statusValue = statusContextFixture(status);
     const settingsValue = settingsContextFixture(settings);
     const queryValue = queryContextFixture(query);
@@ -170,7 +187,7 @@ export function renderWithProviders(
                 <MantineProvider
                     theme={mantineTheme}
                     cssVariablesResolver={cssVariablesResolver}
-                    forceColorScheme={inverted ? 'dark' : 'light'}
+                    forceColorScheme={isDarkTheme(requestedTheme) ? 'dark' : 'light'}
                 >
                     {withProviders}
                 </MantineProvider>
@@ -192,20 +209,33 @@ export function renderWithProviders(
 /**
  * Replace named exports of a module, keeping every other export intact.
  *
- * Use inside a `jest.mock` factory:
+ * Takes the module, which the spec resolves itself, not a path to it:
  *
  *   jest.mock('../hooks/customHooks', () =>
- *       require('../test-utils').mockModule('../hooks/customHooks', {
- *           useDomains: () => mockUseDomains(),
- *       }));
+ *       require('../test-utils').mockModule(
+ *           jest.requireActual('../hooks/customHooks'),
+ *           {useDomains: () => mockUseDomains()},
+ *       ));
  *
- * The point is the spread.  A factory written by hand returns only the keys it lists, so
- * every other export of that module becomes undefined -- one spec mocks six hooks out of
- * customHooks and silently blanks the rest, and the next hook a component under it starts
- * calling fails as "not a function" a long way from the cause.
+ * The point is the spread.  A factory written by hand returns only the keys it lists, so every
+ * other export of that module becomes undefined -- one spec mocks six hooks out of customHooks
+ * and blanks the rest, and the next hook a component under it starts calling fails as "not a
+ * function" a long way from the cause.
+ *
+ * It first took a path and called `jest.requireActual` itself, which cannot work: the
+ * specifier would resolve relative to THIS file rather than to the spec, so the documented
+ * `'../hooks/customHooks'` pointed outside src altogether for any spec in a subdirectory.  The
+ * helper had no caller, so nothing ever ran it.  Throwing on a string is deliberate -- silently
+ * resolving to the wrong module is the failure that was there to begin with.
  */
-export function mockModule(modulePath, overrides) {
-    return {...jest.requireActual(modulePath), ...overrides};
+export function mockModule(actualModule, overrides) {
+    if (typeof actualModule === 'string') {
+        throw new Error(
+            'mockModule takes the module, not a path: pass jest.requireActual(path) so the '
+            + 'specifier resolves from your spec rather than from test-utils.js',
+        );
+    }
+    return {...actualModule, ...overrides};
 }
 
 /*

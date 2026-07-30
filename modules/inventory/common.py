@@ -55,7 +55,7 @@ def _allowed_item_keys(fields_: list) -> set:
 
 
 def _normalize_items(items: list, fields_: list) -> list:
-    """Filter each item to the schema's allowed keys and assign stable ids (fresh id for any missing/duplicate)."""
+    """Filter each item to the schema's allowed keys, strip whitespace from string values, and assign stable ids (fresh id for any missing/duplicate)."""
     if not isinstance(items, list):
         raise ValidationError('items must be a list')
     allowed = _allowed_item_keys(fields_)
@@ -63,7 +63,7 @@ def _normalize_items(items: list, fields_: list) -> list:
     used = set()
     normalized = []
     for raw in items:
-        clean = {k: v for k, v in raw.items() if k in allowed}
+        clean = {k: (v.strip() if isinstance(v, str) else v) for k, v in raw.items() if k in allowed}
         item_id = raw.get('id')
         if not isinstance(item_id, int) or item_id in used:
             counter += 1

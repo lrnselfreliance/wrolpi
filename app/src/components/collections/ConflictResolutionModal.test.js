@@ -9,10 +9,6 @@ jest.mock('../../api', () => ({
     deleteFileGroups: jest.fn(),
 }));
 
-// Mock react-semantic-toasts-2
-jest.mock('react-semantic-toasts-2', () => ({
-    toast: jest.fn(),
-}));
 
 describe('ConflictResolutionModal', () => {
     const mockConflicts = [

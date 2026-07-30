@@ -1,6 +1,5 @@
 import React from 'react';
 import {ArchiveDownloadForm, ChannelDownloadForm, EditRSSDownloadForm} from './Download';
-import 'semantic-ui-offline/semantic.min.css';
 
 describe('<ArchiveDownloadForm />', () => {
     beforeEach(() => {

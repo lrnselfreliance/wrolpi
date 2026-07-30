@@ -3,20 +3,20 @@ import path from 'path';
 import baseline from './semantic-baseline.json';
 
 /*
- * A ratchet for the Semantic UI removal.
+ * Semantic UI is gone, and this keeps it gone.
  *
- * semantic-baseline.json lists every file that still imports Semantic UI (or the
- * Semantic-based toast library).  This test fails if a file not on that list
- * starts importing them, and asks for the list to shrink when a file stops.
+ * It began as a ratchet: semantic-baseline.json listed the 75 files still importing
+ * Semantic UI, the list only shrank, and adding a file to it failed the build.  The list
+ * reached zero, the three packages are uninstalled, and the baseline is now an empty
+ * array kept only so a reintroduction has to delete a file rather than edit one.
  *
- * It replaces an ESLint rule deliberately: `no-restricted-imports` would either
- * print 75 warnings on every dev rebuild, or fail the build outright, and CI
- * already unsets CI= for the build step so warnings there guard nothing.
+ * The assertions below are cheap and each one caught something real during the migration,
+ * so they stay: an import would now fail to resolve, but a `className="ui button"` or a
+ * reach back through Theme.tsx would not, and neither would reinstalling a package.
  *
- * The list has reached zero.  The test stays as a guard rather than being deleted: it now
- * asserts that nothing imports Semantic UI, nothing calls its toast library, nothing leans
- * on its stylesheet, and no migrated file reaches back through Theme.tsx.  It can go when
- * the packages themselves are uninstalled.
+ * It is a test rather than an ESLint rule deliberately: `no-restricted-imports` would
+ * either print dozens of warnings on every dev rebuild or fail the build outright, and CI
+ * unsets CI= for its build step, so warnings there guard nothing.
  */
 
 const SRC = path.join(__dirname);
@@ -109,10 +109,26 @@ describe('Semantic UI removal', () => {
         expect(leaks).toEqual([]);
     });
 
-    it('reports how much of the migration is left', () => {
-        // Not an assertion so much as a progress readout in the test output.
-        const remaining = importers().length;
-        expect(remaining).toBeLessThanOrEqual(baseline.length);
-        console.log(`Semantic UI: ${remaining} files remaining to migrate.`);
+    it('has no Semantic package installed', () => {
+        /*
+         * The three packages are uninstalled.  An import of a missing module fails loudly,
+         * so this guards the quieter mistake: someone reinstalling one -- to "just use a
+         * Semantic component for this one thing" -- which would drag the whole library and
+         * its 300kB stylesheet back into the bundle.
+         */
+        const pkg = JSON.parse(
+            fs.readFileSync(path.join(SRC, '..', 'package.json'), 'utf8'));
+        const named = [...Object.keys(pkg.dependencies || {}),
+            ...Object.keys(pkg.devDependencies || {})]
+            .filter(name => /semantic/i.test(name));
+
+        expect(named).toEqual([]);
+    });
+
+    it('keeps the baseline empty', () => {
+        // The migration is finished; the file stays as an empty list so that putting a
+        // name back requires a deliberate edit.
+        expect(baseline).toEqual([]);
+        expect(importers()).toEqual([]);
     });
 });

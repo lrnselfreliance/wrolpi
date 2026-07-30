@@ -14,10 +14,17 @@
 // ***********************************************************
 
 import './commands'
-import 'semantic-ui-offline/semantic.min.css';
-import {MemoryRouter, Route, Routes} from "react-router-dom";
+// Component tests mount real components, so they need the same styles the app loads.
+import '../../src/index.css';
+import '../../src/themes/fonts.css';
+import '../../src/themes/tokens.css';
+import '@mantine/core/styles.css';
+// react-router v7 ships these directly; `react-router-dom` is not installed.
+import {MemoryRouter, Route, Routes} from "react-router";
 import {QueryProvider} from "../../src/hooks/customHooks";
 import {TagsProvider} from "../../src/Tags";
+import {MantineProvider} from "@mantine/core";
+import {cssVariablesResolver, mantineTheme} from "../../src/themes/mantine";
 import React from "react";
 
 Cypress.on('uncaught:exception', (err, runnable) => {
@@ -31,8 +38,14 @@ Cypress.on('uncaught:exception', (err, runnable) => {
 Cypress.Commands.add('mountWithRouter', (component, options) => {
     options = options || {};
     const initialEntries = options?.initialEntries || ['/'];
+    /*
+     * MantineProvider, configured exactly as ThemeProvider configures it.  Every component
+     * in src/components/ui renders Mantine internals and throws without it -- the same
+     * thing that had to be added to test-utils.js for jest.
+     */
     return cy.mount(
         <MemoryRouter initialEntries={initialEntries}>
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
             <QueryProvider>
                 <Routes>
                     <Route path='/videos/channels/new' element={component}/>
@@ -41,6 +54,7 @@ Cypress.Commands.add('mountWithRouter', (component, options) => {
                     <Route path='*' element={component}/>
                 </Routes>
             </QueryProvider>
+            </MantineProvider>
         </MemoryRouter>,
         options
     );

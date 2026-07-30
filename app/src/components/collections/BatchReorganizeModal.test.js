@@ -11,10 +11,6 @@ jest.mock('../../api', () => ({
     getBatchReorganizationStatus: jest.fn(),
 }));
 
-// Mock react-semantic-toasts-2
-jest.mock('react-semantic-toasts-2', () => ({
-    toast: jest.fn(),
-}));
 
 // Mock the FileWorkerStatusContext
 jest.mock('../../contexts/FileWorkerStatusContext', () => ({

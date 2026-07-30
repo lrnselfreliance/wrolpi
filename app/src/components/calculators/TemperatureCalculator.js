@@ -1,7 +1,6 @@
 import React from "react";
 import {roundDigits} from "../Common";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {GridColumn, GridRow, Input} from "semantic-ui-react";
+import {Grid, NumberInput} from "../ui";
 
 export function TemperatureCalculator() {
     const [state, setState] = React.useState({
@@ -10,14 +9,15 @@ export function TemperatureCalculator() {
         kelvin: '',
     })
 
-    const handleInputChange = (e, {name, value}) => {
-        if (value === '') {
+    const handleInputChange = (name, value) => {
+        if (value === '' || value === undefined || value === null) {
             // User has cleared the input;
             setState({celsius: '', fahrenheit: '', kelvin: ''});
             return
         }
 
-        const numValue = parseFloat(value.endsWith('.') ? `${value}0` : value);
+        const stringValue = `${value}`;
+        const numValue = parseFloat(stringValue.endsWith('.') ? `${stringValue}0` : stringValue);
         console.debug(`Calculating ${value} ${name}`);
         let newCelsius;
         let newKelvin;
@@ -52,25 +52,30 @@ export function TemperatureCalculator() {
         e.target.select();
     }
 
-    const commonInputProps = {
-        fluid: true,
-        labelPosition: 'right',
-        type: 'number',
-        onChange: handleInputChange,
-        onClick: handleClick
-    };
-
-    return <Grid columns={3}>
-        <GridRow>
-            <GridColumn>
-                <Input value={state.celsius} label='°C' name='celsius' {...commonInputProps}/>
-            </GridColumn>
-            <GridColumn>
-                <Input value={state.fahrenheit} label='°F' name='fahrenheit' {...commonInputProps}/>
-            </GridColumn>
-            <GridColumn>
-                <Input value={state.kelvin} label='K' name='kelvin' {...commonInputProps}/>
-            </GridColumn>
-        </GridRow>
+    return <Grid>
+        <Grid.Col span={4}>
+            <NumberInput
+                value={state.celsius}
+                rightSection='°C'
+                onChange={value => handleInputChange('celsius', value)}
+                onClick={handleClick}
+            />
+        </Grid.Col>
+        <Grid.Col span={4}>
+            <NumberInput
+                value={state.fahrenheit}
+                rightSection='°F'
+                onChange={value => handleInputChange('fahrenheit', value)}
+                onClick={handleClick}
+            />
+        </Grid.Col>
+        <Grid.Col span={4}>
+            <NumberInput
+                value={state.kelvin}
+                rightSection='K'
+                onChange={value => handleInputChange('kelvin', value)}
+                onClick={handleClick}
+            />
+        </Grid.Col>
     </Grid>
 }

@@ -598,7 +598,7 @@ function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile
     return (
         <div style={{marginBottom: '4em'}} className={containerClassName}>
             <SortableTable
-                tableProps={{unstackable: true, selectable: true, striped: true}}
+                tableProps={{striped: true}}
                 data={browseFiles}
                 tableHeaders={headers}
                 defaultSortColumn='path'

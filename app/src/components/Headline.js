@@ -1,21 +1,17 @@
-import {Placeholder, Segment} from "./Theme";
-import {Image, PlaceholderLine} from "semantic-ui-react";
+import {Grid, Panel, Placeholder} from "./ui";
 import React from "react";
-import {ThemeContext} from "../contexts/contexts";
 import {encodeMediaPath, FileIcon, findPosterPath, PreviewLink} from "./Common";
 import {Link} from "react-router";
 import _ from "lodash";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {FileRowTagIcon} from "./Files";
 
 export const HeadlineText = ({headline, openTag = '<u>', closeTag = '</u>'}) => {
-    const {s} = React.useContext(ThemeContext);
     if (headline) {
         headline = headline.replaceAll('<b>', openTag);
         headline = headline.replaceAll('</b>', closeTag);
         headline = headline.replaceAll('\n', '<br/>');
         // FTS headlines use <b>...</b> tags which we will restyle.
-        return <span {...s} dangerouslySetInnerHTML={{__html: headline}}></span>
+        return <span dangerouslySetInnerHTML={{__html: headline}}></span>
     }
 }
 
@@ -26,7 +22,7 @@ const FileHeadline = ({file, to}) => {
     const posterPath = findPosterPath(file);
     if (posterPath) {
         const posterUrl = posterPath ? `/media/${encodeMediaPath(posterPath)}` : null;
-        poster = <Image src={posterUrl} size='tiny'/>;
+        poster = <img alt='poster' src={posterUrl} style={{maxWidth: '80px', maxHeight: '80px'}}/>;
     } else {
         poster = <FileIcon file={file}/>;
     }
@@ -48,32 +44,26 @@ const FileHeadline = ({file, to}) => {
         </>;
     }
 
-    return <Segment>
+    return <Panel>
         <Grid>
-            <Grid.Row>
-                <Grid.Column mobile={4} computer={2}>{poster}</Grid.Column>
-                <Grid.Column mobile={12} computer={12}>
-                    <big>
-                        <FileRowTagIcon file={file}/>
-                        {header}
-                    </big>
-                </Grid.Column>
-            </Grid.Row>
+            <Grid.Col span={{base: 4, sm: 2}}>{poster}</Grid.Col>
+            <Grid.Col span={{base: 12, sm: 10}}>
+                <big>
+                    <FileRowTagIcon file={file}/>
+                    {header}
+                </big>
+            </Grid.Col>
         </Grid>
         <br/>
         {body}
-    </Segment>
+    </Panel>
 }
 
 export const Headlines = ({results}) => {
     if (results === null || results === undefined) {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>
+        return <Placeholder lines={3}/>
     } else if (results && results.length === 0) {
-        return <Segment>No results!</Segment>
+        return <Panel>No results!</Panel>
     }
 
     let headlines = [];

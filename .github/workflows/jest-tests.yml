@@ -1,10 +1,16 @@
 name: Jest Tests
 
+# `pull_request` is deliberately unfiltered.  It was `branches: [master]`, which meant a pull
+# request into anything else ran no jest and no webpack build -- so the entire Semantic UI to
+# Mantine migration, seventy-five files of it, was reviewed and merged across nine pull requests
+# into `feature/custom-theme` without either ever running on a single one of them.  The build
+# step matters most of all here: jest and tsc both pass on a named import that does not exist,
+# and only webpack rejects it.  The suite did run on the branch afterwards, which is the wrong
+# side of the merge to find out.
 on:
   push:
     branches: [master, feature/*]
   pull_request:
-    branches: [master]
 
 jobs:
   jest-tests:

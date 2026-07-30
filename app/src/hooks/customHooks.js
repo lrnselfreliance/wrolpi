@@ -1024,276 +1024,140 @@ export const useBrowseFiles = () => {
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
 }
 
-export const useHotspot = () => {
+// Every hardware toggle works the same way: one field of the shared status object
+// says whether the subsystem is on, and starting/stopping it is a Controller call.
+// `on` is null when the status is unknown, which the UI renders as unsupported.
+const useSubsystemToggle = ({
+                                statusField,
+                                onValue = 'on',
+                                offValues = ['off'],
+                                start,
+                                stop,
+                                errorTitle,
+                                errorDescription,
+                                refetchStatus = false,
+                            }) => {
     const [on, setOn] = useState(null);
-    const [inUse, setInUse] = useState(false);
-    const {status} = useContext(StatusContext);
-    // Hotspot is unsupported on Docker.
-    const {dockerized, hotspot_ssid} = status;
+    const {status, fetchStatus} = useContext(StatusContext);
+    const value = status?.[statusField];
 
     useEffect(() => {
-        if (status && status['hotspot_status']) {
-            const {hotspot_status} = status;
-            if (hotspot_status === 'connected') {
-                setOn(true);
-                setInUse(false);
-            } else if (hotspot_status === 'in_use') {
-                setInUse(true);
-                setOn(false);
-            } else if (hotspot_status === 'disconnected' || hotspot_status === 'off') {
-                setOn(false);
-                setInUse(false);
-            } else {
-                setOn(null);
-            }
+        if (value === onValue) {
+            setOn(true);
+        } else if (offValues.includes(value)) {
+            setOn(false);
+        } else {
+            setOn(null);
         }
-    }, [status]);
+    }, [value]);
 
-    const localSetHotspot = async (enable) => {
+    const setSubsystem = async (enable) => {
+        const previous = on;
         setOn(null);
         try {
             if (enable) {
-                await startHotspot();
+                await start();
             } else {
-                await stopHotspot();
+                await stop();
             }
         } catch (e) {
-            console.error('Hotspot error:', e);
+            console.error(`${errorTitle}:`, e);
             toast({
                 type: 'error',
-                title: 'Hotspot Error',
-                description: e.message || 'Could not modify hotspot. See server logs.',
+                title: errorTitle,
+                description: e.message || errorDescription,
                 time: 5000,
             });
+            // Nothing changed, so the status poll will not re-sync `on`; without this
+            // the toggle stays disabled and reads as unsupported until it remounts.
+            setOn(previous);
+        }
+        if (refetchStatus) {
+            await fetchStatus();
         }
     }
 
-    return {on, inUse, hotspotSsid: hotspot_ssid, setOn, setHotspot: localSetHotspot, dockerized};
+    return {on, setOn, setSubsystem};
 }
 
-export const useDownloads = () => {
-    const [onceDownloads, setOnceDownloads] = useState(null);
-    const [recurringDownloads, setRecurringDownloads] = useState(null);
-    const [pendingOnceDownloads, setPendingOnceDownloads] = useState(null);
+export const useHotspot = () => {
+    const {status} = useContext(StatusContext);
+    // Hotspot is unsupported on Docker.
+    const {dockerized, hotspot_ssid, hotspot_status} = status;
+    const {on, setOn, setSubsystem} = useSubsystemToggle({
+        statusField: 'hotspot_status',
+        onValue: 'connected',
+        // The WiFi device being in use for a network is a kind of "off": the hotspot
+        // is not running, but starting it takes the user off that network.
+        offValues: ['disconnected', 'off', 'in_use'],
+        start: startHotspot,
+        stop: stopHotspot,
+        errorTitle: 'Hotspot Error',
+        errorDescription: 'Could not modify hotspot. See server logs.',
+    });
 
-    const fetchDownloads = async () => {
-        try {
-            const data = await getDownloads();
-            setOnceDownloads(data['once_downloads']);
-            setRecurringDownloads(data['recurring_downloads']);
-            setPendingOnceDownloads(data['pending_once_downloads']);
-        } catch (e) {
-            console.error(e);
-            // Display errors.
-            setOnceDownloads(undefined);
-            setRecurringDownloads(undefined);
-            setPendingOnceDownloads(undefined);
-        }
-    }
-
-    useRecurringTimeout(fetchDownloads, 3 * 1000);
-
-    return {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads}
-}
-
-export const useConfigs = () => {
-    const [configs, setConfigs] = useState(null);
-    const [loading, setLoading] = useState(false);
-
-    const fetchConfigs = async () => {
-        setLoading(true);
-        console.log('fetching configs...');
-        try {
-            const data = await getConfigs();
-            setConfigs(data['configs']);
-            console.debug('fetching configs successful');
-        } catch (e) {
-            // Ignore SyntaxError because they happen when the API is down.
-            if (!(e instanceof SyntaxError)) {
-                console.error(e);
-            }
-            setConfigs(undefined);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const importConfig = async (fileName) => {
-        try {
-            await postImportConfig(fileName);
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    const saveConfig = async (fileName) => {
-        try {
-            await postDumpConfig(fileName);
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    return {configs, loading, fetchConfigs, importConfig, saveConfig}
+    return {
+        on,
+        inUse: hotspot_status === 'in_use',
+        hotspotSsid: hotspot_ssid,
+        setOn,
+        setHotspot: setSubsystem,
+        dockerized,
+    };
 }
 
 export const useThrottle = () => {
-    const [on, setOn] = useState(null);
-    const {status, fetchStatus} = React.useContext(StatusContext);
+    const {on, setOn, setSubsystem} = useSubsystemToggle({
+        statusField: 'throttle_status',
+        onValue: 'powersave',
+        offValues: ['ondemand'],
+        start: enableThrottle,
+        stop: disableThrottle,
+        errorTitle: 'Throttle Error',
+        errorDescription: 'Could not modify throttle. See server logs.',
+        // The governor is read from sysfs, so refetch rather than wait for the poll.
+        refetchStatus: true,
+    });
 
-    useEffect(() => {
-        const throttleStatus = status?.throttle_status;
-        if (throttleStatus === 'powersave') {
-            setOn(true);
-        } else if (throttleStatus === 'ondemand') {
-            setOn(false);
-        } else {
-            setOn(null);
-        }
-    }, [status?.throttle_status]);
-
-    const localSetThrottle = async (enable) => {
-        setOn(null);
-        try {
-            if (enable) {
-                await enableThrottle();
-            } else {
-                await disableThrottle();
-            }
-        } catch (e) {
-            console.error('Throttle error:', e);
-            toast({
-                type: 'error',
-                title: 'Throttle Error',
-                description: e.message || 'Could not modify throttle. See server logs.',
-                time: 5000,
-            });
-        }
-        // Refetch status to get updated throttle state
-        await fetchStatus();
-    }
-
-    return {on, setOn, setThrottle: localSetThrottle};
+    return {on, setOn, setThrottle: setSubsystem};
 }
 
 export const useBluetooth = () => {
-    const [on, setOn] = useState(null);
-    const {status} = useContext(StatusContext);
+    const {on, setSubsystem} = useSubsystemToggle({
+        statusField: 'bluetooth_status',
+        start: unblockBluetooth,
+        stop: blockBluetooth,
+        errorTitle: 'Bluetooth Error',
+        errorDescription: 'Could not modify Bluetooth. See server logs.',
+    });
 
-    useEffect(() => {
-        const bluetoothStatus = status?.bluetooth_status;
-        if (bluetoothStatus === 'on') {
-            setOn(true);
-        } else if (bluetoothStatus === 'off') {
-            setOn(false);
-        } else {
-            setOn(null);
-        }
-    }, [status?.bluetooth_status]);
-
-    const localSetBluetooth = async (enable) => {
-        setOn(null);
-        try {
-            if (enable) {
-                await unblockBluetooth();
-            } else {
-                await blockBluetooth();
-            }
-        } catch (e) {
-            console.error('Bluetooth error:', e);
-            toast({
-                type: 'error',
-                title: 'Bluetooth Error',
-                description: e.message || 'Could not modify Bluetooth. See server logs.',
-                time: 5000,
-            });
-        }
-    }
-
-    return {on, setBluetooth: localSetBluetooth};
+    return {on, setBluetooth: setSubsystem};
 }
 
 export const useDesktop = () => {
-    const [on, setOn] = useState(null);
-    const {status} = useContext(StatusContext);
+    const {on, setSubsystem} = useSubsystemToggle({
+        statusField: 'desktop_status',
+        start: startDesktop,
+        stop: stopDesktop,
+        errorTitle: 'Desktop Error',
+        errorDescription: 'Could not start/stop the desktop. See server logs.',
+    });
 
-    useEffect(() => {
-        const desktopStatus = status?.desktop_status;
-        if (desktopStatus === 'on') {
-            setOn(true);
-        } else if (desktopStatus === 'off') {
-            setOn(false);
-        } else {
-            setOn(null);
-        }
-    }, [status?.desktop_status]);
-
-    const localSetDesktop = async (running) => {
-        const previous = on;
-        setOn(null);
-        try {
-            if (running) {
-                await startDesktop();
-            } else {
-                await stopDesktop();
-            }
-        } catch (e) {
-            console.error('Desktop error:', e);
-            toast({
-                type: 'error',
-                title: 'Desktop Error',
-                description: e.message || 'Could not start/stop the desktop. See server logs.',
-                time: 5000,
-            });
-            // The desktop did not change, so the status poll will not re-sync `on`;
-            // restore it or the toggle stays disabled.
-            setOn(previous);
-        }
-    }
-
-    return {on, setDesktop: localSetDesktop};
+    return {on, setDesktop: setSubsystem};
 }
 
 export const useVnc = () => {
-    const [on, setOn] = useState(null);
     const {status} = useContext(StatusContext);
+    const {on, setSubsystem} = useSubsystemToggle({
+        statusField: 'vnc_status',
+        start: startVnc,
+        stop: stopVnc,
+        errorTitle: 'VNC Error',
+        errorDescription: 'Could not start/stop VNC. See server logs.',
+    });
+
     // VNC serves the desktop session, so it cannot be started without one.
-    const desktopRunning = status?.desktop_status === 'on';
-
-    useEffect(() => {
-        const vncStatus = status?.vnc_status;
-        if (vncStatus === 'on') {
-            setOn(true);
-        } else if (vncStatus === 'off') {
-            setOn(false);
-        } else {
-            setOn(null);
-        }
-    }, [status?.vnc_status]);
-
-    const localSetVnc = async (running) => {
-        const previous = on;
-        setOn(null);
-        try {
-            if (running) {
-                await startVnc();
-            } else {
-                await stopVnc();
-            }
-        } catch (e) {
-            console.error('VNC error:', e);
-            toast({
-                type: 'error',
-                title: 'VNC Error',
-                description: e.message || 'Could not start/stop VNC. See server logs.',
-                time: 5000,
-            });
-            // The status poll will not re-sync `on` because VNC did not change.
-            setOn(previous);
-        }
-    }
-
-    return {on, desktopRunning, setVnc: localSetVnc};
+    return {on, desktopRunning: status?.desktop_status === 'on', setVnc: setSubsystem};
 }
 
 export const useSearchDirectories = (value) => {

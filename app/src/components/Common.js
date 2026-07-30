@@ -9,6 +9,7 @@ import {
     Container,
     Dimmer,
     DimmerDimmable,
+    Dropdown,
     GridColumn,
     GridRow,
     Icon as SIcon,
@@ -25,6 +26,7 @@ import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrd
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
+    amberTheme,
     Breadcrumb,
     Button,
     Card as ThemedCard,
@@ -37,9 +39,11 @@ import {
     Loader,
     Menu,
     Modal,
+    nightTheme,
     Popup,
     Segment,
-    Statistic
+    Statistic,
+    systemTheme
 } from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
@@ -1347,20 +1351,37 @@ export function LoadStatistic({label, value, cores, ...props}) {
         {...props}/>;
 }
 
-export function DarkModeToggle() {
-    const {savedTheme, cycleSavedTheme} = useContext(ThemeContext);
-    let iconName = 'lightbulb outline';
-    if (savedTheme === darkTheme) {
-        iconName = 'moon';
-    } else if (savedTheme === lightTheme) {
-        iconName = 'sun';
-    }
+// Theme picker entries.  `night` and `amber` are only reachable here; neither is ever applied
+// automatically.  See ui-design.md.
+const themeChoices = [
+    {value: systemTheme, text: 'System', icon: 'lightbulb outline'},
+    {value: lightTheme, text: 'Light', icon: 'sun'},
+    {value: darkTheme, text: 'Dark', icon: 'moon'},
+    {value: nightTheme, text: 'Night', icon: 'eye'},
+    {value: amberTheme, text: 'Amber', icon: 'terminal'},
+];
 
-    return <Icon
-        name={iconName}
-        onClick={cycleSavedTheme}
-        style={{cursor: 'pointer', marginRight: '0.8em'}}
-    />
+export function DarkModeToggle() {
+    const {savedTheme, setTheme} = useContext(ThemeContext);
+    const active = themeChoices.find(i => i.value === savedTheme) || themeChoices[0];
+
+    return <Dropdown
+        item
+        icon={<Icon name={active.icon} style={{margin: 0}}/>}
+        title={`Theme: ${active.text}`}
+        style={{padding: 0, marginRight: '0.8em'}}
+    >
+        <Dropdown.Menu>
+            <Dropdown.Header content='Theme'/>
+            {themeChoices.map(choice => <Dropdown.Item
+                key={choice.value}
+                icon={choice.icon}
+                text={choice.text}
+                active={choice.value === active.value}
+                onClick={() => setTheme(choice.value)}
+            />)}
+        </Dropdown.Menu>
+    </Dropdown>
 }
 
 

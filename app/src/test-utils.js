@@ -73,6 +73,12 @@ export function renderWithProviders(
         s: inverted ? {style: {backgroundColor: '#1B1C1D', color: '#dddddd'}} : {},  // For style inversion
         t: inverted ? {style: {color: '#eeeeee'}} : {},  // For text color inversion (Header, etc.)
         theme: inverted ? 'dark' : 'light',
+        isDark: inverted,
+        savedTheme: null,
+        setTheme: jest.fn(),
+        setDarkTheme: jest.fn(),
+        setLightTheme: jest.fn(),
+        cycleSavedTheme: jest.fn(),
         ...themeContext
     };
 

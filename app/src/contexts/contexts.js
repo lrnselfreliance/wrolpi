@@ -30,6 +30,8 @@ export const ThemeContext = React.createContext({
     t: {},
     inverted: '',
     savedTheme: null,
+    isDark: false,
+    setTheme: () => {},
     setDarkTheme: () => {},
     setLightTheme: () => {},
     cycleSavedTheme: () => {},

@@ -972,10 +972,10 @@
         <h2>System Actions</h2>
         {% if not docker_mode %}
         <div class="action-buttons" style="margin-bottom: 1rem;">
-            <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
-            <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
-            <button id="desktop-btn" class="btn" onclick="toggleDesktop()" disabled>Loading...</button>
-            <button id="vnc-btn" class="btn" onclick="toggleVnc()" disabled>Loading...</button>
+            <button id="hotspot-btn" class="btn" onclick="toggleSubsystem('hotspot')" disabled>Loading...</button>
+            <button id="bluetooth-btn" class="btn" onclick="toggleSubsystem('bluetooth')" disabled>Loading...</button>
+            <button id="desktop-btn" class="btn" onclick="toggleSubsystem('desktop')" disabled>Loading...</button>
+            <button id="vnc-btn" class="btn" onclick="toggleSubsystem('vnc')" disabled>Loading...</button>
         </div>
         <details style="margin-bottom: 1rem;">
             <summary style="cursor: pointer;">Hotspot Settings</summary>
@@ -1384,48 +1384,101 @@
         }
     }
 
-    // --- Hotspot ---
-    let hotspotEnabled = null;
+    // --- Hardware toggle buttons ---
+    // The Hotspot, Bluetooth, Desktop and VNC buttons all behave the same way: read a
+    // status endpoint, label the button from it, and POST start/stop when clicked.
+    const TOGGLE_BUTTONS = {
+        hotspot: {
+            id: 'hotspot-btn', label: 'Hotspot',
+            statusUrl: 'api/hotspot/status', startUrl: 'api/hotspot/start', stopUrl: 'api/hotspot/stop',
+            isOn: data => data.enabled,
+        },
+        bluetooth: {
+            id: 'bluetooth-btn', label: 'Bluetooth',
+            statusUrl: 'api/bluetooth/status', startUrl: 'api/bluetooth/unblock', stopUrl: 'api/bluetooth/block',
+            isOn: data => data.enabled,
+            startText: 'Enable Bluetooth', stopText: 'Disable Bluetooth',
+        },
+        desktop: {
+            id: 'desktop-btn', label: 'Desktop',
+            statusUrl: 'api/desktop/status', startUrl: 'api/desktop/start', stopUrl: 'api/desktop/stop',
+            isOn: data => data.running,
+            confirmStop: 'Stop the desktop? Anyone using this WROLPi\'s own screen will lose their session'
+                + ' and the display will drop to a terminal. The desktop will return on the next reboot.',
+            // Starting or stopping the desktop changes whether VNC can run.
+            alsoRefresh: ['vnc'],
+        },
+        vnc: {
+            id: 'vnc-btn', label: 'VNC',
+            statusUrl: 'api/vnc/status', startUrl: 'api/vnc/start', stopUrl: 'api/vnc/stop',
+            isOn: data => data.running,
+            // VNC serves the desktop session, so it cannot be started without one.
+            canStart: data => data.can_start,
+            onTitle: data => data.desktop_running ? '' : 'The Desktop is stopped, so VNC clients see nothing',
+        },
+    };
 
-    async function updateHotspotButton() {
-        const btn = document.getElementById('hotspot-btn');
+    const toggleStates = {};
+
+    async function updateToggleButton(name) {
+        const config = TOGGLE_BUTTONS[name];
+        const btn = document.getElementById(config.id);
         if (!btn) return;
+        const startText = config.startText || `Start ${config.label}`;
+        const stopText = config.stopText || `Stop ${config.label}`;
         try {
-            const data = await apiCall('api/hotspot/status');
-            hotspotEnabled = data.enabled;
+            const data = await apiCall(config.statusUrl);
+            toggleStates[name] = config.isOn(data);
+            btn.title = '';
             if (!data.available) {
-                btn.textContent = 'Hotspot Unavailable';
+                btn.textContent = `${config.label} Unavailable`;
                 btn.disabled = true;
                 btn.className = 'btn';
-            } else if (data.enabled) {
-                btn.textContent = 'Stop Hotspot';
+                btn.title = data.reason || '';
+            } else if (toggleStates[name]) {
+                btn.textContent = stopText;
                 btn.disabled = false;
                 btn.className = 'btn btn-warning';
+                if (config.onTitle) btn.title = config.onTitle(data);
+            } else if (config.canStart && !config.canStart(data)) {
+                // Installed and stopped, but something else must happen first.
+                btn.textContent = startText;
+                btn.disabled = true;
+                btn.className = 'btn';
+                btn.title = data.reason || '';
             } else {
-                btn.textContent = 'Start Hotspot';
+                btn.textContent = startText;
                 btn.disabled = false;
                 btn.className = 'btn btn-primary';
             }
         } catch (e) {
-            btn.textContent = 'Hotspot Unavailable';
+            btn.textContent = `${config.label} Unavailable`;
             btn.disabled = true;
         }
     }
 
-    async function toggleHotspot() {
-        const btn = document.getElementById('hotspot-btn');
+    async function refreshToggleButtons() {
+        await Promise.all(Object.keys(TOGGLE_BUTTONS).map(name => updateToggleButton(name)));
+    }
+
+    async function toggleSubsystem(name) {
+        const config = TOGGLE_BUTTONS[name];
+        const btn = document.getElementById(config.id);
+        const on = toggleStates[name];
+        if (on && config.confirmStop && !confirm(config.confirmStop)) {
+            return;
+        }
         btn.disabled = true;
         btn.innerHTML = '<span class="loading"></span>';
         try {
-            if (hotspotEnabled) {
-                await apiCall('api/hotspot/stop', 'POST');
-            } else {
-                await apiCall('api/hotspot/start', 'POST');
-            }
+            await apiCall(on ? config.stopUrl : config.startUrl, 'POST');
         } catch (e) {
-            alert(`Hotspot error: ${e.message}`);
+            alert(`${config.label} error: ${e.message}`);
         }
-        await updateHotspotButton();
+        await updateToggleButton(name);
+        for (const other of config.alsoRefresh || []) {
+            await updateToggleButton(other);
+        }
     }
 
     async function loadHotspotSettings() {
@@ -1496,158 +1549,11 @@
                 device: document.getElementById('hotspot-device').value,
                 protocol: document.getElementById('hotspot-protocol').value || null,
             });
-            await updateHotspotButton();
+            await updateToggleButton('hotspot');
         } catch (e) {
             alert(`Failed to save hotspot settings: ${e.message}`);
         }
         btn.disabled = false;
-    }
-
-    // --- Bluetooth ---
-    let bluetoothEnabled = null;
-
-    async function updateBluetoothButton() {
-        const btn = document.getElementById('bluetooth-btn');
-        if (!btn) return;
-        try {
-            const data = await apiCall('api/bluetooth/status');
-            bluetoothEnabled = data.enabled;
-            if (!data.available) {
-                btn.textContent = 'Bluetooth Unavailable';
-                btn.disabled = true;
-                btn.className = 'btn';
-            } else if (data.enabled) {
-                btn.textContent = 'Disable Bluetooth';
-                btn.disabled = false;
-                btn.className = 'btn btn-warning';
-            } else {
-                btn.textContent = 'Enable Bluetooth';
-                btn.disabled = false;
-                btn.className = 'btn btn-primary';
-            }
-        } catch (e) {
-            btn.textContent = 'Bluetooth Unavailable';
-            btn.disabled = true;
-        }
-    }
-
-    async function toggleBluetooth() {
-        const btn = document.getElementById('bluetooth-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="loading"></span>';
-        try {
-            if (bluetoothEnabled) {
-                await apiCall('api/bluetooth/block', 'POST');
-            } else {
-                await apiCall('api/bluetooth/unblock', 'POST');
-            }
-        } catch (e) {
-            alert(`Bluetooth error: ${e.message}`);
-        }
-        await updateBluetoothButton();
-    }
-
-    // --- Desktop ---
-    let desktopRunning = null;
-
-    async function updateDesktopButton() {
-        const btn = document.getElementById('desktop-btn');
-        if (!btn) return;
-        try {
-            const data = await apiCall('api/desktop/status');
-            desktopRunning = data.running;
-            if (!data.available) {
-                btn.textContent = 'Desktop Unavailable';
-                btn.disabled = true;
-                btn.className = 'btn';
-            } else if (data.running) {
-                btn.textContent = 'Stop Desktop';
-                btn.disabled = false;
-                btn.className = 'btn btn-warning';
-            } else {
-                btn.textContent = 'Start Desktop';
-                btn.disabled = false;
-                btn.className = 'btn btn-primary';
-            }
-        } catch (e) {
-            btn.textContent = 'Desktop Unavailable';
-            btn.disabled = true;
-        }
-    }
-
-    async function toggleDesktop() {
-        const btn = document.getElementById('desktop-btn');
-        if (desktopRunning && !confirm(
-            'Stop the desktop? Anyone using this WROLPi\'s own screen will lose their session'
-            + ' and the display will drop to a terminal. The desktop will return on the next reboot.')) {
-            return;
-        }
-        btn.disabled = true;
-        btn.innerHTML = '<span class="loading"></span>';
-        try {
-            if (desktopRunning) {
-                await apiCall('api/desktop/stop', 'POST');
-            } else {
-                await apiCall('api/desktop/start', 'POST');
-            }
-        } catch (e) {
-            alert(`Desktop error: ${e.message}`);
-        }
-        await updateDesktopButton();
-        await updateVncButton();
-    }
-
-    // --- VNC ---
-    let vncRunning = null;
-
-    async function updateVncButton() {
-        const btn = document.getElementById('vnc-btn');
-        if (!btn) return;
-        try {
-            const data = await apiCall('api/vnc/status');
-            vncRunning = data.running;
-            if (!data.available) {
-                btn.textContent = 'VNC Unavailable';
-                btn.disabled = true;
-                btn.className = 'btn';
-                btn.title = data.reason || '';
-            } else if (data.running) {
-                btn.textContent = 'Stop VNC';
-                btn.disabled = false;
-                btn.className = 'btn btn-warning';
-                // VNC serves the desktop session, so say when there is nothing to serve.
-                btn.title = data.desktop_running ? '' : 'The Desktop is stopped, so VNC clients see nothing';
-            } else if (!data.can_start) {
-                btn.textContent = 'Start VNC';
-                btn.disabled = true;
-                btn.className = 'btn';
-                btn.title = data.reason || '';
-            } else {
-                btn.textContent = 'Start VNC';
-                btn.disabled = false;
-                btn.className = 'btn btn-primary';
-                btn.title = '';
-            }
-        } catch (e) {
-            btn.textContent = 'VNC Unavailable';
-            btn.disabled = true;
-        }
-    }
-
-    async function toggleVnc() {
-        const btn = document.getElementById('vnc-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="loading"></span>';
-        try {
-            if (vncRunning) {
-                await apiCall('api/vnc/stop', 'POST');
-            } else {
-                await apiCall('api/vnc/start', 'POST');
-            }
-        } catch (e) {
-            alert(`VNC error: ${e.message}`);
-        }
-        await updateVncButton();
     }
 
     async function waitForController(maxWaitMs = 60000) {
@@ -3030,10 +2936,7 @@
         const updateInterval = 10000;
 
         // Fetch hardware button status immediately
-        updateHotspotButton();
-        updateBluetoothButton();
-        updateDesktopButton();
-        updateVncButton();
+        refreshToggleButtons();
         loadHotspotSettings();
 
         // Initial update after a short delay (to not overlap with initial load)
@@ -3050,10 +2953,7 @@
             updateServicesTable();
             loadDisks();
             loadSmart();
-            updateHotspotButton();
-            updateBluetoothButton();
-            updateDesktopButton();
-            updateVncButton();
+            refreshToggleButtons();
         }, updateInterval);
     }
 </script>

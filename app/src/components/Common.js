@@ -977,117 +977,120 @@ export function HelpHeader({
     </div>
 }
 
-export function HotspotToggle() {
-    let {on, setHotspot} = useHotspot();
-    const disabled = on === null;
-    return <div style={{margin: '0.5em'}}>
-        <Toggle
-            label='WiFi Hotspot'
-            disabled={disabled}
-            checked={on === true}
-            onChange={checked => setHotspot(checked)}
-        />
-        {disabled && <InfoPopup content='Hotspot is not supported on this server'/>}
-    </div>;
-}
-
-export function ThrottleToggle() {
-    let {on, setThrottle} = useThrottle();
-    const disabled = on === null;
-    return <div style={{margin: '0.5em'}}>
-        <Toggle
-            label='CPU Power-save'
-            disabled={disabled}
-            checked={on === true}
-            onChange={checked => setThrottle(checked)}
-        />
-        {disabled && <InfoPopup content='CPU Power-save is not supported on this server'/>}
-    </div>;
-}
-
-export function BluetoothToggle() {
-    let {on, setBluetooth} = useBluetooth();
-    const disabled = on === null;
-    return <div style={{margin: '0.5em'}}>
-        <Toggle
-            label='Bluetooth'
-            disabled={disabled}
-            checked={on === true}
-            onChange={checked => setBluetooth(checked)}
-        />
-        {disabled && <InfoPopup content='Bluetooth is not supported on this server'/>}
-    </div>;
-}
-
-export function DesktopToggle() {
-    let {on, setDesktop} = useDesktop();
+// All the hardware toggles share this shape: a Toggle whose state comes from a
+// subsystem hook, disabled when the status is unknown, with an InfoPopup explaining
+// why it cannot be used.  `confirmStop` asks before switching off.
+function SubsystemToggle({label, on, onChange, unsupportedMessage, info = null, disabled = null, confirmStop = null}) {
     const [confirmOpen, setConfirmOpen] = React.useState(false);
-    const disabled = on === null;
+    const unsupported = on === null;
 
     const handleChange = (checked) => {
-        if (checked) {
-            setDesktop(true);
-        } else {
-            // Stopping the desktop kills any session on this WROLPi's own screen.
+        if (!checked && confirmStop) {
             setConfirmOpen(true);
+        } else {
+            onChange(checked);
         }
     }
 
-    const handleConfirmStop = (e) => {
+    const handleConfirm = (e) => {
         if (e) {
             e.preventDefault()
         }
         setConfirmOpen(false);
-        setDesktop(false);
+        onChange(false);
     }
 
+    const popup = unsupported ? unsupportedMessage : info;
+
     return <div style={{margin: '0.5em'}}>
-        <Confirm
+        {confirmStop && <Confirm
             open={confirmOpen}
             onCancel={() => setConfirmOpen(false)}
             onClose={() => setConfirmOpen(false)}
-            onConfirm={handleConfirmStop}
-            header='Stop the desktop'
-            content={"Anyone using this WROLPi's own screen will lose their session and the display will"
-                + ' drop to a terminal. The desktop will return on the next reboot. Are you sure?'}
-            confirmButton='Stop'
-        />
+            onConfirm={handleConfirm}
+            header={confirmStop.header}
+            content={confirmStop.content}
+            confirmButton={confirmStop.button}
+        />}
         <Toggle
-            label='Desktop'
-            disabled={disabled}
+            label={label}
+            disabled={disabled === null ? unsupported : disabled}
             checked={on === true}
             onChange={handleChange}
         />
-        {disabled && <InfoPopup content='The Desktop is not supported on this server'/>}
+        {popup && <InfoPopup content={popup}/>}
     </div>;
 }
 
+export function HotspotToggle() {
+    const {on, setHotspot} = useHotspot();
+    return <SubsystemToggle
+        label='WiFi Hotspot'
+        on={on}
+        onChange={setHotspot}
+        unsupportedMessage='Hotspot is not supported on this server'
+    />;
+}
+
+export function ThrottleToggle() {
+    const {on, setThrottle} = useThrottle();
+    return <SubsystemToggle
+        label='CPU Power-save'
+        on={on}
+        onChange={setThrottle}
+        unsupportedMessage='CPU Power-save is not supported on this server'
+    />;
+}
+
+export function BluetoothToggle() {
+    const {on, setBluetooth} = useBluetooth();
+    return <SubsystemToggle
+        label='Bluetooth'
+        on={on}
+        onChange={setBluetooth}
+        unsupportedMessage='Bluetooth is not supported on this server'
+    />;
+}
+
+export function DesktopToggle() {
+    const {on, setDesktop} = useDesktop();
+    return <SubsystemToggle
+        label='Desktop'
+        on={on}
+        onChange={setDesktop}
+        unsupportedMessage='The Desktop is not supported on this server'
+        // Stopping the desktop kills any session on this WROLPi's own screen.
+        confirmStop={{
+            header: 'Stop the desktop',
+            content: "Anyone using this WROLPi's own screen will lose their session and the display will"
+                + ' drop to a terminal. The desktop will return on the next reboot. Are you sure?',
+            button: 'Stop',
+        }}
+    />;
+}
+
 export function VncToggle() {
-    let {on, desktopRunning, setVnc} = useVnc();
+    const {on, desktopRunning, setVnc} = useVnc();
     const unsupported = on === null;
     // VNC serves the desktop session; it cannot be started without one.  Stopping
     // stays available so a running VNC server is never stranded on.
     const blockedByDesktop = !desktopRunning && on !== true;
-    const disabled = unsupported || blockedByDesktop;
 
     let info = null;
-    if (unsupported) {
-        info = 'VNC is not supported on this server';
-    } else if (blockedByDesktop) {
+    if (blockedByDesktop) {
         info = 'Start the Desktop before starting VNC';
     } else if (on === true && !desktopRunning) {
         info = 'The Desktop is stopped, so VNC clients will see nothing';
     }
 
-    return <div style={{margin: '0.5em'}}>
-        <Toggle
-            label='VNC'
-            disabled={disabled}
-            checked={on === true}
-            onChange={checked => setVnc(checked)}
-        />
-        {info && <InfoPopup content={info}/>}
-    </div>;
+    return <SubsystemToggle
+        label='VNC'
+        on={on}
+        onChange={setVnc}
+        unsupportedMessage='VNC is not supported on this server'
+        info={info}
+        disabled={unsupported || blockedByDesktop}
+    />;
 }
 
 export function Toggle({label, checked, disabled, onChange, icon, popupContent = null, info = null}) {

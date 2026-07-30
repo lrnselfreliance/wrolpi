@@ -69,6 +69,20 @@ from controller.lib.samba import (
 router = APIRouter(tags=["admin"])
 
 
+def _raise_for_action(result: dict):
+    """
+    Turn a failed subsystem action into an HTTPException.
+
+    Actions all report `{"success": bool, "error": str}`.  A precondition failure
+    (VNC needs a running desktop) is a 409 so callers can tell it from a command
+    that was attempted and failed.
+    """
+    if result.get("success"):
+        return
+    status_code = 409 if result.get("precondition_failed") else 500
+    raise HTTPException(status_code=status_code, detail=result.get("error", "Failed"))
+
+
 # --- Hotspot ---
 
 @router.get("/api/hotspot/status", response_model=HotspotStatusResponse)
@@ -119,8 +133,7 @@ async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSet
 async def hotspot_start() -> HotspotActionResponse:
     """Start the WiFi hotspot."""
     result = start_hotspot()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return HotspotActionResponse(**result)
 
 
@@ -128,8 +141,7 @@ async def hotspot_start() -> HotspotActionResponse:
 async def hotspot_stop() -> HotspotActionResponse:
     """Stop the WiFi hotspot by turning the WiFi radio off."""
     result = stop_hotspot()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return HotspotActionResponse(**result)
 
 
@@ -145,8 +157,7 @@ async def bluetooth_status() -> BluetoothStatusResponse:
 async def bluetooth_unblock() -> BluetoothActionResponse:
     """Unblock the Bluetooth radio (turn it on)."""
     result = await unblock_bluetooth()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return BluetoothActionResponse(**result)
 
 
@@ -154,8 +165,7 @@ async def bluetooth_unblock() -> BluetoothActionResponse:
 async def bluetooth_block() -> BluetoothActionResponse:
     """Block the Bluetooth radio (turn it off)."""
     result = await block_bluetooth()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return BluetoothActionResponse(**result)
 
 
@@ -171,8 +181,7 @@ async def desktop_status() -> DesktopStatusResponse:
 async def desktop_start() -> DesktopActionResponse:
     """Start the graphical desktop until stopped or reboot."""
     result = await start_desktop()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return DesktopActionResponse(**result)
 
 
@@ -180,8 +189,7 @@ async def desktop_start() -> DesktopActionResponse:
 async def desktop_stop() -> DesktopActionResponse:
     """Stop the graphical desktop; it returns on the next boot (fail open)."""
     result = await stop_desktop()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return DesktopActionResponse(**result)
 
 
@@ -197,10 +205,7 @@ async def vnc_status() -> VncStatusResponse:
 async def vnc_start() -> VncActionResponse:
     """Start the VNC server; requires a running desktop."""
     result = await start_vnc()
-    if not result.get("success"):
-        # 409 distinguishes "the desktop is not running" from a systemctl failure.
-        status_code = 409 if result.get("precondition_failed") else 500
-        raise HTTPException(status_code=status_code, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return VncActionResponse(success=True)
 
 
@@ -208,8 +213,7 @@ async def vnc_start() -> VncActionResponse:
 async def vnc_stop() -> VncActionResponse:
     """Stop the VNC server; allowed even when the desktop is stopped."""
     result = await stop_vnc()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return VncActionResponse(success=True)
 
 
@@ -251,8 +255,7 @@ async def throttle_status() -> ThrottleStatusResponse:
 async def throttle_enable() -> ThrottleActionResponse:
     """Enable CPU throttle (powersave mode)."""
     result = enable_throttle()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return ThrottleActionResponse(**result)
 
 
@@ -260,8 +263,7 @@ async def throttle_enable() -> ThrottleActionResponse:
 async def throttle_disable() -> ThrottleActionResponse:
     """Disable CPU throttle (normal performance)."""
     result = disable_throttle()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return ThrottleActionResponse(**result)
 
 
@@ -277,8 +279,7 @@ async def timezone_status() -> TimezoneStatusResponse:
 async def timezone_set(request: TimezoneSetRequest) -> TimezoneSetResponse:
     """Set the system timezone."""
     result = set_timezone(request.timezone)
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return TimezoneSetResponse(**result)
 
 
@@ -294,8 +295,7 @@ async def system_shutdown() -> SystemActionResponse:
         )
 
     result = shutdown_system()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return SystemActionResponse(**result)
 
 
@@ -309,8 +309,7 @@ async def system_reboot() -> SystemActionResponse:
         )
 
     result = reboot_system()
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    _raise_for_action(result)
     return SystemActionResponse(**result)
 
 

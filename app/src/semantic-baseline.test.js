@@ -83,6 +83,27 @@ describe('Semantic UI removal', () => {
         expect(bridges.sort()).toEqual(allowed.sort());
     });
 
+    it('lets no migrated file keep rendering Semantic through Theme.tsx', () => {
+        /*
+         * The import check above only sees `semantic-ui-react`.  `Theme.tsx` re-exports
+         * Semantic-backed wrappers under friendly names, so a file could drop its direct
+         * imports, leave the baseline, and still put Semantic components on screen —
+         * which is exactly how a Semantic modal survived in the search shortcut long
+         * after that file looked migrated.
+         *
+         * Theme.tsx also re-exports theme *names* (`themeChoices`, `darkTheme`, ...),
+         * which are data and carry no markup; those come from `themes/names` instead, so
+         * any import from Theme in a migrated file is a component import and a mistake.
+         */
+        const fromTheme = /from ['"](\.{1,2}\/)+Theme['"]/;
+        const leaks = sourceFiles()
+            .filter(file => !baseline.includes(file))
+            .filter(file => !file.endsWith('components/Theme.tsx'))
+            .filter(file => fromTheme.test(fs.readFileSync(path.join(SRC, '..', file), 'utf8')));
+
+        expect(leaks).toEqual([]);
+    });
+
     it('reports how much of the migration is left', () => {
         // Not an assertion so much as a progress readout in the test output.
         const remaining = importers().length;

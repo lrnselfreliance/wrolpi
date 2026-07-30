@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useRef, useState} from "react";
 import {useNavigate} from "react-router";
 import {useHotkeys} from "react-hotkeys-hook";
 import {KeyboardShortcutsContext} from "../contexts/KeyboardShortcutsContext";
-import {Modal} from "./Theme";
+import {Modal} from "./ui";
 import {SearchResultsInput} from "./Common";
 import {useSearchSuggestions} from "./Search";
 import HelpModal from "./HelpModal";
@@ -64,7 +64,15 @@ function SearchModal({open, onClose}) {
     }, [open, setSearchStr]);
 
     useEffect(() => {
-        // Focus on the Search's <input/> when the modal is opened.
+        /*
+         * Focus the search input when the modal opens.
+         *
+         * `autoFocus` on the input below is what actually does it: the modal mounts its
+         * content on a later tick, so this effect runs while `inputRef.current` is still
+         * null.  Semantic's modal mounted synchronously, which is why focusing here used
+         * to be enough.  The ref call is kept for the case where the modal is already
+         * mounted and merely re-opened.
+         */
         if (open && inputRef.current) {
             inputRef.current.focus();
         }
@@ -73,7 +81,7 @@ function SearchModal({open, onClose}) {
     if (!open) return null;
 
     return (
-        <Modal open={open} onClose={onClose} centered={false}>
+        <Modal open={open} onClose={onClose} centered={false} title='Search'>
             <Modal.Content>
                 <SearchResultsInput
                     clearable
@@ -87,6 +95,7 @@ function SearchModal({open, onClose}) {
                     resultRenderer={resultRenderer}
                     loading={loading}
                     inputRef={inputRef}
+                    autoFocus
                 />
             </Modal.Content>
         </Modal>

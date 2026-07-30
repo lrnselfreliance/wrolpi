@@ -3,6 +3,7 @@ import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MantineProvider} from '@mantine/core';
 import {IconMoodSmile} from '@tabler/icons-react';
+import {ThemeContext} from '../../contexts/contexts';
 import {cssVariablesResolver, mantineTheme, semanticColorNames} from '../../themes/mantine';
 import {
     Button,
@@ -16,6 +17,7 @@ import {
     resolveIconName,
     Status,
     Table,
+    ThemePicker,
     Toggle,
 } from './index';
 
@@ -230,6 +232,57 @@ describe('Toggle', () => {
         await userEvent.click(toggle);
 
         expect(onChange).toHaveBeenCalled();
+    });
+});
+
+describe('ThemePicker', () => {
+    const renderPicker = (themeContext = {}) => {
+        const setTheme = jest.fn();
+        const value = {savedTheme: null, setTheme, ...themeContext};
+        render(
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                <ThemeContext.Provider value={value}><ThemePicker/></ThemeContext.Provider>
+            </MantineProvider>
+        );
+        return setTheme;
+    };
+
+    it('offers every theme plus following the system', () => {
+        renderPicker();
+
+        const options = screen.getAllByRole('radio').map(o => o.textContent);
+        ['System', 'Light', 'Dark', 'Night', 'Amber'].forEach(name => {
+            expect(options.some(text => text.startsWith(name))).toBe(true);
+        });
+    });
+
+    it('marks the saved theme as selected', () => {
+        renderPicker({savedTheme: 'night'});
+
+        const night = screen.getAllByRole('radio').find(o => o.textContent.startsWith('Night'));
+        expect(night).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('treats a user who has never chosen as following the system', () => {
+        renderPicker({savedTheme: null});
+
+        const system = screen.getAllByRole('radio').find(o => o.textContent.startsWith('System'));
+        expect(system).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('applies the theme a user picks', async () => {
+        const setTheme = renderPicker();
+
+        await userEvent.click(screen.getAllByRole('radio').find(o => o.textContent.startsWith('Amber')));
+
+        expect(setTheme).toHaveBeenCalledWith('amber');
+    });
+
+    it('explains what night mode is for', () => {
+        // Users need to know it filters media too, not just the interface.
+        renderPicker();
+
+        expect(screen.getByText(/night vision/i)).toBeInTheDocument();
     });
 });
 

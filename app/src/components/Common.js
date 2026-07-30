@@ -26,24 +26,21 @@ import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrd
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
-    amberTheme,
     Breadcrumb,
     Button,
     Card as ThemedCard,
     Confirm,
-    darkTheme,
     Form,
     Header,
     Icon,
-    lightTheme,
     Loader,
     Menu,
     Modal,
-    nightTheme,
     Popup,
     Segment,
     Statistic,
-    systemTheme
+    systemTheme,
+    themeChoices
 } from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
@@ -1350,16 +1347,6 @@ export function LoadStatistic({label, value, cores, ...props}) {
         value={value ? parseFloat(value).toFixed(1) : '?'}
         {...props}/>;
 }
-
-// Theme picker entries.  `night` and `amber` are only reachable here; neither is ever applied
-// automatically.  See ui-design.md.
-const themeChoices = [
-    {value: systemTheme, text: 'System', icon: 'lightbulb outline'},
-    {value: lightTheme, text: 'Light', icon: 'sun'},
-    {value: darkTheme, text: 'Dark', icon: 'moon'},
-    {value: nightTheme, text: 'Night', icon: 'eye'},
-    {value: amberTheme, text: 'Amber', icon: 'terminal'},
-];
 
 export function DarkModeToggle() {
     const {savedTheme, setTheme} = useContext(ThemeContext);

@@ -53,6 +53,63 @@ html[data-theme="night"] .wrolpi-button-danger:hover:not(:disabled) {
 
 /* The icon inside inherits currentColor, so it follows without another rule. */
 
+/* ----------------------------------------------------------- Theme picker */
+
+.wrolpi-theme-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.wrolpi-theme-option {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font: inherit;
+    cursor: pointer;
+}
+
+.wrolpi-theme-option:hover {
+    background: var(--head);
+}
+
+/* The selected theme is marked by a heavier border as well as color, so the
+   selection survives in monochrome themes. */
+.wrolpi-theme-option-active {
+    border: 2px solid var(--blue);
+    padding: 9px 11px;
+}
+
+html[data-theme="night"] .wrolpi-theme-option-active,
+html[data-theme="amber"] .wrolpi-theme-option-active {
+    border-color: var(--text);
+}
+
+.wrolpi-theme-option:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 1px;
+}
+
+.wrolpi-theme-option-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.wrolpi-theme-option-description {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
 /* --------------------------------------------------------------- Switches */
 /*
  * Mantine's unchecked track is a gray from its own palette, which would put a

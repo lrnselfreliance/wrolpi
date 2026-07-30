@@ -11,6 +11,7 @@ import {themeChoices} from '../../themes/names';
 import {
     ActionInput,
     Button,
+    Card,
     Confirm,
     Header,
     Icon,
@@ -429,6 +430,23 @@ describe('Table', () => {
         </Table.Body></Table>);
 
         expect(container.querySelector('.wrolpi-table-scroll')).toBeInTheDocument();
+    });
+});
+
+describe('Card', () => {
+    it('draws a mimetype accent from a token, not a hex', () => {
+        // File cards carry the mimetype's colour on their top edge so a grid of results is
+        // scannable by kind.  Semantic did this with `<Card color='violet'>`; two migrated
+        // files had dropped the accent because our Card had no equivalent.
+        const {container} = renderUI(<Card title='Water Storage.pdf' color='red'/>);
+
+        expect(container.firstChild).toHaveStyle({borderTop: '3px solid var(--red)'});
+    });
+
+    it('has no accent when no colour is given', () => {
+        const {container} = renderUI(<Card title='Plain'/>);
+
+        expect(container.firstChild.style.borderTop).toBe('');
     });
 });
 

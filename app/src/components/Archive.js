@@ -20,7 +20,8 @@ import {
     SearchInput,
     TabLinks,
     textEllipsis,
-    useTitle
+    mimetypeColor,
+    useTitle,
 } from "./Common";
 import {
     deleteDomain,
@@ -425,7 +426,8 @@ export function ArchiveCard({file}) {
         </div>
     </>;
 
-    return <Card media={media} title={titleElm} meta={meta}>
+    return <Card media={media} title={titleElm} meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}>
         <div style={{display: 'flex', gap: '0.5em', marginTop: '0.5em'}}>
             <Link to={`/archives/${file.id}`}>
                 <Button icon='file alternate'>Details</Button>

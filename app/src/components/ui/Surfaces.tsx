@@ -124,10 +124,17 @@ export interface CardProps {
     meta?: React.ReactNode;
     children?: React.ReactNode;
     onClick?: React.MouseEventHandler<HTMLDivElement>;
+    /**
+     * A token colour name, drawn as an accent along the card's top edge.  File cards use
+     * it to carry the mimetype's colour, so a grid of results is scannable by kind before
+     * any text is read.  It remaps per theme, so night gets a red accent rather than a
+     * dozen hues.
+     */
+    color?: string;
     className?: string;
 }
 
-export function Card({media, title, meta, children, onClick, className}: CardProps) {
+export function Card({media, title, meta, children, onClick, color, className}: CardProps) {
     return <MCard
         withBorder
         padding={0}
@@ -139,6 +146,9 @@ export function Card({media, title, meta, children, onClick, className}: CardPro
             cursor: onClick ? 'pointer' : undefined,
             display: 'flex',
             flexDirection: 'column',
+            // An accent edge rather than a tinted surface: the design rules keep surfaces
+            // flat, and a 3px edge survives night mode without becoming a bright patch.
+            borderTop: color ? `3px solid var(--${color})` : undefined,
         }}
     >
         {media && <div style={{borderBottom: '1px solid var(--border)'}}>{media}</div>}

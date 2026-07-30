@@ -382,20 +382,26 @@ export function ThemeSamplePage() {
         <Section label='Cards'>
             <CardGroup>
                 {[
-                    ['How To Sharpen An Axe The Right Way', 'Wranglerstar · 2024-11-03'],
-                    ['Pressure Canning Basics', 'RoseRed Homestead · 2025-02-17'],
-                    ['Solar Panel Wiring: Series vs Parallel', 'DIY Solar Power · 2025-08-21'],
-                    ['Ham Radio General License, Part 1', 'Ham Radio Crash Course · 2024-05-09'],
-                ].map(([title, meta]) => <Card
+                    ['How To Sharpen An Axe The Right Way', 'Wranglerstar · 2024-11-03', 'blue', 'film'],
+                    ['Pressure Canning Basics', 'RoseRed Homestead · 2025-02-17', 'blue', 'film'],
+                    ['Water Storage Guide.pdf', 'docs/ · 2025-08-21', 'red', 'file pdf'],
+                    ['Ham Radio General License.epub', 'ebooks/ · 2024-05-09', 'yellow', 'book'],
+                ].map(([title, meta, color, icon]) => <Card
                     key={title}
                     title={title}
                     meta={meta}
+                    color={color}
                     media={<div style={{
                         aspectRatio: '16/9', background: 'var(--head)', display: 'flex',
                         alignItems: 'center', justifyContent: 'center', color: 'var(--muted)',
-                    }}><Icon name='film' size={34}/></div>}
+                    }}><Icon name={icon} size={34}/></div>}
                 />)}
             </CardGroup>
+            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+                The top edge carries the file type's colour, so a grid of results is
+                scannable by kind before any title is read. It comes from a token, so night
+                and amber render the accent in their own single hue rather than four.
+            </p>
         </Section>
 
         <Section label='Loading placeholders'>

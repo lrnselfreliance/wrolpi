@@ -1,114 +1,184 @@
 /**
- * Test utilities for React Testing Library
- * Provides custom render functions with necessary context providers
+ * Test utilities: render helpers that supply what a component actually needs, and no more.
+ *
+ * Three tiers, because components differ in what they depend on and a single do-everything
+ * wrapper hides that:
+ *
+ *   renderUI              components from src/components/ui.  Mantine's provider only.  These
+ *                         take props and read no ambient state, which is enforced by the
+ *                         guards in components/ui/ui.test.js.
+ *   render                anything that reads a context.  Supplies the REAL providers holding
+ *                         fixture values -- see test-fixtures.js -- so consumers run against
+ *                         real data instead of a mocked module.
+ *   mockModule            the last resort, for hooks that fetch.  Always spreads the actual
+ *                         module, which hand-written jest.mock factories forget to do.
+ *
+ * The point of the middle tier is that `jest.mock('../../contexts/contexts')` should be
+ * unnecessary.  Mocking that module replaces every export, including `Media` and the other
+ * providers, so each spec that did it reinvented them slightly differently -- one of them
+ * defaulting the responsive `Media` to desktop, which quietly left the mobile branch of that
+ * component untested.
  */
 
-import React, {createContext, useContext} from 'react';
-import {render} from '@testing-library/react';
+import React from 'react';
+import {render as rtlRender} from '@testing-library/react';
 import {BrowserRouter} from 'react-router';
 import {MantineProvider} from '@mantine/core';
-import {MediaContextProvider, ThemeContext} from './contexts/contexts';
+import {
+    MediaContextProvider,
+    QueryContext,
+    SettingsContext,
+    StatusContext,
+    ThemeContext,
+} from './contexts/contexts';
 import {cssVariablesResolver, mantineTheme} from './themes/mantine';
+import {
+    domainFixture,
+    domainsFixture,
+    queryContextFixture,
+    settingsContextFixture,
+    statusContextFixture,
+    themeContextFixture,
+} from './test-fixtures';
 
-// Mock FileWorkerStatusContext for tests - avoids API calls during testing
-const MockFileWorkerStatusContext = createContext(null);
+/*
+ * Why this file imports only contexts/contexts, and nothing else of the app's.
+ *
+ * A first attempt had the harness import Tags.js and FileWorkerStatusContext.js so it could
+ * supply those providers too.  That put both into the module graph of every spec that imports
+ * the harness, ahead of the spec's own mocks, and broke eight suites in two different ways.
+ * Where a spec mocked a module those files pull in, the component under test bound to a second
+ * instance of it -- a different `jest.fn()` from the one the test configured, so a hook mocked
+ * to return a value returned undefined, in a file the test never mentions.  Requiring them
+ * lazily fixed that but not the mirror image of it: `useContext(TagsContext)` in a component
+ * read a different TagsContext than the one the harness had required, so the provider was
+ * ignored and the context default (`SingleTag: null`) won.
+ *
+ * The lesson is that a test harness must not change what a spec imports.  So this file owns
+ * only the four contexts in contexts/contexts.js, and any other context is passed in by the
+ * spec, which resolves it exactly as the component does:
+ *
+ *   import {TagsContext} from '../Tags';
+ *   render(<Thing/>, {contexts: [[TagsContext, tagsContextFixture({tags})]]})
+ *
+ * A private mock context and re-exported `useFileWorkerStatus`/`useReorganizationStatus` also
+ * used to live here.  They could never have worked: components import those hooks from
+ * contexts/FileWorkerStatusContext, so a copy exported from the harness was read by nothing.
+ */
 
-function MockFileWorkerStatusProvider({children}) {
-    const mockValue = {
-        status: null,
-        error: null,
-        refresh: jest.fn(),
-        setFastPolling: jest.fn(),
-    };
-    return (
-        <MockFileWorkerStatusContext.Provider value={mockValue}>
-            {children}
-        </MockFileWorkerStatusContext.Provider>
+/**
+ * Render a component from src/components/ui.
+ *
+ * Mantine's provider and nothing else, matching what those components can rely on.  Reach for
+ * this rather than the full harness when the component takes props and reads no context: a
+ * test that supplies providers a component does not use conceals it starting to use one.
+ */
+export function renderUI(ui, {theme, ...renderOptions} = {}) {
+    if (theme) document.documentElement.dataset.theme = theme;
+    return rtlRender(
+        <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+            {ui}
+        </MantineProvider>,
+        renderOptions,
     );
 }
 
-// Re-export hooks that use the mock context
-export function useFileWorkerStatus() {
-    const context = useContext(MockFileWorkerStatusContext);
-    if (!context) {
-        throw new Error('useFileWorkerStatus must be used within FileWorkerStatusProvider');
-    }
-    return context;
-}
-
-export function useReorganizationStatus() {
-    const {status: progress, refresh} = useFileWorkerStatus();
-    return {
-        isReorganizing: false,
-        taskType: null,
-        collectionId: null,
-        collectionKind: null,
-        batchStatus: null,
-        workerStatus: progress,
-        refresh,
-    };
-}
-
 /**
- * Custom render function that wraps components with necessary providers
- * @param {React.Component} ui - Component to render
- * @param {Object} options - Render options
- * @param {boolean} options.inverted - Whether to use dark theme
- * @param {Object} options.themeContext - Custom theme context values
- * @param {boolean} options.withMedia - Include MediaContextProvider (default: false)
- * @param {Object} options.renderOptions - Additional React Testing Library options
+ * Render anything that reads a context, with the real providers holding fixture values.
+ *
+ * Every context option takes overrides merged into that context's fixture, so a test states
+ * only the part it cares about:
+ *
+ *   render(<Page/>, {settings: {wrol_mode: true}})
+ *   render(<Page/>, {status: {status: statusFixture({flags: {db_up: false}})}})
+ *   render(<Page/>, {tags: {tags: [tagFixture({name: 'Repair'})]}})
+ *
+ * @param {React.ReactElement} ui
+ * @param {Object}  [options]
+ * @param {boolean} [options.inverted]   render dark; sets the theme and Mantine's scheme together
+ * @param {Object}  [options.theme]      ThemeContext overrides
+ * @param {Object}  [options.status]     StatusContext overrides
+ * @param {Object}  [options.settings]   SettingsContext overrides
+ * @param {Object}  [options.query]      QueryContext overrides
+ * @param {Array}   [options.contexts]   extra [Context, value] pairs the spec supplies itself,
+ *                                       for contexts outside contexts/contexts.js -- see the
+ *                                       note at the top of this file for why
+ * @param {boolean} [options.withMedia]  wrap in MediaContextProvider (needs window.matchMedia)
+ * @param {string}  [options.route]      point jsdom's location here before rendering
+ * @param {Object}  [options.themeContext] deprecated alias for `theme`
  */
 export function renderWithProviders(
     ui,
     {
         inverted = false,
+        theme = {},
         themeContext = {},
+        status = {},
+        settings = {},
+        query = {},
+        contexts = [],
         withMedia = false,
+        route,
         ...renderOptions
     } = {}
 ) {
-    const defaultThemeContext = {
-        inverted,
-        setInverted: jest.fn(),
-        // Theme components use different properties:
-        i: inverted ? {inverted: true} : {inverted: undefined},  // For Semantic UI elements (Segment, Form, etc.)
-        s: inverted ? {style: {backgroundColor: '#1B1C1D', color: '#dddddd'}} : {},  // For style inversion
-        t: inverted ? {style: {color: '#eeeeee'}} : {},  // For text color inversion (Header, etc.)
+    // render() wraps content in a BrowserRouter rather than a MemoryRouter, so a test wanting
+    // a particular URL has to put jsdom's location there first.  Several specs were doing
+    // this by hand.
+    if (route) window.history.pushState({}, '', route);
+
+    const themeValue = themeContextFixture({
         theme: inverted ? 'dark' : 'light',
         isDark: inverted,
-        savedTheme: null,
-        // Media filtering is off by default here; a test that needs it sets these.
-        mediaFilter: undefined,
-        mediaFilterEnabled: false,
-        setMediaFilterEnabled: jest.fn(),
-        setTheme: jest.fn(),
-        setDarkTheme: jest.fn(),
-        setLightTheme: jest.fn(),
-        cycleSavedTheme: jest.fn(),
-        ...themeContext
-    };
+        ...themeContext,
+        ...theme,
+    });
+    const statusValue = statusContextFixture(status);
+    const settingsValue = settingsContextFixture(settings);
+    const queryValue = queryContextFixture(query);
+
+    /*
+     * One provider per context, skipping any a spec has mocked away.
+     *
+     * `jest.mock` on contexts/contexts replaces its exports, so a context can arrive here as
+     * undefined -- and one spec passes a hand-written object with a `_currentValue` and no
+     * `.Provider`, which works only because `useContext` reads that React internal.  Rendering
+     * `undefined.Provider` fails with "element type is invalid" pointing at this wrapper rather
+     * than at the mock responsible, which is a miserable trail to follow.  So the harness
+     * degrades rather than demanding every spec convert at once.
+     */
+    const providers = [
+        [StatusContext, statusValue],
+        [SettingsContext, settingsValue],
+        [QueryContext, queryValue],
+        [ThemeContext, themeValue],
+        ...contexts,
+    ];
 
     function Wrapper({children}) {
-        // MantineProvider, configured exactly as ThemeProvider configures it: components
-        // from src/components/ui render Mantine internals and need it in the tree.
+        const withProviders = providers.reduceRight(
+            (inner, [Context, value]) => (Context && Context.Provider
+                ? <Context.Provider value={value}>{inner}</Context.Provider>
+                : inner),
+            children,
+        );
+
         const content = (
             <BrowserRouter>
+                {/* Configured exactly as ThemeProvider configures it: components from
+                    src/components/ui render Mantine internals and need it in the tree. */}
                 <MantineProvider
                     theme={mantineTheme}
                     cssVariablesResolver={cssVariablesResolver}
                     forceColorScheme={inverted ? 'dark' : 'light'}
                 >
-                    <MockFileWorkerStatusProvider>
-                        <ThemeContext.Provider value={defaultThemeContext}>
-                            {children}
-                        </ThemeContext.Provider>
-                    </MockFileWorkerStatusProvider>
+                    {withProviders}
                 </MantineProvider>
             </BrowserRouter>
         );
 
-        // Only wrap with MediaContextProvider if explicitly requested
-        // (since it requires window.matchMedia which can be tricky in tests)
+        // Opt-in: MediaContextProvider needs window.matchMedia, and a component that does not
+        // branch on breakpoint gains nothing from it.
         if (withMedia) {
             return <MediaContextProvider>{content}</MediaContextProvider>;
         }
@@ -116,37 +186,34 @@ export function renderWithProviders(
         return content;
     }
 
-    return render(ui, {wrapper: Wrapper, ...renderOptions});
+    return rtlRender(ui, {wrapper: Wrapper, ...renderOptions});
 }
 
 /**
- * Creates a mock domain collection object for testing
+ * Replace named exports of a module, keeping every other export intact.
+ *
+ * Use inside a `jest.mock` factory:
+ *
+ *   jest.mock('../hooks/customHooks', () =>
+ *       require('../test-utils').mockModule('../hooks/customHooks', {
+ *           useDomains: () => mockUseDomains(),
+ *       }));
+ *
+ * The point is the spread.  A factory written by hand returns only the keys it lists, so
+ * every other export of that module becomes undefined -- one spec mocks six hooks out of
+ * customHooks and silently blanks the rest, and the next hook a component under it starts
+ * calling fails as "not a function" a long way from the cause.
  */
-export function createMockDomain(overrides = {}) {
-    return {
-        id: 1,
-        domain: 'example.com',
-        archive_count: 42,
-        size: 1024000,
-        tag_name: null,
-        directory: '',
-        can_be_tagged: false,
-        description: '',
-        ...overrides
-    };
+export function mockModule(modulePath, overrides) {
+    return {...jest.requireActual(modulePath), ...overrides};
 }
 
-/**
- * Creates multiple mock domains for list testing
+/*
+ * The names the existing specs already import.  Both delegate to test-fixtures so a domain is
+ * defined once rather than in two places free to disagree.
  */
-export function createMockDomains(count = 3) {
-    return Array.from({length: count}, (_, i) => createMockDomain({
-        id: i + 1,
-        domain: `example${i + 1}.com`,
-        archive_count: (i + 1) * 10,
-        size: (i + 1) * 1000000,
-    }));
-}
+export const createMockDomain = domainFixture;
+export const createMockDomains = domainsFixture;
 
 /**
  * Mock fetch implementation for API calls
@@ -222,18 +289,6 @@ export function renderInLightMode(ui, options = {}) {
         inverted: false,
         ...options
     });
-}
-
-/**
- * Helper to check if an element has theme-aware (inverted) styling
- * Returns true if the element has the 'inverted' class
- *
- * Usage:
- *   const segment = container.querySelector('.ui.segment');
- *   expect(hasInvertedStyling(segment)).toBe(true);
- */
-export function hasInvertedStyling(element) {
-    return element && element.classList.contains('inverted');
 }
 
 /**

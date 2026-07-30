@@ -85,7 +85,7 @@ import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, St
 import {BulkTagModal} from "./BulkTagModal";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "./ui";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
 import {CollectionEditForm} from "./collections/CollectionEditForm";
@@ -237,12 +237,28 @@ function ArchivePage() {
         ? isoDatetimeToAgoPopup(archiveFile.published_modified_datetime, true)
         : 'unknown';
 
+    const aboutPane = {
+        menuItem: 'About', render: () => <Tab.Pane>
+            <Header as={'h3'}>Domain</Header>
+            {domainHeader}
+
+            <Header as='h3'>Size</Header>
+            {humanFileSize(size)}
+
+            <Header as={'h3'}>URL</Header>
+            <p>{archiveFile.url ? <a href={archiveFile.url}>{archiveFile.url}</a> : 'N/A'}</p>
+
+            <Header as={'h3'}>Modified Date</Header>
+            <p>{modifiedDatetimeString}</p>
+        </Tab.Pane>
+    };
+
     // Helper to find file size from the files array by resolved path
     const findFileSize = (resolvedPath) => {
         if (!resolvedPath || !archiveFile.files) return null;
         const file = archiveFile.files.find(i => String(i.path) === String(resolvedPath));
         return file && file.size
-            ? <span style={{marginLeft: '1em', color: 'var(--muted)'}}>({humanFileSize(file.size)})</span>
+            ? <span style={{marginLeft: '1em', color: 'grey'}}>({humanFileSize(file.size)})</span>
             : null;
     };
 
@@ -259,11 +275,51 @@ function ArchivePage() {
 
     const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
     const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
+    const filesPane = {
+        menuItem: 'Files', render: () => <Tab.Pane>
+            <table style={tableStyle}>
+                <tbody>
+                <tr>
+                    <td style={labelStyle}><strong>Singlefile File</strong></td>
+                    <td>{localPreviewPath(data.singlefile_path, 'text/html')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability File</strong></td>
+                    <td>{localPreviewPath(data.readability_path, 'text/html')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability Text File</strong></td>
+                    <td>{localPreviewPath(data.readability_txt_path, 'text/plain')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability JSON File</strong></td>
+                    <td>{localPreviewPath(data.readability_json_path, 'application/json')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Screenshot File</strong></td>
+                    <td>
+                        {screenshotPath
+                            ? <><PreviewPath path={screenshotPath} mimetype='image/*'
+                                             taggable={false}>{screenshotPath}</PreviewPath>{findFileSize(screenshotPath)}</>
+                            : 'Unknown'}
+                    </td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Directory</strong></td>
+                    <td><DirectoryLink path={archiveFile.directory}/></td>
+                </tr>
+                </tbody>
+            </table>
+        </Tab.Pane>
+    };
+
+    const tabPanes = [aboutPane, filesPane];
+    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
     return <>
         <BackButton/>
 
-        <Panel>
+        <Segment>
             {screenshot}
             <ExternalCardLink to={singlefileUrl}>
                 <Header as='h2'>{textEllipsis(archiveFile.title || data.url)}</Header>
@@ -271,13 +327,15 @@ function ArchivePage() {
 
             <Header as='h3'>Author: {archiveFile.author ? archiveFile.author : 'unknown'}</Header>
 
-            <Grid>
-                <Grid.Col span={{base: 12, sm: 6}}>
-                    <Header as='h4'>Published: {publishedDatetimeString}</Header>
-                </Grid.Col>
-                <Grid.Col span={{base: 12, sm: 6}}>
-                    <Header as='h4'>Downloaded: {downloadDatetimeString}</Header>
-                </Grid.Col>
+            <Grid columns={2} stackable>
+                <GridRow>
+                    <GridColumn>
+                        <Header as='h4'>Published: {publishedDatetimeString}</Header>
+                    </GridColumn>
+                    <GridColumn>
+                        <Header as='h4'>Downloaded: {downloadDatetimeString}</Header>
+                    </GridColumn>
+                </GridRow>
             </Grid>
 
             {singlefileButton}
@@ -286,78 +344,25 @@ function ArchivePage() {
             {deleteButton}
             {generateScreenshotButton}
             <AddToPlaylistButton fileGroupId={archiveFile.id}/>
-        </Panel>
+        </Segment>
 
-        <Panel>
+        <Segment>
             <TagsSelector
                 selectedTagNames={archiveFile['tags']}
                 onAdd={localAddTag}
                 onRemove={localRemoveTag}
             />
-        </Panel>
+        </Segment>
 
-        <Tabs defaultValue='about'>
-            <Tabs.List>
-                <Tabs.Tab value='about'>About</Tabs.Tab>
-                <Tabs.Tab value='files'>Files</Tabs.Tab>
-            </Tabs.List>
-            <Tabs.Panel value='about' pt='md'>
-                <Header as='h3'>Domain</Header>
-                {domainHeader}
+        <Tab menu={tabMenu} panes={tabPanes}/>
 
-                <Header as='h3'>Size</Header>
-                {humanFileSize(size)}
-
-                <Header as='h3'>URL</Header>
-                <p>{archiveFile.url ? <a href={archiveFile.url}>{archiveFile.url}</a> : 'N/A'}</p>
-
-                <Header as='h3'>Modified Date</Header>
-                <p>{modifiedDatetimeString}</p>
-            </Tabs.Panel>
-            <Tabs.Panel value='files' pt='md'>
-                <table style={tableStyle}>
-                    <tbody>
-                    <tr>
-                        <td style={labelStyle}><strong>Singlefile File</strong></td>
-                        <td>{localPreviewPath(data.singlefile_path, 'text/html')}</td>
-                    </tr>
-                    <tr>
-                        <td style={labelStyle}><strong>Readability File</strong></td>
-                        <td>{localPreviewPath(data.readability_path, 'text/html')}</td>
-                    </tr>
-                    <tr>
-                        <td style={labelStyle}><strong>Readability Text File</strong></td>
-                        <td>{localPreviewPath(data.readability_txt_path, 'text/plain')}</td>
-                    </tr>
-                    <tr>
-                        <td style={labelStyle}><strong>Readability JSON File</strong></td>
-                        <td>{localPreviewPath(data.readability_json_path, 'application/json')}</td>
-                    </tr>
-                    <tr>
-                        <td style={labelStyle}><strong>Screenshot File</strong></td>
-                        <td>
-                            {screenshotPath
-                                ? <><PreviewPath path={screenshotPath} mimetype='image/*'
-                                                 taggable={false}>{screenshotPath}</PreviewPath>{findFileSize(screenshotPath)}</>
-                                : 'Unknown'}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style={labelStyle}><strong>Directory</strong></td>
-                        <td><DirectoryLink path={archiveFile.directory}/></td>
-                    </tr>
-                    </tbody>
-                </table>
-            </Tabs.Panel>
-        </Tabs>
-
-        <Panel>
+        <Segment>
             <InfoHeader
                 headerContent='History'
                 popupContent='Other archives of this URL created at different times.'
             />
             {historyList}
-        </Panel>
+        </Segment>
 
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}

@@ -366,7 +366,10 @@ describe('no input reserves space for a section it cannot measure', () => {
             for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
-                else if (/\.(js|jsx|tsx)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+                // Specs are exempt: ui-layout.cy.js reproduces this exact mistake on
+                // purpose, to prove its overlap check can still detect it.
+                else if (/\.(js|jsx|tsx)$/.test(entry.name)
+                    && !/\.test\.|\.cy\./.test(entry.name)) {
                     // Comments are stripped first: the component that replaced this
                     // pattern documents it by name, and prose about a mistake is not the
                     // mistake.
@@ -381,6 +384,56 @@ describe('no input reserves space for a section it cannot measure', () => {
             }
         };
         walk(path.join(__dirname, '..', '..'));
+
+        expect(offenders).toEqual([]);
+    });
+});
+
+describe('the library stays mockable-free', () => {
+    /*
+     * The whole reason these 80-odd tests need no setup is that a library component takes
+     * props and reaches for nothing else -- no module-level fetch, no API helper, no
+     * ambient state it has to be lied to about.  Pages are the opposite: DomainEditPage
+     * needs seven jest.mock calls before it will render at all, which is precisely why the
+     * inputs on the Settings page had no test when they broke.
+     *
+     * That property is worth asserting rather than hoping for.  The day a library
+     * component grows a fetch, the mock somebody has to add to keep this file passing
+     * trips the first check, and the import trips the second.
+     */
+
+    const libraryFiles = () => fs.readdirSync(__dirname)
+        .filter(name => /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name))
+        .map(name => [name, fs.readFileSync(path.join(__dirname, name), 'utf8')]);
+
+    it('needs no module mocked to render any of it', () => {
+        const source = fs.readFileSync(path.join(__dirname, 'ui.test.js'), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+
+        expect(source).not.toMatch(/jest\.mock\s*\(/);
+    });
+
+    it('asks the network for nothing', () => {
+        const offenders = libraryFiles()
+            .filter(([, source]) => /\bfetch\s*\(|\bapiCall\b|\baxios\b/
+                .test(source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+            .map(([name]) => name);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('reads ambient state only in the theme controls', () => {
+        /*
+         * ThemePicker and MediaFilterToggle are the deliberate exception -- a control whose
+         * entire job is to show and change the current theme has to know it.  Their tests
+         * pass a real ThemeContext.Provider holding plain values, which is supplying data,
+         * not mocking a module.  Everything else takes props.
+         */
+        const offenders = libraryFiles()
+            .filter(([name]) => name !== 'ThemePicker.tsx')
+            .filter(([, source]) => /useContext\s*\(/.test(source))
+            .map(([name]) => name);
 
         expect(offenders).toEqual([]);
     });

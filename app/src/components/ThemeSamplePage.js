@@ -62,6 +62,7 @@ export function ThemeSamplePage() {
     const [hotspot, setHotspot] = useState(true);
     const [dismissed, setDismissed] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
+    const [realColors, setRealColors] = useState(false);
 
     return <div style={{maxWidth: 1060, margin: '0 auto', padding: '20px 16px 60px', color: 'var(--text)'}}>
         <h1 style={{fontSize: 21, fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
@@ -77,6 +78,53 @@ export function ThemeSamplePage() {
                     The same picker the Settings page uses. The navigation bar has a compact
                     version; both read the same list of themes.
                 </p>
+            </Panel>
+        </Section>
+
+        <Section label='Media filtering'>
+            <Panel>
+                <div style={{display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start'}}>
+                    <div>
+                        {/*
+                          A real <img>, so it goes through whatever filter the current theme
+                          applies — this is the only way to see the filter working without
+                          leaving the page.  The unfiltered copy beside it opts out with
+                          `night-unfiltered`, so the two can be compared side by side.
+                        */}
+                        <img src='/icon.svg' alt='The WROLPi logo, filtered like any other media'
+                             width={104} height={104}/>
+                        <p style={{fontSize: 11, color: 'var(--muted)', margin: '4px 0 0'}}>
+                            Filtered
+                        </p>
+                    </div>
+                    <div>
+                        {/*
+                          Kept behind a click: an unfiltered image is a bright patch, and
+                          leaving one on screen in night mode would cost a user the dark
+                          adaptation they came here to protect.  They can ask for it.
+                        */}
+                        {realColors
+                            ? <img className='night-unfiltered' src='/icon.svg'
+                                   alt='The WROLPi logo, unfiltered' width={104} height={104}/>
+                            : <Button role='cancel' icon='eye' style={{width: 104, height: 104}}
+                                      onClick={() => setRealColors(true)}>Show</Button>}
+                        <p style={{fontSize: 11, color: 'var(--muted)', margin: '4px 0 0'}}>
+                            Real colors
+                        </p>
+                    </div>
+                    <p style={{fontSize: 12, color: 'var(--muted)', margin: 0, maxWidth: 430}}>
+                        Images, video, PDFs, embedded pages, and the map canvas cannot read theme
+                        tokens, so a monochrome theme remaps them with an SVG color matrix instead.
+                        Night filters to red unless you turn it off; amber tints to match only if
+                        you ask. Light and dark offer no filter, so both images look the same here.
+                        <br/><br/>
+                        Use the toggle in the theme picker above to see the difference. An
+                        element can opt out with <code>night-unfiltered</code> — that is what
+                        the right-hand copy does, which is why it is behind a click: an
+                        unfiltered image is a bright patch, and night mode should not spring
+                        one on you.
+                    </p>
+                </div>
             </Panel>
         </Section>
 

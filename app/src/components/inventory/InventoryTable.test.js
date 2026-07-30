@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, render, screen, within} from "@testing-library/react";
+import {fireEvent, render, screen, within} from "../../test-utils";
 import {filterItems, InventoryTable} from "./InventoryTable";
 
 const FIELDS = [
@@ -252,14 +252,14 @@ describe('InventoryTable expired highlighting', () => {
             {id: 1, name: 'Old', expiration_date: '2000-01-01'},
             {id: 2, name: 'Fresh', expiration_date: '2999-01-01'},
         ];
-        const {container} = render(
+        render(
             <InventoryTable slug='s' fields={FIELDS_WITH_DATE} items={items} locations={[]} onChange={jest.fn()}/>);
 
         const rowOf = (name) => screen.getByText(name).closest('tr');
-        expect(rowOf('Old').className).toContain('negative');
-        expect(rowOf('Fresh').className).not.toContain('negative');
+        expect(rowOf('Old').className).toContain('wrolpi-row-failed');
+        expect(rowOf('Fresh').className).not.toContain('wrolpi-row-failed');
         // One expired row -> one warning icon.
-        expect(container.querySelectorAll('i.warning.sign.icon').length).toBe(1);
+        expect(screen.getAllByLabelText('Expired').length).toBe(1);
     });
 });
 

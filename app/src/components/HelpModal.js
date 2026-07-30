@@ -1,7 +1,5 @@
-import React, {useContext} from "react";
-import {Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Button, Header, Modal} from "./Theme";
-import {ThemeContext} from "../contexts/contexts";
+import React from "react";
+import {Button, Header, Modal, Table} from "./ui";
 import {SHORTCUTS} from "./KeyboardShortcutsProvider";
 import {usePlatformModifier} from "../hooks/customHooks";
 
@@ -9,13 +7,11 @@ import {usePlatformModifier} from "../hooks/customHooks";
 function KeyboardKey({children}) {
     return (
         <kbd style={{
-            backgroundColor: '#f7f7f7',
-            border: '1px solid #ccc',
-            borderRadius: '3px',
-            boxShadow: '0 1px 0 rgba(0,0,0,0.2)',
-            color: '#333',
+            backgroundColor: 'var(--head)',
+            border: '1px solid var(--border)',
+            color: 'var(--text)',
             display: 'inline-block',
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '0.85em',
             lineHeight: '1.4',
             margin: '0 2px',
@@ -116,7 +112,6 @@ function groupShortcutsByCategory(shortcuts) {
 }
 
 export default function HelpModal({open, onClose}) {
-    const {i, t} = useContext(ThemeContext);
     const {isMac} = usePlatformModifier();
     const groupedShortcuts = groupShortcutsByCategory(SHORTCUTS);
 
@@ -125,29 +120,29 @@ export default function HelpModal({open, onClose}) {
     const orderedCategories = categoryOrder.filter(cat => groupedShortcuts[cat]);
 
     return (
-        <Modal closeIcon open={open} onClose={onClose} size='small'>
+        <Modal open={open} onClose={onClose} size='small'>
             <Modal.Header>Keyboard Shortcuts</Modal.Header>
-            <Modal.Content scrolling>
+            <Modal.Content>
                 {orderedCategories.map(category => (
                     <div key={category} style={{marginBottom: '1.5em'}}>
-                        <Header as='h4' {...t}>{category}</Header>
-                        <Table basic='very' compact {...i}>
-                            <TableBody>
+                        <Header as='h4'>{category}</Header>
+                        <Table>
+                            <Table.Body>
                                 {groupedShortcuts[category].map((shortcut, idx) => (
-                                    <TableRow key={idx}>
-                                        <TableCell width={6}>
+                                    <Table.Row key={idx}>
+                                        <Table.Cell width={6}>
                                             <ShortcutKeys keys={shortcut.keys} isMac={isMac}/>
-                                        </TableCell>
-                                        <TableCell {...t}>{shortcut.description}</TableCell>
-                                    </TableRow>
+                                        </Table.Cell>
+                                        <Table.Cell>{shortcut.description}</Table.Cell>
+                                    </Table.Row>
                                 ))}
-                            </TableBody>
+                            </Table.Body>
                         </Table>
                     </div>
                 ))}
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={onClose}>Close</Button>
+                <Button role='cancel' onClick={onClose}>Close</Button>
             </Modal.Actions>
         </Modal>
     );

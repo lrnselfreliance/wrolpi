@@ -1,9 +1,7 @@
 import React from "react";
-import {GridColumn, Input, Label, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Form, Header, Segment, Table} from "../Theme";
-import {InfoPopup, roundDigits, Toggle, useLocalStorage} from "../Common";
-import {ThemeContext} from "../../contexts/contexts";
+import {Grid, Header, Panel, Table, TextInput, Toggle} from "../ui";
+import {ColoredInput} from "../Apps";
+import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 
 // Generic food-storage planner: given a household, estimate how much of each food category to store for a chosen
 // duration.  Independent of any inventory (like the Water calculator).  Defaults are a common one-year-per-adult
@@ -97,18 +95,13 @@ const SHARES_INFO = 'Each person\'s share of one adult man\'s ration. Defaults f
     + 'Americans 2020-2025 moderate-activity calorie needs (man ~2,600, woman ~2,000, child ~1,800 kcal/day) — '
     + 'food storage scales with calories. Children vary widely by age, so adjust as needed.';
 
+// Category colors are theme tokens (not hex) so the tags stay legible — and become outlines instead of fills — in
+// night mode.
 const PEOPLE_META = [
-    {key: 'men', label: 'Men', color: '#4477aa'},
-    {key: 'women', label: 'Women', color: '#aa3377'},
-    {key: 'children', label: 'Children', color: '#228833'},
+    {key: 'men', label: 'Men', color: 'blue'},
+    {key: 'women', label: 'Women', color: 'pink'},
+    {key: 'children', label: 'Children', color: 'green'},
 ];
-
-function textColorFor(hex) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff';
-}
 
 function fmt(value, unit) {
     return Number.isFinite(value) && value > 0 ? `${roundDigits(value, 1)} ${unit}` : '—';
@@ -120,7 +113,6 @@ export function FoodStorageCalculator() {
     const [monthsIndex, setMonthsIndex] = useLocalStorage('food_storage_months_index', MONTH_STOPS.indexOf(12));
     const [amounts, setAmounts] = useLocalStorage('food_storage_amounts', DEFAULT_AMOUNTS);
     const [metric, setMetric] = useLocalStorage('food_storage_metric', false);
-    const {t} = React.useContext(ThemeContext);
 
     const unit = metric ? 'kg' : 'lb';
     // Convert the editable amounts when switching units so the user keeps their numbers.
@@ -135,18 +127,13 @@ export function FoodStorageCalculator() {
 
     const inputProps = {fluid: true, type: 'number', min: 0, onSelect: e => e.target.select(), autoComplete: 'off'};
 
-    const labelStyle = (color) =>
-        ({backgroundColor: color, color: textColorFor(color), borderColor: color});
-
     const countInput = ({key, label, color}) =>
-        <Input {...inputProps} step={1} name={`count-${key}`} labelPosition='left' value={counts[key]}
-               onChange={e => setCounts({...counts, [key]: e.target.value})}
-               label={<Label style={labelStyle(color)}>{label}</Label>}/>;
+        <ColoredInput {...inputProps} step={1} name={`count-${key}`} label={label} color={color}
+                      value={counts[key]} onChange={e => setCounts({...counts, [key]: e.target.value})}/>;
 
     const shareInput = ({key, label, color}) =>
-        <Input {...inputProps} step={1} name={`share-${key}`} labelPosition='left' value={shares[key]}
-               onChange={e => setShares({...shares, [key]: e.target.value})}
-               label={<Label style={labelStyle(color)}>{label}</Label>}/>;
+        <ColoredInput {...inputProps} step={1} name={`share-${key}`} label={label} color={color}
+                      value={shares[key]} onChange={e => setShares({...shares, [key]: e.target.value})}/>;
 
     const rows = FOOD_CATEGORIES.map(c => {
         const perYear = amounts[c.key] ?? '';
@@ -155,26 +142,26 @@ export function FoodStorageCalculator() {
     });
     const grandTotal = rows.reduce((s, r) => s + r.total, 0);
 
-    return <Form>
+    return <div>
         <Header as='h1'>Food Storage</Header>
-        <p {...t}>Estimate how much food to store for your household over time.</p>
+        <p>Estimate how much food to store for your household over time.</p>
 
         <div style={{marginBottom: '1em'}}>
             <Toggle label={metric ? 'Metric (kg)' : 'Imperial (lb)'} checked={metric} onChange={toggleMetric}/>
         </div>
 
         <Header as='h3'>People</Header>
-        <Grid stackable columns={3}>
-            {PEOPLE_META.map(meta => <GridColumn key={meta.key}>{countInput(meta)}</GridColumn>)}
+        <Grid>
+            {PEOPLE_META.map(meta => <Grid.Col key={meta.key} span={{base: 12, sm: 4}}>{countInput(meta)}</Grid.Col>)}
         </Grid>
 
         <Header as='h4' style={{marginTop: '1em', marginBottom: '0.5em'}}>
             Ration share (% of an adult man) <InfoPopup content={SHARES_INFO}/>
         </Header>
-        <Grid stackable columns={3}>
-            {PEOPLE_META.map(meta => <GridColumn key={meta.key}>{shareInput(meta)}</GridColumn>)}
+        <Grid>
+            {PEOPLE_META.map(meta => <Grid.Col key={meta.key} span={{base: 12, sm: 4}}>{shareInput(meta)}</Grid.Col>)}
         </Grid>
-        <p {...t} style={{...t.style, marginTop: '0.5em', opacity: 0.8}}>
+        <p style={{marginTop: '0.5em', opacity: 0.8}}>
             ≈ {roundDigits(equivalents, 2)} adult-equivalent{equivalents === 1 ? '' : 's'}
         </p>
 
@@ -183,40 +170,40 @@ export function FoodStorageCalculator() {
             <input type='range' min={0} max={MONTH_STOPS.length - 1} step={1} value={monthStop}
                    aria-label='Duration' onChange={e => setMonthsIndex(Number(e.target.value))}
                    style={{width: '100%'}}/>
-            <Header as='h2' textAlign='center' style={{marginTop: '0.25em'}}>{formatMonths(months)}</Header>
+            <Header as='h2' style={{marginTop: '0.25em', textAlign: 'center'}}>{formatMonths(months)}</Header>
         </div>
 
         <Header as='h3' style={{marginTop: '1em'}}>
             Amounts ({unit} per person per year) <InfoPopup content={CATEGORY_INFO}/>
         </Header>
-        <Segment>
-            <Table unstackable>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell width={7}>Category</TableHeaderCell>
-                        <TableHeaderCell width={5}>{unit === 'kg' ? 'Kg' : 'Lbs'} / person / year</TableHeaderCell>
-                        <TableHeaderCell width={4}>Total needed</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {rows.map(r => <TableRow key={r.key}>
-                        <TableCell>{r.label}</TableCell>
-                        <TableCell>
-                            <Input fluid type='number' min={0} value={r.perYear}
-                                   aria-label={`${r.label} per person per year`}
-                                   onChange={e => setAmounts({...amounts, [r.key]: e.target.value})}/>
-                        </TableCell>
-                        <TableCell>{fmt(r.total, unit)}</TableCell>
-                    </TableRow>)}
-                </TableBody>
-                <TableFooter>
-                    <TableRow>
-                        <TableHeaderCell>Total</TableHeaderCell>
-                        <TableHeaderCell/>
-                        <TableHeaderCell>{fmt(grandTotal, unit)}</TableHeaderCell>
-                    </TableRow>
-                </TableFooter>
+        <Panel>
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Category</Table.HeaderCell>
+                        <Table.HeaderCell>{unit === 'kg' ? 'Kg' : 'Lbs'} / person / year</Table.HeaderCell>
+                        <Table.HeaderCell>Total needed</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                    {rows.map(r => <Table.Row key={r.key}>
+                        <Table.Cell>{r.label}</Table.Cell>
+                        <Table.Cell>
+                            <TextInput type='number' min={0} value={r.perYear} style={{width: '100%'}}
+                                       aria-label={`${r.label} per person per year`}
+                                       onChange={e => setAmounts({...amounts, [r.key]: e.target.value})}/>
+                        </Table.Cell>
+                        <Table.Cell>{fmt(r.total, unit)}</Table.Cell>
+                    </Table.Row>)}
+                </Table.Body>
+                <Table.Footer>
+                    <Table.Row>
+                        <Table.HeaderCell>Total</Table.HeaderCell>
+                        <Table.HeaderCell/>
+                        <Table.HeaderCell>{fmt(grandTotal, unit)}</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Footer>
             </Table>
-        </Segment>
-    </Form>;
+        </Panel>
+    </div>;
 }

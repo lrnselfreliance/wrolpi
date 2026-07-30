@@ -1,11 +1,8 @@
-import React, {useContext, useEffect, useState} from "react";
-import {toast} from "react-semantic-toasts-2";
-import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Button, Divider, Header, Icon, Loader, Modal, Table} from "../Theme";
+import React, {useEffect, useState} from "react";
+import {Button, Divider, Header, Icon, Loading, Modal, Table, toast} from "../ui";
 import {
     getInventoryBackups, postInventoryRestore, postInventoryRestorePreview, reimportInventories,
 } from "../../api";
-import {ThemeContext} from "../../contexts/contexts";
 
 const formatDate = (d) => d && d.length === 8 ? `${d.substring(0, 4)}-${d.substring(4, 6)}-${d.substring(6, 8)}` : d;
 
@@ -13,12 +10,11 @@ const itemName = (item) => (item && (item.name || `Item ${item.id}`)) || 'Item';
 
 // Compact list of item names from a preview's add/remove arrays.
 function ItemNameList({items}) {
-    const {t} = useContext(ThemeContext);
     if (!items || items.length === 0) {
         return null;
     }
     return <ul style={{marginTop: '0.25em'}}>
-        {items.map((i, idx) => <li key={`${i.id}-${idx}`} {...t}>{itemName(i)}</li>)}
+        {items.map((i, idx) => <li key={`${i.id}-${idx}`}>{itemName(i)}</li>)}
     </ul>;
 }
 
@@ -29,7 +25,6 @@ function ItemNameList({items}) {
  * `onChanged` refreshes the page's inventory state after a successful action.
  */
 export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
-    const {t} = useContext(ThemeContext);
     const [dates, setDates] = useState(null);          // null while loading
     const [reimporting, setReimporting] = useState(false);
     const [selected, setSelected] = useState(null);    // {date, mode, preview} confirmation view
@@ -96,38 +91,42 @@ export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
             <Modal.Header>{modeLabel} backup from {formatDate(date)}</Modal.Header>
             <Modal.Content>
                 {applying
-                    ? <Loader active inline='centered'>Restoring…</Loader>
+                    ? <Loading>Restoring…</Loading>
                     : <>
                         {mode === 'overwrite'
-                            ? <p {...t}>
+                            ? <p>
                                 Replace <strong>{name}</strong> entirely with the {formatDate(date)} backup
                                 ({preview.backup_count} item{preview.backup_count === 1 ? '' : 's'}).
                             </p>
-                            : <p {...t}>
+                            : <p>
                                 Add items from the {formatDate(date)} backup that aren't already present; your
                                 current items and fields are kept.
                             </p>}
 
                         {preview.add.length > 0 && <>
-                            <Header as='h5' color='green'><Icon name='plus'/> {preview.add.length} to add</Header>
+                            <Header as='h5' icon='plus' style={{color: 'var(--green)'}}>
+                                {preview.add.length} to add
+                            </Header>
                             <ItemNameList items={preview.add}/>
                         </>}
                         {preview.remove.length > 0 && <>
-                            <Header as='h5' color='red'><Icon name='minus'/> {preview.remove.length} to remove</Header>
+                            <Header as='h5' icon='minus' style={{color: 'var(--red)'}}>
+                                {preview.remove.length} to remove
+                            </Header>
                             <ItemNameList items={preview.remove}/>
                         </>}
                         {preview.fields_change &&
-                            <p {...t}><Icon name='columns'/> The field columns will also change.</p>}
+                            <p><Icon name='columns'/> The field columns will also change.</p>}
                         {preview.add.length === 0 && preview.remove.length === 0 && !preview.fields_change &&
-                            <p {...t}>No changes — this backup matches the current inventory.</p>}
-                        <p style={{color: 'grey'}}>{preview.unchanged} unchanged
+                            <p>No changes — this backup matches the current inventory.</p>}
+                        <p style={{color: 'var(--muted)'}}>{preview.unchanged} unchanged
                             item{preview.unchanged === 1 ? '' : 's'}</p>
                     </>}
             </Modal.Content>
             <Modal.Actions>
                 {!applying && <>
-                    <Button onClick={() => setSelected(null)}>Back</Button>
-                    <Button color='green' onClick={applyRestore}><Icon name='check'/> Apply</Button>
+                    <Button role='cancel' onClick={() => setSelected(null)}>Back</Button>
+                    <Button role='save' icon='check' onClick={applyRestore}>Apply</Button>
                 </>}
             </Modal.Actions>
         </Modal>;
@@ -137,57 +136,58 @@ export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
         <Modal.Header>Import / Restore: {name}</Modal.Header>
         <Modal.Content>
             <Header as='h4'>Re-import from disk</Header>
-            <p {...t}>
+            <p>
                 Reload every inventory from its config file. Use this after editing a file by hand, or after copying
                 an inventory file in from another WROLPi.
             </p>
-            <Button primary onClick={doReimport} loading={reimporting} disabled={reimporting}>
-                <Icon name='sync'/> Re-import from disk
+            <Button role='primary' icon='sync' onClick={doReimport} loading={reimporting} disabled={reimporting}>
+                Re-import from disk
             </Button>
 
             <Divider/>
 
             <Header as='h4'>Restore from a backup</Header>
-            <p {...t}>
+            <p>
                 <strong>Merge</strong> adds items from the backup that aren't already present.
                 {' '}<strong>Overwrite</strong> replaces this inventory entirely with the backup.
             </p>
             {dates === null
-                ? <Loader active inline='centered'>Loading backups…</Loader>
+                ? <Loading>Loading backups…</Loading>
                 : dates.length === 0
-                    ? <p {...t}>No backups yet. A backup is saved automatically whenever this inventory changes.</p>
+                    ? <p>No backups yet. A backup is saved automatically whenever this inventory changes.</p>
                     : <div style={{maxHeight: '320px', overflowY: 'auto'}}>
-                        <Table compact unstackable>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHeaderCell>Date</TableHeaderCell>
-                                    <TableHeaderCell>Merge</TableHeaderCell>
-                                    <TableHeaderCell>Overwrite</TableHeaderCell>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {dates.map(date => <TableRow key={date}>
-                                    <TableCell>{formatDate(date)}</TableCell>
-                                    <TableCell>
-                                        <Button size='mini' color='green' loading={previewing === `${date}:merge`}
+                        <Table>
+                            <Table.Header>
+                                <Table.Row>
+                                    <Table.HeaderCell>Date</Table.HeaderCell>
+                                    <Table.HeaderCell>Merge</Table.HeaderCell>
+                                    <Table.HeaderCell>Overwrite</Table.HeaderCell>
+                                </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                                {dates.map(date => <Table.Row key={date}>
+                                    <Table.Cell>{formatDate(date)}</Table.Cell>
+                                    <Table.Cell>
+                                        <Button size='xs' role='save' icon='plus'
+                                                loading={previewing === `${date}:merge`}
                                                 onClick={() => selectAction(date, 'merge')}>
-                                            <Icon name='plus'/> Merge
+                                            Merge
                                         </Button>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button size='mini' color='orange'
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                        <Button size='xs' color='orange' icon='refresh'
                                                 loading={previewing === `${date}:overwrite`}
                                                 onClick={() => selectAction(date, 'overwrite')}>
-                                            <Icon name='refresh'/> Overwrite
+                                            Overwrite
                                         </Button>
-                                    </TableCell>
-                                </TableRow>)}
-                            </TableBody>
+                                    </Table.Cell>
+                                </Table.Row>)}
+                            </Table.Body>
                         </Table>
                     </div>}
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Close</Button>
+            <Button role='cancel' onClick={onClose}>Close</Button>
         </Modal.Actions>
     </Modal>;
 }

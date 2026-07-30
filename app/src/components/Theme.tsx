@@ -105,9 +105,12 @@ import {
     isDarkTheme,
     isThemeName,
     lightTheme,
+    mediaFilterSessionKey,
     nightTheme,
+    resolveMediaFilter,
     systemTheme,
     themeChoices,
+    themeMediaFilter,
     themeNames,
     themeSessionKey,
 } from "../themes/names";
@@ -127,6 +130,7 @@ export {
     nightTheme,
     systemTheme,
     themeChoices,
+    themeMediaFilter,
     themeNames,
     themeSessionKey,
 };
@@ -155,6 +159,28 @@ const readSavedTheme = (): SavedThemeName => {
     return null;
 }
 
+/**
+ * The user's per-theme media filter choices: `{night: false}` means "night, but
+ * do not filter media".  A theme absent from the map follows its own default.
+ */
+const readMediaFilters = (): Partial<Record<ThemeName, boolean>> => {
+    try {
+        const raw = localStorage.getItem(mediaFilterSessionKey);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            // Only keep known themes with boolean values; the rest is someone else's data.
+            if (parsed && typeof parsed === 'object') {
+                return Object.fromEntries(Object.entries(parsed)
+                    .filter(([key, value]) => isThemeName(key) && typeof value === 'boolean'));
+            }
+        }
+    } catch (e) {
+        // Blocked storage, or a value an older version wrote.
+        console.error('Unable to read the media filter settings', e);
+    }
+    return {};
+}
+
 interface ThemeProviderProps {
     children: React.ReactNode;
 }
@@ -170,11 +196,27 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
     // theme is what is currently applied.
     const [theme, setThemeName] = useState<ThemeName>(() => resolveTheme(readSavedTheme()));
 
+    // Which themes the user has turned media filtering on or off for.
+    const [mediaFilters, setMediaFilters] = useState<Partial<Record<ThemeName, boolean>>>(
+        readMediaFilters);
+
     // `data-theme` on <html> is what the token CSS keys off of.  index.html stamps it before
     // first paint from the same localStorage value, so the first render already matches.
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
     }, [theme]);
+
+    // `data-media-filter` names the filter to apply, or is absent when nothing should be
+    // filtered.  index.html stamps this too: a flash of unfiltered thumbnails before the
+    // bundle arrives would cost the user the dark adaptation night mode exists to protect.
+    useEffect(() => {
+        const filter = resolveMediaFilter(theme, mediaFilters);
+        if (filter) {
+            document.documentElement.setAttribute('data-media-filter', filter);
+        } else {
+            document.documentElement.removeAttribute('data-media-filter');
+        }
+    }, [theme, mediaFilters]);
 
     // Follow the OS preference only while the user has not chosen a specific theme.
     useEffect(() => {
@@ -208,6 +250,20 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
         }
         saveTheme(value);
         setThemeName(resolveTheme(value));
+    }
+
+    /**
+     * Turn the current theme's media filter on or off.  Stored per theme, so a user who
+     * wants amber's tint but not night's — or the reverse — gets both.
+     */
+    const setMediaFilterEnabled = (enabled: boolean) => {
+        const next = {...mediaFilters, [theme]: enabled};
+        setMediaFilters(next);
+        try {
+            localStorage.setItem(mediaFilterSessionKey, JSON.stringify(next));
+        } catch (e) {
+            console.error('Unable to save the media filter setting', e);
+        }
     }
 
     // Retained for callers written against the old two-theme API.
@@ -256,6 +312,10 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
         theme,
         savedTheme,
         isDark: dark,
+        // The filter this theme offers, if any, and whether it is currently applied.
+        mediaFilter: themeMediaFilter(theme),
+        mediaFilterEnabled: !!resolveMediaFilter(theme, mediaFilters),
+        setMediaFilterEnabled,
         setTheme,
         setDarkTheme,
         setLightTheme,

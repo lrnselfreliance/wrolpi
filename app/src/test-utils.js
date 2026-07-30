@@ -77,6 +77,10 @@ export function renderWithProviders(
         theme: inverted ? 'dark' : 'light',
         isDark: inverted,
         savedTheme: null,
+        // Media filtering is off by default here; a test that needs it sets these.
+        mediaFilter: undefined,
+        mediaFilterEnabled: false,
+        setMediaFilterEnabled: jest.fn(),
         setTheme: jest.fn(),
         setDarkTheme: jest.fn(),
         setLightTheme: jest.fn(),

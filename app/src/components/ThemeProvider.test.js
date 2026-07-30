@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React, {useContext} from 'react';
 import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,6 +15,7 @@ import {
     ThemeProvider,
     themeSessionKey,
 } from './Theme';
+import {mediaFilterSessionKey, resolveMediaFilter, themeMediaFilter} from '../themes/names';
 
 // Lets a test drive `prefers-color-scheme` and assert on what the provider applied.
 let prefersDark = false;
@@ -38,26 +41,37 @@ const mockMatchMedia = () => {
 };
 
 function ThemeProbe() {
-    const {theme, savedTheme, isDark, setTheme, cycleSavedTheme} = useContext(ThemeContext);
+    const {
+        theme, savedTheme, isDark, setTheme, cycleSavedTheme,
+        mediaFilter, mediaFilterEnabled, setMediaFilterEnabled,
+    } = useContext(ThemeContext);
     return <>
         <span data-testid='theme'>{theme}</span>
         <span data-testid='saved'>{String(savedTheme)}</span>
         <span data-testid='dark'>{String(isDark)}</span>
+        <span data-testid='filter-offered'>{mediaFilter ? mediaFilter.id : 'none'}</span>
+        <span data-testid='filter-on'>{String(mediaFilterEnabled)}</span>
         <button onClick={() => setTheme(nightTheme)}>night</button>
+        <button onClick={() => setTheme(amberTheme)}>amber</button>
+        <button onClick={() => setTheme(lightTheme)}>light</button>
         <button onClick={() => setTheme(systemTheme)}>system</button>
         <button onClick={cycleSavedTheme}>cycle</button>
+        <button onClick={() => setMediaFilterEnabled(false)}>filter off</button>
+        <button onClick={() => setMediaFilterEnabled(true)}>filter on</button>
     </>
 }
 
 const renderProvider = () => render(<ThemeProvider><ThemeProbe/></ThemeProvider>);
 
 const appliedTheme = () => document.documentElement.getAttribute('data-theme');
+const appliedFilter = () => document.documentElement.getAttribute('data-media-filter');
 
 describe('ThemeProvider', () => {
     beforeEach(() => {
         prefersDark = false;
         localStorage.clear();
         document.documentElement.removeAttribute('data-theme');
+        document.documentElement.removeAttribute('data-media-filter');
         mockMatchMedia();
     });
 
@@ -137,6 +151,127 @@ describe('ThemeProvider', () => {
 
         expect(screen.getByTestId('theme')).toHaveTextContent(lightTheme);
         expect(appliedTheme()).toBe(lightTheme);
+    });
+});
+
+describe('ThemeProvider media filtering', () => {
+    beforeEach(() => {
+        prefersDark = false;
+        localStorage.clear();
+        document.documentElement.removeAttribute('data-theme');
+        document.documentElement.removeAttribute('data-media-filter');
+        mockMatchMedia();
+    });
+
+    it('filters media in night mode without being asked', async () => {
+        // An unfiltered thumbnail undoes dark adaptation, so night starts filtered.
+        renderProvider();
+
+        await userEvent.click(screen.getByRole('button', {name: 'night'}));
+
+        expect(appliedFilter()).toBe('night-red');
+        expect(screen.getByTestId('filter-on')).toHaveTextContent('true');
+    });
+
+    it('leaves amber media alone until the user asks for it', async () => {
+        renderProvider();
+
+        await userEvent.click(screen.getByRole('button', {name: 'amber'}));
+
+        expect(appliedFilter()).toBeNull();
+        expect(screen.getByTestId('filter-offered')).toHaveTextContent('amber-mono');
+    });
+
+    it('applies no filter, and offers none, in a theme without one', async () => {
+        renderProvider();
+
+        await userEvent.click(screen.getByRole('button', {name: 'light'}));
+
+        expect(appliedFilter()).toBeNull();
+        expect(screen.getByTestId('filter-offered')).toHaveTextContent('none');
+    });
+
+    it('turns the filter off when the user says so, and persists it', async () => {
+        renderProvider();
+        await userEvent.click(screen.getByRole('button', {name: 'night'}));
+
+        await userEvent.click(screen.getByRole('button', {name: 'filter off'}));
+
+        expect(appliedFilter()).toBeNull();
+        expect(JSON.parse(localStorage.getItem(mediaFilterSessionKey))).toEqual({night: false});
+    });
+
+    it('turns amber filtering on when the user asks', async () => {
+        renderProvider();
+        await userEvent.click(screen.getByRole('button', {name: 'amber'}));
+
+        await userEvent.click(screen.getByRole('button', {name: 'filter on'}));
+
+        expect(appliedFilter()).toBe('amber-mono');
+    });
+
+    it('keeps the choice separate for each theme', async () => {
+        // Wanting amber's tint says nothing about wanting night's, and turning night's off
+        // must not disarm a filter the user deliberately enabled elsewhere.
+        renderProvider();
+        await userEvent.click(screen.getByRole('button', {name: 'amber'}));
+        await userEvent.click(screen.getByRole('button', {name: 'filter on'}));
+        await userEvent.click(screen.getByRole('button', {name: 'night'}));
+
+        await userEvent.click(screen.getByRole('button', {name: 'filter off'}));
+        expect(appliedFilter()).toBeNull();
+
+        await userEvent.click(screen.getByRole('button', {name: 'amber'}));
+        expect(appliedFilter()).toBe('amber-mono');
+    });
+
+    it('restores the saved choice on the next load', () => {
+        localStorage.setItem(themeSessionKey, nightTheme);
+        localStorage.setItem(mediaFilterSessionKey, JSON.stringify({night: false}));
+
+        renderProvider();
+
+        expect(appliedFilter()).toBeNull();
+    });
+
+    it('falls back to the theme default when the stored settings are unusable', () => {
+        localStorage.setItem(themeSessionKey, nightTheme);
+        localStorage.setItem(mediaFilterSessionKey, 'not json');
+
+        renderProvider();
+
+        // Failing open would leave a user in the dark staring at a white thumbnail.
+        expect(appliedFilter()).toBe('night-red');
+    });
+
+    it('ignores stored entries for themes that no longer exist', () => {
+        localStorage.setItem(themeSessionKey, nightTheme);
+        localStorage.setItem(mediaFilterSessionKey, JSON.stringify({sepia: true, night: false}));
+
+        renderProvider();
+
+        expect(appliedFilter()).toBeNull();
+    });
+});
+
+describe('resolveMediaFilter', () => {
+    it('gives every filtering theme a filter defined in MediaFilterDefs', () => {
+        // A theme naming a filter that does not exist would silently filter nothing.
+        const defs = fs.readFileSync(
+            path.join(__dirname, '..', 'themes', 'MediaFilterDefs.tsx'), 'utf8');
+
+        [nightTheme, amberTheme].forEach(theme => {
+            const filter = themeMediaFilter(theme);
+            expect(defs).toContain(`id='wrolpi-${filter.id}'`);
+        });
+    });
+
+    it('honours an override in either direction', () => {
+        expect(resolveMediaFilter(nightTheme, {})).toBe('night-red');
+        expect(resolveMediaFilter(nightTheme, {night: false})).toBe('');
+        expect(resolveMediaFilter(amberTheme, {})).toBe('');
+        expect(resolveMediaFilter(amberTheme, {amber: true})).toBe('amber-mono');
+        expect(resolveMediaFilter(lightTheme, {light: true})).toBe('');
     });
 });
 

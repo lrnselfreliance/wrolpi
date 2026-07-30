@@ -16,6 +16,7 @@ import {
     Modal,
     Pagination,
     Panel,
+    PathInput,
     Placeholder,
     Progress,
     SearchBox,
@@ -280,6 +281,14 @@ export function ThemeSamplePage() {
                 </div>
                 <div style={{marginTop: 12}}>
                     <Textarea label='Notes' placeholder='Notes about this download…' minRows={2}/>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <PathInput
+                        prefix='/media/wrolpi/'
+                        label='Videos Directory'
+                        description="A fixed prefix beside the value, not layered over it."
+                        defaultValue='videos/%(channel_name)s'
+                    />
                 </div>
                 <div style={{marginTop: 12}}>
                     <ActionInput

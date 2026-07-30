@@ -27,20 +27,19 @@ import {
     WROLModeMessage
 } from "../Common";
 import {
-    Button as SButton,
+    Button,
     ButtonGroup,
     Checkbox,
+    Header,
+    IconButton,
     Label,
     Loader,
-    PlaceholderLine,
-    TableBody,
-    TableCell,
-    TableFooter,
-    TableHeader,
-    TableHeaderCell,
-    TableRow
-} from "semantic-ui-react";
-import {Button, Header, Modal, Placeholder, Progress, Segment, Table} from "../Theme";
+    Modal,
+    Panel,
+    Placeholder,
+    Progress,
+    Table,
+} from "../ui";
 import {useDownloads} from "../../hooks/customHooks";
 import {
     EditArchiveDownloadForm,
@@ -70,35 +69,32 @@ function DownloadProgressModal({progress, url}) {
             <Modal.Content>
                 <Progress
                     percent={progress.percent}
-                    progress
-                    indicating
                     color={navColor}
-                >
-                    {humanFileSize(progress.bytes_downloaded)} / {humanFileSize(progress.total_bytes)}
-                </Progress>
-                <Table definition>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell width={4}>Speed</TableCell>
-                            <TableCell>{speedText}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell>ETA</TableCell>
-                            <TableCell>{progress.eta || 'Calculating...'}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell>Downloaded</TableCell>
-                            <TableCell>{humanFileSize(progress.bytes_downloaded)} / {humanFileSize(progress.total_bytes)}</TableCell>
-                        </TableRow>
-                        {url && <TableRow>
-                            <TableCell>URL</TableCell>
-                            <TableCell style={{wordBreak: 'break-all'}}>{url}</TableCell>
-                        </TableRow>}
-                    </TableBody>
+                    label={`${humanFileSize(progress.bytes_downloaded)} / ${humanFileSize(progress.total_bytes)}`}
+                />
+                <Table>
+                    <Table.Body>
+                        <Table.Row>
+                            <Table.Cell style={{fontWeight: 600}}>Speed</Table.Cell>
+                            <Table.Cell>{speedText}</Table.Cell>
+                        </Table.Row>
+                        <Table.Row>
+                            <Table.Cell style={{fontWeight: 600}}>ETA</Table.Cell>
+                            <Table.Cell>{progress.eta || 'Calculating...'}</Table.Cell>
+                        </Table.Row>
+                        <Table.Row>
+                            <Table.Cell style={{fontWeight: 600}}>Downloaded</Table.Cell>
+                            <Table.Cell>{humanFileSize(progress.bytes_downloaded)} / {humanFileSize(progress.total_bytes)}</Table.Cell>
+                        </Table.Row>
+                        {url && <Table.Row>
+                            <Table.Cell style={{fontWeight: 600}}>URL</Table.Cell>
+                            <Table.Cell style={{wordBreak: 'break-all'}}>{url}</Table.Cell>
+                        </Table.Row>}
+                    </Table.Body>
                 </Table>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={() => setOpen(false)}>Close</Button>
+                <Button role='cancel' onClick={() => setOpen(false)}>Close</Button>
             </Modal.Actions>
         </Modal>
     </>;
@@ -154,7 +150,7 @@ function RetryDownloadsButton({callback, selectedIds, clearSelection}) {
     const label = hasSelection ? `Retry (${selectedIds.length})` : 'Retry';
 
     return <APIButton
-        color='green'
+        role='retry'
         onClick={localRetryOnce}
         obeyWROLMode={true}
     >{label}</APIButton>
@@ -184,7 +180,7 @@ function DeleteOnceDownloadsButton({callback, selectedIds, clearSelection}) {
         : 'Are you sure you want to delete all downloads?  Some may be retried!';
 
     return <APIButton
-        color='red'
+        role='danger'
         onClick={localDeleteOnce}
         confirmContent={confirmContent}
         confirmButton='Delete'
@@ -231,24 +227,26 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
     const errorModal = <Modal
         closeIcon
         onClose={handleErrorClose}
-        onOpen={handleErrorOpen}
         open={errorModalOpen}
-        trigger={<Button icon='exclamation circle' color='orange'/>}
     >
         <Modal.Header>Download Error</Modal.Header>
         <Modal.Content>
             <pre style={{overflowX: 'scroll'}}>{error}</pre>
         </Modal.Content>
         <Modal.Actions>
-            <SButton onClick={handleEditClose}>Close</SButton>
+            <Button role='cancel' onClick={handleErrorClose}>Close</Button>
         </Modal.Actions>
     </Modal>;
 
+    const errorTrigger = <IconButton icon='exclamation triangle' label='Download error' color='orange'
+                                     onClick={handleErrorOpen}/>;
+
     const hideEdit = downloader === Downloaders.MapCatalog || downloader === Downloaders.MapExtract;
-    const editButton = hideEdit ? null : <Button icon='edit' onClick={handleEditOpen}/>;
+    const editButton = hideEdit ? null :
+        <IconButton icon='edit' label='Edit download' onClick={handleEditOpen}/>;
 
     const restartButton = <APIButton
-        color='green'
+        role='retry'
         icon='redo'
         confirmContent='Are you sure you want to restart this download?'
         confirmButton='Restart'
@@ -320,24 +318,25 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         </Modal.Content>
     </Modal>;
 
-    return <TableRow>
-        <TableCell className='column-ellipsis'>
+    return <Table.Row failed={!!error && !download.progress}>
+        <Table.Cell className='column-ellipsis'>
             {link(url)}
-        </TableCell>
-        <TableCell>{formatFrequency(frequency)}</TableCell>
-        <TableCell>
+        </Table.Cell>
+        <Table.Cell>{formatFrequency(frequency)}</Table.Cell>
+        <Table.Cell>
             {last_successful_download && isoDatetimeToElapsedPopup(last_successful_download)}
-            {status === 'pending' && !download.progress && <Loader active inline size='tiny'/>}
+            {status === 'pending' && !download.progress && <Loader size='xs'/>}
             {download.progress && <DownloadProgressModal progress={download.progress} url={download.url}/>}
-        </TableCell>
-        <TableCell>{next}</TableCell>
-        <TableCell textAlign='right'>
-            {error && !download.progress && errorModal}
+        </Table.Cell>
+        <Table.Cell>{next}</Table.Cell>
+        <Table.Cell style={{textAlign: 'right'}}>
+            {error && !download.progress && errorTrigger}
             {editButton}
             {restartButton}
-        </TableCell>
+        </Table.Cell>
+        {errorModal}
         {editModal}
-    </TableRow>
+    </Table.Row>
 }
 
 function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
@@ -384,35 +383,36 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
         (text) => <a href={location || url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
     let completedAtCell = last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null;
-    let buttonCell = <TableCell/>;
+    let buttonCell = <Table.Cell/>;
     if (status === 'pending' || status === 'new') {
         buttonCell = (
-            <TableCell>
+            <Table.Cell>
                 <ButtonGroup>
                     <APIButton
-                        color='red'
-                        icon='stop circle'
+                        role='danger'
+                        icon='stop'
                         onClick={handleStop}
                         confirmContent='Are you sure you want to stop this download?  It will not be retried.'
                         confirmButton='Stop'
                         obeyWROLMode={true}
                     />
                     {status === 'new' && (downloader === Downloaders.Video || downloader === Downloaders.Archive) && (
-                        <Button
+                        <IconButton
                             icon='edit'
+                            label='Edit download'
                             color='blue'
                             onClick={handleEditOpen}
                         />
                     )}
                 </ButtonGroup>
-            </TableCell>
+            </Table.Cell>
         );
     } else if (status === 'failed' || status === 'deferred') {
         buttonCell = (
-            <TableCell>
+            <Table.Cell>
                 <ButtonGroup>
                     <APIButton
-                        color='red'
+                        role='danger'
                         icon='trash'
                         onClick={handleDelete}
                         confirmContent='Are you sure you want to delete this download?'
@@ -420,14 +420,15 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         obeyWROLMode={true}
                     />
                     {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
-                        <Button
+                        <IconButton
                             icon='edit'
+                            label='Edit download'
                             color='blue'
                             onClick={handleEditOpen}
                         />
                     )}
                     <APIButton
-                        color='green'
+                        role='retry'
                         icon='redo'
                         confirmContent='Are you sure you want to restart this download?'
                         confirmButton='Start'
@@ -435,31 +436,37 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         obeyWROLMode={true}
                     />
                 </ButtonGroup>
-            </TableCell>
+            </Table.Cell>
         );
     } else if (status === 'complete' && location) {
         buttonCell = (
-            <TableCell>
+            <Table.Cell>
                 {link('View')}
-            </TableCell>
+            </Table.Cell>
         );
-    }
-    if (error && !download.progress) {
-        completedAtCell = (
-            <Modal
-                closeIcon
-                trigger={<Button icon='exclamation circle' color='red'/>}
-            >
-                <Modal.Header>Download Error</Modal.Header>
-                <Modal.Content>
-                    <pre style={{overflowX: 'scroll'}}>{error}</pre>
-                </Modal.Content>
-            </Modal>
-        )
     }
 
     // Create edit modal for video or archive downloads
     let editModal = null;
+    let errorModal = null;
+    const [errorModalOpen, setErrorModalOpen] = React.useState(false);
+
+    if (error && !download.progress) {
+        completedAtCell = (
+            <IconButton icon='exclamation triangle' label='Download error' color='red'
+                        onClick={() => setErrorModalOpen(true)}/>
+        )
+        errorModal = <Modal
+            closeIcon
+            open={errorModalOpen}
+            onClose={() => setErrorModalOpen(false)}
+        >
+            <Modal.Header>Download Error</Modal.Header>
+            <Modal.Content>
+                <pre style={{overflowX: 'scroll'}}>{error}</pre>
+            </Modal.Content>
+        </Modal>
+    }
 
     if (downloader === Downloaders.Video) {
         editModal = (
@@ -482,7 +489,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         onDelete={handleDelete}
                     />
                     {parentDownloadUrl && (
-                        <p style={{marginTop: '1em', color: '#666'}}>
+                        <p style={{marginTop: '1em', color: 'var(--muted)'}}>
                             From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
                             {parentDownloadUrl}
                         </a>
@@ -511,7 +518,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         onDelete={handleDelete}
                     />
                     {parentDownloadUrl && (
-                        <p style={{marginTop: '1em', color: '#666'}}>
+                        <p style={{marginTop: '1em', color: 'var(--muted)'}}>
                             From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
                             {parentDownloadUrl}
                         </a>
@@ -522,24 +529,25 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
         );
     }
 
-    return <TableRow>
-        <TableCell collapsing>
+    return <Table.Row failed={status === 'failed' || status === 'deferred'}>
+        <Table.Cell>
             <Checkbox
                 checked={isSelected}
                 onChange={() => onSelect(id)}
             />
-        </TableCell>
-        <TableCell className='column-ellipsis'>
+        </Table.Cell>
+        <Table.Cell className='column-ellipsis'>
             {link(url)}
-        </TableCell>
-        <TableCell>
+        </Table.Cell>
+        <Table.Cell>
             {completedAtCell}
-            {status === 'pending' && !download.progress ? <Loader active inline size='tiny'/> : null}
+            {status === 'pending' && !download.progress ? <Loader size='xs'/> : null}
             {download.progress && <DownloadProgressModal progress={download.progress} url={download.url}/>}
-        </TableCell>
+        </Table.Cell>
         {buttonCell}
+        {errorModal}
         {editModal}
-    </TableRow>
+    </Table.Row>
 }
 
 export function OnceDownloadsTable({downloads, fetchDownloads}) {
@@ -597,9 +605,9 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
         />
     );
 
-    const footer = <TableFooter>
-        <TableRow>
-            <TableHeaderCell colSpan={4}>
+    const footer = <Table.Footer>
+        <Table.Row>
+            <Table.HeaderCell colSpan={4}>
                 <ClearDownloadsButton
                     callback={fetchDownloads}
                     selectedIds={selectedIds}
@@ -615,9 +623,9 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                     selectedIds={selectedIds}
                     clearSelection={clearSelection}
                 />
-            </TableHeaderCell>
-        </TableRow>
-    </TableFooter>;
+            </Table.HeaderCell>
+        </Table.Row>
+    </Table.Footer>;
 
     if (downloads && downloads.length >= 1) {
         return <SortableTable
@@ -629,29 +637,26 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
             tableProps={{className: 'table-ellipsis'}}
         />
     } else if (downloads) {
-        return <Segment>No downloads are scheduled.</Segment>
+        return <Panel>No downloads are scheduled.</Panel>
     } else if (downloads === undefined) {
         return <ErrorMessage>Unable to fetch downloads</ErrorMessage>
     }
-    return <Placeholder>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <Placeholder lines={2}/>
 }
 
 export function RecurringDownloadsTable({downloads, fetchDownloads, onDelete}) {
     if (downloads && downloads.length >= 1) {
-        return <Table compact className='table-ellipsis'>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell width={8}>URL</TableHeaderCell>
-                    <TableHeaderCell width={2}>Download Frequency</TableHeaderCell>
-                    <TableHeaderCell width={2}>Completed At</TableHeaderCell>
-                    <TableHeaderCell width={1}>Next</TableHeaderCell>
-                    <TableHeaderCell width={3} textAlign='right'>Control</TableHeaderCell>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+        return <Table className='table-ellipsis'>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell style={{width: '50%'}}>URL</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '12.5%'}}>Download Frequency</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '12.5%'}}>Completed At</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '6.25%'}}>Next</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '18.75%', textAlign: 'right'}}>Control</Table.HeaderCell>
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
                 {downloads.map(i => {
                     return <RecurringDownloadRow
                         key={i.id}
@@ -660,17 +665,14 @@ export function RecurringDownloadsTable({downloads, fetchDownloads, onDelete}) {
                         onDelete={onDelete}
                     />
                 })}
-            </TableBody>
+            </Table.Body>
         </Table>
     } else if (downloads) {
-        return <Segment>No downloads are scheduled.</Segment>
+        return <Panel>No downloads are scheduled.</Panel>
     } else if (downloads === undefined) {
         return <ErrorMessage>Unable to fetch downloads</ErrorMessage>
     }
-    return <Placeholder>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <Placeholder lines={2}/>
 }
 
 export function DownloadsPage() {
@@ -679,7 +681,7 @@ export function DownloadsPage() {
     const {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads} = useDownloads();
 
     const pendingOnceDownloadsSpan = pendingOnceDownloads > 0 ?
-        <Label color='violet' size='large'>{pendingOnceDownloads}</Label>
+        <Label color='violet'>{pendingOnceDownloads}</Label>
         : null;
 
     return <>

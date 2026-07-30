@@ -158,10 +158,59 @@ html[data-theme="amber"] {
 /* Shell                                                                      */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Base element styling.
+ *
+ * semantic.min.css used to supply all of this, and removing it took the lot with it --
+ * links lost their colour and gained the browser's underline and visited purple, and
+ * every padded element silently changed size when `box-sizing: border-box` went away.
+ * None of it belonged to Semantic; it belongs here, expressed in tokens.
+ */
+
+html {
+    box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
 body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-body);
+}
+
+/*
+ * Links take the primary token rather than the browser's blue, and carry no underline
+ * until hovered -- a great many of them wrap cards, posters, statistics and icons, where
+ * a permanent underline is noise.  `--blue` remaps per theme, so night gets a dim red
+ * link and amber an amber one without another rule.
+ */
+a {
+    color: var(--blue);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* A link wrapping a card, poster or icon carries no text of its own to underline. */
+a:has(img, svg, .wrolpi-card-icon):hover {
+    text-decoration: none;
+}
+
+a:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+html[data-theme="night"] a:focus-visible,
+html[data-theme="amber"] a:focus-visible {
+    outline-color: var(--text);
 }
 
 /* ------------------------------------------------------------------------- */

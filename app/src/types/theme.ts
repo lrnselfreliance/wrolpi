@@ -31,14 +31,6 @@ export interface StyleProps {
 
 // ThemeContext value type
 export interface ThemeContextValue {
-    /** Props for Semantic elements that support "inverted" */
-    i: InvertedProps;
-    /** Props to invert styles on elements */
-    s: StyleProps;
-    /** Props to invert text color */
-    t: StyleProps;
-    /** Class name string: 'inverted' or '' */
-    inverted: string;
     /** Current applied theme */
     theme: ThemeName;
     /** User's saved theme preference */

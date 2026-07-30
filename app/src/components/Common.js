@@ -175,9 +175,6 @@ export function isoDatetimeToString(dt, time = false) {
 }
 
 export function CardLink({to, newTab = false, ...props}) {
-    const {t} = useContext(ThemeContext);
-    props = {...props, ...t};
-
     props = newTab === true ? {...props, target: '_blank', rel: 'noopener noreferrer'} : props;
     return <Link to={to} className="no-link-underscore card-link" {...props}>
         {props.children}
@@ -185,13 +182,11 @@ export function CardLink({to, newTab = false, ...props}) {
 }
 
 export function ExternalCardLink({to, children, ...props}) {
-    const {t} = useContext(ThemeContext);
     return <a
         href={to}
         target='_blank'
         rel='noopener noreferrer'
         className='no-link-underscore card-link'
-        {...t}
         {...props}
     >
         {children}
@@ -199,10 +194,9 @@ export function ExternalCardLink({to, children, ...props}) {
 }
 
 export function PreviewLink({file, children, className, ...props}) {
-    const {t} = useContext(ThemeContext);
     const {setPreviewFile} = React.useContext(FilePreviewContext);
     className = className ? `clickable ${className}` : `clickable `;
-    return <span className={className} onClick={() => setPreviewFile(file)} {...props} {...t}>
+    return <span className={className} onClick={() => setPreviewFile(file)} {...props}>
         {children}
     </span>
 }

@@ -1,8 +1,7 @@
 import React from "react";
 import _ from "lodash";
 import {InfoPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
-import {Form, Icon, TextArea} from "../components/Theme";
-import {Message} from "../components/ui";
+import {Icon, Message, Textarea} from "../components/ui";
 
 
 async function asyncNoOp() {
@@ -367,13 +366,14 @@ export function InputForm({
                 />
             }
         </label>
-        <Form.Input
-            id={`${name}_input`}
-            placeholder={placeholder}
-            error={inputProps.error}
-        >
-            <input {...extraInputProps} {...inputProps}/>
-        </Form.Input>
+        <div className='wrolpi-form-field' data-error={inputProps.error ? true : undefined}>
+            <input
+                id={`${name}_input`}
+                placeholder={placeholder}
+                {...extraInputProps}
+                {...inputProps}
+            />
+        </div>
         {messageElm}
     </>
 }
@@ -463,31 +463,36 @@ export function UrlsTextarea({name = 'urls', required, form}) {
     };
 
     return (
-        <Form.Input required error={inputProps.error} label="URLs">
-            <TextArea
-                id="urls_textarea"
-                placeholder="Enter one URL per line"
-                name="urls"
-                onDrop={handleDrop}
-                onKeyDown={handleKeyDown}
-                {...inputProps}
-            />
-        </Form.Input>
+        <Textarea
+            id="urls_textarea"
+            label="URLs"
+            required
+            error={inputProps.error}
+            placeholder="Enter one URL per line"
+            name="urls"
+            onDrop={handleDrop}
+            onKeyDown={handleKeyDown}
+            autosize
+            minRows={3}
+            {...inputProps}
+        />
     );
 }
 
 export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big', disabled = false}) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
-    const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;
-    return <Form.Input
-        label={label}>
-        {iconElm}
-        <Toggle
-            disabled={disabled || form.disabled}
-            name={name}
-            checked={inputProps.value}
-            onChange={inputProps.onChange}
-        />
-    </Form.Input>
+    const iconElm = icon ? <Icon size={iconSize === 'big' ? 'large' : iconSize} name={icon}/> : null;
+    return <div className='wrolpi-form-field'>
+        <label><b>{label}</b></label>
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            {iconElm}
+            <Toggle
+                disabled={disabled || form.disabled}
+                name={name}
+                checked={inputProps.value}
+                onChange={inputProps.onChange}
+            />
+        </div>
+    </div>
 }

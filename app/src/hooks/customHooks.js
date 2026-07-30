@@ -1024,6 +1024,72 @@ export const useBrowseFiles = () => {
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
 }
 
+export const useConfigs = () => {
+    const [configs, setConfigs] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const fetchConfigs = async () => {
+        setLoading(true);
+        console.log('fetching configs...');
+        try {
+            const data = await getConfigs();
+            setConfigs(data['configs']);
+            console.debug('fetching configs successful');
+        } catch (e) {
+            // Ignore SyntaxError because they happen when the API is down.
+            if (!(e instanceof SyntaxError)) {
+                console.error(e);
+            }
+            setConfigs(undefined);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const importConfig = async (fileName) => {
+        try {
+            await postImportConfig(fileName);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const saveConfig = async (fileName) => {
+        try {
+            await postDumpConfig(fileName);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    return {configs, loading, fetchConfigs, importConfig, saveConfig}
+}
+
+export const useDownloads = () => {
+    const [onceDownloads, setOnceDownloads] = useState(null);
+    const [recurringDownloads, setRecurringDownloads] = useState(null);
+    const [pendingOnceDownloads, setPendingOnceDownloads] = useState(null);
+
+    const fetchDownloads = async () => {
+        try {
+            const data = await getDownloads();
+            setOnceDownloads(data['once_downloads']);
+            setRecurringDownloads(data['recurring_downloads']);
+            setPendingOnceDownloads(data['pending_once_downloads']);
+        } catch (e) {
+            console.error(e);
+            // Display errors.
+            setOnceDownloads(undefined);
+            setRecurringDownloads(undefined);
+            setPendingOnceDownloads(undefined);
+        }
+    }
+
+    useRecurringTimeout(fetchDownloads, 3 * 1000);
+
+    return {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads}
+}
+
 // Every hardware toggle works the same way: one field of the shared status object
 // says whether the subsystem is on, and starting/stopping it is a Controller call.
 // `on` is null when the status is unknown, which the UI renders as unsupported.

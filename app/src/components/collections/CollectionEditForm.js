@@ -47,50 +47,39 @@ export function CollectionEditForm({
 
         <form onSubmit={handleSubmit} autoComplete="off">
             {/*
-             * `ui stackable grid` replicates Semantic's own Grid CSS classes (still loaded
-             * globally via semantic-ui-offline while other call sites remain unmigrated).
-             * Callers of this component (Channels.js, Archive.js, Playlists.js) still pass
-             * Semantic <Grid.Row>/<Grid.Column> children -- they have not migrated to the
-             * component library yet. This div keeps their layout without importing
-             * semantic-ui-react here. Replace with the real `Grid`/`Grid.Col` once every
-             * caller has migrated.
-             */}
+              Every caller now passes library components rather than Semantic Grid rows, so
+              this is a plain flex column instead of the `ui stackable grid` bridge it used
+              to be.  That bridge was the last thing in the app depending on Semantic's
+              stylesheet.
+            */}
             <div
-                className="ui stackable grid"
+                className='wrolpi-form-rows'
                 style={form.loading ? {opacity: 0.6, pointerEvents: 'none'} : undefined}
             >
                 {children}
 
-                {appliedTagName && <div className="row">
-                    <div className="column">
-                        <SingleTag name={appliedTagName}/>
-                    </div>
-                </div>}
+                {appliedTagName && <div><SingleTag name={appliedTagName}/></div>}
 
-                <div className="two column row">
-                    <div className="column">
-                        {actionButtons}
-                        {onCancel && <Button
-                            type='button'
-                            role='cancel'
-                            onClick={onCancel}
-                            disabled={form.disabled}
-                            className="action-button-spacing"
-                        >
-                            Cancel
-                        </Button>}
-                    </div>
-                    <div className="column">
-                        <Button
-                            type='submit'
-                            role='save'
-                            size='lg'
-                            style={{float: 'right'}}
-                            disabled={form.disabled}
-                        >
-                            Save
-                        </Button>
-                    </div>
+                <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                    {actionButtons}
+                    {onCancel && <Button
+                        type='button'
+                        role='cancel'
+                        onClick={onCancel}
+                        disabled={form.disabled}
+                        className="action-button-spacing"
+                    >
+                        Cancel
+                    </Button>}
+                    <Button
+                        type='submit'
+                        role='save'
+                        size='lg'
+                        style={{marginLeft: 'auto'}}
+                        disabled={form.disabled}
+                    >
+                        Save
+                    </Button>
                 </div>
             </div>
         </form>

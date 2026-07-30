@@ -155,7 +155,9 @@ describe('FileBrowser', () => {
 
             // Find the upload button
             const buttons = screen.getAllByRole('button');
-            const uploadButton = buttons.find(btn => btn.classList.contains('green'));
+            const uploadButton = buttons.find(btn =>
+                btn.classList.contains('green') || btn.querySelector('[class*="upload"]')
+            );
 
             expect(uploadButton).not.toBeDisabled();
         });
@@ -173,7 +175,9 @@ describe('FileBrowser', () => {
 
             // Find the upload button
             const buttons = screen.getAllByRole('button');
-            const uploadButton = buttons.find(btn => btn.classList.contains('green'));
+            const uploadButton = buttons.find(btn =>
+                btn.classList.contains('green') || btn.querySelector('[class*="upload"]')
+            );
 
             expect(uploadButton).toBeDisabled();
         });

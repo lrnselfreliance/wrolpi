@@ -13,7 +13,10 @@ import baseline from './semantic-baseline.json';
  * print 75 warnings on every dev rebuild, or fail the build outright, and CI
  * already unsets CI= for the build step so warnings there guard nothing.
  *
- * When the list reaches zero, delete this test, the JSON, and the dependencies.
+ * The list has reached zero.  The test stays as a guard rather than being deleted: it now
+ * asserts that nothing imports Semantic UI, nothing calls its toast library, nothing leans
+ * on its stylesheet, and no migrated file reaches back through Theme.tsx.  It can go when
+ * the packages themselves are uninstalled.
  */
 
 const SRC = path.join(__dirname);
@@ -74,7 +77,9 @@ describe('Semantic UI removal', () => {
          * collapse.  Anything on this list is a deliberate bridge that must be revisited
          * then; anything NOT on it is an accident.
          */
-        const allowed = ['src/components/collections/CollectionEditForm.js'];
+        // Empty, and it should stay that way: Semantic's stylesheet is no longer loaded,
+        // so a `ui ...` class name now styles nothing at all.
+        const allowed = [];
 
         const bridges = sourceFiles()
             .filter(file => !baseline.includes(file))

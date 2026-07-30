@@ -1,5 +1,5 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '../test-utils';
 
 // esptool-js ships untranspiled ESM which Jest will not transform; mock it so importing Flasher.js is safe.
 // Real classes (not jest.fn mock impls) so `new ESPLoader()` reliably yields an instance with main()/after().

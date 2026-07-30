@@ -158,10 +158,59 @@ html[data-theme="amber"] {
 /* Shell                                                                      */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Base element styling.
+ *
+ * semantic.min.css used to supply all of this, and removing it took the lot with it --
+ * links lost their colour and gained the browser's underline and visited purple, and
+ * every padded element silently changed size when `box-sizing: border-box` went away.
+ * None of it belonged to Semantic; it belongs here, expressed in tokens.
+ */
+
+html {
+    box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
 body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-body);
+}
+
+/*
+ * Links take the primary token rather than the browser's blue, and carry no underline
+ * until hovered -- a great many of them wrap cards, posters, statistics and icons, where
+ * a permanent underline is noise.  `--blue` remaps per theme, so night gets a dim red
+ * link and amber an amber one without another rule.
+ */
+a {
+    color: var(--blue);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* A link wrapping a card, poster or icon carries no text of its own to underline. */
+a:has(img, svg, .wrolpi-card-icon):hover {
+    text-decoration: none;
+}
+
+a:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+html[data-theme="night"] a:focus-visible,
+html[data-theme="amber"] a:focus-visible {
+    outline-color: var(--text);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -202,6 +251,19 @@ html[data-media-filter="night-red"] :is(img, video, canvas, iframe, embed, objec
 
 html[data-media-filter="amber-mono"] :is(img, video, canvas, iframe, embed, object, .media):not(.night-unfiltered) {
     filter: url(#wrolpi-amber-mono);
+}
+
+/*
+ * A `.media` wrapper filters its whole subtree as one unit, so the leaf media inside
+ * it must not be filtered a second time.  Two passes of a luminance-to-red matrix is
+ * not the same as one: the second pass takes the luminance of an already-red pixel
+ * (0.2126 of it) and the image comes out markedly darker than everything around it.
+ *
+ * The audio player's poster is the case that found this — the poster sits under
+ * custom control glyphs, so the wrapper is filtered to keep the two tinted together.
+ */
+html[data-media-filter] .media :is(img, video, canvas, iframe, embed, object) {
+    filter: none;
 }
 
 /*

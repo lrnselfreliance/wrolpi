@@ -342,6 +342,54 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
     border-top: 1px solid var(--border);
 }
 
+/* A stack of form rows, replacing Semantic's `ui stackable grid` in edit forms. */
+.wrolpi-form-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* ------------------------------------------------------------- Form fields */
+/*
+ * `hooks/useForm.js` renders its own <label> and native <input> — it always did, with
+ * Semantic's Form.Input only wrapping them for field styling.  These rules supply that
+ * styling from tokens instead, so a native input matches the library's own controls.
+ */
+
+.wrolpi-form-field input {
+    width: 100%;
+    padding: 7px 9px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font: inherit;
+    font-size: 13px;
+}
+
+.wrolpi-form-field input::placeholder {
+    color: var(--muted);
+}
+
+.wrolpi-form-field input:focus {
+    outline: none;
+    border-color: var(--blue);
+}
+
+html[data-theme="night"] .wrolpi-form-field input:focus,
+html[data-theme="amber"] .wrolpi-form-field input:focus {
+    border-color: var(--text);
+}
+
+/* An invalid field is dashed, matching every other failure state in the interface. */
+.wrolpi-form-field[data-error] input {
+    border: 1.5px dashed var(--red);
+}
+
+.wrolpi-form-field input:disabled {
+    color: var(--muted);
+    background: var(--bg);
+}
+
 /* ---------------------------------------------------------- Action inputs */
 /*
  * Input and button share one outline: the input gives up its right border and
@@ -499,6 +547,22 @@ html[data-theme="night"] .wrolpi-label {
     margin-top: 3px;
 }
 
+/*
+ * Night and amber are single-hue by definition, and a call site may legitimately want
+ * many distinguishable colours — the Flasher's chip-family badges set `--label-color`
+ * inline from a twelve-colour palette that no four tokens can express.
+ *
+ * In those themes the palette is overridden back to the theme's own text colour, so a
+ * label cannot put a green or blue pixel on a night-adapted screen.  `!important` is
+ * required because the palette arrives as an inline custom property, which a normal
+ * rule cannot outrank.  The labels stop being distinguishable by colour, which is the
+ * correct trade: the theme's whole purpose is that no other hue reaches the eye.
+ */
+html[data-theme="night"] .wrolpi-label,
+html[data-theme="amber"] .wrolpi-label {
+    --label-color: var(--text) !important;
+}
+
 /* --------------------------------------------------------------- Messages */
 
 .wrolpi-message {
@@ -578,6 +642,34 @@ html[data-theme="night"] .wrolpi-label {
 @media (prefers-reduced-motion: reduce) {
     .wrolpi-progress-fill {
         transition: none;
+    }
+}
+
+/*
+ * Indeterminate: a sliding band, for work whose size is not known yet.  Semantic called
+ * this `indicating`; without it an upload that has not reported its size sits at 0% and
+ * reads as stalled.
+ */
+.wrolpi-progress-indeterminate .wrolpi-progress-fill {
+    width: 35%;
+    animation: wrolpi-progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes wrolpi-progress-slide {
+    from {
+        margin-left: -35%;
+    }
+    to {
+        margin-left: 100%;
+    }
+}
+
+/* Motion is the only signal here, so when it is suppressed the bar fills instead. */
+@media (prefers-reduced-motion: reduce) {
+    .wrolpi-progress-indeterminate .wrolpi-progress-fill {
+        animation: none;
+        width: 100%;
+        opacity: 0.5;
     }
 }
 

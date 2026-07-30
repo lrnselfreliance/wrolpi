@@ -5,7 +5,6 @@ import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, Rout
 import {VideosTabLayout, VideosPage, VideosSettingsPage, VideosStatistics, VideoWrapper} from "./components/Videos";
 import AdminRoute from "./components/admin/AdminRoute";
 import {Box, Header} from "./components/ui";
-import 'semantic-ui-offline/semantic.min.css';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 // Theme tokens load last so they win over both component libraries.

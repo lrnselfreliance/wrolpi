@@ -32,6 +32,7 @@ export interface ButtonProps extends Omit<MButtonProps, 'leftSection' | 'rightSe
     type?: 'button' | 'submit' | 'reset';
     href?: string;
     target?: string;
+    component?: any;
 }
 
 const renderIcon = (icon?: string | React.ComponentType<any>) => {
@@ -69,6 +70,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
     const fromRole = role ? roleProps[role] : undefined;
     return <MButton
         ref={ref}
+        /*
+         * An `href` makes this an anchor.  Mantine needs `component='a'` to render one, and
+         * without it the href is accepted and silently dropped — the control looks like a
+         * link and navigates nowhere.  Semantic used `as='a'` for this, so every migrated
+         * call site that carried `href` alone was quietly broken.
+         */
+        component={props.component ?? (props.href ? 'a' : undefined)}
         // An explicit color/variant still wins, so a call site can deviate when it must.
         color={props.color ?? fromRole?.color}
         variant={props.variant ?? fromRole?.variant}
@@ -88,6 +96,9 @@ export interface IconButtonProps extends Omit<ActionIconProps, 'children'> {
     label: string;
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
     type?: 'button' | 'submit' | 'reset';
+    href?: string;
+    target?: string;
+    component?: any;
 }
 
 /** A square, icon-only button. */
@@ -97,6 +108,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>((
     const fromRole = role ? roleProps[role] : undefined;
     return <ActionIcon
         ref={ref}
+        // See Button: an href without `component='a'` renders a non-navigating button.
+        component={props.component ?? (props.href ? 'a' : undefined)}
         aria-label={label}
         title={label}
         color={props.color ?? fromRole?.color}

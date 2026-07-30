@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useHotkeys} from 'react-hotkeys-hook';
 import {deleteFileGroups, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router";
@@ -17,17 +17,14 @@ import {
     useMediaSession,
     useTitle
 } from "./Common";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
 import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
-import {ThemeContext} from "../contexts/contexts";
-import {Button, darkTheme, Header, Icon, Loader, Segment, Tab} from "./Theme";
+import {Button, Grid, Header, Icon, Label, Loading, Panel, Tabs, TextInput} from "./ui";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
-import {Comment, CommentGroup, Input, Label, Transition} from "semantic-ui-react";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
+import {IconPlayerPause, IconPlayerPlay} from "@tabler/icons-react";
 
 const MEDIA_PATH = '/media';
 
@@ -117,7 +114,7 @@ const NoComments = ({video}) => {
             <p>No comments have been been downloaded. Refresh the video?</p>
 
             <APIButton
-                color='blue'
+                role='primary'
                 size='large'
                 onClick={handleRefresh}
             >Refresh</APIButton>
@@ -132,43 +129,43 @@ const NoComments = ({video}) => {
     }
 }
 
+// Semantic's <Comment>/<CommentGroup> have no equivalent in the token library -- this is a nested
+// comment thread, not a reusable widget, so it is built here from plain elements and tokens.
 const VideoComment = ({comment, children}) => {
-    const {t} = React.useContext(ThemeContext);
-
     const {is_favorited, like_count, author, timestamp, text, author_is_uploader} = comment;
 
     // Author comments and favorited comments are important.
     let specialIcon = null;
     if (author_is_uploader) {
-        specialIcon = <Icon name='star' color='green'/>;
+        specialIcon = <Icon name='star' label='Uploader' style={{color: 'var(--green)'}}/>;
     } else if (is_favorited) {
-        specialIcon = <Icon name='heart' color='red'/>;
+        specialIcon = <Icon name='heart' label='Favorited' style={{color: 'var(--red)'}}/>;
     }
 
-    const dateElm = <div {...t}>{isoDatetimeToAgoPopup(timestamp * 1000)}</div>;
-    const likesElm = like_count && <div {...t}>
-        <Icon name='thumbs up'/>{humanNumber(comment['like_count'])}
-    </div>;
-
-    return <Comment>
-        <Comment.Content>
-            <Comment.Author as='a'>
-                <span {...t}>{specialIcon}{author}</span>
-            </Comment.Author>
-            <Comment.Metadata>
-                {dateElm}
-                {likesElm}
-            </Comment.Metadata>
-            <Comment.Text {...t}>
-                <MultilineText text={text} style={{marginLeft: '0.5em'}}/>
-            </Comment.Text>
-        </Comment.Content>
+    return <div style={{marginBottom: '1.2em'}}>
+        <div style={{fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3em'}}>
+            {specialIcon}<span>{author}</span>
+        </div>
+        <div style={{display: 'flex', gap: '1em', fontSize: '0.85em', color: 'var(--muted)'}}>
+            <div>{isoDatetimeToAgoPopup(timestamp * 1000)}</div>
+            {like_count ? <div>
+                <Icon name='thumbs up' size={14}/> {humanNumber(comment['like_count'])}
+            </div> : null}
+        </div>
+        <div>
+            <MultilineText text={text} style={{marginLeft: '0.5em'}}/>
+        </div>
         {children && !_.isEmpty(children) &&
-            <CommentGroup>
+            <div style={{
+                marginLeft: '1.5em',
+                marginTop: '0.7em',
+                paddingLeft: '1em',
+                borderLeft: '1px solid var(--border)',
+            }}>
                 {children.map((i, key) => <VideoComment key={key} comment={i}/>)}
-            </CommentGroup>
+            </div>
         }
-    </Comment>
+    </div>
 }
 
 
@@ -202,9 +199,9 @@ const Comments = ({comments, video}) => {
         groupedByParent[obj.parent] = _.sortBy(children, ['timestamp']);
     })
 
-    return <CommentGroup>
+    return <div>
         {rootComments.map((i, key) => <VideoComment key={key} comment={i} children={groupedByParent[i.id]}/>)}
-    </CommentGroup>
+    </div>
 }
 
 // Generate a video page URL for a file object.
@@ -214,11 +211,10 @@ function getVideoLink(file) {
 }
 
 function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
-    const {theme} = useContext(ThemeContext);
-
     const navigate = useNavigate();
     const videoRef = React.useRef();
     const [taggedFileGroups, setTaggedFileGroups] = useState(null);
+    const [activeTab, setActiveTab] = useState('comments');
 
     useTitle(videoFile ? videoFile.title ? videoFile.title : videoFile.name : null);
     let video;
@@ -353,26 +349,9 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         description = formatVideoDescription(description, setVideoTime)
     }
 
-    const descriptionPane = {
-        menuItem: 'Description', render: () => <Tab.Pane>
-            <pre className="wrap-text">
-                {description}
-            </pre>
-        </Tab.Pane>
-    };
-
-    const captionsPane = {
-        menuItem: 'Captions', render: () => <CaptionsPane
-            captions={captions}
-            captionsLoading={captionsLoading}
-            fetchCaptions={fetchCaptions}
-            setVideoTime={setVideoTime}
-        />
-    };
-
     const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));
     const fileSize = (file) => file && file.size
-        ? <span style={{marginLeft: '1em', color: 'grey'}}>({humanFileSize(file.size)})</span>
+        ? <span style={{marginLeft: '1em', color: 'var(--muted)'}}>({humanFileSize(file.size)})</span>
         : null;
 
     const {poster_file, info_json_file} = video;
@@ -380,120 +359,6 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const ffprobeJsonFile = getFile('.ffprobe.json');
     const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
     const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
-    const filesPane = {
-        menuItem: 'Files', render: () => <Tab.Pane>
-            <table style={tableStyle}>
-                <tbody>
-                <tr>
-                    <td style={labelStyle}><strong>{isAudio ? 'Audio File' : 'Video File'}</strong></td>
-                    <td>
-                        {video['video_path']
-                            ? <><PreviewPath path={video['video_path']} mimetype={isAudio ? 'audio/*' : 'video/*'} taggable={false}>
-                                {video['video_path']}
-                            </PreviewPath>{fileSize(videoPathFile)}</>
-                            : 'Unknown'}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style={labelStyle}><strong>Caption Files</strong></td>
-                    <td>
-                        {caption_files
-                            ? caption_files.map(i => <div key={i['path']} style={{marginBottom: '0.3em'}}>
-                                <PreviewPath {...i} taggable={false}>{i['path']}</PreviewPath>
-                                {fileSize(i)}
-                            </div>)
-                            : 'No caption files'}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style={labelStyle}><strong>Poster File</strong></td>
-                    <td>
-                        {poster_file
-                            ? <><PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']}
-                                             taggable={false}>
-                                {poster_file['path']}
-                            </PreviewPath>{fileSize(poster_file)}</>
-                            : 'No poster file'}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style={labelStyle}><strong>Info JSON File</strong></td>
-                    <td>
-                        {info_json_file
-                            ? <><PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']}
-                                             taggable={false}>
-                                {info_json_file['path']}
-                            </PreviewPath>{fileSize(info_json_file)}</>
-                            : 'No yt-dlp info json file'}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style={labelStyle}><strong>ffprobe JSON File</strong></td>
-                    <td>
-                        {ffprobeJsonFile
-                            ? <><PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']}
-                                             taggable={false}>
-                                {ffprobeJsonFile['path']}
-                            </PreviewPath>{fileSize(ffprobeJsonFile)}</>
-                            : 'No ffprobe json file'}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style={labelStyle}><strong>Directory</strong></td>
-                    <td><DirectoryLink path={videoFile['directory']}/></td>
-                </tr>
-                </tbody>
-            </table>
-        </Tab.Pane>
-    }
-
-    const commentsPane = {
-        menuItem: 'Comments', render: () => <Tab.Pane>
-            <Header as='h3'>Top Comments</Header>
-            <Comments comments={comments} video={videoFile}/>
-        </Tab.Pane>,
-    };
-
-    const tabPanes = [commentsPane, descriptionPane, filesPane, captionsPane];
-    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
-
-    const aboutSegment = <Segment>
-        <Header as='h2'>About Video</Header>
-
-        <Grid columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <h3>Size</h3>
-                    <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
-                </Grid.Column>
-                <Grid.Column>
-                    <h3>View Count</h3>
-                    <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <h3>Codec Names</h3>
-                    <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
-                </Grid.Column>
-                <Grid.Column>
-                    <h3>Censored</h3>
-                    <p>{videoFile.censored ? 'Yes' : 'No'}</p>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <h3>Source URL</h3>
-                    <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Segment>;
 
     const localAddTag = async (name) => {
         await tagFileGroup(videoFile, name);
@@ -508,20 +373,18 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     let videoSource = <source src={videoUrl}/>;
     const isAudio = videoFile.mimetype && videoFile.mimetype.startsWith('audio/');
 
-    let prevNextVideosSegment = <Segment><p>No related videos found.</p></Segment>;
+    let prevNextVideosPanel = <Panel><p>No related videos found.</p></Panel>;
     if (prevFile || nextFile) {
-        prevNextVideosSegment = <Segment>
-            <Grid columns={2} stackable>
-                <Grid.Row>
-                    <Grid.Column textAlign='left'>
-                        {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
-                    </Grid.Column>
-                    <Grid.Column textAlign='left'>
-                        {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
-                    </Grid.Column>
-                </Grid.Row>
+        prevNextVideosPanel = <Panel>
+            <Grid>
+                <Grid.Col span={{base: 12, sm: 6}}>
+                    {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
+                </Grid.Col>
+                <Grid.Col span={{base: 12, sm: 6}}>
+                    {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
+                </Grid.Col>
             </Grid>
-        </Segment>
+        </Panel>
     }
 
     let title = video.video_path;
@@ -531,17 +394,33 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         title = videoFile.stem;
     }
 
+    const audioPlayPauseLabel = audioPlaying ? 'Pause' : 'Play';
+
     return <>
-        <Container style={{margin: '1em'}}>
+        <div style={{margin: '1em'}}>
             <BackButton/>
-        </Container>
+        </div>
 
         {isAudio ? <>
             {posterUrl && <div
-                className='audio-poster-container'
+                // A wrapper whose custom play/pause/volume glyphs are drawn over the poster image: the whole
+                // composite must be tinted as one unit in night mode, so it carries `.media` even though the
+                // <img/> inside is already a filtered leaf on its own.
+                className='audio-poster-container media'
+                role='button'
+                tabIndex={0}
+                aria-label={audioPlaying ? 'Pause audio' : 'Play audio'}
                 onClick={() => {
                     if (videoRef.current) {
                         videoRef.current.paused ? videoRef.current.play() : videoRef.current.pause();
+                    }
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (videoRef.current) {
+                            videoRef.current.paused ? videoRef.current.play() : videoRef.current.pause();
+                        }
                     }
                 }}
                 onMouseEnter={() => setAudioPosterHover(true)}
@@ -552,16 +431,24 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                     alt={mediaTitle || 'Audio thumbnail'}
                     style={{maxWidth: '100%', maxHeight: '400px', cursor: 'pointer'}}
                 />
-                <Transition visible={showAudioOverlay} animation='fade' duration={500}>
-                    <div className='audio-poster-overlay'>
-                        <Icon name='volume up' size='massive'/>
-                    </div>
-                </Transition>
-                <Transition visible={audioPosterHover && !showAudioOverlay} animation='fade' duration={200}>
-                    <div className='audio-poster-overlay'>
-                        <Icon name={audioPlaying ? 'pause circle outline' : 'play circle outline'} size='massive'/>
-                    </div>
-                </Transition>
+                <div
+                    className='audio-poster-overlay'
+                    aria-hidden='true'
+                    style={{opacity: showAudioOverlay ? 1 : 0, transition: 'opacity 500ms ease'}}
+                >
+                    <Icon name='volume up' size={64}/>
+                </div>
+                <div
+                    className='audio-poster-overlay'
+                    aria-hidden='true'
+                    style={{
+                        opacity: (audioPosterHover && !showAudioOverlay) ? 1 : 0,
+                        transition: 'opacity 200ms ease',
+                    }}
+                >
+                    <Icon component={audioPlaying ? IconPlayerPause : IconPlayerPlay} size={64}
+                          label={audioPlayPauseLabel}/>
+                </div>
             </div>}
             <audio controls
                    autoPlay={props.autoplay !== undefined ? props.autoplay : true}
@@ -585,8 +472,8 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             {captionUrls.map(i => <CaptionTrack key={i} src={i}/>)}
         </video>}
 
-        <Container style={{marginTop: '1em'}}>
-            <Segment>
+        <div style={{marginTop: '1em'}}>
+            <Panel>
 
                 <Header as='h2'>{title}</Header>
                 {videoFile.published_datetime && <h3>{isoDatetimeToAgoPopup(videoFile.published_datetime)}</h3>}
@@ -597,37 +484,158 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                 </h3>
 
                 <p>
-                    <Button as='a' href={downloadUrl}>
-                        <Icon name='download'/>
+                    <Button component='a' href={downloadUrl} icon='download'>
                         Download
                     </Button>
                     <APIButton
-                        color='red'
+                        role='danger'
                         confirmContent='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
                         confirmButton='Delete'
                         onClick={async () => await handleDeleteVideo(videoFile.id)}
                         obeyWROLMode={true}
                     >Delete</APIButton>
                     <APIButton
-                        color='blue'
+                        role='primary'
                         onClick={handleRefresh}
                         obeyWROLMode={true}
                         disabled={!videoFile.url}
                     >Refresh</APIButton>
                     <AddToPlaylistButton fileGroupId={videoFile.id}/>
                 </p>
-            </Segment>
+            </Panel>
 
-            <Segment>
+            <Panel>
                 <TagsSelector selectedTagNames={videoFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
-            </Segment>
+            </Panel>
 
-            {aboutSegment}
+            <Panel>
+                <Header as='h2'>About Video</Header>
 
-            <Tab menu={tabMenu} panes={tabPanes}/>
+                <Grid>
+                    <Grid.Col span={6}>
+                        <h3>Size</h3>
+                        <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                        <h3>View Count</h3>
+                        <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                        <h3>Codec Names</h3>
+                        <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                        <h3>Censored</h3>
+                        <p>{videoFile.censored ? 'Yes' : 'No'}</p>
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                        <h3>Source URL</h3>
+                        <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
+                    </Grid.Col>
+                </Grid>
+            </Panel>
 
-            {prevNextVideosSegment}
-        </Container>
+            <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
+                <Tabs.List>
+                    <Tabs.Tab value='comments'>Comments</Tabs.Tab>
+                    <Tabs.Tab value='description'>Description</Tabs.Tab>
+                    <Tabs.Tab value='files'>Files</Tabs.Tab>
+                    <Tabs.Tab value='captions'>Captions</Tabs.Tab>
+                </Tabs.List>
+
+                <Tabs.Panel value='comments' style={{paddingTop: '1em'}}>
+                    <Header as='h3'>Top Comments</Header>
+                    <Comments comments={comments} video={videoFile}/>
+                </Tabs.Panel>
+
+                <Tabs.Panel value='description' style={{paddingTop: '1em'}}>
+                    <pre className="wrap-text">
+                        {description}
+                    </pre>
+                </Tabs.Panel>
+
+                <Tabs.Panel value='files' style={{paddingTop: '1em'}}>
+                    <table style={tableStyle}>
+                        <tbody>
+                        <tr>
+                            <td style={labelStyle}><strong>{isAudio ? 'Audio File' : 'Video File'}</strong></td>
+                            <td>
+                                {video['video_path']
+                                    ? <><PreviewPath path={video['video_path']} mimetype={isAudio ? 'audio/*' : 'video/*'} taggable={false}>
+                                        {video['video_path']}
+                                    </PreviewPath>{fileSize(videoPathFile)}</>
+                                    : 'Unknown'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style={labelStyle}><strong>Caption Files</strong></td>
+                            <td>
+                                {caption_files
+                                    ? caption_files.map(i => <div key={i['path']} style={{marginBottom: '0.3em'}}>
+                                        <PreviewPath {...i} taggable={false}>{i['path']}</PreviewPath>
+                                        {fileSize(i)}
+                                    </div>)
+                                    : 'No caption files'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style={labelStyle}><strong>Poster File</strong></td>
+                            <td>
+                                {poster_file
+                                    ? <><PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']}
+                                                     taggable={false}>
+                                        {poster_file['path']}
+                                    </PreviewPath>{fileSize(poster_file)}</>
+                                    : 'No poster file'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style={labelStyle}><strong>Info JSON File</strong></td>
+                            <td>
+                                {info_json_file
+                                    ? <><PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']}
+                                                     taggable={false}>
+                                        {info_json_file['path']}
+                                    </PreviewPath>{fileSize(info_json_file)}</>
+                                    : 'No yt-dlp info json file'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style={labelStyle}><strong>ffprobe JSON File</strong></td>
+                            <td>
+                                {ffprobeJsonFile
+                                    ? <><PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']}
+                                                     taggable={false}>
+                                        {ffprobeJsonFile['path']}
+                                    </PreviewPath>{fileSize(ffprobeJsonFile)}</>
+                                    : 'No ffprobe json file'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style={labelStyle}><strong>Directory</strong></td>
+                            <td><DirectoryLink path={videoFile['directory']}/></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </Tabs.Panel>
+
+                <Tabs.Panel value='captions' style={{paddingTop: '1em'}}>
+                    <CaptionsPane
+                        captions={captions}
+                        captionsLoading={captionsLoading}
+                        fetchCaptions={fetchCaptions}
+                        setVideoTime={setVideoTime}
+                    />
+                </Tabs.Panel>
+            </Tabs>
+
+            {prevNextVideosPanel}
+        </div>
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}
             taggedFileGroups={taggedFileGroups}
@@ -661,11 +669,11 @@ function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) 
     }, []);
 
     if (captionsLoading) {
-        return <Tab.Pane><Loader active/></Tab.Pane>;
+        return <Loading/>;
     }
 
     if (!captions || captions.length === 0) {
-        return <Tab.Pane>No captions available.</Tab.Pane>;
+        return <div>No captions available.</div>;
     }
 
     let filtered = captions;
@@ -677,14 +685,13 @@ function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) 
         });
     }
 
-    return <Tab.Pane>
-        <Input
-            fluid
-            icon='filter'
+    return <>
+        <TextInput
+            leftSection={<Icon name='filter' size={14}/>}
             placeholder='Filter captions...'
             value={filter}
-            onChange={(e, {value}) => setFilter(value)}
-            style={{marginBottom: '1em'}}
+            onChange={(e) => setFilter(e.currentTarget.value)}
+            style={{marginBottom: '1em', width: '100%'}}
         />
         <div style={{maxHeight: '400px', overflowY: 'auto'}}>
             {filtered.map((chunk, idx) => (
@@ -694,7 +701,7 @@ function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) 
                            e.preventDefault();
                            setVideoTime(chunk.start_seconds);
                        }}
-                       style={{whiteSpace: 'nowrap', fontFamily: 'monospace'}}
+                       style={{whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)'}}
                     >
                         {formatCaptionTimestamp(chunk.start_seconds)}
                     </a>
@@ -702,7 +709,7 @@ function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) 
                 </div>
             ))}
         </div>
-    </Tab.Pane>;
+    </>;
 }
 
 export default VideoPage;

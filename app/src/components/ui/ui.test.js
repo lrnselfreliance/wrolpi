@@ -11,6 +11,7 @@ import {themeChoices} from '../../themes/names';
 import {
     ActionInput,
     Button,
+    Card,
     Confirm,
     Header,
     Icon,
@@ -22,6 +23,7 @@ import {
     IconButton,
     Label,
     Message,
+    Modal,
     Panel,
     Progress,
     resolveIconName,
@@ -152,6 +154,58 @@ describe('Button', () => {
         expect(screen.getByRole('button', {name: 'New'})).toHaveAttribute('data-size', 'sm');
     });
 
+    it('renders an anchor when given an href, without being told twice', () => {
+        /*
+         * Mantine drops `href` unless it also gets `component='a'`, so a button carrying
+         * only an href looked like a link and navigated nowhere.  Semantic spelled this
+         * `as='a'`, so every migrated call site that kept just the href was silently
+         * broken — a download button that downloads nothing.
+         */
+        renderUI(<>
+            <Button href='/media/thing.pdf'>Download</Button>
+            <IconButton icon='download' label='Save file' href='/media/other.pdf'/>
+        </>);
+
+        const link = screen.getByRole('link', {name: 'Download'});
+        expect(link.tagName).toBe('A');
+        expect(link).toHaveAttribute('href', '/media/thing.pdf');
+        expect(screen.getByRole('link', {name: 'Save file'}).tagName).toBe('A');
+    });
+
+    it('forwards a ref to the underlying DOM element', () => {
+        /*
+         * Ported from the old Theme.test.js, which caught a real crash: Semantic's Button
+         * was a class component, so a forwarded ref resolved to the class instance, and
+         * anything that called `node.contains(...)` on the trigger -- a Modal or Popup
+         * portal checking whether a click landed inside -- threw "contains is not a
+         * function".  Our Tooltip and Menu targets rely on this ref too.
+         */
+        const ref = React.createRef();
+        renderUI(<Button ref={ref}>Click</Button>);
+
+        expect(ref.current).toBeInstanceOf(HTMLElement);
+        expect(typeof ref.current.contains).toBe('function');
+        expect(ref.current.tagName).toBe('BUTTON');
+    });
+
+    it('survives a document click while used as a modal trigger', () => {
+        // The other half of that regression: the Control page crashed when the document
+        // was clicked with a modal open whose trigger was a themed Button.
+        renderUI(<>
+            <Button>Open</Button>
+            <Modal open onClose={jest.fn()}><Modal.Content>content</Modal.Content></Modal>
+        </>);
+
+        expect(() => document.body.dispatchEvent(new MouseEvent('click', {bubbles: true})))
+            .not.toThrow();
+    });
+
+    it('is still a button when there is no href', () => {
+        renderUI(<Button onClick={jest.fn()}>Save</Button>);
+
+        expect(screen.getByRole('button', {name: 'Save'}).tagName).toBe('BUTTON');
+    });
+
     it('gives icon-only buttons an accessible name', () => {
         renderUI(<IconButton icon='trash' label='Delete channel'/>);
 
@@ -255,6 +309,20 @@ describe('Progress', () => {
         expect(bar).toHaveTextContent('62%');
     });
 
+    it('keeps its percent text readable on every bar colour', () => {
+        /*
+         * Ported from Theme.test.js, which asserted Semantic's `inverted-progress-text`
+         * class across all fourteen colours and both modes.  That class is gone; the
+         * mechanism now is that the text always takes `--text` while light mode lightens
+         * the fill beneath it, because the text sits across both the filled and unfilled
+         * halves of the bar.
+         */
+        const css = fs.readFileSync(path.join(__dirname, 'ui.css'), 'utf8');
+
+        expect(css).toMatch(/\.wrolpi-progress-text\s*{[^}]*color:\s*var\(--text\)/);
+        expect(css).toMatch(/html\[data-theme="light"] \.wrolpi-progress-fill\s*{[^}]*brightness/);
+    });
+
     it('clamps values outside 0-100', () => {
         // A download reporting 103% must not overflow its container.
         renderUI(<><Progress percent={150}/><Progress percent={-20}/></>);
@@ -268,6 +336,17 @@ describe('Progress', () => {
         renderUI(<Progress percent={undefined}/>);
 
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+    });
+
+    it('reports no value when the size is unknown', () => {
+        // Semantic called this `indicating`.  An upload that has not reported its size
+        // would otherwise sit at 0% and read as stalled, and `aria-valuenow=0` would tell
+        // a screen reader the same wrong thing.
+        renderUI(<Progress indeterminate label='Uploading…'/>);
+
+        const bar = screen.getByRole('progressbar');
+        expect(bar).not.toHaveAttribute('aria-valuenow');
+        expect(bar).toHaveClass('wrolpi-progress-indeterminate');
     });
 
     it('shows arbitrary label text instead of the percentage', () => {
@@ -351,6 +430,23 @@ describe('Table', () => {
         </Table.Body></Table>);
 
         expect(container.querySelector('.wrolpi-table-scroll')).toBeInTheDocument();
+    });
+});
+
+describe('Card', () => {
+    it('draws a mimetype accent from a token, not a hex', () => {
+        // File cards carry the mimetype's colour on their top edge so a grid of results is
+        // scannable by kind.  Semantic did this with `<Card color='violet'>`; two migrated
+        // files had dropped the accent because our Card had no equivalent.
+        const {container} = renderUI(<Card title='Water Storage.pdf' color='red'/>);
+
+        expect(container.firstChild).toHaveStyle({borderBottom: '3px solid var(--red)'});
+    });
+
+    it('has no accent when no colour is given', () => {
+        const {container} = renderUI(<Card title='Plain'/>);
+
+        expect(container.firstChild.style.borderBottom).toBe('');
     });
 });
 

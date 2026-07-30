@@ -86,6 +86,11 @@ export function Label({color = 'grey', icon, children, onClick, className}: Labe
 export interface ProgressProps {
     /** 0-100.  Values outside the range are clamped. */
     percent?: number;
+    /**
+     * Work is happening but its size is unknown — an upload that has not reported yet.
+     * Animates instead of sitting at 0%, which otherwise reads as stalled.
+     */
+    indeterminate?: boolean;
     /** Show the percentage inside the bar. */
     showPercent?: boolean;
     color?: SemanticColorName;
@@ -94,18 +99,26 @@ export interface ProgressProps {
     className?: string;
 }
 
-export function Progress({percent = 0, showPercent = true, color = 'blue', label, className}: ProgressProps) {
+export function Progress({
+    percent = 0, showPercent = true, color = 'blue', label, indeterminate, className,
+}: ProgressProps) {
     const clamped = Math.min(100, Math.max(0, Number.isFinite(percent) ? percent : 0));
     return <div
-        className={['wrolpi-progress', className].filter(Boolean).join(' ')}
+        className={['wrolpi-progress', indeterminate ? 'wrolpi-progress-indeterminate' : '', className]
+            .filter(Boolean).join(' ')}
         role='progressbar'
-        aria-valuenow={Math.round(clamped)}
+        // An indeterminate bar reports no value, which is what tells assistive tech the
+        // amount is unknown rather than zero.
+        aria-valuenow={indeterminate ? undefined : Math.round(clamped)}
         aria-valuemin={0}
         aria-valuemax={100}
     >
         <div
             className='wrolpi-progress-fill'
-            style={{width: `${clamped}%`, ['--progress-color' as string]: `var(--${color})`}}
+            style={{
+                width: indeterminate ? undefined : `${clamped}%`,
+                ['--progress-color' as string]: `var(--${color})`,
+            }}
         />
         {(showPercent || label) && <span className='wrolpi-progress-text'>
             {label ?? `${Math.round(clamped)}%`}

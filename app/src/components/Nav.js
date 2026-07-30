@@ -195,8 +195,14 @@ export function NavBar() {
     let memoryIcon;
     if (memoryPercent > 80) {
         const color = memoryPercent > 90 ? highWarningColor : lowWarningColor;
-        const icon = <Link to='/admin/status' color={color}>
-            <Icon name='microchip' size='large' label='Memory usage warning'/>
+        {/*
+          The colour goes on the Icon, as it does for every other indicator.  It used to
+          be passed to `Link`, which ignores it, so the memory warning never actually
+          changed colour -- 81% and 95% looked identical.
+        */}
+        const icon = <Link to='/admin/status'>
+            <Icon name='microchip' size='large' label='Memory usage warning'
+                  style={{color: colorVar(color)}}/>
         </Link>;
         memoryIcon = <Tooltip label={`System Memory: ${memoryPercent.toFixed()}%`}>{icon}</Tooltip>
     }

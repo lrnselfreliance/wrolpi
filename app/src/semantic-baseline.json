@@ -1,6 +1,5 @@
 [
   "src/components/Archive.js",
-  "src/components/BulkTagModal.js",
   "src/components/Channels.js",
   "src/components/Docs.js",
   "src/components/FileBrowser.js",
@@ -9,9 +8,7 @@
   "src/components/Nav.js",
   "src/components/Playlists.js",
   "src/components/Theme.tsx",
-  "src/components/Upload.js",
   "src/components/VideoPlayer.js",
   "src/components/Zim.js",
-  "src/components/admin/ControllerPage.js",
-  "src/components/admin/Downloads.js"
+  "src/components/admin/ControllerPage.js"
 ]

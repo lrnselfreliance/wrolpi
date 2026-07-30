@@ -1,9 +1,7 @@
 import React from 'react';
-import {Button, Divider, Header, Loader, Modal, Progress} from "./Theme";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {Button, Divider, Header, Loading, Message, Modal, Progress} from "./ui";
 import {applyBulkTags, getBulkTagPreview, getBulkTagProgress} from "../api";
 import {TagsContext} from "../Tags";
-import {ThemeContext} from "../contexts/contexts";
 
 const BULK_TAG_WARNING_THRESHOLD = 50;
 const POLL_INTERVAL = 500; // Poll progress every 500ms
@@ -18,7 +16,6 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
     const [error, setError] = React.useState(null);
 
     const {tagNames, TagsGroup} = React.useContext(TagsContext);
-    const {t} = React.useContext(ThemeContext);
 
     // Fetch preview when modal opens
     React.useEffect(() => {
@@ -132,16 +129,13 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
             <Modal.Header>Bulk Tag Files</Modal.Header>
             <Modal.Content>
                 {state === 'loading' && (
-                    <div style={{textAlign: 'center', padding: '2em'}}>
-                        <Loader active inline="centered">Loading preview...</Loader>
-                    </div>
+                    <Loading>Loading preview...</Loading>
                 )}
 
                 {state === 'preview' && (
                     <>
                         {error && (
-                            <Message negative>
-                                <Message.Header>Error</Message.Header>
+                            <Message kind='error' title='Error'>
                                 <p>{error}</p>
                             </Message>
                         )}
@@ -151,8 +145,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         </Header>
 
                         {showWarning && (
-                            <Message warning>
-                                <Message.Header>Warning</Message.Header>
+                            <Message kind='warning' title='Warning'>
                                 <p>Tagging over {BULK_TAG_WARNING_THRESHOLD} files may make it difficult to find what you are looking for. Are you sure?</p>
                             </Message>
                         )}
@@ -163,7 +156,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {localTags.length > 0 ? (
                             <TagsGroup tagNames={localTags} onClick={removeTag}/>
                         ) : (
-                            <p {...t}>Add one or more tags below</p>
+                            <p>Add one or more tags below</p>
                         )}
 
                         <Divider/>
@@ -171,7 +164,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {unusedTags.length > 0 ? (
                             <TagsGroup tagNames={unusedTags} onClick={addTag}/>
                         ) : (
-                            <p {...t}>You have no tags</p>
+                            <p>You have no tags</p>
                         )}
                     </>
                 )}
@@ -181,18 +174,14 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         <Header as="h4">Applying tags...</Header>
                         <Progress
                             percent={progressPercent}
-                            progress
-                            indicating
                             color="blue"
-                        >
-                            <span {...t}>{progress.completed} / {progress.total} files</span>
-                        </Progress>
+                            label={`${progress.completed} / ${progress.total} files`}
+                        />
                         {progress.queued_jobs > 0 && (
-                            <p {...t}>{progress.queued_jobs} job{progress.queued_jobs !== 1 ? 's' : ''} queued</p>
+                            <p>{progress.queued_jobs} job{progress.queued_jobs !== 1 ? 's' : ''} queued</p>
                         )}
                         {error && (
-                            <Message negative>
-                                <Message.Header>Error</Message.Header>
+                            <Message kind='error' title='Error'>
                                 <p>{error}</p>
                             </Message>
                         )}
@@ -201,13 +190,11 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
 
                 {state === 'complete' && (
                     <div style={{padding: '1em'}}>
-                        <Message positive>
-                            <Message.Header>Complete</Message.Header>
+                        <Message kind='success' title='Complete'>
                             <p>Successfully tagged {progress.total} file{progress.total !== 1 ? 's' : ''}.</p>
                         </Message>
                         {error && (
-                            <Message warning>
-                                <Message.Header>Warning</Message.Header>
+                            <Message kind='warning' title='Warning'>
                                 <p>Some errors occurred: {error}</p>
                             </Message>
                         )}
@@ -217,7 +204,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
             <Modal.Actions>
                 {state === 'preview' && (
                     <>
-                        <Button onClick={handleClose}>Cancel</Button>
+                        <Button role='cancel' onClick={handleClose}>Cancel</Button>
                         <Button
                             color="violet"
                             onClick={handleApply}
@@ -228,12 +215,12 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                     </>
                 )}
                 {state === 'applying' && (
-                    <Button onClick={handleClose} disabled>
+                    <Button role='cancel' onClick={handleClose} disabled>
                         Please wait...
                     </Button>
                 )}
                 {state === 'complete' && (
-                    <Button color="green" onClick={handleClose}>
+                    <Button role='save' onClick={handleClose}>
                         Done
                     </Button>
                 )}

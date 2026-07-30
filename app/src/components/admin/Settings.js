@@ -29,6 +29,26 @@ import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ConfigsTable} from "./Configs";
 import {semanticUIColorMap} from "../Vars";
+import {Link} from "react-router";
+import {ThemePicker} from "../ui";
+
+function ThemeSegment() {
+    return <Segment>
+        <Header as='h2'>Theme</Header>
+        <p>Choose how WROLPi looks. The choice is saved in this browser, so each device can
+            differ.</p>
+
+        <ThemePicker/>
+
+        <Divider/>
+
+        <Header as='h3'>Preview</Header>
+        <p>See every part of the interface in the theme you picked.</p>
+        <Link to='/theme-sample'>
+            <Button><Icon name='eye'/> View the components</Button>
+        </Link>
+    </Segment>;
+}
 
 export function ShutdownButton() {
     const dockerized = useDockerized();
@@ -913,6 +933,8 @@ export function SettingsPage() {
             <Header as='h2'>Settings</Header>
             {body}
         </Segment>
+
+        <ThemeSegment/>
 
         {configsSegment}
 

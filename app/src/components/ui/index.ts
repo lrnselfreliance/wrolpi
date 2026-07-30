@@ -18,6 +18,7 @@ export * from './Surfaces';
 export * from './DataTable';
 export * from './Inputs';
 export * from './Overlays';
+export * from './ThemePicker';
 export * from './toast';
 
 // Layout primitives are used as-is; they carry no colors of their own.

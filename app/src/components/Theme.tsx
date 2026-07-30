@@ -97,28 +97,39 @@ import {
 import {MantineProvider} from "@mantine/core";
 import {Notifications} from "@mantine/notifications";
 import {cssVariablesResolver, mantineTheme} from "../themes/mantine";
+import {
+    amberTheme,
+    darkTheme,
+    defaultTheme,
+    explicitOnlyThemes,
+    isDarkTheme,
+    isThemeName,
+    lightTheme,
+    nightTheme,
+    systemTheme,
+    themeChoices,
+    themeNames,
+    themeSessionKey,
+} from "../themes/names";
 import {ColorToSemanticHexColor} from "./Vars";
 import _ from "lodash";
 import {ThemeContextValue, ThemeName, SavedThemeName} from "../types/theme";
 
-export const darkTheme = 'dark';
-export const lightTheme = 'light';
-export const nightTheme = 'night';
-export const amberTheme = 'amber';
-export const defaultTheme = lightTheme;
-export const systemTheme = 'system';
-export const themeSessionKey = 'color-scheme';
-
-// Every theme a user can apply, in the order the theme picker offers them.
-export const themeNames: ThemeName[] = [lightTheme, darkTheme, nightTheme, amberTheme];
-// Themes built on a dark background.  Semantic components are `inverted` in these.
-const darkThemes: ThemeName[] = [darkTheme, nightTheme, amberTheme];
-// Themes a user must choose deliberately; `prefers-color-scheme` never picks them.
-const explicitOnlyThemes: ThemeName[] = [nightTheme, amberTheme];
-
-export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(theme);
-
-const isThemeName = (value: unknown): value is ThemeName => themeNames.includes(value as ThemeName);
+// Theme names and picker choices live in themes/names so the component library can use
+// them without importing this module (which still pulls in Semantic UI).  Re-exported
+// here because most call sites already import them from Theme.
+export {
+    amberTheme,
+    darkTheme,
+    defaultTheme,
+    isDarkTheme,
+    lightTheme,
+    nightTheme,
+    systemTheme,
+    themeChoices,
+    themeNames,
+    themeSessionKey,
+};
 
 /** Resolve the saved preference to the theme that should be applied right now. */
 export const resolveTheme = (saved: SavedThemeName): ThemeName => {

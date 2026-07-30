@@ -1,9 +1,19 @@
 import React, {useEffect, useState} from "react";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router";
-import {Grid, Image, Input, Message} from "semantic-ui-react";
-import {toast} from "./ui";
-
-import {Button, Form, Header, Icon, Loader, Modal, Segment, Table} from "./Theme";
+import {IconMapPin} from "@tabler/icons-react";
+import {
+    Button,
+    Group,
+    Header,
+    Icon,
+    Loading,
+    Message,
+    Modal,
+    Panel,
+    Table,
+    TextInput,
+    toast,
+} from "./ui";
 import {
     APIButton,
     BackButton,
@@ -35,7 +45,6 @@ import {
     setPlaylistTag,
     updatePlaylist,
 } from "../api";
-import {ThemeContext} from "../contexts/contexts";
 import {TagsSelector} from "../Tags";
 
 
@@ -119,39 +128,36 @@ export function PlaylistsPage() {
         }
     };
 
-    const header = <div style={{marginBottom: '1em'}}>
-        <Grid stackable columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <SearchInput
-                        placeholder='Name filter...'
-                        size='large'
-                        searchStr={searchStr}
-                        disabled={!Array.isArray(playlists) || playlists.length === 0}
-                        onClear={() => setSearchStr('')}
-                        onChange={setSearchStr}
-                        onSubmit={null}
-                        inputRef={searchInputRef}
-                    />
-                </Grid.Column>
-                <Grid.Column textAlign='right'>
-                    <Button secondary onClick={() => setModalOpen(true)}>New Playlist</Button>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </div>;
+    const header = <Group justify='space-between' align='flex-end' wrap='wrap' mb='1em'>
+        <SearchInput
+            placeholder='Name filter...'
+            size='large'
+            searchStr={searchStr}
+            disabled={!Array.isArray(playlists) || playlists.length === 0}
+            onClear={() => setSearchStr('')}
+            onChange={setSearchStr}
+            onSubmit={null}
+            inputRef={searchInputRef}
+        />
+        <Button role='primary' onClick={() => setModalOpen(true)}>New Playlist</Button>
+    </Group>;
 
     const createModal = <Modal open={modalOpen} onClose={() => setModalOpen(false)} size='tiny'>
         <Modal.Header>New Playlist</Modal.Header>
         <Modal.Content>
-            <Form onSubmit={handleCreate}>
-                <Form.Field>
-                    <label>Name</label>
-                    <Input autoFocus placeholder='Playlist name...' value={name}
-                           onChange={(e, {value}) => setName(value)}/>
-                </Form.Field>
-                <Form.Field>
-                    <label>
+            <form onSubmit={e => {
+                e.preventDefault();
+                handleCreate();
+            }}>
+                <TextInput
+                    autoFocus
+                    label='Name'
+                    placeholder='Playlist name...'
+                    value={name}
+                    onChange={(e) => setName(e.currentTarget.value)}
+                />
+                <div style={{marginTop: '1em'}}>
+                    <label style={{display: 'flex', alignItems: 'center', gap: '0.3em', marginBottom: '0.3em'}}>
                         Tag
                         <InfoPopup content='Optional. A tagged playlist lives under its tag in the
                             Playlists Directory.'/>
@@ -162,12 +168,12 @@ export function PlaylistsPage() {
                         onAdd={setTagName}
                         onRemove={() => setTagName(null)}
                     />
-                </Form.Field>
-            </Form>
+                </div>
+            </form>
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button primary disabled={!name.trim()} onClick={handleCreate}>Create</Button>
+            <Button role='cancel' onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button role='save' disabled={!name.trim()} onClick={handleCreate}>Create</Button>
         </Modal.Actions>
     </Modal>;
 
@@ -185,22 +191,24 @@ export function PlaylistsPage() {
 }
 
 
-// Icon (name + color) for a playlist item.  File items use the FileGroup's mimetype/model icon
-// and color (video, pdf, ebook, image, ...) so they match the rest of the UI; zim/url are fixed.
-function itemIcon(item) {
+// Icon for a playlist item.  File items use FileGroup's mimetype/model icon and color (video,
+// pdf, ebook, image, ...) so they match the rest of the UI; zim/url are fixed.
+function ItemIcon({item}) {
     if (item.item_kind === 'file' && item.file_group) {
         const fg = item.file_group;
         const lowerPath = (fg.primary_path || '').toLowerCase();
-        return {name: mimetypeIconName(fg.mimetype, lowerPath), color: mimetypeColor(fg.mimetype, lowerPath)};
+        const name = mimetypeIconName(fg.mimetype, lowerPath);
+        const color = mimetypeColor(fg.mimetype, lowerPath);
+        return <Icon name={name} size='large' style={{color: `var(--${color})`}}/>;
     }
-    if (item.item_kind === 'zim') return {name: 'book'};
+    if (item.item_kind === 'zim') return <Icon name='book' size='large'/>;
     if (item.item_kind === 'url') {
         // A map-location URL (e.g. /map?lat=&lon=) gets a map marker; other URLs get the link icon.
         const u = (item.url || '').toLowerCase();
-        if (u.startsWith('/map')) return {name: 'map marker alternate'};
-        return {name: 'linkify'};
+        if (u.startsWith('/map')) return <Icon component={IconMapPin} size='large'/>;
+        return <Icon name='linkify' size='large'/>;
     }
-    return {name: 'file'};
+    return <Icon name='file' size='large'/>;
 }
 
 
@@ -278,13 +286,13 @@ function ItemTitle({item, label}) {
 // The ordered items table, shared by the view and edit pages.  When `editable`, the reorder/remove
 // action buttons (and their column) are shown; otherwise the table is read-only.
 function PlaylistItemsTable({items, editable, onMove, onRemove}) {
-    return <Table unstackable celled>
+    return <Table>
         <Table.Header>
             <Table.Row>
-                <Table.HeaderCell collapsing>#</Table.HeaderCell>
-                <Table.HeaderCell collapsing>Item</Table.HeaderCell>
+                <Table.HeaderCell>#</Table.HeaderCell>
+                <Table.HeaderCell>Item</Table.HeaderCell>
                 <Table.HeaderCell>Title</Table.HeaderCell>
-                {editable && <Table.HeaderCell collapsing/>}
+                {editable && <Table.HeaderCell/>}
             </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -292,23 +300,23 @@ function PlaylistItemsTable({items, editable, onMove, onRemove}) {
                 const label = itemLabel(item);
                 const poster = item.item_kind === 'file' && item.file_group
                     ? findPosterPath(item.file_group) : null;
-                return <Table.Row key={item.id} verticalAlign='middle'>
-                    <Table.Cell collapsing>{String(index + 1).padStart(2, '0')}</Table.Cell>
-                    <Table.Cell collapsing textAlign='center' style={{width: '90px'}}>
+                return <Table.Row key={item.id}>
+                    <Table.Cell>{String(index + 1).padStart(2, '0')}</Table.Cell>
+                    <Table.Cell style={{width: '90px', textAlign: 'center'}}>
                         {poster
-                            ? <Image src={`/media/${encodeMediaPath(poster)}`} alt=''
-                                     centered style={{maxHeight: '45px', maxWidth: '80px', width: 'auto'}}/>
-                            : <Icon {...itemIcon(item)} size='large'/>}
+                            ? <img alt='' src={`/media/${encodeMediaPath(poster)}`}
+                                   style={{maxHeight: '45px', maxWidth: '80px', width: 'auto', display: 'block', margin: '0 auto'}}/>
+                            : <ItemIcon item={item}/>}
                     </Table.Cell>
                     <Table.Cell>
                         <ItemTitle item={item} label={label}/>
                     </Table.Cell>
-                    {editable && <Table.Cell collapsing textAlign='right'>
-                        <Button icon='arrow up' size='mini' disabled={index === 0}
+                    {editable && <Table.Cell style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
+                        <Button icon='arrow up' size='xs' disabled={index === 0}
                                 onClick={() => onMove(index, -1)}/>
-                        <Button icon='arrow down' size='mini' disabled={index === items.length - 1}
+                        <Button icon='arrow down' size='xs' disabled={index === items.length - 1}
                                 onClick={() => onMove(index, 1)}/>
-                        <Button icon='trash' color='red' size='mini'
+                        <Button role='danger' icon='trash' size='xs'
                                 onClick={() => onRemove(item.id)}/>
                     </Table.Cell>}
                 </Table.Row>;
@@ -323,7 +331,6 @@ function PlaylistItemsTable({items, editable, onMove, onRemove}) {
 export function PlaylistViewPage() {
     const {playlistId} = useParams();
     const {playlist} = usePlaylist(playlistId);
-    const {t} = React.useContext(ThemeContext);
 
     useTitle(playlist && playlist.name ? `${playlist.name} Playlist` : 'Playlist');
 
@@ -331,7 +338,7 @@ export function PlaylistViewPage() {
         return <ErrorMessage>Could not fetch playlist</ErrorMessage>;
     }
     if (playlist === null) {
-        return <Loader active inline='centered'/>;
+        return <Loading/>;
     }
 
     const items = playlist.items || [];
@@ -345,10 +352,10 @@ export function PlaylistViewPage() {
                 <Icon name='edit' style={{marginLeft: '0.5em'}}/>
             </Link>
         </Header>
-        {playlist.description && <p {...t}>{playlist.description}</p>}
+        {playlist.description && <p>{playlist.description}</p>}
 
         {items.length === 0
-            ? <Message><Message.Header>This playlist is empty</Message.Header></Message>
+            ? <Message title='This playlist is empty'/>
             : <PlaylistItemsTable items={items} editable={false}/>}
     </>;
 }
@@ -385,7 +392,7 @@ export function PlaylistEditPage() {
         return <ErrorMessage>Could not fetch playlist</ErrorMessage>;
     }
     if (playlist === null) {
-        return <Loader active inline='centered'/>;
+        return <Loading/>;
     }
 
     const items = playlist.items || [];
@@ -463,7 +470,7 @@ export function PlaylistEditPage() {
     };
 
     const deleteButton = <APIButton
-        color='red'
+        role='danger'
         size='small'
         confirmContent='Are you sure you want to delete this playlist? Its directory will be removed.'
         confirmButton='Delete'
@@ -477,7 +484,7 @@ export function PlaylistEditPage() {
         type="button"
         size='small'
         onClick={() => setTagModalOpen(true)}
-        color='violet'
+        role='primary'
         disabled={!editable}
         style={{marginTop: '1em'}}
     >Tag</Button>;
@@ -504,47 +511,35 @@ export function PlaylistEditPage() {
             appliedTagName={playlist.tag_name}
             onSubmit={handleSave}
         >
-            <Grid.Row>
-                <Grid.Column width={8}>
-                    <Form.Field>
-                        <label>Playlist Name</label>
-                        <Input
-                            placeholder='Playlist name...'
-                            value={name}
-                            disabled={!editable}
-                            onChange={(e, {value}) => setName(value)}
-                        />
-                    </Form.Field>
-                </Grid.Column>
-                <Grid.Column width={8}>
-                    <Form.Field>
-                        <label>
-                            Directory
-                            <InfoPopup content='Where the playlist lives on disk. By default it is
-                                managed automatically in the Playlists Directory (under its tag, if
-                                tagged); choose a different directory to manage it manually.'/>
-                        </label>
-                        <DirectorySearch
-                            value={directory}
-                            disabled={!editable}
-                            onSelect={value => setDirectory(value || '')}
-                        />
-                    </Form.Field>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <Form.Field>
-                        <label>Description</label>
-                        <Input
-                            placeholder='Optional description...'
-                            value={description}
-                            disabled={!editable}
-                            onChange={(e, {value}) => setDescription(value)}
-                        />
-                    </Form.Field>
-                </Grid.Column>
-            </Grid.Row>
+            <TextInput
+                label='Playlist Name'
+                placeholder='Playlist name...'
+                value={name}
+                disabled={!editable}
+                onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <div style={{marginTop: '1em'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '0.3em', marginBottom: '0.3em'}}>
+                    Directory
+                    <InfoPopup content='Where the playlist lives on disk. By default it is
+                        managed automatically in the Playlists Directory (under its tag, if
+                        tagged); choose a different directory to manage it manually.'/>
+                </label>
+                <DirectorySearch
+                    value={directory}
+                    disabled={!editable}
+                    onSelect={value => setDirectory(value || '')}
+                />
+            </div>
+            <div style={{marginTop: '1em'}}>
+                <TextInput
+                    label='Description'
+                    placeholder='Optional description...'
+                    value={description}
+                    disabled={!editable}
+                    onChange={(e) => setDescription(e.currentTarget.value)}
+                />
+            </div>
         </CollectionEditForm>
 
         {/* Tag Modal */}
@@ -559,34 +554,34 @@ export function PlaylistEditPage() {
         />
 
         {/* Items Segment */}
-        <Segment>
+        <Panel>
             <Header as='h1'>Items</Header>
 
             {items.length === 0
-                ? <Message>
-                    <Message.Header>This playlist is empty</Message.Header>
-                    {editable && <Message.Content>Add a link below.</Message.Content>}
+                ? <Message title='This playlist is empty'>
+                    {editable && 'Add a link below.'}
                 </Message>
                 : <PlaylistItemsTable items={items} editable={editable} onMove={move} onRemove={handleRemove}/>}
 
             <Header as='h4'>Add a link</Header>
-            <Form onSubmit={handleAddUrl}>
-                <Form.Group>
-                    <Form.Field width={8}>
-                        <Input placeholder='URL (e.g. /map?lat=40.76&lon=-111.89&z=10)'
-                               value={url} disabled={!editable}
-                               onChange={(e, {value}) => setUrl(value)}/>
-                    </Form.Field>
-                    <Form.Field width={6}>
-                        <Input placeholder='Title (optional)' value={urlTitle} disabled={!editable}
-                               onChange={(e, {value}) => setUrlTitle(value)}/>
-                    </Form.Field>
-                    <Form.Field>
-                        <Button primary type='submit' disabled={!editable || !url.trim()}>Add</Button>
-                    </Form.Field>
-                </Form.Group>
-            </Form>
-        </Segment>
+            <form onSubmit={e => {
+                e.preventDefault();
+                handleAddUrl();
+            }}>
+                <Group align='flex-end' wrap='wrap'>
+                    <TextInput
+                        style={{flex: '2 1 300px'}}
+                        placeholder='URL (e.g. /map?lat=40.76&lon=-111.89&z=10)'
+                        value={url} disabled={!editable}
+                        onChange={(e) => setUrl(e.currentTarget.value)}/>
+                    <TextInput
+                        style={{flex: '1 1 200px'}}
+                        placeholder='Title (optional)' value={urlTitle} disabled={!editable}
+                        onChange={(e) => setUrlTitle(e.currentTarget.value)}/>
+                    <Button role='primary' type='submit' disabled={!editable || !url.trim()}>Add</Button>
+                </Group>
+            </form>
+        </Panel>
     </>;
 }
 

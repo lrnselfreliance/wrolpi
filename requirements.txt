@@ -15,6 +15,11 @@ psutil==7.2.2
 pydantic>=2.0.0
 PyMuPDF>=1.27.2.3
 pytest-asyncio==1.4.0
+# pytest.ini sets `timeout = 30` and asks that it not be removed, but this was never declared
+# here -- so on any machine without it, and in CI, which installs only this file, the option was
+# unknown and the timeout never applied.  A hung test then runs until the CI job itself is
+# killed, with no indication of which test hung.
+pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 pytest==9.0.3
 py7zr>=1.1.3

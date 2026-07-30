@@ -68,6 +68,19 @@ def test_save_inventory_items(food_inventory_factory, test_inventory_configs):
     assert [i['name'] for i in saved['items']] == ['Rice']
 
 
+def test_save_inventory_strips_whitespace(food_inventory_factory, test_inventory_configs):
+    """Leading/trailing whitespace in string field values is stripped on save (categories, names, etc.)."""
+    config = test_inventory_configs
+    slug = food_inventory_factory()
+    saved = config.save_inventory(slug, dict(items=[
+        dict(name='  Rice  ', category=' grains ', count='4'),
+    ]))
+    item = saved['items'][0]
+    assert item['name'] == 'Rice'
+    assert item['category'] == 'grains'
+    assert item['count'] == '4'
+  
+
 def test_save_inventory_fields(food_inventory_factory, test_inventory_configs):
     config = test_inventory_configs
     slug = food_inventory_factory()

@@ -1,24 +1,5 @@
-import React, {useContext, useState} from "react";
+import React, {useState} from "react";
 import {useHotkeys} from "react-hotkeys-hook";
-import {
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardMeta,
-    Container,
-    Form,
-    GridColumn,
-    GridRow,
-    Image,
-    Input,
-    PlaceholderHeader,
-    PlaceholderLine,
-    StatisticLabel,
-    StatisticValue,
-    TableCell,
-    TextArea,
-} from "semantic-ui-react";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {
     APIButton,
     BackButton,
@@ -33,7 +14,6 @@ import {
     humanNumber,
     InfoHeader,
     isoDatetimeToAgoPopup,
-    mimetypeColor,
     PageContainer,
     PreviewPath,
     resolveDataPath,
@@ -58,14 +38,13 @@ import {
     untagFileGroup,
     updateArchiveDownloaderConfig,
 } from "../api";
-import {InputForm, useForm} from "../hooks/useForm";
+import {useForm} from "../hooks/useForm";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
 import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useArchive,
     useArchiveStatistics,
@@ -78,14 +57,32 @@ import {
     useSearchOrder
 } from "../hooks/customHooks";
 import {DeepSearchHint, FileCards, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
-import {ThemeContext} from "../contexts/contexts";
-import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, Statistic, Tab} from "./Theme";
+import {
+    ActionInput,
+    Button,
+    Card,
+    Header,
+    Icon,
+    IconButton,
+    Loader,
+    Loading,
+    Message,
+    Panel,
+    Placeholder,
+    Select,
+    Statistic,
+    StatisticGroup,
+    Table,
+    Tabs,
+    Textarea,
+    TextInput,
+    Tooltip,
+    toast,
+} from "./ui";
 import {BulkTagModal} from "./BulkTagModal";
-import {taggedImageLabel, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
-import {toast} from "./ui";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
 import {CollectionEditForm} from "./collections/CollectionEditForm";
@@ -96,14 +93,13 @@ function ArchivePage() {
     const navigate = useNavigate();
     const {fileGroupId} = useParams();
     const {archiveFile, history, fetchArchive} = useArchive(fileGroupId);
-    const {theme} = useContext(ThemeContext);
     const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
     let title = archiveFile ? archiveFile.title ? archiveFile.title : archiveFile.name : null;
     useTitle(title);
 
     if (archiveFile === null) {
-        return <Segment><Loader active/></Segment>;
+        return <Panel><Loading>Loading archive...</Loading></Panel>;
     }
     if (archiveFile === undefined) {
         return <>
@@ -124,14 +120,15 @@ function ArchivePage() {
     const screenshotUrl = screenshotPath ? `/media/${encodeMediaPath(screenshotPath)}` : null;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
-        <Button content='View' color='violet'/>
+        <Button color='violet'>View</Button>
     </ExternalCardLink>;
     const readButton = <ExternalCardLink to={readabilityUrl}>
-        <Button content='Read' color='blue' disabled={!!!readabilityUrl}/>
+        <Button color='blue' disabled={!!!readabilityUrl}>Read</Button>
     </ExternalCardLink>
 
     const screenshot = screenshotUrl ?
-        <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
+        <img alt='Archive screenshot' src={screenshotUrl}
+             style={{marginTop: '1em', marginBottom: '1em', maxWidth: '100%'}}/> :
         null;
 
     const localDeleteArchive = async (force = false) => {
@@ -171,7 +168,6 @@ function ArchivePage() {
     }
 
     const updateButton = <APIButton
-        text='Update'
         color='green'
         confirmContent='Download the latest version of this URL?'
         confirmButton='Update'
@@ -182,17 +178,15 @@ function ArchivePage() {
         Update
     </APIButton>;
     const deleteButton = <APIButton
-        text='Delete'
-        color='red'
+        role='danger'
         confirmContent='Are you sure you want to delete this archive? All files will be deleted'
-        confirmButton='Delete'
+        confirmButton='Delete Archive'
         onClick={() => localDeleteArchive(false)}
         obeyWROLMode={true}
     >
         Delete
     </APIButton>;
     const generateScreenshotButton = !screenshotUrl ? <APIButton
-        text='Generate Screenshot'
         color='yellow'
         confirmContent='Generate a screenshot for this archive?'
         confirmButton='Generate'
@@ -203,7 +197,7 @@ function ArchivePage() {
         Generate Screenshot
     </APIButton> : null;
 
-    let historyList = <Loader active/>;
+    let historyList = <Loader/>;
     if (history && history.length === 0) {
         historyList = <p>No history available</p>;
     } else if (history) {
@@ -237,28 +231,12 @@ function ArchivePage() {
         ? isoDatetimeToAgoPopup(archiveFile.published_modified_datetime, true)
         : 'unknown';
 
-    const aboutPane = {
-        menuItem: 'About', render: () => <Tab.Pane>
-            <Header as={'h3'}>Domain</Header>
-            {domainHeader}
-
-            <Header as='h3'>Size</Header>
-            {humanFileSize(size)}
-
-            <Header as={'h3'}>URL</Header>
-            <p>{archiveFile.url ? <a href={archiveFile.url}>{archiveFile.url}</a> : 'N/A'}</p>
-
-            <Header as={'h3'}>Modified Date</Header>
-            <p>{modifiedDatetimeString}</p>
-        </Tab.Pane>
-    };
-
     // Helper to find file size from the files array by resolved path
     const findFileSize = (resolvedPath) => {
         if (!resolvedPath || !archiveFile.files) return null;
         const file = archiveFile.files.find(i => String(i.path) === String(resolvedPath));
         return file && file.size
-            ? <span style={{marginLeft: '1em', color: 'grey'}}>({humanFileSize(file.size)})</span>
+            ? <span style={{marginLeft: '1em', color: 'var(--muted)'}}>({humanFileSize(file.size)})</span>
             : null;
     };
 
@@ -275,51 +253,11 @@ function ArchivePage() {
 
     const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
     const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
-    const filesPane = {
-        menuItem: 'Files', render: () => <Tab.Pane>
-            <table style={tableStyle}>
-                <tbody>
-                <tr>
-                    <td style={labelStyle}><strong>Singlefile File</strong></td>
-                    <td>{localPreviewPath(data.singlefile_path, 'text/html')}</td>
-                </tr>
-                <tr>
-                    <td style={labelStyle}><strong>Readability File</strong></td>
-                    <td>{localPreviewPath(data.readability_path, 'text/html')}</td>
-                </tr>
-                <tr>
-                    <td style={labelStyle}><strong>Readability Text File</strong></td>
-                    <td>{localPreviewPath(data.readability_txt_path, 'text/plain')}</td>
-                </tr>
-                <tr>
-                    <td style={labelStyle}><strong>Readability JSON File</strong></td>
-                    <td>{localPreviewPath(data.readability_json_path, 'application/json')}</td>
-                </tr>
-                <tr>
-                    <td style={labelStyle}><strong>Screenshot File</strong></td>
-                    <td>
-                        {screenshotPath
-                            ? <><PreviewPath path={screenshotPath} mimetype='image/*'
-                                             taggable={false}>{screenshotPath}</PreviewPath>{findFileSize(screenshotPath)}</>
-                            : 'Unknown'}
-                    </td>
-                </tr>
-                <tr>
-                    <td style={labelStyle}><strong>Directory</strong></td>
-                    <td><DirectoryLink path={archiveFile.directory}/></td>
-                </tr>
-                </tbody>
-            </table>
-        </Tab.Pane>
-    };
-
-    const tabPanes = [aboutPane, filesPane];
-    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
     return <>
         <BackButton/>
 
-        <Segment>
+        <Panel>
             {screenshot}
             <ExternalCardLink to={singlefileUrl}>
                 <Header as='h2'>{textEllipsis(archiveFile.title || data.url)}</Header>
@@ -327,16 +265,14 @@ function ArchivePage() {
 
             <Header as='h3'>Author: {archiveFile.author ? archiveFile.author : 'unknown'}</Header>
 
-            <Grid columns={2} stackable>
-                <GridRow>
-                    <GridColumn>
-                        <Header as='h4'>Published: {publishedDatetimeString}</Header>
-                    </GridColumn>
-                    <GridColumn>
-                        <Header as='h4'>Downloaded: {downloadDatetimeString}</Header>
-                    </GridColumn>
-                </GridRow>
-            </Grid>
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: '1em', marginBottom: '1em'}}>
+                <div style={{flex: '1 1 240px'}}>
+                    <Header as='h4'>Published: {publishedDatetimeString}</Header>
+                </div>
+                <div style={{flex: '1 1 240px'}}>
+                    <Header as='h4'>Downloaded: {downloadDatetimeString}</Header>
+                </div>
+            </div>
 
             {singlefileButton}
             {readButton}
@@ -344,25 +280,78 @@ function ArchivePage() {
             {deleteButton}
             {generateScreenshotButton}
             <AddToPlaylistButton fileGroupId={archiveFile.id}/>
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <TagsSelector
                 selectedTagNames={archiveFile['tags']}
                 onAdd={localAddTag}
                 onRemove={localRemoveTag}
             />
-        </Segment>
+        </Panel>
 
-        <Tab menu={tabMenu} panes={tabPanes}/>
+        <Tabs defaultValue='about'>
+            <Tabs.List>
+                <Tabs.Tab value='about'>About</Tabs.Tab>
+                <Tabs.Tab value='files'>Files</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value='about' pt='md'>
+                <Header as={'h3'}>Domain</Header>
+                {domainHeader}
 
-        <Segment>
+                <Header as='h3'>Size</Header>
+                {humanFileSize(size)}
+
+                <Header as={'h3'}>URL</Header>
+                <p>{archiveFile.url ? <a href={archiveFile.url}>{archiveFile.url}</a> : 'N/A'}</p>
+
+                <Header as={'h3'}>Modified Date</Header>
+                <p>{modifiedDatetimeString}</p>
+            </Tabs.Panel>
+            <Tabs.Panel value='files' pt='md'>
+                <table style={tableStyle}>
+                    <tbody>
+                    <tr>
+                        <td style={labelStyle}><strong>Singlefile File</strong></td>
+                        <td>{localPreviewPath(data.singlefile_path, 'text/html')}</td>
+                    </tr>
+                    <tr>
+                        <td style={labelStyle}><strong>Readability File</strong></td>
+                        <td>{localPreviewPath(data.readability_path, 'text/html')}</td>
+                    </tr>
+                    <tr>
+                        <td style={labelStyle}><strong>Readability Text File</strong></td>
+                        <td>{localPreviewPath(data.readability_txt_path, 'text/plain')}</td>
+                    </tr>
+                    <tr>
+                        <td style={labelStyle}><strong>Readability JSON File</strong></td>
+                        <td>{localPreviewPath(data.readability_json_path, 'application/json')}</td>
+                    </tr>
+                    <tr>
+                        <td style={labelStyle}><strong>Screenshot File</strong></td>
+                        <td>
+                            {screenshotPath
+                                ? <><PreviewPath path={screenshotPath} mimetype='image/*'
+                                                 taggable={false}>{screenshotPath}</PreviewPath>{findFileSize(screenshotPath)}</>
+                                : 'Unknown'}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style={labelStyle}><strong>Directory</strong></td>
+                        <td><DirectoryLink path={archiveFile.directory}/></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </Tabs.Panel>
+        </Tabs>
+
+        <Panel>
             <InfoHeader
                 headerContent='History'
                 popupContent='Other archives of this URL created at different times.'
             />
             {historyList}
-        </Segment>
+        </Panel>
 
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}
@@ -377,7 +366,6 @@ function ArchivePage() {
 }
 
 export function ArchiveCard({file}) {
-    const {s} = useContext(ThemeContext);
     const {sort} = useSearchOrder();
     const sortField = sort ? sort.replace(/^-/, '') : null;
     const {data, directory} = file;
@@ -389,56 +377,68 @@ export function ArchiveCard({file}) {
     const imageSrc = screenshotPath ? `/media/${encodeMediaPath(screenshotPath)}` : null;
     const singlefileUrl = singlefilePath ? `/media/${encodeMediaPath(singlefilePath)}` : null;
 
-    let screenshot = <Card.Icon><FileIcon file={file}/></Card.Icon>;
-    const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;
+    // Marks a tagged file, pinned to the poster's corner (same convention as CardPoster).
+    const cardTagIcon = <div className='wrolpi-card-tag'><Icon name='tag' size={14} label='Tagged'/></div>;
+    const imageLabel = !_.isEmpty(file.tags) ? cardTagIcon : null;
+
+    let media;
     if (imageSrc) {
-        screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}} label={imageLabel}/>;
+        media = <ExternalCardLink to={singlefileUrl}>
+            <div style={{position: 'relative'}}>
+                {imageLabel}
+                <img alt='' src={imageSrc} style={{width: '100%', display: 'block'}}/>
+            </div>
+        </ExternalCardLink>;
+    } else {
+        media = <ExternalCardLink to={singlefileUrl}>
+            <div className='wrolpi-card-icon'>
+                {imageLabel}
+                <FileIcon file={file}/>
+            </div>
+        </ExternalCardLink>;
     }
 
     const domain = data ? data.domain : null;
     const domainUrl = `/archives?domain=${domain}`;
 
     const title = file.title || data.url;
-    const header = <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
+    const titleElm = <Tooltip label={title}>
+        <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>
+    </Tooltip>;
     const dt = file.published_datetime || file.published_modified_datetime || file.modified;
-    return <Card color={mimetypeColor(file.mimetype)}>
+
+    const meta = <>
+        {domain && <div>
+            <CardLink to={domainUrl}>{domain}</CardLink>
+        </div>}
         <div>
-            <ExternalCardLink to={singlefileUrl}>
-                {screenshot}
-            </ExternalCardLink>
+            {sortField === 'published_modified_datetime'
+                ? isoDatetimeToAgoPopup(file.published_modified_datetime, false)
+                : sortField === 'download_datetime'
+                ? isoDatetimeToAgoPopup(file.download_datetime, false)
+                : sortField === 'size'
+                ? humanFileSize(file.size)
+                : sortField === 'viewed'
+                ? isoDatetimeToAgoPopup(file.viewed, false)
+                : isoDatetimeToAgoPopup(dt, false)
+            }
         </div>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            {domain &&
-                <CardLink to={domainUrl}>
-                    <span {...s}>{domain}</span>
-                </CardLink>}
-            <CardMeta {...s}>
-                {sortField === 'published_modified_datetime'
-                    ? isoDatetimeToAgoPopup(file.published_modified_datetime, false)
-                    : sortField === 'download_datetime'
-                    ? isoDatetimeToAgoPopup(file.download_datetime, false)
-                    : sortField === 'size'
-                    ? humanFileSize(file.size)
-                    : sortField === 'viewed'
-                    ? isoDatetimeToAgoPopup(file.viewed, false)
-                    : isoDatetimeToAgoPopup(dt, false)
-                }
-            </CardMeta>
-            <CardDescription>
-                <Link to={`/archives/${file.id}`}>
-                    <Button icon='file alternate' content='Details'
-                            labelPosition='left'/>
-                </Link>
-                <Button icon='external' href={file.url} target='_blank' rel='noopener noreferrer'/>
-            </CardDescription>
-        </CardContent>
+    </>;
+
+    return <Card media={media} title={titleElm} meta={meta}>
+        <div style={{display: 'flex', gap: '0.5em', marginTop: '0.5em'}}>
+            <Link to={`/archives/${file.id}`}>
+                <Button icon='file alternate'>Details</Button>
+            </Link>
+            <IconButton
+                icon='external'
+                label='Open original URL'
+                component='a'
+                href={file.url}
+                target='_blank'
+                rel='noopener noreferrer'
+            />
+        </div>
     </Card>
 }
 
@@ -471,25 +471,15 @@ function DomainStatistics({statistics}) {
         return <></>
     }
 
-    return <Segment>
+    return <Panel>
         <Header as='h1'>Statistics</Header>
-        <Statistic>
-            <StatisticValue>{statistics.archive_count}</StatisticValue>
-            <StatisticLabel>Archives</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
-            <StatisticLabel>Total Size</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanFileSize(statistics.largest_archive, true)}</StatisticValue>
-            <StatisticLabel>Largest Archive</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanNumber(statistics.archive_tags)}</StatisticValue>
-            <StatisticLabel>Archive Tags</StatisticLabel>
-        </Statistic>
-    </Segment>
+        <StatisticGroup>
+            <Statistic value={statistics.archive_count} label='Archives'/>
+            <Statistic value={humanFileSize(statistics.size, true)} label='Total Size'/>
+            <Statistic value={humanFileSize(statistics.largest_archive, true)} label='Largest Archive'/>
+            <Statistic value={humanNumber(statistics.archive_tags)} label='Archive Tags'/>
+        </StatisticGroup>
+    </Panel>
 }
 
 export function DomainsPage() {
@@ -507,35 +497,29 @@ export function DomainsPage() {
     }, {enableOnFormTags: false});
 
     // Header section matching ChannelsPage pattern
-    const header = <div style={{marginBottom: '1em'}}>
-        <Grid stackable columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <SearchInput
-                        placeholder='Domain filter...'
-                        size='large'
-                        searchStr={searchStr}
-                        disabled={!Array.isArray(domains) || domains.length === 0}
-                        onClear={() => setSearchStr('')}
-                        onChange={setSearchStr}
-                        onSubmit={null}
-                        inputRef={searchInputRef}
-                    />
-                </Grid.Column>
-                <Grid.Column textAlign='right'>
-                    {/* No "New Domain" button - domains are auto-created */}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
+    const header = <div style={{marginBottom: '1em', display: 'flex', flexWrap: 'wrap', gap: '1em', alignItems: 'center'}}>
+        <div style={{flex: '1 1 240px'}}>
+            <SearchInput
+                placeholder='Domain filter...'
+                size='large'
+                searchStr={searchStr}
+                disabled={!Array.isArray(domains) || domains.length === 0}
+                onClear={() => setSearchStr('')}
+                onChange={setSearchStr}
+                onSubmit={null}
+                inputRef={searchInputRef}
+            />
+        </div>
+        <div style={{flex: '1 1 240px', textAlign: 'right'}}>
+            {/* No "New Domain" button - domains are auto-created */}
+        </div>
     </div>;
 
     // Empty state
     if (domains && domains.length === 0) {
         return <>
             {header}
-            <Message>
-                <Message.Header>No domains yet. Archive some webpages!</Message.Header>
-            </Message>
+            <Message kind='info' title='No domains yet. Archive some webpages!'/>
         </>;
     }
 
@@ -633,13 +617,12 @@ export function DomainEditPage() {
         if (form.error) {
             return <>
                 <BackButton/>
-                <Message error>
-                    <Message.Header>Domain not found</Message.Header>
+                <Message kind='error' title='Domain not found'>
                     <p>{form.error}</p>
                 </Message>
             </>;
         }
-        return <Loader active>Loading domain...</Loader>;
+        return <Loading>Loading domain...</Loading>;
     }
 
     // Handler for domain deletion
@@ -655,10 +638,10 @@ export function DomainEditPage() {
     };
 
     const deleteButton = <APIButton
-        color='red'
+        role='danger'
         size='small'
         confirmContent='Are you sure you want to delete this domain? No archive files will be deleted, but archives will be orphaned.'
-        confirmButton='Delete'
+        confirmButton='Delete Domain'
         confirmHeader='Delete Domain?'
         onClick={handleDelete}
         obeyWROLMode={true}
@@ -709,8 +692,7 @@ export function DomainEditPage() {
         </Link>
 
         {domain?.needs_reorganization && (
-            <Message warning>
-                <Message.Header>File Format Changed</Message.Header>
+            <Message kind='warning' title='File Format Changed'>
                 <p>
                     The file name format has changed. Click "Reorganize Files" to move existing files
                     to match the new format.
@@ -725,29 +707,33 @@ export function DomainEditPage() {
             actionButtons={actionButtons}
             appliedTagName={domain?.tag_name}
         >
-            <GridRow>
-                <GridColumn>
+            {/*
+             * CollectionEditForm still wraps its children in a `ui stackable grid` div (Semantic's
+             * grid CSS, not a component) because it is shared with unmigrated callers (Channels.js,
+             * Playlists.js). Plain "row"/"column" divs are that CSS's own class names, not a
+             * semantic-ui-react import.
+             */}
+            <div className="row">
+                <div className="column">
                     <DestinationForm
                         form={form}
                         label='Directory'
                         name='directory'
                         path='directory'
                     />
-                </GridColumn>
-            </GridRow>
-            <GridRow>
-                <GridColumn>
-                    <Form.Field>
-                        <label>Description</label>
-                        <TextArea
-                            placeholder='Optional description'
-                            {...descriptionProps}
-                            onChange={(e, {value}) => descriptionProps.onChange(value)}
-                            rows={3}
-                        />
-                    </Form.Field>
-                </GridColumn>
-            </GridRow>
+                </div>
+            </div>
+            <div className="row">
+                <div className="column">
+                    <label style={{display: 'block', marginBottom: 4}}>Description</label>
+                    <Textarea
+                        placeholder='Optional description'
+                        value={descriptionProps.value || ''}
+                        onChange={(e) => descriptionProps.onChange(e.target.value)}
+                        rows={3}
+                    />
+                </div>
+            </div>
         </CollectionEditForm>
 
         {/* Tag Modal */}
@@ -772,14 +758,14 @@ export function DomainEditPage() {
             needsReorganization={domain?.needs_reorganization}
         />
 
-        {/* Downloads Segment */}
-        <Segment>
+        {/* Downloads Panel */}
+        <Panel>
             <Header as='h1'>Downloads</Header>
             <RecurringDownloadsTable
                 downloads={domain?.downloads}
                 fetchDownloads={fetchDomain}
             />
-        </Segment>
+        </Panel>
 
         {domain && domain.statistics && <DomainStatistics statistics={domain.statistics}/>}
     </>;
@@ -792,44 +778,45 @@ function ArchiveFileNameForm({form}) {
         const response = await postArchiveFileFormat(value);
         const {error, preview} = await response.json();
         if (error) {
-            setMessage({content: error, header: 'Invalid File Name', negative: true});
+            setMessage({kind: 'error', title: 'Invalid File Name', content: error});
         } else {
-            setMessage({content: preview, header: 'File Name Preview', positive: true});
+            setMessage({kind: 'success', title: 'File Name Preview', content: preview});
         }
     }
 
-    const label = <InfoHeader
-        headerSize='h5'
-        headerContent='Archive File Format'
-        popupProps={{wide: 'very', position: 'top left'}}
-        popupContent={<>
-            <p>Variables:</p>
-            <ul>
-                <li><code>%(title)s</code> - Page title</li>
-                <li><code>%(download_datetime)s</code> - Full datetime (YYYY-MM-DD-HH-MM-SS)</li>
-                <li><code>%(download_date)s</code> - Date only (YYYY-MM-DD)</li>
-                <li><code>%(download_year)s</code> - Year</li>
-                <li><code>%(download_month)s</code> - Month (zero-padded)</li>
-                <li><code>%(download_day)s</code> - Day (zero-padded)</li>
-                <li><code>%(domain)s</code> - Domain name</li>
-                <li><code>%(ext)s</code> - File extension (required, must be at end)</li>
-            </ul>
-            <p>Subdirectories supported: <code>%(download_year)s/%(title)s.%(ext)s</code></p>
-        </>}
-    />;
+    const [inputProps] = form.getInputProps({name: 'file_name_format', path: 'file_name_format', onChange});
 
-    return <InputForm
-        form={form}
-        name='file_name_format'
-        path='file_name_format'
-        label={label}
-        onChange={onChange}
-        message={message}
-    />
+    return <div>
+        <InfoHeader
+            headerSize='h5'
+            headerContent='Archive File Format'
+            popupContent={<>
+                <p>Variables:</p>
+                <ul>
+                    <li><code>%(title)s</code> - Page title</li>
+                    <li><code>%(download_datetime)s</code> - Full datetime (YYYY-MM-DD-HH-MM-SS)</li>
+                    <li><code>%(download_date)s</code> - Date only (YYYY-MM-DD)</li>
+                    <li><code>%(download_year)s</code> - Year</li>
+                    <li><code>%(download_month)s</code> - Month (zero-padded)</li>
+                    <li><code>%(download_day)s</code> - Day (zero-padded)</li>
+                    <li><code>%(domain)s</code> - Domain name</li>
+                    <li><code>%(ext)s</code> - File extension (required, must be at end)</li>
+                </ul>
+                <p>Subdirectories supported: <code>%(download_year)s/%(title)s.%(ext)s</code></p>
+            </>}
+        />
+        <TextInput
+            id='file_name_format_input'
+            name='file_name_format'
+            value={inputProps.value ?? ''}
+            onChange={inputProps.onChange}
+            data-path={inputProps['data-path']}
+        />
+        {message && <Message kind={message.kind} title={message.title}>{message.content}</Message>}
+    </div>
 }
 
 function BrowserConfigForm({form, browsers, browsersAvailable}) {
-    const {t} = React.useContext(ThemeContext);
     const [useCustomPath, setUseCustomPath] = useState(false);
 
     // Determine if custom path is being used based on current value
@@ -848,12 +835,12 @@ function BrowserConfigForm({form, browsers, browsersAvailable}) {
 
     // Build dropdown options: auto-detect + installed browsers + custom
     const browserOptions = [
-        {key: 'auto', value: '', text: 'Auto-detect (recommended)'},
-        ...browsers.map(b => ({key: b.key, value: b.path, text: `${b.name} (${b.path})`})),
-        {key: 'custom', value: '__custom__', text: 'Custom path...'},
+        {value: '', label: 'Auto-detect (recommended)'},
+        ...browsers.map(b => ({value: b.path, label: `${b.name} (${b.path})`})),
+        {value: '__custom__', label: 'Custom path...'},
     ];
 
-    const handleBrowserChange = (e, {value}) => {
+    const handleBrowserChange = (value) => {
         if (value === '__custom__') {
             setUseCustomPath(true);
             form.setValue('browser_executable', '');
@@ -868,63 +855,60 @@ function BrowserConfigForm({form, browsers, browsersAvailable}) {
 
     return <>
         <Header as='h4'>Browser Settings</Header>
-        <p {...t}>
+        <p>
             Configure which browser SingleFile uses to create archives.
             These settings only apply to native deployments (Raspberry Pi/Debian).
         </p>
 
-        <Form.Field>
-            <label {...t}>Browser</label>
-            <Form.Dropdown
-                selection
-                options={browserOptions}
+        <div style={{marginBottom: '1em'}}>
+            <label style={{display: 'block', marginBottom: 4}}>Browser</label>
+            <Select
+                data={browserOptions}
                 value={dropdownValue}
                 onChange={handleBrowserChange}
                 placeholder='Select browser...'
             />
-        </Form.Field>
+        </div>
 
         {useCustomPath && (
-            <Form.Field>
-                <label {...t}>Custom Browser Path</label>
-                <Input
-                    fluid
+            <div style={{marginBottom: '1em'}}>
+                <label style={{display: 'block', marginBottom: 4}}>Custom Browser Path</label>
+                <TextInput
                     placeholder='/usr/bin/chromium'
                     value={form.formData?.browser_executable || ''}
                     onChange={(e) => form.setValue('browser_executable', e.target.value)}
                 />
-                <small {...t}>Enter the absolute path to the browser executable.</small>
-            </Form.Field>
+                <small style={{color: 'var(--muted)'}}>Enter the absolute path to the browser executable.</small>
+            </div>
         )}
 
-        <Form.Field>
-            <label {...t}>Browser Arguments</label>
-            <Input
-                fluid
+        <div style={{marginBottom: '1em'}}>
+            <label style={{display: 'block', marginBottom: 4}}>Browser Arguments</label>
+            <TextInput
                 placeholder='["--no-sandbox"]'
                 value={form.formData?.browser_args || '["--no-sandbox"]'}
                 onChange={(e) => form.setValue('browser_args', e.target.value)}
             />
-            <small {...t}>JSON array of arguments passed to the browser. Default: ["--no-sandbox"]</small>
-        </Form.Field>
+            <small style={{color: 'var(--muted)'}}>JSON array of arguments passed to the browser. Default:
+                ["--no-sandbox"]</small>
+        </div>
 
-        <Form.Field>
-            <label {...t}>User Agent</label>
-            <Input
-                fluid
+        <div>
+            <label style={{display: 'block', marginBottom: 4}}>User Agent</label>
+            <TextInput
                 placeholder='Leave empty to use system default'
                 value={form.formData?.user_agent || ''}
                 onChange={(e) => form.setValue('user_agent', e.target.value || null)}
             />
-            <small {...t}>Custom user agent string. Leave empty to use the system default.</small>
-        </Form.Field>
+            <small style={{color: 'var(--muted)'}}>Custom user agent string. Leave empty to use the system
+                default.</small>
+        </div>
     </>;
 }
 
 function ArchiveSettingsPage() {
     useTitle('Archive Settings');
 
-    const {t} = React.useContext(ThemeContext);
     const dockerized = useDockerized();
     const [batchModalOpen, setBatchModalOpen] = useState(false);
     const [domainsNeedingReorg, setDomainsNeedingReorg] = useState(0);
@@ -1002,46 +986,38 @@ function ArchiveSettingsPage() {
     />;
 
     return <PageContainer>
-        <Segment>
+        <Panel>
             <Header as='h3'>Archive Downloader Config</Header>
 
-            <Form>
-                <Grid>
-                    <GridRow columns={1}>
-                        <GridColumn mobile={16} computer={8}>
-                            <ArchiveFileNameForm form={configForm}/>
-                        </GridColumn>
-                    </GridRow>
+            <div style={{opacity: configForm.loading ? 0.6 : 1, pointerEvents: configForm.loading ? 'none' : 'auto'}}>
+                <div style={{maxWidth: 500, marginBottom: '1em'}}>
+                    <ArchiveFileNameForm form={configForm}/>
+                </div>
 
-                    {/* Browser settings - only shown on native deployments */}
-                    {!dockerized && browsersAvailable && (
-                        <GridRow columns={1}>
-                            <GridColumn mobile={16} computer={8}>
-                                <BrowserConfigForm
-                                    form={configForm}
-                                    browsers={browsers}
-                                    browsersAvailable={browsersAvailable}
-                                />
-                            </GridColumn>
-                        </GridRow>
-                    )}
+                {/* Browser settings - only shown on native deployments */}
+                {!dockerized && browsersAvailable && (
+                    <div style={{maxWidth: 500, marginBottom: '1em'}}>
+                        <BrowserConfigForm
+                            form={configForm}
+                            browsers={browsers}
+                            browsersAvailable={browsersAvailable}
+                        />
+                    </div>
+                )}
 
-                    <GridRow columns={1}>
-                        <GridColumn textAlign='right'>
-                            <APIButton
-                                disabled={configForm.disabled || !configForm.ready}
-                                type='submit'
-                                style={{marginTop: '0.5em'}}
-                                onClick={configForm.onSubmit}
-                                id='archive_settings_save_button'
-                            >Save</APIButton>
-                        </GridColumn>
-                    </GridRow>
-                </Grid>
-            </Form>
-        </Segment>
+                <div style={{textAlign: 'right'}}>
+                    <APIButton
+                        disabled={configForm.disabled || !configForm.ready}
+                        type='submit'
+                        style={{marginTop: '0.5em'}}
+                        onClick={configForm.onSubmit}
+                        id='archive_settings_save_button'
+                    >Save</APIButton>
+                </div>
+            </div>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <Header as='h4'>File Organization</Header>
             <p>
                 {fetchingReorgCount
@@ -1056,14 +1032,15 @@ function ArchiveSettingsPage() {
             </p>
             <Button
                 color='orange'
+                icon='folder open outline'
                 onClick={() => setBatchModalOpen(true)}
                 id='reorganize_all_domains_button'
                 disabled={fetchingReorgCount || domainsNeedingReorg === 0}
                 loading={fetchingReorgCount}
             >
-                <Icon name='folder open outline'/> Reorganize All Domains
+                Reorganize All Domains
             </Button>
-        </Segment>
+        </Panel>
 
         <BatchReorganizeModal
             open={batchModalOpen}
@@ -1075,10 +1052,10 @@ function ArchiveSettingsPage() {
             }}
         />
 
-        <Segment>
+        <Panel>
             <Header as='h3'>SingleFile Browser Extension</Header>
 
-            <p {...t}>
+            <p>
                 These are the settings necessary to configure the <a
                 href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install"
                 rel='noopener noreferrer'
@@ -1086,22 +1063,22 @@ function ArchiveSettingsPage() {
                 Extension</a> to automatically upload to your WROLPi.
             </p>
 
-            <label {...t}>Upload URL</label>
-            <Input fluid
+            <label style={{display: 'block', marginBottom: 4}}>Upload URL</label>
+            <ActionInput readOnly
                    value={API_ARCHIVE_UPLOAD_URI}
-                   label={urlClipboardButton}
+                   action={urlClipboardButton}
             />
-            <label {...t}>Data Field Name</label>
-            <Input fluid
+            <label style={{display: 'block', marginBottom: 4, marginTop: '1em'}}>Data Field Name</label>
+            <ActionInput readOnly
                    value='singlefile_contents'
-                   label={dataFieldNameClipboardButton}
+                   action={dataFieldNameClipboardButton}
             />
-            <label {...t}>URL Field Name</label>
-            <Input fluid
+            <label style={{display: 'block', marginBottom: 4, marginTop: '1em'}}>URL Field Name</label>
+            <ActionInput readOnly
                    value='url'
-                   label={urlFieldNameClipboardButton}
+                   action={urlFieldNameClipboardButton}
             />
-        </Segment>
+        </Panel>
     </PageContainer>
 }
 
@@ -1191,26 +1168,26 @@ function ArchivesPage() {
 
     const selectElm = <div style={{marginTop: '0.5em'}}>
         <Button
-            color='violet'
+            role='primary'
             disabled={_.isEmpty(selectedArchives)}
             onClick={() => setBulkTagOpen(true)}
         >Tag</Button>
         <APIButton
-            color='red'
+            role='danger'
             disabled={_.isEmpty(selectedArchives)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these archives files?  This cannot be undone.'
             onClick={() => onDelete(false)}
         >Delete</APIButton>
         <Button
-            color='grey'
+            role='cancel'
             onClick={invertSelection}
             disabled={_.isEmpty(archives)}
         >
             Invert
         </Button>
         <Button
-            color='yellow'
+            role='cancel'
             onClick={clearSelection}
             disabled={_.isEmpty(archives) || _.isEmpty(selectedArchives)}
         >
@@ -1252,11 +1229,9 @@ function ArchivesPage() {
         </>;
     } else if (domain) {
         // Domain filter is set but domain object not loaded yet
-        header = <Placeholder style={{marginBottom: '1em'}}>
-            <PlaceholderHeader>
-                <PlaceholderLine/>
-            </PlaceholderHeader>
-        </Placeholder>;
+        header = <div style={{marginBottom: '1em'}}>
+            <Placeholder lines={1}/>
+        </div>;
     }
 
     return <>
@@ -1297,7 +1272,7 @@ export function ArchiveRowCells({file}) {
     let poster;
     if (posterUrl) {
         poster = <CardLink to={archiveUrl}>
-            <Image wrapped src={posterUrl} width='50px'/>
+            <img alt='' src={posterUrl} style={{width: '50px', height: 'auto'}}/>
         </CardLink>;
     } else {
         poster = <FileIcon file={file} size='large'/>;
@@ -1316,16 +1291,18 @@ export function ArchiveRowCells({file}) {
 
     // Fragment for SelectableRow
     return <React.Fragment>
-        <TableCell>
-            <center>{poster}</center>
-        </TableCell>
-        <TableCell>
+        <Table.Cell>
+            <div style={{textAlign: 'center'}}>
+                {poster}
+            </div>
+        </Table.Cell>
+        <Table.Cell>
             <CardLink to={archiveUrl}>
                 <FileRowTagIcon file={file}/>
                 {textEllipsis(file.title || file.stem)}
             </CardLink>
-        </TableCell>
-        <TableCell>{dataCell}</TableCell>
+        </Table.Cell>
+        <Table.Cell>{dataCell}</Table.Cell>
     </React.Fragment>
 }
 
@@ -1336,7 +1313,7 @@ function ArchiveStatistics() {
 
     if (statistics === null) {
         // Request is pending.
-        return <Loader active inline='centered'/>
+        return <Loading/>
     } else if (statistics === undefined) {
         return <ErrorMessage>Unable to fetch Archive Statistics</ErrorMessage>
     }
@@ -1360,25 +1337,22 @@ function ArchiveStatistics() {
         {key: 'tagged_domains', label: 'Tagged Domains'},
     ];
 
-    const buildSegment = (title, names, stats) => {
-        return <Segment>
-            <Header textAlign='center' as='h1'>{title}</Header>
-            <Statistic.Group>
+    const buildPanel = (title, names, stats) => {
+        return <Panel>
+            <Header as='h1' style={{textAlign: 'center'}}>{title}</Header>
+            <StatisticGroup>
                 {names.map(
                     ({key, label}) =>
-                        <Statistic key={key} style={{margin: '2em'}}>
-                            <StatisticValue>{stats[key]}</StatisticValue>
-                            <StatisticLabel>{label}</StatisticLabel>
-                        </Statistic>
+                        <Statistic key={key} value={stats[key]} label={label}/>
                 )}
-            </Statistic.Group>
-        </Segment>
+            </StatisticGroup>
+        </Panel>
     }
 
     return <>
-        {buildSegment('Archives', archiveNames, archives)}
-        {buildSegment('Historical Archives', historicalNames, historical)}
-        {buildSegment('Domains', domainNames, domains)}
+        {buildPanel('Archives', archiveNames, archives)}
+        {buildPanel('Historical Archives', historicalNames, historical)}
+        {buildPanel('Domains', domainNames, domains)}
     </>
 }
 

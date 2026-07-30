@@ -1,6 +1,5 @@
 import React, {useEffect} from "react";
 import {ApiDownError, deleteTag, getRecentTags, getTags, saveTag} from "./api";
-import {Dimmer, Divider, Grid, GridColumn, GridRow, Input, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {
     APIButton,
     contrastingColor,
@@ -10,17 +9,24 @@ import {
     scrollToTopOfElement
 } from "./components/Common";
 import {
+    Box,
     Button,
-    Form,
+    Divider,
+    Group,
     Header,
-    Loader,
+    Icon,
+    IconButton,
+    Label,
+    Loading,
     Modal,
-    Segment
-} from "./components/Theme";
+    Panel,
+    Table,
+    TextInput,
+} from "./components/ui";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
-import {Media, QueryContext, ThemeContext} from "./contexts/contexts";
+import {Media, QueryContext} from "./contexts/contexts";
 import {Link, useNavigate} from "react-router";
 import {TagPlaceholder} from "./components/Placeholder";
 import {SortableTable} from "./components/SortableTable";
@@ -96,33 +102,36 @@ export function useTags() {
             || fuzzyMatch(lowerName, i.name.toLowerCase(), 2))
     }
 
+    // A single tag chip.  Tag colors are chosen by the user (stored per-tag), not by the
+    // theme, so they are rendered with the raw hex value rather than a token -- but the
+    // `wrolpi-label` className still gives them the theme's shape (and its night-mode
+    // outline treatment, which keys off the same `--label-color` variable).
     const NameToTagLabel = ({name, to, ...props}) => {
         const tag = findTagByName(name);
         if (tag !== null && tag !== undefined) {
             const tagColor = tag['color'] || DEFAULT_TAG_COLOR;
             const textColor = contrastingColor(tagColor);
-            const style = {...props['style'], backgroundColor: tagColor, color: textColor};
-            return <Label
-                size='large'
+            const className = ['wrolpi-label', props.onClick ? 'clickable' : ''].filter(Boolean).join(' ');
+            return <span
                 {...props} // onClick passed here.
-                style={style}
-                className={props.onClick ? 'clickable' : null}
+                className={className}
+                style={{...props['style'], ['--label-color']: tagColor, color: textColor}}
             >
                 {name}
-            </Label>;
+            </span>;
         }
 
         // No tags have been fetched.
-        return <Label size='large'>{name}</Label>;
+        return <Label>{name}</Label>;
     }
 
     const TagsGroup = ({tagNames, onClick}) => {
         if (!tagNames || tagNames.length === 0) {
             return <React.Fragment/>;
         }
-        return <Label.Group tag>
+        return <Group gap={6}>
             {tagNames.map(i => <NameToTagLabel key={i} name={i} onClick={() => onClick(i)}/>)}
-        </Label.Group>
+        </Group>
     }
 
     const TagLabelLink = ({name, props}) => {
@@ -147,13 +156,13 @@ export function useTags() {
             return <React.Fragment/>;
         }
 
-        return <Label.Group tag>
+        return <Group gap={6}>
             {tagNames.map(i => <TagLabelLink key={i} name={i} props={props}/>)}
-        </Label.Group>
+        </Group>
     }
 
     const SingleTag = ({name, ...props}) => {
-        return <Label.Group tag {...props}><NameToTagLabel name={name}/></Label.Group>
+        return <Group gap={6} {...props}><NameToTagLabel name={name}/></Group>
     }
 
     useEffect(() => {
@@ -187,16 +196,15 @@ function EditTagRow({tag, onDelete, onEdit}) {
     const {SingleTag} = React.useContext(TagsContext);
     const {name, color, id, file_group_count, zim_entry_count, channel_count, domain_count} = tag;
 
-    const deleteConfirm = <>
-        <APIButton
-            icon='trash'
-            color='red'
-            confirmContent={`Are you sure you want to delete: ${name}?`}
-            confirmButton='Delete'
-            onClick={async () => onDelete(id, name)}
-        />
-    </>;
-    const editButton = <Button primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
+    const deleteConfirm = <APIButton
+        icon='trash'
+        role='danger'
+        confirmContent={`Are you sure you want to delete: ${name}?`}
+        confirmButton='Delete'
+        onClick={async () => onDelete(id, name)}
+    />;
+    const editButton = <IconButton icon='edit' label='Edit' role='primary'
+                                   onClick={() => onEdit(name, color, id)}/>;
 
     // Individual count labels for tablet+
     const fileCountColor = file_group_count > 0 ? 'black' : 'grey';
@@ -213,32 +221,31 @@ function EditTagRow({tag, onDelete, onEdit}) {
     const totalCountColor = totalCount > 0 ? 'black' : 'grey';
     const totalCountLabel = <Label color={totalCountColor}>{totalCount}</Label>;
 
-    return <TableRow>
-        <TableCell>{deleteConfirm}</TableCell>
-        <TableCell>{editButton}</TableCell>
-        <TableCell><SingleTag name={name}/></TableCell>
+    return <Table.Row>
+        <Table.Cell>{deleteConfirm}</Table.Cell>
+        <Table.Cell>{editButton}</Table.Cell>
+        <Table.Cell><SingleTag name={name}/></Table.Cell>
         <Media at='mobile'>
             {(className, renderChildren) => {
-                return renderChildren ? <TableCell className={className}>{totalCountLabel}</TableCell> : null;
+                return renderChildren ? <Table.Cell className={className}>{totalCountLabel}</Table.Cell> : null;
             }}
         </Media>
         <Media greaterThanOrEqual='tablet'>
             {(className, renderChildren) => {
                 return renderChildren ? <>
-                        <TableCell className={className}>{fileCountLabel}</TableCell>
-                        <TableCell className={className}>{zimCountLabel}</TableCell>
-                        <TableCell className={className}>{channelCountLabel}</TableCell>
-                        <TableCell className={className}>{domainCountLabel}</TableCell>
+                        <Table.Cell className={className}>{fileCountLabel}</Table.Cell>
+                        <Table.Cell className={className}>{zimCountLabel}</Table.Cell>
+                        <Table.Cell className={className}>{channelCountLabel}</Table.Cell>
+                        <Table.Cell className={className}>{domainCountLabel}</Table.Cell>
                     </>
                     : null;
             }}
         </Media>
-    </TableRow>
+    </Table.Row>
 }
 
 function EditTagsModal() {
     const {fetchTags, tags} = React.useContext(TagsContext);
-    const {inverted} = React.useContext(ThemeContext);
 
     // Return a random, but distinct Hex color.
     const getRandomColor = () => getDistinctColor((tags || []).map(i => i.color));
@@ -292,11 +299,12 @@ function EditTagsModal() {
         setRandomColor();
     }
 
-    const handleTagNameChange = (e, {value}) => {
+    const handleTagNameChange = (e) => {
+        const value = e.target.value;
         setTagName(value);
         // Tag names cannot contain these characters.
         const tagNameRegex = /[,<>:|"\\?*%!\n\r]/;
-        setTagNameError(tagNameRegex.test(value) ? {content: 'Invalid Tag Name'} : null);
+        setTagNameError(tagNameRegex.test(value) ? 'Invalid Tag Name' : null);
     }
 
     const tableHeaders = [
@@ -316,59 +324,41 @@ function EditTagsModal() {
     ];
 
     return <>
-        <Modal closeIcon
-               open={open}
-               onOpen={() => setOpen(true)}
-               onClose={localOnClose}
-        >
+        <Modal open={open} onClose={localOnClose}>
             <Modal.Header>Edit Tags</Modal.Header>
-            <div className={`content scrolling ${inverted}`} id='editModalContent'>
-                <Label.Group tag>
-                    <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
+            <div id='editModalContent'>
+                <Group gap={6}>
+                    <span
+                        className='wrolpi-label'
+                        style={{['--label-color']: tagColor, color: textColor}}
+                    >
                         {tagName || 'Example Tag'}
-                    </Label>
-                </Label.Group>
+                    </span>
+                </Group>
 
-                <Form autoComplete='off'>
-                    <Form.Input required
-                               autoFocus
-                               label={<b>Tag Name</b>}
-                               placeholder='Unique name'
-                               value={tagName}
-                               error={tagNameError}
-                               onChange={handleTagNameChange}
-                    />
-                </Form>
+                <TextInput
+                    required
+                    autoFocus
+                    autoComplete='off'
+                    label={<b>Tag Name</b>}
+                    placeholder='Unique name'
+                    value={tagName}
+                    error={tagNameError}
+                    onChange={handleTagNameChange}
+                    style={{marginTop: '1em'}}
+                />
 
                 <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
 
-                <Grid>
-                    <Grid.Row columns={2}>
-                        <Grid.Column>
-                            <Button
-                                color='orange'
-                                onClick={setRandomColor}
-                                style={{marginTop: '2em'}}
-                                type='button'
-                            >Random</Button>
-                        </Grid.Column>
-                        <Grid.Column textAlign='right'>
-                            <APIButton
-                                color='violet'
-                                size='big'
-                                onClick={localSaveTag}
-                                style={{marginTop: '2em'}}
-                                disabled={disabled}
-                            >Save</APIButton>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
+                <Group justify='space-between' style={{marginTop: '2em'}}>
+                    <Button role='cancel' type='button' onClick={setRandomColor}>Random</Button>
+                    <APIButton role='save' onClick={localSaveTag} disabled={disabled}>Save</APIButton>
+                </Group>
 
                 <Divider/>
 
                 <Media at='mobile'>
                     <SortableTable
-                        tableProps={{unstackable: true}}
                         data={tags}
                         rowFunc={(i, sortData) => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
                                                               onEdit={localEditTag}/>}
@@ -378,7 +368,6 @@ function EditTagsModal() {
                 </Media>
                 <Media greaterThanOrEqual='tablet'>
                     <SortableTable
-                        tableProps={{unstackable: true}}
                         data={tags}
                         rowFunc={(i, sortData) => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
                                                               onEdit={localEditTag}/>}
@@ -388,7 +377,7 @@ function EditTagsModal() {
                 </Media>
             </div>
         </Modal>
-        <Button onClick={() => setOpen(true)} color='violet' disabled={tags === undefined}>
+        <Button role='primary' onClick={() => setOpen(true)} disabled={tags === undefined}>
             Edit
         </Button>
     </>
@@ -406,7 +395,6 @@ export function AddTagsButton({
                                   limit = null,
                                   disabled = false,
                                   filterByOverlap = false,
-                                  color = 'violet',
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
 
@@ -556,19 +544,17 @@ export function AddTagsButton({
     const hideFrequentTags = filterByOverlap && localTags && localTags.length > 0;
 
     return <>
-        <Button
+        <IconButton
             icon={active ? 'tags' : 'tag'}
-            color={color}
+            label={active ? 'Tags applied' : 'Add tag'}
+            role='primary'
             onClick={handleOpen}
-            type="button"
+            type='button'
             disabled={disabled}
         />
-        <Modal closeIcon
-               open={open}
-               onOpen={(e) => handleOpen(e)}
-               onClose={() => setOpen(false)}>
+        <Modal open={open} onClose={() => setOpen(false)}>
             <Modal.Content>
-                {loading && <Dimmer active><Loader/></Dimmer>}
+                {loading && <Loading size='xs'>Updating tags…</Loading>}
                 <Header as='h4'>Applied Tags</Header>
 
                 {localTags && localTags.length > 0 ? selectedTagsGroup : emptySelectedTags}
@@ -581,7 +567,7 @@ export function AddTagsButton({
 
                 <Divider/>
 
-                <Input
+                <TextInput
                     ref={filterInputRef}
                     placeholder='Filter tags...'
                     value={filterText}
@@ -592,8 +578,7 @@ export function AddTagsButton({
                             addTag(filteredUnusedTags[0]);
                         }
                     }}
-                    icon='search'
-                    fluid
+                    leftSection={<Icon name='search'/>}
                     style={{marginBottom: '0.5em'}}
                 />
 
@@ -604,18 +589,16 @@ export function AddTagsButton({
                         : 'You have no tags')}
             </Modal.Content>
             <Modal.Actions>
-                <Grid textAlign='left'>
-                    <Grid.Row>
-                        <Grid.Column width={8}>
-                            {!hideEdit && <EditTagsModal/>}
-                        </Grid.Column>
-                        <Grid.Column width={8}>
-                            <Button onClick={() => setOpen(false)} floated='right'>Close</Button>
-                            {showAny && <Button color='violet' onClick={localOnAnyTag} floated='right'>Any</Button>}
-                            <Button floated='right' secondary onClick={() => clearLocalTags()}>Clear</Button>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
+                <Group justify='space-between'>
+                    <Box>
+                        {!hideEdit && <EditTagsModal/>}
+                    </Box>
+                    <Group gap={8}>
+                        <Button role='cancel' onClick={() => clearLocalTags()}>Clear</Button>
+                        {showAny && <Button role='primary' onClick={localOnAnyTag}>Any</Button>}
+                        <Button role='cancel' onClick={() => setOpen(false)}>Close</Button>
+                    </Group>
+                </Group>
             </Modal.Actions>
         </Modal>
     </>
@@ -663,43 +646,37 @@ export const TagsSelector = ({
         return button;
     }
 
-    return <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column mobile={2} computer={1}>
-                {button}
-            </Grid.Column>
-            <Grid.Column mobile={13} computer={14}>
-                <TagsLinkGroup tagNames={selectedTagNames}/>
-            </Grid.Column>
-        </Grid.Row>
-    </Grid>
+    return <Group align='flex-start' wrap='nowrap' gap={8}>
+        {button}
+        <Box style={{flex: 1}}>
+            <TagsLinkGroup tagNames={selectedTagNames}/>
+        </Box>
+    </Group>
 }
 
 export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
-    const tagPlaceholder = <GridColumn style={{width: 100}}><TagPlaceholder/></GridColumn>;
-    let availableTagsGroup = <Grid columns={3}>
-        <GridRow>
-            {tagPlaceholder}
-            {tagPlaceholder}
-            {tagPlaceholder}
-        </GridRow>
-    </Grid>;
+    const tagPlaceholder = <Box style={{width: 100}}><TagPlaceholder/></Box>;
+    let availableTagsGroup = <Group gap={12}>
+        {tagPlaceholder}
+        {tagPlaceholder}
+        {tagPlaceholder}
+    </Group>;
     if (tagNames && tagNames.length >= 1) {
         availableTagsGroup = <TagsLinkGroup tagNames={tagNames} style={{marginTop: '0.5em'}}/>;
     } else if (tagNames === undefined) {
         availableTagsGroup = <ErrorMessage>Could not fetch tags</ErrorMessage>
     }
 
-    return <Segment>
+    return <Panel>
         <Header as='h2'>Tags</Header>
         {availableTagsGroup}
 
         <Divider/>
 
         <EditTagsModal/>
-    </Segment>
+    </Panel>
 }
 
 export const TagsProvider = (props) => {

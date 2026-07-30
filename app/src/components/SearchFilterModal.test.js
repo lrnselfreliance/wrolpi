@@ -64,12 +64,12 @@ describe('SearchFilterButton', () => {
         expect(screen.getByText('3')).toBeInTheDocument();
     });
 
-    it('opens the modal and only shows the sections enabled by props', () => {
+    it('opens the modal and only shows the sections enabled by props', async () => {
         renderButton({sorts: videoOrders});
         fireEvent.click(screen.getByText('Filter'));
 
         // Enabled sections.
-        expect(screen.getByText('Sort By')).toBeInTheDocument();
+        expect(await screen.findByText('Sort By')).toBeInTheDocument();
         expect(screen.getByText('Tags')).toBeInTheDocument();
         expect(screen.getByText('Results Per Page')).toBeInTheDocument();
 
@@ -79,13 +79,13 @@ describe('SearchFilterButton', () => {
         expect(screen.queryByText('From Year')).toBeNull();
     });
 
-    it('applies changes only on close, not as fields change', () => {
+    it('applies changes only on close, not as fields change', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders}, {}, spy);
         fireEvent.click(screen.getByText('Filter'));
 
         // Changing the sort field updates the draft but must NOT perform the search yet.
-        fireEvent.click(screen.getByText('Size'));
+        fireEvent.click(await screen.findByText('Size'));
         expect(spy).not.toHaveBeenCalled();
 
         // Closing via Done commits the draft in a single query update.
@@ -94,25 +94,25 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({order: '-size'});
     });
 
-    it('Clear All resets results-per-page to the default on close', () => {
+    it('Clear All resets results-per-page to the default on close', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders}, {l: '96'}, spy);
         fireEvent.click(screen.getByText('Filter'));
-        fireEvent.click(screen.getByText('Clear All'));
+        fireEvent.click(await screen.findByText('Clear All'));
         fireEvent.click(screen.getByText('Done'));
         expect(spy).toHaveBeenCalledTimes(1);
         expect(spy.mock.calls[0][0]).toMatchObject({l: 24});
     });
 
-    it('does not update the query when closed without changes', () => {
+    it('does not update the query when closed without changes', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders}, {}, spy);
         fireEvent.click(screen.getByText('Filter'));
-        fireEvent.click(screen.getByText('Done'));
+        fireEvent.click(await screen.findByText('Done'));
         expect(spy).not.toHaveBeenCalled();
     });
 
-    it('counts the censored filter and applies it on close when showCensored is set', () => {
+    it('counts the censored filter and applies it on close when showCensored is set', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders, showCensored: true}, {}, spy);
 
@@ -121,7 +121,7 @@ describe('SearchFilterButton', () => {
 
         fireEvent.click(screen.getByText('Filter'));
         // The Availability section/toggle is shown.
-        expect(screen.getByText('Availability')).toBeInTheDocument();
+        expect(await screen.findByText('Availability')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('toggle'));
         // Draft only — nothing applied yet.
         expect(spy).not.toHaveBeenCalled();
@@ -131,9 +131,10 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({censored: 'true'});
     });
 
-    it('does not show the Availability section unless showCensored is set', () => {
+    it('does not show the Availability section unless showCensored is set', async () => {
         renderButton({sorts: videoOrders});
         fireEvent.click(screen.getByText('Filter'));
+        await screen.findByText('Sort By');
         expect(screen.queryByText('Availability')).toBeNull();
     });
 
@@ -142,7 +143,7 @@ describe('SearchFilterButton', () => {
         expect(screen.getByText('1')).toBeInTheDocument();
     });
 
-    it('counts the deep filter and applies it on close when showDeep is set', () => {
+    it('counts the deep filter and applies it on close when showDeep is set', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders, showDeep: true}, {}, spy);
 
@@ -151,7 +152,7 @@ describe('SearchFilterButton', () => {
 
         fireEvent.click(screen.getByText('Filter'));
         // The Search Depth section/toggle is shown.
-        expect(screen.getByText('Search Depth')).toBeInTheDocument();
+        expect(await screen.findByText('Search Depth')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('toggle'));
         // Draft only — nothing applied yet.
         expect(spy).not.toHaveBeenCalled();
@@ -161,9 +162,10 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({deep: 'true'});
     });
 
-    it('does not show the Search Depth section unless showDeep is set', () => {
+    it('does not show the Search Depth section unless showDeep is set', async () => {
         renderButton({sorts: videoOrders});
         fireEvent.click(screen.getByText('Filter'));
+        await screen.findByText('Sort By');
         expect(screen.queryByText('Search Depth')).toBeNull();
     });
 
@@ -172,13 +174,13 @@ describe('SearchFilterButton', () => {
         expect(screen.getByText('1')).toBeInTheDocument();
     });
 
-    it('shows the File Type section when fileFilterOptions are provided', () => {
+    it('shows the File Type section when fileFilterOptions are provided', async () => {
         renderButton({
             sorts: videoOrders,
             fileFilterOptions: [{value: 'pdf', text: 'PDF'}, {value: 'epub', text: 'EPUB'}],
         });
         fireEvent.click(screen.getByText('Filter'));
-        expect(screen.getByText('File Type')).toBeInTheDocument();
+        expect(await screen.findByText('File Type')).toBeInTheDocument();
         expect(screen.getByText('PDF')).toBeInTheDocument();
         expect(screen.getByText('EPUB')).toBeInTheDocument();
     });

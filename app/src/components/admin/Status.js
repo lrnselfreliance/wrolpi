@@ -1,4 +1,13 @@
-import {Accordion, Header, Progress, Segment, Statistic, Table} from "../Theme";
+import {
+    Accordion,
+    Grid,
+    Header,
+    Panel,
+    Progress,
+    Statistic,
+    StatisticGroup,
+    Table,
+} from "../ui";
 import React, {useContext} from "react";
 import {
     Duration,
@@ -11,20 +20,8 @@ import {
     useTitle
 } from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, SettingsContext, StatusContext, ThemeContext} from "../../contexts/contexts";
-import {
-    AccordionContent,
-    AccordionTitle,
-    SegmentGroup,
-    TableBody,
-    TableCell,
-    TableHeader,
-    TableHeaderCell,
-    TableRow
-} from "semantic-ui-react";
+import {Media, SettingsContext, StatusContext} from "../../contexts/contexts";
 import _ from "lodash";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 
 function DriveInfo({used, size, percent, mount}) {
     let color;
@@ -33,11 +30,11 @@ function DriveInfo({used, size, percent, mount}) {
     } else if (percent >= 80) {
         color = 'orange';
     }
-    return <Progress progress
-                     percent={percent}
-                     label={`${mount} ${humanFileSize(used)} of ${humanFileSize(size)}`}
-                     color={color}
-                     key={mount}
+    return <Progress
+        percent={percent}
+        label={`${mount} ${humanFileSize(used)} of ${humanFileSize(size)}`}
+        color={color}
+        key={mount}
     />
 }
 
@@ -45,7 +42,7 @@ function DiskBandwidthProgress({bytes_ps, total, label, ...props}) {
     // Calculate percent so colors can be shown.
     let percent = (bytes_ps / total) * 100;
     percent = percent || 0;
-    let color = null;
+    let color = undefined;
     if (percent >= 90) {
         color = 'red';
     } else if (percent >= 80) {
@@ -62,35 +59,30 @@ function DiskBandwidth({name, bytes_read_ps, bytes_write_ps, max_read_ps, max_wr
         bytes_ps={bytes_read_ps}
         total={max_read_ps}
         label={`${name} read`}
-        size='tiny'
-        disabled={bytes_read_ps === 0}
     />;
     const write = <DiskBandwidthProgress
         bytes_ps={bytes_write_ps}
         total={max_write_ps}
         label={`${name} write`}
-        size='tiny'
-        disabled={bytes_write_ps === 0}
     />;
 
-    return <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column>{read}</Grid.Column>
-            <Grid.Column>{write}</Grid.Column>
-        </Grid.Row>
+    return <Grid>
+        <Grid.Col span={6}>{read}</Grid.Col>
+        <Grid.Col span={6}>{write}</Grid.Col>
     </Grid>
 }
 
 function CPUTemperatureStatistic({temperature, high_temperature, critical_temperature, ...props}) {
     if (!temperature) {
-        return <Statistic label='Temp C°' value='?'/>
+        return <Statistic label='Temp C°' value='?' {...props}/>
     }
+    let color;
     if ((critical_temperature && temperature >= critical_temperature) || (!critical_temperature && temperature >= 75)) {
-        props['color'] = 'red';
+        color = 'red';
     } else if ((high_temperature && temperature >= high_temperature) || (!high_temperature && temperature >= 55)) {
-        props['color'] = 'orange';
+        color = 'orange';
     }
-    return <Statistic label='Temp C°' value={temperature} {...props}/>
+    return <Statistic label='Temp C°' value={temperature} color={color} {...props}/>
 }
 
 function FanRPMStatistic({fan_rpm, ...props}) {
@@ -103,14 +95,15 @@ function FanRPMStatistic({fan_rpm, ...props}) {
 
 function IOWaitStatistic({percent_iowait, ...props}) {
     if (percent_iowait === null || percent_iowait === undefined) {
-        return <Statistic label='IO Wait %' value='?'/>
+        return <Statistic label='IO Wait %' value='?' {...props}/>
     }
+    let color;
     if (percent_iowait >= 30) {
-        props['color'] = 'red';
+        color = 'red';
     } else if (percent_iowait >= 10) {
-        props['color'] = 'orange';
+        color = 'orange';
     }
-    return <Statistic label='IO Wait %' value={percent_iowait.toFixed(1)} {...props}/>
+    return <Statistic label='IO Wait %' value={percent_iowait.toFixed(1)} color={color} {...props}/>
 }
 
 function formatUptime(seconds) {
@@ -140,13 +133,13 @@ export function BandwidthProgress({label = '', bytes, maxBytes, ...props}) {
 
     label = `${label} (${humanBandwidth(bytes)})`;
     const percent = (bytes / maxBytes) * 100;
+    let color;
     if (percent > 70) {
-        props['color'] = 'yellow';
+        color = 'yellow';
     } else if (percent > 90) {
-        props['color'] = 'red';
+        color = 'red';
     }
-    const disabled = percent === 0;
-    return <Progress percent={percent} label={label} disabled={disabled} {...props}/>
+    return <Progress percent={percent} label={label} color={color} {...props}/>
 }
 
 export function BandwidthProgressGroup({bandwidth, ...props}) {
@@ -157,7 +150,6 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
         bytes={bandwidth['bytes_recv_ps']}
         label={`${bandwidth['name']} In`}
         maxBytes={maxBytes}
-        size='small'
         {...props}
     />;
 
@@ -165,19 +157,12 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
         bytes={bandwidth['bytes_sent_ps']}
         label={`${bandwidth['name']} Out`}
         maxBytes={maxBytes}
-        size='small'
         {...props}
     />;
 
-    return <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column>
-                {recv}
-            </Grid.Column>
-            <Grid.Column>
-                {sent}
-            </Grid.Column>
-        </Grid.Row>
+    return <Grid>
+        <Grid.Col span={6}>{recv}</Grid.Col>
+        <Grid.Col span={6}>{sent}</Grid.Col>
     </Grid>
 }
 
@@ -189,10 +174,10 @@ export function BandwidthProgressCombined({bandwidth, ...props}) {
 
 export function CPUUsageProgress({percent, label}) {
     if (percent === null) {
-        return <Progress progress={0} color='grey' label='Average CPU Usage ERROR' disabled/>
+        return <Progress percent={0} color='grey' label='Average CPU Usage ERROR'/>
     }
 
-    let color = 'black';
+    let color = undefined;
     if (percent >= 90) {
         color = 'red';
     } else if (percent >= 70) {
@@ -200,44 +185,37 @@ export function CPUUsageProgress({percent, label}) {
     } else if (percent >= 50) {
         color = 'orange';
     }
-    return <Progress percent={percent} progress color={color} label={label}/>
+    return <Progress percent={percent} color={color} label={label}/>
 }
 
 export function MemoryUsageProgress({percent, label}) {
     if (percent === null) {
-        return <Progress progress={0} color='grey' label='RAM Usage' disabled/>
+        return <Progress percent={0} color='grey' label='RAM Usage'/>
     }
 
-    let color = 'black';
-    let size = 'small';
+    let color = undefined;
     if (percent >= 90) {
         color = 'red';
-        size = 'large';
     } else if (percent >= 70) {
         color = 'orange';
-        size = 'large';
     }
-    return <Progress percent={percent} progress color={color} label={label} size={size}/>
+    return <Progress percent={percent} color={color} label={label}/>
 }
 
 function ProcessInfoRow({pid, command, percent_cpu, percent_mem}) {
-    const color = percent_cpu >= 80 ? 'orange' : null;
-    return <TableRow color={color}>
-        <TableCell className='column-ellipsis'>{command}</TableCell>
-        <TableCell textAlign='right'>{percent_cpu}</TableCell>
-        <TableCell textAlign='right'>{percent_mem}</TableCell>
-        <TableCell textAlign='right'>{pid}</TableCell>
-    </TableRow>
+    return <Table.Row failed={percent_cpu >= 80}>
+        <Table.Cell className='column-ellipsis'>{command}</Table.Cell>
+        <Table.Cell numeric>{percent_cpu}</Table.Cell>
+        <Table.Cell numeric>{percent_mem}</Table.Cell>
+        <Table.Cell numeric>{pid}</Table.Cell>
+    </Table.Row>
 }
 
 export function StatusPage() {
     useTitle('Status');
 
-    const [activeIndex, setActiveIndex] = React.useState(null);
-
     const {status} = useContext(StatusContext);
     const {settings} = useContext(SettingsContext);
-    const {s} = useContext(ThemeContext);
 
     let percent;
     let cores;
@@ -299,23 +277,19 @@ export function StatusPage() {
     const cpuProgress = <CPUUsageProgress percent={percent} label={`CPU Usage (${cores} cores)`}/>;
     const memoryUsageProgress = <MemoryUsageProgress percent={memoryPercent} label={`RAM Usage (${memorySize})`}/>;
 
-    const handleAccordionClick = (e, {index}) => {
-        setActiveIndex(activeIndex === index ? -1 : index);
-    }
+    const noProcessesRow = <Table.Row>
+        <Table.Cell colSpan={4}>No top processes</Table.Cell>
+    </Table.Row>
 
-    const noProcessesRow = <TableRow>
-        <TableCell colSpan={4}>No top processes</TableCell>
-    </TableRow>
-
-    return <SegmentGroup>
+    return <>
         <Media at='mobile'>
-            <Segment>
+            <Panel>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <Statistic.Group size='mini'>
-                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores} style={{margin: '1em'}}/>
-                    <LoadStatistic label='5 Min. Load' value={minute_5} cores={cores} style={{margin: '1m'}}/>
-                    <LoadStatistic label='15 Min. Load' value={minute_15} cores={cores} style={{margin: '1em'}}/>
+                <StatisticGroup>
+                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Min. Load' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Min. Load' value={minute_15} cores={cores}/>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -325,14 +299,14 @@ export function StatusPage() {
                     <FanRPMStatistic fan_rpm={fan_rpm}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
-                </Statistic.Group>
-            </Segment>
+                </StatisticGroup>
+            </Panel>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Segment>
+            <Panel>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <Statistic.Group>
+                <StatisticGroup>
                     <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
                     <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
@@ -341,16 +315,15 @@ export function StatusPage() {
                         temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
-                        style={{marginRight: 0}}
                     />
                     <FanRPMStatistic fan_rpm={fan_rpm}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
-                </Statistic.Group>
-            </Segment>
+                </StatisticGroup>
+            </Panel>
         </Media>
 
-        <Segment>
+        <Panel>
             <InfoHeader
                 headerSize='h2'
                 headerContent='Drive Bandwidth'
@@ -361,70 +334,68 @@ export function StatusPage() {
             {!_.isEmpty(diskBandwidthStats) ?
                 Object.entries(diskBandwidthStats).map(([name, disk]) => <DiskBandwidth key={name} {...disk}/>)
                 : <ProgressPlaceholder/>}
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <SizedHeader>Network Bandwidth</SizedHeader>
             {!_.isEmpty(nicBandwidthStats) ?
                 Object.entries(nicBandwidthStats).map(([name, stats]) => <BandwidthProgressGroup key={name}
                                                                                                  bandwidth={stats}/>)
                 : <ProgressPlaceholder/>}
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <SizedHeader>Top Processes</SizedHeader>
-            <Table unstackable striped className='table-ellipsis'>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell width={10}>Command</TableHeaderCell>
-                        <TableHeaderCell width={2} textAlign='right'>CPU %</TableHeaderCell>
-                        <TableHeaderCell width={2} textAlign='right'>Mem %</TableHeaderCell>
-                        <TableHeaderCell width={2} textAlign='right'>PID</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
+            <Table className='table-ellipsis'>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Command</Table.HeaderCell>
+                        <Table.HeaderCell>CPU %</Table.HeaderCell>
+                        <Table.HeaderCell>Mem %</Table.HeaderCell>
+                        <Table.HeaderCell>PID</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
                     {processesStats && processesStats.length === 0 ?
                         noProcessesRow :
                         processesStats && processesStats.length > 0 ?
                             processesStats.map(i => <ProcessInfoRow key={i.pid} {...i}/>)
-                            : <TableRow><TableCell><ProgressPlaceholder/></TableCell></TableRow>
+                            : <Table.Row><Table.Cell colSpan={4}><ProgressPlaceholder/></Table.Cell></Table.Row>
                     }
-                </TableBody>
+                </Table.Body>
             </Table>
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <SizedHeader>Drive Usage</SizedHeader>
             {drivesStats && drivesStats.length > 0 ? drivesStats.map((drive) => <DriveInfo
                     key={drive['mount']} {...drive}/>)
                 : <ProgressPlaceholder/>}
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <SizedHeader sizeMobile={'h2'} sizeTablet={'h3'}>Developer</SizedHeader>
             <Accordion>
 
-                <AccordionTitle onClick={handleAccordionClick} index={0}>
-                    <Icon name='dropdown'/>
-                    Status Details
-                </AccordionTitle>
-                <AccordionContent active={activeIndex === 0}>
-                <pre {...s}>
-                    {JSON.stringify(status, undefined, 1)}
-                </pre>
-                </AccordionContent>
+                <Accordion.Item value='status'>
+                    <Accordion.Control>Status Details</Accordion.Control>
+                    <Accordion.Panel>
+                        <pre style={{background: 'var(--panel)', color: 'var(--text)', padding: '0.5em'}}>
+                            {JSON.stringify(status, undefined, 1)}
+                        </pre>
+                    </Accordion.Panel>
+                </Accordion.Item>
 
-                <AccordionTitle onClick={handleAccordionClick} index={1}>
-                    <Icon name='dropdown'/>
-                    Settings Details
-                </AccordionTitle>
-                <AccordionContent active={activeIndex === 1}>
-                <pre {...s}>
-                    {JSON.stringify(settings, undefined, 1)}
-                </pre>
-                </AccordionContent>
+                <Accordion.Item value='settings'>
+                    <Accordion.Control>Settings Details</Accordion.Control>
+                    <Accordion.Panel>
+                        <pre style={{background: 'var(--panel)', color: 'var(--text)', padding: '0.5em'}}>
+                            {JSON.stringify(settings, undefined, 1)}
+                        </pre>
+                    </Accordion.Panel>
+                </Accordion.Item>
 
             </Accordion>
-        </Segment>
-    </SegmentGroup>
+        </Panel>
+    </>
 }

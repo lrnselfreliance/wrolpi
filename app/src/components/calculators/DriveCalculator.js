@@ -1,10 +1,9 @@
 import React from "react";
-import {Form, Header, Segment, Table} from "../Theme";
-import {Button, GridColumn, GridRow, Input, Label, TableBody, TableCell, TableRow} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {Button, ButtonGroup, Grid, Group, Header, IconButton, NumberInput, Panel, Table} from "../ui";
 import {ColoredInput} from "../Apps";
 import {InfoPopup, roundDigits, Toggle, useLocalStorage} from "../Common";
 import {Media} from "../../contexts/contexts";
+import {IconSettings, IconSettings2} from "@tabler/icons-react";
 
 // Pure calculation functions for the Drive Ratio calculator (pulleys, gears, sprockets).
 //
@@ -206,13 +205,15 @@ export function gearPoints(cx, cy, rOuter, rInner, teeth, tipFrac = 0.5) {
 // Per-mode wording.  All three drive types share the same math; only the size
 // label (and the diagram) differ.
 const MODES = {
-    pulley: {button: 'Pulley', icon: 'circle outline', sizeLabel: 'Diameter', toothed: false},
-    gear: {button: 'Gear', icon: 'cogs', sizeLabel: 'Teeth', toothed: true},
-    sprocket: {button: 'Sprocket', icon: 'cog', sizeLabel: 'Teeth', toothed: true},
+    pulley: {button: 'Pulley', icon: 'circle', sizeLabel: 'Diameter', toothed: false},
+    gear: {button: 'Gear', icon: IconSettings, sizeLabel: 'Teeth', toothed: true},
+    sprocket: {button: 'Sprocket', icon: IconSettings2, sizeLabel: 'Teeth', toothed: true},
 };
 
 // Distinct, colorblind-friendly wheel colors (Paul Tol's bright palette):
 // blue, red, green, yellow, cyan, purple.  Grey is reserved as a neutral.
+// These are diagram/data-visualization colors, matched 1:1 to the drawn wheels
+// below; they are not themed UI chrome, so they stay literal hex.
 const ELEMENT_COLORS = ['#4477aa', '#ee6677', '#228833', '#ccbb44', '#66ccee', '#aa3377'];
 
 const MIN_ELEMENTS = 2;
@@ -393,6 +394,20 @@ function fmtSpeed(speed) {
     return speed ? `${roundDigits(speed.value, 3)} ${speed.unit}` : '—';
 }
 
+// One wheel's size/RPM input, its label tinted to match its diagram color.  The
+// color is a literal hex (matched to the diagram, not a theme token), so this is
+// a small local composition rather than the token-driven `Label`.
+function WheelInput({hex, label, value, onChange, name, min, step}) {
+    return <Group gap={0} wrap='nowrap' align='stretch' style={{marginBottom: '0.25em'}}>
+        <span style={{
+            display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 13, fontWeight: 500,
+            whiteSpace: 'nowrap', background: hex, color: textColorFor(hex), border: `1px solid ${hex}`,
+        }}>{label}</span>
+        <NumberInput name={name} value={value} onChange={onChange} min={min} step={step}
+                     onFocus={e => e.target.select()} hideControls style={{flex: 1}}/>
+    </Group>;
+}
+
 export function DriveCalculator() {
     const [mode, setMode] = React.useState('pulley');
     const [metric, setMetric] = useLocalStorage('drive_calculator_metric', false);
@@ -433,20 +448,10 @@ export function DriveCalculator() {
     const ratio = driveRatio(firstSize, lastSize);
     const outTorque = torqueIn !== '' ? torqueOut(Number(torqueIn), firstSize, lastSize) : null;
 
-    const inputProps = {
-        fluid: true,
-        type: 'number',
-        onSelect: e => e.target.select(),
-        autoComplete: 'off',
-    };
-    // Each wheel's inputs use its diagram color so the form and the picture line up.
-    const coloredField = (hex, labelText, value, onChange, extraProps = {}, name) =>
-        <Input {...inputProps} {...extraProps} name={name} labelPosition='left' value={value} onChange={onChange}
-               label={<Label style={{backgroundColor: hex, color: textColorFor(hex), borderColor: hex}}>
-                   {labelText}</Label>}/>;
     // Auxiliary (non-solver) numeric input.
     const auxInput = (label, value, setter, name) =>
-        <ColoredInput {...inputProps} name={name} label={label} value={value}
+        <ColoredInput fluid type='number' onSelect={e => e.target.select()} autoComplete='off'
+                      name={name} label={label} value={value}
                       onChange={e => setter(e.target.value)}/>;
 
     // Pitch diameter of a wheel given the mode's extra parameter.  Pulley size IS the
@@ -468,43 +473,47 @@ export function DriveCalculator() {
         ? surfaceSpeedDisplay(pitchDiameter(Number(speedEl.size)), Number(speedEl.rpm), metric)
         : null;
 
-    const modeButtons = <Button.Group style={{marginBottom: '1em', flexWrap: 'wrap'}}>
+    const modeButtons = <ButtonGroup style={{marginBottom: '1em', flexWrap: 'wrap'}}>
         {Object.entries(MODES).map(([key, m]) =>
-            <Button key={key} type='button' icon={m.icon} content={m.button}
-                    primary={mode === key} onClick={() => setMode(key)}/>)}
-    </Button.Group>;
+            <Button key={key} type='button' icon={m.icon} role={mode === key ? 'primary' : 'cancel'}
+                    onClick={() => setMode(key)}>{m.button}</Button>)}
+    </ButtonGroup>;
 
     // One row of inputs per wheel: size, RPM, and a remove button (above the minimum).
     const elementRows = elements.map((el, i) => {
         const hex = ELEMENT_COLORS[i % ELEMENT_COLORS.length];
-        const onField = (field) => (e) => {
-            dispatch({type: 'field', index: i, field, value: e.target.value});
+        const onField = (field) => (value) => {
+            dispatch({type: 'field', index: i, field, value});
             scheduleSolve();
         };
         // Teeth are whole numbers; pulley diameters stay continuous.
         const onSize = toothed
-            ? (e) => {
-                dispatch({type: 'field', index: i, field: 'size',
-                    value: e.target.value === '' ? '' : String(Math.round(Math.abs(Number(e.target.value))))});
+            ? (value) => {
+                dispatch({
+                    type: 'field', index: i, field: 'size',
+                    value: value === '' ? '' : String(Math.round(Math.abs(Number(value)))),
+                });
                 scheduleSolve();
               }
             : onField('size');
         return {
             hex,
-            sizeField: coloredField(hex, `#${i + 1} ${sizeLabel}${sizeUnit}`, el.size, onSize,
-                toothed ? {step: 1, min: 1} : {}, `size-${i}`),
-            rpmField: coloredField(hex, `#${i + 1} RPM`, el.rpm, onField('rpm'), {}, `rpm-${i}`),
+            sizeField: <WheelInput hex={hex} label={`#${i + 1} ${sizeLabel}${sizeUnit}`} value={el.size}
+                                    onChange={onSize} name={`size-${i}`} min={toothed ? 1 : undefined}
+                                    step={toothed ? 1 : undefined}/>,
+            rpmField: <WheelInput hex={hex} label={`#${i + 1} RPM`} value={el.rpm}
+                                  onChange={onField('rpm')} name={`rpm-${i}`}/>,
             removeBtn: elements.length > MIN_ELEMENTS
-                ? <Button type='button' basic color='red' icon='close' size='small'
-                          aria-label={`Remove #${i + 1}`} onClick={() => dispatch({type: 'remove', index: i})}/>
+                ? <IconButton type='button' role='danger' icon='close' size='sm'
+                              label={`Remove #${i + 1}`} onClick={() => dispatch({type: 'remove', index: i})}/>
                 : null,
         };
     });
 
-    const addButton = <Button type='button' icon='plus' primary content={`Add ${button}`}
+    const addButton = <Button type='button' icon='plus' role='primary'
                               disabled={elements.length >= MAX_ELEMENTS}
                               onClick={() => dispatch({type: 'add'})}
-                              style={{marginTop: '0.5em'}}/>;
+                              style={{marginTop: '0.5em'}}>Add {button}</Button>;
 
     // Small colored swatch matching a wheel, used to label its detail rows.
     const swatch = (hex) => <span style={{
@@ -514,10 +523,10 @@ export function DriveCalculator() {
 
     // Per-wheel pitch-diameter rows (gear/sprocket only).
     const pitchDiameterRows = toothed ? elements.map((el, i) =>
-        <TableRow key={i}>
-            <TableCell>{swatch(ELEMENT_COLORS[i % ELEMENT_COLORS.length])}#{i + 1} Pitch Diameter</TableCell>
-            <TableCell>{fmt(pitchDiameter(Number(el.size)), lengthUnit)}</TableCell>
-        </TableRow>) : null;
+        <Table.Row key={i}>
+            <Table.Cell>{swatch(ELEMENT_COLORS[i % ELEMENT_COLORS.length])}#{i + 1} Pitch Diameter</Table.Cell>
+            <Table.Cell>{fmt(pitchDiameter(Number(el.size)), lengthUnit)}</Table.Cell>
+        </Table.Row>) : null;
 
     // Pairwise belt/chain length and center distance only make sense for a two-wheel
     // drive; with 3+ wheels they depend on the physical layout, so they are omitted.
@@ -526,38 +535,38 @@ export function DriveCalculator() {
         const belt = twoElements ? beltLength(firstSize, lastSize, Number(centerDistance)) : null;
         detailRows = <>
             {twoElements && <>
-                <TableRow>
-                    <TableCell width={6}>Center Distance <InfoPopup content={CENTER_DISTANCE_INFO}/></TableCell>
-                    <TableCell>{auxInput(`Center Distance (${lengthUnit})`, centerDistance, setCenterDistance, "centerDistance")}</TableCell>
-                </TableRow>
-                <TableRow>
-                    <TableCell>Belt Length</TableCell>
-                    <TableCell>{fmt(belt, lengthUnit)}</TableCell>
-                </TableRow>
+                <Table.Row>
+                    <Table.Cell style={{fontWeight: 600}}>Center Distance <InfoPopup content={CENTER_DISTANCE_INFO}/></Table.Cell>
+                    <Table.Cell>{auxInput(`Center Distance (${lengthUnit})`, centerDistance, setCenterDistance, "centerDistance")}</Table.Cell>
+                </Table.Row>
+                <Table.Row>
+                    <Table.Cell style={{fontWeight: 600}}>Belt Length</Table.Cell>
+                    <Table.Cell>{fmt(belt, lengthUnit)}</Table.Cell>
+                </Table.Row>
             </>}
-            <TableRow>
-                <TableCell width={6}>Belt Speed</TableCell>
-                <TableCell>{fmtSpeed(trainSpeed)}</TableCell>
-            </TableRow>
+            <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Belt Speed</Table.Cell>
+                <Table.Cell>{fmtSpeed(trainSpeed)}</Table.Cell>
+            </Table.Row>
         </>;
     } else if (mode === 'gear') {
         const paramLabel = metric ? 'Module (mm)' : 'Diametral Pitch (1/in)';
         const pd1 = pitchDiameter(firstSize), pd2 = pitchDiameter(lastSize);
         const cd = twoElements && pd1 > 0 && pd2 > 0 ? centerDistanceFromPitchDiameters(pd1, pd2) : null;
         detailRows = <>
-            <TableRow>
-                <TableCell width={6}>{paramLabel}</TableCell>
-                <TableCell>{auxInput(paramLabel, gearTooth, setGearTooth, "gearParam")}</TableCell>
-            </TableRow>
+            <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>{paramLabel}</Table.Cell>
+                <Table.Cell>{auxInput(paramLabel, gearTooth, setGearTooth, "gearParam")}</Table.Cell>
+            </Table.Row>
             {pitchDiameterRows}
-            {twoElements && <TableRow>
-                <TableCell>Center Distance</TableCell>
-                <TableCell>{fmt(cd, lengthUnit)}</TableCell>
-            </TableRow>}
-            <TableRow>
-                <TableCell>Pitch-Line Velocity</TableCell>
-                <TableCell>{fmtSpeed(trainSpeed)}</TableCell>
-            </TableRow>
+            {twoElements && <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Center Distance</Table.Cell>
+                <Table.Cell>{fmt(cd, lengthUnit)}</Table.Cell>
+            </Table.Row>}
+            <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Pitch-Line Velocity</Table.Cell>
+                <Table.Cell>{fmtSpeed(trainSpeed)}</Table.Cell>
+            </Table.Row>
         </>;
     } else {  // sprocket
         const pitch = Number(chainPitch);
@@ -565,27 +574,27 @@ export function DriveCalculator() {
             ? chainLengthPitchesEven(firstSize, lastSize, Number(centerDistance), pitch)
             : null;
         detailRows = <>
-            <TableRow>
-                <TableCell width={6}>Chain Pitch</TableCell>
-                <TableCell>{auxInput(`Chain Pitch (${lengthUnit})`, chainPitch, setChainPitch, "chainPitch")}</TableCell>
-            </TableRow>
-            {twoElements && <TableRow>
-                <TableCell>Center Distance <InfoPopup content={CENTER_DISTANCE_INFO}/></TableCell>
-                <TableCell>{auxInput(`Center Distance (${lengthUnit})`, centerDistance, setCenterDistance, "centerDistance")}</TableCell>
-            </TableRow>}
+            <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Chain Pitch</Table.Cell>
+                <Table.Cell>{auxInput(`Chain Pitch (${lengthUnit})`, chainPitch, setChainPitch, "chainPitch")}</Table.Cell>
+            </Table.Row>
+            {twoElements && <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Center Distance <InfoPopup content={CENTER_DISTANCE_INFO}/></Table.Cell>
+                <Table.Cell>{auxInput(`Center Distance (${lengthUnit})`, centerDistance, setCenterDistance, "centerDistance")}</Table.Cell>
+            </Table.Row>}
             {pitchDiameterRows}
-            {twoElements && <TableRow>
-                <TableCell>Chain Length</TableCell>
-                <TableCell>{links === null ? '—' : `${links} pitches`}</TableCell>
-            </TableRow>}
-            <TableRow>
-                <TableCell>Chain Speed</TableCell>
-                <TableCell>{fmtSpeed(trainSpeed)}</TableCell>
-            </TableRow>
+            {twoElements && <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Chain Length</Table.Cell>
+                <Table.Cell>{links === null ? '—' : `${links} pitches`}</Table.Cell>
+            </Table.Row>}
+            <Table.Row>
+                <Table.Cell style={{fontWeight: 600}}>Chain Speed</Table.Cell>
+                <Table.Cell>{fmtSpeed(trainSpeed)}</Table.Cell>
+            </Table.Row>
         </>;
     }
 
-    return <Form>
+    return <div>
         <Header as='h1'>Drive Ratio</Header>
 
         <div style={{marginBottom: '1em'}}>{modeButtons}</div>
@@ -605,53 +614,52 @@ export function DriveCalculator() {
         </Media>
 
         <Media greaterThanOrEqual='tablet'>
-            <Grid verticalAlign='middle'>
-                {elementRows.map(({sizeField, rpmField, removeBtn}, i) =>
-                    <GridRow key={i}>
-                        <GridColumn width={7}>{sizeField}</GridColumn>
-                        <GridColumn width={7}>{rpmField}</GridColumn>
-                        <GridColumn width={2}>{removeBtn}</GridColumn>
-                    </GridRow>)}
-            </Grid>
+            {elementRows.map(({sizeField, rpmField, removeBtn}, i) =>
+                <Grid key={i} align='center'>
+                    <Grid.Col span={5}>{sizeField}</Grid.Col>
+                    <Grid.Col span={5}>{rpmField}</Grid.Col>
+                    <Grid.Col span={2}>{removeBtn}</Grid.Col>
+                </Grid>)}
         </Media>
 
         <div>{addButton}</div>
 
-        <Segment style={{textAlign: 'center', overflowX: 'auto'}}>
+        <Panel style={{textAlign: 'center', overflowX: 'auto'}}>
             <DriveDiagram mode={mode} sizes={elements.map(el => el.size)}/>
-        </Segment>
+        </Panel>
 
-        <Table definition unstackable>
-            <TableBody>
-                <TableRow>
-                    <TableCell width={6}>Drive Ratio{' '}
+        <Table>
+            <Table.Body>
+                <Table.Row>
+                    <Table.Cell style={{fontWeight: 600}}>Drive Ratio{' '}
                         <span style={{fontWeight: 'normal', opacity: 0.7}}>(#1 → #{elements.length})</span>
-                    </TableCell>
-                    <TableCell>{formatRatio(ratio)}</TableCell>
-                </TableRow>
-                <TableRow>
-                    <TableCell>Torque Multiplier</TableCell>
-                    <TableCell>{ratio === null ? '—' : `${roundDigits(ratio, 3)}×`}</TableCell>
-                </TableRow>
-                <TableRow>
-                    <TableCell>Output Torque <InfoPopup content={TORQUE_INFO}/></TableCell>
-                    <TableCell>
-                        <ColoredInput {...inputProps} name="torqueIn" label={`Input Torque (${torqueUnit})`}
+                    </Table.Cell>
+                    <Table.Cell>{formatRatio(ratio)}</Table.Cell>
+                </Table.Row>
+                <Table.Row>
+                    <Table.Cell style={{fontWeight: 600}}>Torque Multiplier</Table.Cell>
+                    <Table.Cell>{ratio === null ? '—' : `${roundDigits(ratio, 3)}×`}</Table.Cell>
+                </Table.Row>
+                <Table.Row>
+                    <Table.Cell style={{fontWeight: 600}}>Output Torque <InfoPopup content={TORQUE_INFO}/></Table.Cell>
+                    <Table.Cell>
+                        <ColoredInput fluid type='number' onSelect={e => e.target.select()} autoComplete='off'
+                                      name="torqueIn" label={`Input Torque (${torqueUnit})`}
                                       value={torqueIn}
                                       onChange={e => setTorqueIn(e.target.value)}/>
                         {outTorque !== null && <span style={{marginLeft: '1em'}}>
                             = <b>{roundDigits(outTorque, 3)} {torqueUnit}</b>
                         </span>}
-                    </TableCell>
-                </TableRow>
-            </TableBody>
+                    </Table.Cell>
+                </Table.Row>
+            </Table.Body>
         </Table>
 
         <Header as='h3' style={{marginTop: '1em'}}>{button} Details</Header>
-        <Table definition unstackable>
-            <TableBody>{detailRows}</TableBody>
+        <Table>
+            <Table.Body>{detailRows}</Table.Body>
         </Table>
-    </Form>;
+    </div>;
 }
 
 // Exported for testing

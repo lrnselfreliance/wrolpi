@@ -1,0 +1,280 @@
+/*
+ * Styles for the token-driven component library.
+ *
+ * Rules here encode design decisions Mantine's variables cannot express on their
+ * own — chiefly the two that change *form* rather than color between themes:
+ * the dashed danger treatment and status-by-brightness.  See ui-design.md.
+ *
+ * Nothing in this file hardcodes a color; every value comes from a token.
+ */
+
+/* ------------------------------------------------------------------ Icons */
+
+.wrolpi-icon-spin {
+    animation: wrolpi-icon-spin 0.9s linear infinite;
+}
+
+@keyframes wrolpi-icon-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wrolpi-icon-spin {
+        animation: none;
+    }
+}
+
+/* ---------------------------------------------------------------- Buttons */
+/*
+ * Dashed borders mean "destructive or failed", and nothing else may use them.
+ * In night mode a destructive button drops its fill entirely: 1.5px keeps the
+ * dashes legible at low brightness, where a 1px hairline dash disappears.
+ */
+
+/*
+ * In light, dark, and amber the button stays filled, which `color="red"` already
+ * does.  Night is the exception, and it cannot be expressed by overriding
+ * Mantine's `--button-*` variables: Mantine writes those as inline styles on the
+ * element, which no stylesheet rule can outrank.  Setting the real properties
+ * works instead — this selector (0,2,0 plus an element) outranks the Mantine
+ * class rule that reads the variables.
+ */
+html[data-theme="night"] .wrolpi-button-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1.5px dashed var(--red);
+}
+
+html[data-theme="night"] .wrolpi-button-danger:hover:not(:disabled) {
+    background: var(--panel);
+}
+
+/* The icon inside inherits currentColor, so it follows without another rule. */
+
+/* --------------------------------------------------------------- Switches */
+/*
+ * Mantine's unchecked track is a gray from its own palette, which would put a
+ * non-red pixel on screen in night mode.  Scoped to `:not(:checked)` so the
+ * checked track keeps coming from the `color` prop.
+ */
+.wrolpi-switch input:not(:checked) + .mantine-Switch-track {
+    --switch-bg: var(--border);
+}
+
+/*
+ * The disabled thumb has the same problem: Mantine sets it from its gray palette,
+ * on the thumb element itself, which is a near-white pixel in night mode.
+ */
+.wrolpi-switch input:disabled + * > .mantine-Switch-thumb,
+.wrolpi-switch input[data-disabled] + * > .mantine-Switch-thumb {
+    --switch-thumb-bg-disabled: var(--muted);
+}
+
+/* ----------------------------------------------------------------- Labels */
+
+.wrolpi-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    background: var(--label-color);
+    color: var(--btn-text);
+    border: 1px solid transparent;
+}
+
+/* White and black labels would vanish into the surface they sit on. */
+.wrolpi-label-white {
+    color: var(--black);
+    border-color: var(--border);
+}
+
+.wrolpi-label-black {
+    color: var(--white);
+    border-color: var(--border);
+}
+
+/*
+ * Night mode: a filled label is a bright patch, and a wall of tags would be a
+ * wall of light.  Every label becomes an outline instead.
+ */
+html[data-theme="night"] .wrolpi-label {
+    background: transparent;
+    color: var(--label-color);
+    border-color: var(--label-color);
+}
+
+/* --------------------------------------------------------------- Messages */
+
+.wrolpi-message {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--message-color, var(--border));
+    background: var(--panel);
+    padding: 10px 14px;
+    font-size: 13px;
+}
+
+.wrolpi-message-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.wrolpi-message-body {
+    color: var(--muted);
+}
+
+/* Errors take the danger treatment in every theme, so "dashed" stays one rule. */
+.wrolpi-message-error {
+    border: 1.5px dashed var(--red);
+}
+
+/* --------------------------------------------------------------- Progress */
+
+.wrolpi-progress {
+    position: relative;
+    height: 16px;
+    min-width: 120px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+.wrolpi-progress-fill {
+    height: 100%;
+    background: var(--progress-color, var(--blue));
+    transition: width 0.2s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wrolpi-progress-fill {
+        transition: none;
+    }
+}
+
+.wrolpi-progress-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The percent text sits on both the filled and empty halves of the bar, so the
+ * fill has to stay light enough in light mode for dark text to read over it.
+ */
+html[data-theme="light"] .wrolpi-progress {
+    background: var(--panel);
+}
+
+html[data-theme="light"] .wrolpi-progress-fill {
+    filter: brightness(1.75) saturate(0.55);
+}
+
+/* Night: a mostly-full bar must not become a large bright surface. */
+html[data-theme="night"] .wrolpi-progress-fill,
+html[data-theme="amber"] .wrolpi-progress-fill {
+    background: var(--muted);
+}
+
+/* ----------------------------------------------------------------- Panels */
+
+.wrolpi-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+}
+
+/* Danger zones are dashed in every theme; it doubles as a colorblind-safe cue. */
+.wrolpi-panel-danger {
+    border: 1.5px dashed var(--red);
+}
+
+/* ------------------------------------------------------------- Statistics */
+
+.wrolpi-statistic-value {
+    font-size: 24px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+
+.wrolpi-statistic-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------- Status */
+/*
+ * Status is encoded by hue in light/dark.  In night mode hue is unavailable, so
+ * brightness carries it instead: dim = done, mid = active, brightest + bold =
+ * failed.  Callers use these classes rather than naming a color.
+ */
+
+.wrolpi-status {
+    font-size: 12.5px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.wrolpi-status-complete {
+    color: var(--green);
+}
+
+.wrolpi-status-active {
+    color: var(--blue);
+}
+
+.wrolpi-status-pending {
+    color: var(--muted);
+}
+
+.wrolpi-status-failed {
+    color: var(--red);
+}
+
+html[data-theme="night"] .wrolpi-status-complete {
+    color: var(--muted);
+}
+
+html[data-theme="night"] .wrolpi-status-active {
+    color: var(--text);
+}
+
+html[data-theme="night"] .wrolpi-status-failed {
+    color: var(--red);
+    font-weight: 500;
+}
+
+/* ----------------------------------------------------------------- Tables */
+
+/* A failed row carries the danger border, matching failed messages. */
+.wrolpi-row-failed > td {
+    border-top: 1.5px dashed var(--red);
+    border-bottom: 1.5px dashed var(--red);
+}
+
+.wrolpi-row-failed > td:first-child {
+    border-left: 1.5px dashed var(--red);
+}
+
+.wrolpi-row-failed > td:last-child {
+    border-right: 1.5px dashed var(--red);
+}
+
+/* Wide tables scroll inside their own container; the page never scrolls sideways. */
+.wrolpi-table-scroll {
+    overflow-x: auto;
+}

@@ -95,10 +95,9 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='donate' element={<DonatePage/>}/>
-    {/* Component gallery for reviewing the design in each theme.  Unlinked, and left out
-        of production builds so it cannot ship to users. */}
-    {process.env.NODE_ENV === 'development' &&
-        <Route path='theme-sample' element={<ErrorBoundary><ThemeSamplePage/></ErrorBoundary>}/>}
+    {/* Component gallery: lets a user see a theme before committing to it, and lets us
+        review the design.  Linked from Settings. */}
+    <Route path='theme-sample' element={<ErrorBoundary><ThemeSamplePage/></ErrorBoundary>}/>
     <Route path='videos'>
         <Route element={<ErrorBoundary><VideosTabLayout/></ErrorBoundary>}>
             <Route index element={<ErrorBoundary><VideosPage/></ErrorBoundary>}/>

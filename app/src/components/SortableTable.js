@@ -1,7 +1,6 @@
 import React from "react";
 import _ from "lodash";
-import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Table} from "./Theme";
+import {Table} from "./ui";
 import {TextPlaceholder} from "./Placeholder";
 
 export class SortableTable extends React.Component {
@@ -39,29 +38,29 @@ export class SortableTable extends React.Component {
 
     render() {
         let {rowFunc, tableHeaders, rowKey} = this.props;
-        let {direction} = this.state;
+        let {direction, sortColumn} = this.state;
         rowKey = rowKey || 'key';
 
         const data = this.props['data'] ? this.sortData(this.props['data']) : null;
 
         const tableHeader = (spec) => {
-            const {key, text, sortBy, width} = spec;
+            const {key, text, sortBy} = spec;
             if (sortBy) {
-                return <TableHeaderCell
+                const active = sortColumn === key;
+                return <Table.HeaderCell
                     key={key}
-                    sorted={this.state['sortColumn'] === key ? direction : null}
-                    onClick={() => this.changeSort(key)}
-                    width={width || undefined}
+                    sorted={active ? direction : null}
+                    onSort={() => this.changeSort(key)}
                 >
                     {text}
-                </TableHeaderCell>;
+                </Table.HeaderCell>;
             } else {
-                return <TableHeaderCell key={key} width={width}>{text}</TableHeaderCell>
+                return <Table.HeaderCell key={key}>{text}</Table.HeaderCell>
             }
         }
 
         // Use placeholder while data is null.
-        let rows = <TableRow><TableCell colSpan={tableHeaders.length}><TextPlaceholder/></TableCell></TableRow>;
+        let rows = <Table.Row><Table.Cell colSpan={tableHeaders.length}><TextPlaceholder/></Table.Cell></Table.Row>;
         if (data !== null) {
             if (data.length > 0) {
                 // Convert data to table rows.
@@ -69,19 +68,19 @@ export class SortableTable extends React.Component {
             } else {
                 // No results in data.
                 rows = this.props.emptyRow
-                    || <TableRow><TableCell colSpan={tableHeaders.length}>No results</TableCell></TableRow>;
+                    || <Table.Row><Table.Cell colSpan={tableHeaders.length}>No results</Table.Cell></Table.Row>;
             }
         }
 
-        return <Table sortable {...this.props.tableProps}>
-            <TableHeader>
-                <TableRow>
+        return <Table {...this.props.tableProps}>
+            <Table.Header>
+                <Table.Row>
                     {tableHeaders.map(tableHeader)}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
                 {rows}
-            </TableBody>
+            </Table.Body>
             {this.props.footer}
         </Table>
     }

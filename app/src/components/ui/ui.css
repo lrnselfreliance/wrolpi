@@ -26,6 +26,26 @@
     }
 }
 
+.wrolpi-icon-stack {
+    position: relative;
+    display: inline-flex;
+    line-height: 0;
+}
+
+/*
+ * The corner glyph sits on the main one, so it carries the surface color behind
+ * it — without that the two sets of strokes cross and neither reads.
+ */
+.wrolpi-icon-stack-corner {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    display: flex;
+    background: var(--bg);
+    border-radius: 50%;
+    padding: 1px;
+}
+
 /* ---------------------------------------------------------------- Buttons */
 /*
  * Dashed borders mean "destructive or failed", and nothing else may use them.
@@ -115,6 +135,188 @@ html[data-theme="amber"] .wrolpi-theme-option-active {
     margin-top: 14px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------ Pagination */
+
+.wrolpi-pagination button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.wrolpi-pagination button[data-active] {
+    background: var(--blue);
+    color: var(--btn-text);
+    border-color: var(--blue);
+}
+
+/* Night and amber have no second hue to spend, so the current page is marked by a
+   heavier border and the panel surface instead of a filled block of color. */
+html[data-theme="night"] .wrolpi-pagination button[data-active],
+html[data-theme="amber"] .wrolpi-pagination button[data-active] {
+    background: var(--panel);
+    color: var(--text);
+    border: 2px solid var(--text);
+}
+
+.wrolpi-pagination button:disabled {
+    color: var(--muted);
+    background: var(--bg);
+}
+
+/* ---------------------------------------------------------------- Tab bar */
+
+.wrolpi-tabs {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 14px;
+}
+
+.wrolpi-tabs-links {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.wrolpi-tabs-right {
+    padding-bottom: 6px;
+}
+
+.wrolpi-tab {
+    display: inline-block;
+    padding: 8px 14px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    border: 1px solid transparent;
+    /* Sits on the bar's own rule, so the active tab can erase it and read as
+       connected to the panel below. */
+    margin-bottom: -1px;
+}
+
+.wrolpi-tab:hover {
+    color: var(--text);
+}
+
+.wrolpi-tab-active {
+    color: var(--text);
+    background: var(--panel);
+    border-color: var(--border);
+    border-bottom-color: var(--panel);
+    font-weight: 600;
+}
+
+.wrolpi-tab:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
+}
+
+/* ------------------------------------------------------------- Search box */
+
+.wrolpi-searchbox {
+    position: relative;
+    width: 100%;
+}
+
+.wrolpi-searchbox-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 0 8px;
+}
+
+.wrolpi-searchbox-control:focus-within {
+    border-color: var(--blue);
+}
+
+html[data-theme="night"] .wrolpi-searchbox-control:focus-within,
+html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
+    border-color: var(--text);
+}
+
+.wrolpi-searchbox-icon {
+    display: flex;
+    color: var(--muted);
+}
+
+.wrolpi-searchbox-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 0;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+
+.wrolpi-searchbox-input::placeholder {
+    color: var(--muted);
+}
+
+.wrolpi-searchbox-loading,
+.wrolpi-searchbox-clear {
+    flex: none;
+}
+
+/*
+ * The suggestion list overlays the page rather than pushing it down — a search
+ * that reflows the results underneath it is unusable while typing.
+ */
+.wrolpi-searchbox-results {
+    position: absolute;
+    z-index: 20;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: none;
+}
+
+.wrolpi-searchbox-group-name {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--head);
+}
+
+.wrolpi-searchbox-result {
+    padding: 7px 10px;
+    cursor: pointer;
+    border-top: 1px solid var(--border);
+}
+
+.wrolpi-searchbox-result-active {
+    background: var(--head);
+}
+
+.wrolpi-searchbox-result-title {
+    font-size: 13px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.wrolpi-searchbox-result-description {
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.wrolpi-searchbox-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
 }
 
 /* ---------------------------------------------------------------- Modals */
@@ -459,6 +661,41 @@ html[data-theme="night"] .wrolpi-status-failed {
 }
 
 /* ----------------------------------------------------------------- Tables */
+
+/* A sortable header: a real button, so the column is reachable by keyboard. */
+.wrolpi-th-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* The unsorted columns show a faint arrow: the affordance is visible, but it does
+   not compete with the column actually doing the sorting. */
+.wrolpi-th-sort-idle {
+    opacity: 0.35;
+}
+
+.wrolpi-th-sort:hover .wrolpi-th-sort-idle {
+    opacity: 0.7;
+}
+
+.wrolpi-th-sort:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+html[data-theme="night"] .wrolpi-th-sort:focus-visible,
+html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
+    outline-color: var(--text);
+}
 
 /* A failed row carries the danger border, matching failed messages. */
 .wrolpi-row-failed > td {

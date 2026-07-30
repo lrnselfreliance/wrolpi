@@ -1,5 +1,6 @@
 import React from 'react';
 import {Table as MTable, TableProps as MTableProps} from '@mantine/core';
+import {Icon} from './Icon';
 
 /*
  * Tables.
@@ -54,19 +55,55 @@ function Cell({numeric, style, ...props}: CellProps) {
     />
 }
 
+export type SortDirection = 'ascending' | 'descending';
+
+export interface HeaderCellProps extends React.ComponentPropsWithoutRef<'th'> {
+    /** This column's current sort, or null/undefined when it is not the sorted one. */
+    sorted?: SortDirection | null;
+    /** Makes the header a sort control.  Receives nothing; the caller knows its column. */
+    onSort?: () => void;
+}
+
+/**
+ * A header cell, optionally a sort control.
+ *
+ * When `onSort` is given the label becomes a real `<button>` — a click handler on
+ * the `<th>` alone is unreachable by keyboard — and the cell carries `aria-sort`,
+ * so the sort state is announced rather than left to the arrow glyph.
+ */
+function HeaderCell({sorted, onSort, children, ...props}: HeaderCellProps) {
+    if (!onSort) return <MTable.Th {...props}>{children}</MTable.Th>
+
+    return <MTable.Th
+        // `none` (not omitted) on the other columns tells assistive tech they are
+        // sortable but not currently sorted.
+        aria-sort={sorted ? sorted : 'none'}
+        {...props}
+    >
+        <button type='button' className='wrolpi-th-sort' onClick={onSort}>
+            {children}
+            <Icon
+                name={sorted === 'descending' ? 'arrow down' : 'arrow up'}
+                size={14}
+                className={sorted ? undefined : 'wrolpi-th-sort-idle'}
+            />
+        </button>
+    </MTable.Th>
+}
+
 export const Table = Object.assign(TableBase, {
     Header: MTable.Thead,
     Body: MTable.Tbody,
     Footer: MTable.Tfoot,
     Row,
     Cell,
-    HeaderCell: MTable.Th,
+    HeaderCell,
     // Mantine's own names, for new code.
     Thead: MTable.Thead,
     Tbody: MTable.Tbody,
     Tfoot: MTable.Tfoot,
     Tr: Row,
     Td: Cell,
-    Th: MTable.Th,
+    Th: HeaderCell,
     ScrollContainer: MTable.ScrollContainer,
 });

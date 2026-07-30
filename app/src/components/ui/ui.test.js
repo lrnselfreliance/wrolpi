@@ -12,6 +12,11 @@ import {
     Confirm,
     Header,
     Icon,
+    IconStack,
+    Pagination,
+    SearchBox,
+    TabBar,
+    tabClassName,
     IconButton,
     Label,
     Message,
@@ -280,6 +285,30 @@ describe('Table', () => {
         expect(container.querySelector('.wrolpi-row-failed')).toBeInTheDocument();
     });
 
+    it('makes a sortable column a keyboard-reachable button that announces its state', async () => {
+        // A click handler on the <th> alone is unreachable by keyboard, and the arrow
+        // glyph says nothing to a screen reader.
+        const onSort = jest.fn();
+        renderUI(<Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell sorted='descending' onSort={onSort}>Size</Table.HeaderCell>
+                    <Table.HeaderCell onSort={jest.fn()}>Name</Table.HeaderCell>
+                    <Table.HeaderCell>Actions</Table.HeaderCell>
+                </Table.Row>
+            </Table.Header>
+        </Table>);
+
+        expect(screen.getByRole('columnheader', {name: /Size/})).toHaveAttribute('aria-sort', 'descending');
+        // Sortable but not currently sorted.
+        expect(screen.getByRole('columnheader', {name: /Name/})).toHaveAttribute('aria-sort', 'none');
+        // Not sortable at all.
+        expect(screen.getByRole('columnheader', {name: 'Actions'})).not.toHaveAttribute('aria-sort');
+
+        await userEvent.click(screen.getByRole('button', {name: /Size/}));
+        expect(onSort).toHaveBeenCalled();
+    });
+
     it('keeps wide tables from scrolling the page sideways', () => {
         const {container} = renderUI(<Table><Table.Body>
             <Table.Row><Table.Cell>wide</Table.Cell></Table.Row>
@@ -406,6 +435,160 @@ describe('ThemePicker', () => {
         await userEvent.click(screen.getByRole('switch', {name: /filter media to red/i}));
 
         expect(setMediaFilterEnabled).toHaveBeenCalledWith(false);
+    });
+});
+
+describe('Pagination', () => {
+    it('reports the current page and moves when one is clicked', async () => {
+        const onPageChange = jest.fn();
+        renderUI(<Pagination activePage={3} totalPages={12} onPageChange={onPageChange}/>);
+
+        await userEvent.click(screen.getByRole('button', {name: 'Page 5'}));
+
+        expect(onPageChange).toHaveBeenCalledWith(5);
+    });
+
+    it('still renders one page when the total is unknown', () => {
+        // Downloads render the paginator before the first response arrives; collapsing to
+        // nothing and back shifts the whole page.
+        renderUI(<Pagination activePage={1} totalPages={undefined} onPageChange={jest.fn()}/>);
+
+        expect(screen.getByRole('button', {name: 'Page 1'})).toBeInTheDocument();
+    });
+});
+
+describe('TabBar', () => {
+    it('marks the active tab with a class the themes key on', () => {
+        const {container} = renderUI(<TabBar>
+            <button className={tabClassName(true)}>Videos</button>
+            <button className={tabClassName(false)}>Channels</button>
+        </TabBar>);
+
+        expect(container.querySelectorAll('.wrolpi-tab')).toHaveLength(2);
+        expect(container.querySelectorAll('.wrolpi-tab-active')).toHaveLength(1);
+    });
+});
+
+describe('SearchBox', () => {
+    const results = {
+        directories: {name: 'Directories', results: [{title: 'videos/'}]},
+        channels: {name: 'Channels', results: [
+            {title: 'videos/Wranglerstar', description: 'Wranglerstar'},
+            {title: 'videos/RoseRed', description: 'RoseRed Homestead'},
+        ]},
+    };
+
+    it('submits what was typed', async () => {
+        const onSubmit = jest.fn();
+        renderUI(<SearchBox value='axe' onChange={jest.fn()} onSubmit={onSubmit}/>);
+
+        await userEvent.type(screen.getByRole('textbox'), '{Enter}');
+
+        expect(onSubmit).toHaveBeenCalledWith('axe');
+    });
+
+    it('shows suggestions under their group headings', async () => {
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={results}
+                            onResultSelect={jest.fn()}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+
+        expect(screen.getByText('Directories')).toBeInTheDocument();
+        expect(screen.getAllByRole('option')).toHaveLength(3);
+    });
+
+    it('selects a suggestion by click', async () => {
+        const onResultSelect = jest.fn();
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={results}
+                            onResultSelect={onResultSelect}/>);
+        await userEvent.click(screen.getByRole('combobox'));
+
+        await userEvent.click(screen.getByText('videos/Wranglerstar'));
+
+        expect(onResultSelect).toHaveBeenCalledWith(
+            expect.objectContaining({title: 'videos/Wranglerstar'}));
+    });
+
+    it('moves through suggestions with the arrow keys and takes one with Enter', async () => {
+        const onResultSelect = jest.fn();
+        const onSubmit = jest.fn();
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={results}
+                            onResultSelect={onResultSelect} onSubmit={onSubmit}/>);
+
+        const input = screen.getByRole('combobox');
+        await userEvent.click(input);
+        await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+
+        expect(onResultSelect).toHaveBeenCalledWith(
+            expect.objectContaining({title: 'videos/Wranglerstar'}));
+        // Enter took the highlighted suggestion instead of submitting the raw text.
+        expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('wraps around rather than stranding the user at the end of the list', async () => {
+        const onResultSelect = jest.fn();
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={results}
+                            onResultSelect={onResultSelect}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+        await userEvent.keyboard('{ArrowUp}{Enter}');
+
+        expect(onResultSelect).toHaveBeenCalledWith(
+            expect.objectContaining({title: 'videos/RoseRed'}));
+    });
+
+    it('closes on Escape without clearing what was typed', async () => {
+        const onChange = jest.fn();
+        renderUI(<SearchBox value='vid' onChange={onChange} results={results}
+                            onResultSelect={jest.fn()}/>);
+        await userEvent.click(screen.getByRole('combobox'));
+
+        await userEvent.keyboard('{Escape}');
+
+        expect(screen.queryByRole('option')).not.toBeInTheDocument();
+        expect(screen.getByRole('combobox')).toHaveValue('vid');
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('says it is searching rather than "no results" while suggestions are pending', async () => {
+        renderUI(<SearchBox value='vid' onChange={jest.fn()} results={{}} loading
+                            onResultSelect={jest.fn()}/>);
+
+        await userEvent.click(screen.getByRole('combobox'));
+
+        expect(screen.getByText(/searching/i)).toBeInTheDocument();
+    });
+
+    it('clears the input and submits the empty search', async () => {
+        const onChange = jest.fn();
+        const onSubmit = jest.fn();
+        renderUI(<SearchBox value='axe' onChange={onChange} onSubmit={onSubmit} clearable/>);
+
+        await userEvent.click(screen.getByRole('button', {name: 'Clear search'}));
+
+        expect(onChange).toHaveBeenCalledWith('');
+        expect(onSubmit).toHaveBeenCalledWith('');
+    });
+
+    it('is a plain search field when no suggestions are wired up', () => {
+        // Without this, a box that can never show options still claims to be a combobox.
+        renderUI(<SearchBox value='' onChange={jest.fn()} onSubmit={jest.fn()}/>);
+
+        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+        expect(screen.getByRole('textbox')).toBeInTheDocument();
+    });
+});
+
+describe('IconStack', () => {
+    it('names the pair once, and hides the corner glyph from assistive tech', () => {
+        const {container} = renderUI(
+            <IconStack corner={<Icon name='question'/>} label='WiFi status unknown'>
+                <Icon name='wifi'/>
+            </IconStack>
+        );
+
+        expect(screen.getByRole('img', {name: 'WiFi status unknown'})).toBeInTheDocument();
+        expect(container.querySelector('.wrolpi-icon-stack-corner')).toHaveAttribute('aria-hidden', 'true');
     });
 });
 

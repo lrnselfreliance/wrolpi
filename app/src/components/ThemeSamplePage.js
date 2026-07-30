@@ -14,12 +14,16 @@ import {
     Loading,
     Message,
     Modal,
+    Pagination,
     Panel,
     Placeholder,
     Progress,
+    SearchBox,
     Select,
     Statistic,
     StatisticGroup,
+    TabBar,
+    tabClassName,
     Status,
     Table,
     TextInput,
@@ -63,6 +67,9 @@ export function ThemeSamplePage() {
     const [dismissed, setDismissed] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [realColors, setRealColors] = useState(false);
+    const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState('Videos');
+    const [page, setPage] = useState(3);
 
     return <div style={{maxWidth: 1060, margin: '0 auto', padding: '20px 16px 60px', color: 'var(--text)'}}>
         <h1 style={{fontSize: 21, fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
@@ -211,8 +218,8 @@ export function ThemeSamplePage() {
             <Table>
                 <Table.Header>
                     <Table.Row>
-                        <Table.HeaderCell>URL</Table.HeaderCell>
-                        <Table.HeaderCell>Downloader</Table.HeaderCell>
+                        <Table.HeaderCell sorted='ascending' onSort={() => {}}>URL</Table.HeaderCell>
+                        <Table.HeaderCell onSort={() => {}}>Downloader</Table.HeaderCell>
                         <Table.HeaderCell style={{width: 150}}>Progress</Table.HeaderCell>
                         <Table.HeaderCell>Status</Table.HeaderCell>
                         <Table.HeaderCell>Size</Table.HeaderCell>
@@ -290,6 +297,56 @@ export function ThemeSamplePage() {
                     <Toggle label='WROL Mode' description='Read-only: disables downloads.'/>
                     <Toggle label='Bluetooth' description='No adapter detected.' disabled/>
                 </div>
+            </Panel>
+        </Section>
+
+        <Section label='Search'>
+            <Panel>
+                <SearchBox
+                    value={search}
+                    onChange={setSearch}
+                    onSubmit={value => toast({type: 'info', title: 'Searched', description: value})}
+                    onResultSelect={result => setSearch(result.title)}
+                    results={{
+                        directories: {
+                            name: 'Directories',
+                            results: [{title: 'videos/'}, {title: 'archive/'}],
+                        },
+                        channels: {
+                            name: 'Channels',
+                            results: [
+                                {title: 'videos/Wranglerstar', description: 'Wranglerstar'},
+                                {title: 'videos/RoseRed Homestead', description: 'RoseRed Homestead'},
+                            ],
+                        },
+                    }}
+                    clearable
+                    placeholder='Search directory names…'
+                />
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                    Focus the field to see grouped suggestions. Arrow keys move, Enter takes the
+                    highlighted one or submits what you typed, Escape closes the list without
+                    clearing the text.
+                </p>
+            </Panel>
+        </Section>
+
+        <Section label='Pagination and tabs'>
+            <Panel>
+                <TabBar right={<Label color='blue'>1,432 videos</Label>}>
+                    {['Videos', 'Channels', 'Playlists'].map(tab => <button
+                        key={tab}
+                        type='button'
+                        className={tabClassName(tab === activeTab)}
+                        onClick={() => setActiveTab(tab)}
+                    >{tab}</button>)}
+                </TabBar>
+                <Pagination activePage={page} totalPages={12} onPageChange={setPage} showFirstAndLast/>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                    Night and amber mark the current page with a heavier border rather than a
+                    filled block, which would be a bright surface. The tab bar takes rendered
+                    children, so routing stays with the caller.
+                </p>
             </Panel>
         </Section>
 

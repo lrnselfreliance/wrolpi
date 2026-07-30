@@ -1,5 +1,5 @@
 import React from 'react';
-import {Button, Container, Icon, Message, Segment} from 'semantic-ui-react';
+import {Box, Button, ButtonGroup, Message, Panel} from './ui';
 
 /**
  * Error Boundary component that catches JavaScript errors in child components
@@ -52,23 +52,19 @@ class ErrorBoundary extends React.Component {
             const errorMessage = error?.message || 'An unexpected error occurred';
 
             return (
-                <Container style={{padding: '2em'}}>
-                    <Message negative icon>
-                        <Icon name='warning sign'/>
-                        <Message.Content>
-                            <Message.Header>Something went wrong</Message.Header>
-                            <p>{errorMessage}</p>
-                            <Button.Group>
-                                <Button onClick={this.handleReset} primary>
-                                    <Icon name='refresh'/> Try Again
-                                </Button>
-                                <Button onClick={this.handleReload}>
-                                    <Icon name='redo'/> Reload Page
-                                </Button>
-                            </Button.Group>
-                        </Message.Content>
+                <Box style={{padding: '2em'}}>
+                    <Message kind='error' icon='warning sign' title='Something went wrong'>
+                        <p>{errorMessage}</p>
+                        <ButtonGroup>
+                            <Button onClick={this.handleReset} role='primary' icon='refresh'>
+                                Try Again
+                            </Button>
+                            <Button onClick={this.handleReload} icon='redo'>
+                                Reload Page
+                            </Button>
+                        </ButtonGroup>
                     </Message>
-                </Container>
+                </Box>
             );
         }
 
@@ -96,11 +92,11 @@ class InlineErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <Segment basic>
-                    <Message negative size='small'>
-                        <Icon name='warning'/> Failed to load this section
+                <Panel>
+                    <Message kind='error' icon='warning'>
+                        Failed to load this section
                     </Message>
-                </Segment>
+                </Panel>
             );
         }
         return this.props.children;

@@ -1,8 +1,6 @@
 import React from "react";
-import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Icon, Table} from "../Theme";
+import {Icon, Table, Text} from "../ui";
 import {formatValue, isItemExpired} from "./InventoryTable";
-import {ThemeContext} from "../../contexts/contexts";
 
 // Fallback columns for inventories whose schema predates the per-field `mobile` flag: these preferred keys in
 // order, else the first few fields.
@@ -31,33 +29,32 @@ export function mobileColumns(fields) {
  */
 export function InventoryItemsMobile({fields, items}) {
     const columns = mobileColumns(fields);
-    const {t} = React.useContext(ThemeContext);
 
     return <>
-        <p {...t} style={{...t.style, opacity: 0.7, fontSize: '0.85em', marginBottom: '0.5em'}}>
+        <Text size='sm' c='dimmed' mb='0.5em'>
             Read-only — rotate to landscape to edit.
-        </p>
+        </Text>
         {(items || []).length === 0
-            ? <p {...t}>No items yet.</p>
-            : <Table celled unstackable>
-                <TableHeader>
-                    <TableRow>
-                        {columns.map(f => <TableHeaderCell key={f.key}>{f.label}</TableHeaderCell>)}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
+            ? <Text>No items yet.</Text>
+            : <Table>
+                <Table.Header>
+                    <Table.Row>
+                        {columns.map(f => <Table.HeaderCell key={f.key}>{f.label}</Table.HeaderCell>)}
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
                     {items.map(item => {
                         const expired = isItemExpired(item, fields);
-                        return <TableRow key={item.id} negative={expired}>
-                            {columns.map((f, idx) => <TableCell key={f.key}>
+                        return <Table.Row key={item.id} failed={expired}>
+                            {columns.map((f, idx) => <Table.Cell key={f.key}>
                                 {idx === 0 && expired &&
-                                    <Icon name='warning sign' color='red' title='Expired'
-                                          style={{marginRight: '0.4em'}}/>}
+                                    <Icon name='warning sign' label='Expired'
+                                          style={{color: 'var(--red)', marginRight: '0.4em'}}/>}
                                 {formatValue(item, f)}
-                            </TableCell>)}
-                        </TableRow>;
+                            </Table.Cell>)}
+                        </Table.Row>;
                     })}
-                </TableBody>
+                </Table.Body>
             </Table>}
     </>;
 }

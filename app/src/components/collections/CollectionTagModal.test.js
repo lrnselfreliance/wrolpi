@@ -3,31 +3,6 @@ import {act, render, screen, waitFor} from '../../test-utils';
 import userEvent from '@testing-library/user-event';
 import {CollectionTagModal} from './CollectionTagModal';
 
-// Mock Theme components with compound patterns
-jest.mock('../Theme', () => {
-    const MockModal = ({open, onClose, children, closeIcon}) => {
-        if (!open) return null;
-        return (
-            <div data-testid="modal">
-                {closeIcon && <button data-testid="close-icon" onClick={onClose}>×</button>}
-                {children}
-            </div>
-        );
-    };
-    MockModal.Header = ({children}) => <div data-testid="modal-header">{children}</div>;
-    MockModal.Content = ({children}) => <div data-testid="modal-content">{children}</div>;
-    MockModal.Actions = ({children}) => <div data-testid="modal-actions">{children}</div>;
-    MockModal.Description = ({children}) => <div data-testid="modal-description">{children}</div>;
-
-    return {
-        ...jest.requireActual('../Theme'),
-        Modal: MockModal,
-        Button: ({children, onClick, ...props}) => (
-            <button onClick={onClick} data-testid={`button-${children}`} {...props}>{children}</button>
-        ),
-    };
-});
-
 // Mock Common components
 jest.mock('../Common', () => ({
     ...jest.requireActual('../Common'),
@@ -76,22 +51,22 @@ describe('CollectionTagModal', () => {
     describe('Modal Rendering', () => {
         it('renders modal when open is true', () => {
             render(<CollectionTagModal {...defaultProps} />);
-            expect(screen.getByTestId('modal')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
 
         it('does not render modal when open is false', () => {
             render(<CollectionTagModal {...defaultProps} open={false}/>);
-            expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         });
 
         it('shows "Add Tag" header when no current tag', () => {
             render(<CollectionTagModal {...defaultProps} currentTagName={null}/>);
-            expect(screen.getByTestId('modal-header')).toHaveTextContent('Add Tag');
+            expect(screen.getByRole('heading')).toHaveTextContent('Add Tag');
         });
 
         it('shows "Modify Tag" header when there is a current tag', () => {
             render(<CollectionTagModal {...defaultProps} currentTagName="existing-tag"/>);
-            expect(screen.getByTestId('modal-header')).toHaveTextContent('Modify Tag');
+            expect(screen.getByRole('heading')).toHaveTextContent('Modify Tag');
         });
     });
 
@@ -308,7 +283,7 @@ describe('CollectionTagModal', () => {
             const mockOnClose = jest.fn();
             render(<CollectionTagModal {...defaultProps} onClose={mockOnClose}/>);
 
-            const cancelButton = screen.getByTestId('button-Cancel');
+            const cancelButton = screen.getByRole('button', {name: 'Cancel'});
             await userEvent.click(cancelButton);
 
             expect(mockOnClose).toHaveBeenCalled();
@@ -341,7 +316,7 @@ describe('CollectionTagModal', () => {
             });
 
             // Close the modal
-            const cancelButton = screen.getByTestId('button-Cancel');
+            const cancelButton = screen.getByRole('button', {name: 'Cancel'});
             await userEvent.click(cancelButton);
 
             // Reopen modal

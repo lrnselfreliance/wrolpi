@@ -1,6 +1,5 @@
 import React from 'react';
-import {Button, Form, Grid, Message} from 'semantic-ui-react';
-import {Header, Segment} from '../Theme';
+import {Button, Header, Message, Panel} from '../ui';
 import {TagsContext} from '../../Tags';
 import {WROLModeMessage} from '../Common';
 
@@ -37,51 +36,63 @@ export function CollectionEditForm({
         }
     };
 
-    return <Segment>
+    return <Panel>
         {title && <Header as="h1">{title}</Header>}
         {wrolModeContent && <WROLModeMessage content={wrolModeContent}/>}
 
         {/* Display form-level errors */}
-        {form.error && <Message error>
-            <Message.Header>Error</Message.Header>
+        {form.error && <Message kind='error' title='Error'>
             <p>{form.error}</p>
         </Message>}
 
-        <Form onSubmit={handleSubmit} loading={form.loading} autoComplete="off">
-            <Grid stackable>
+        <form onSubmit={handleSubmit} autoComplete="off">
+            {/*
+             * `ui stackable grid` replicates Semantic's own Grid CSS classes (still loaded
+             * globally via semantic-ui-offline while other call sites remain unmigrated).
+             * Callers of this component (Channels.js, Archive.js, Playlists.js) still pass
+             * Semantic <Grid.Row>/<Grid.Column> children -- they have not migrated to the
+             * component library yet. This div keeps their layout without importing
+             * semantic-ui-react here. Replace with the real `Grid`/`Grid.Col` once every
+             * caller has migrated.
+             */}
+            <div
+                className="ui stackable grid"
+                style={form.loading ? {opacity: 0.6, pointerEvents: 'none'} : undefined}
+            >
                 {children}
 
-                {appliedTagName && <Grid.Row>
-                    <Grid.Column>
+                {appliedTagName && <div className="row">
+                    <div className="column">
                         <SingleTag name={appliedTagName}/>
-                    </Grid.Column>
-                </Grid.Row>}
+                    </div>
+                </div>}
 
-                <Grid.Row columns={2}>
-                    <Grid.Column>
+                <div className="two column row">
+                    <div className="column">
                         {actionButtons}
                         {onCancel && <Button
                             type='button'
+                            role='cancel'
                             onClick={onCancel}
                             disabled={form.disabled}
                             className="action-button-spacing"
                         >
                             Cancel
                         </Button>}
-                    </Grid.Column>
-                    <Grid.Column>
+                    </div>
+                    <div className="column">
                         <Button
                             type='submit'
-                            color='violet'
-                            size='big'
-                            floated='right'
+                            role='save'
+                            size='lg'
+                            style={{float: 'right'}}
                             disabled={form.disabled}
                         >
                             Save
                         </Button>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Form>
-    </Segment>;
+                    </div>
+                </div>
+            </div>
+        </form>
+    </Panel>;
 }

@@ -368,6 +368,26 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
  * non-red pixel on screen in night mode.  Scoped to `:not(:checked)` so the
  * checked track keeps coming from the `color` prop.
  */
+/*
+ * Semantic's inverted stylesheet colors *every* descendant of `.ui.inverted.segment`
+ * (rgba(255,255,255,.9), and #dddddd on labels).  Our components are mounted inside
+ * unmigrated pages that still use those wrappers, so an inherited color puts white
+ * pixels on screen in night mode.  Restating from tokens is the fix; the rule can go
+ * when the last Semantic wrapper does.
+ */
+.wrolpi-switch .mantine-Switch-label {
+    color: var(--text);
+}
+
+.wrolpi-switch .mantine-Switch-description {
+    color: var(--muted);
+}
+
+.wrolpi-switch input:disabled + * .mantine-Switch-label,
+.wrolpi-switch input:disabled ~ * .mantine-Switch-label {
+    color: var(--muted);
+}
+
 .wrolpi-switch input:not(:checked) + .mantine-Switch-track {
     --switch-bg: var(--border);
 }
@@ -599,7 +619,60 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     border: 1.5px dashed var(--red);
 }
 
+/* ----------------------------------------------------------- Card posters */
+/*
+ * The icon shown when a file has no poster, and the corner mark for a tagged
+ * file.  Both live here rather than in Common.js so the card surface and the
+ * poster area agree in every theme.
+ */
+
+.wrolpi-card-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    background: var(--head);
+}
+
+.wrolpi-card-tag {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    padding: 3px 4px;
+    background: var(--green);
+    color: var(--btn-text);
+}
+
+/* Night and amber have no green to spend; the mark reads as an outline instead. */
+html[data-theme="night"] .wrolpi-card-tag,
+html[data-theme="amber"] .wrolpi-card-tag {
+    background: var(--panel);
+    color: var(--text);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
 /* ------------------------------------------------------------- Statistics */
+/*
+ * A statistic carries its own spacing rather than relying on a parent to supply
+ * it: unmigrated pages still drop these inside Semantic's `Statistic.Group`,
+ * whose CSS only spaces elements carrying Semantic's own classes, and without
+ * this the labels run together into one unreadable line.
+ */
+
+.wrolpi-statistic {
+    display: inline-block;
+    vertical-align: top;
+    margin: 0 26px 10px 0;
+}
+
+/* Inside our own group the grid does the spacing, so the intrinsic margin goes. */
+.wrolpi-statistic-cell .wrolpi-statistic {
+    display: block;
+    margin: 0;
+}
 
 .wrolpi-statistic-value {
     font-size: 24px;

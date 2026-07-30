@@ -1,8 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {Input, Message} from "semantic-ui-react";
-import {toast} from "react-semantic-toasts-2";
-
-import {Button, Form, List, Loader, Modal} from "./Theme";
+import {Button, IconButton, Loading, Message, Modal, Radio, Stack, TextInput, toast} from "./ui";
 import {addPlaylistItem, createPlaylist, fetchPlaylists} from "../api";
 
 
@@ -68,32 +65,38 @@ export function AddToPlaylistModal({open, onClose, items = [], onComplete}) {
     return <Modal open={open} onClose={onClose} size='tiny'>
         <Modal.Header>Add to Playlist</Modal.Header>
         <Modal.Content>
-            {playlists === undefined && <Message error><Message.Header>Could not load playlists</Message.Header></Message>}
-            {playlists === null && <Loader active inline='centered'/>}
+            {playlists === undefined && <Message kind='error' title='Could not load playlists'/>}
+            {playlists === null && <Loading/>}
             {Array.isArray(playlists) && playlists.length > 0 &&
-                <List divided selection>
-                    {playlists.map(p => <List.Item key={p.id} active={selected === p.id}
-                                                   onClick={() => setSelected(p.id)}>
-                        <List.Icon name={selected === p.id ? 'check circle' : 'circle outline'}
-                                   verticalAlign='middle'/>
-                        <List.Content><List.Header>{p.name}</List.Header></List.Content>
-                    </List.Item>)}
-                </List>}
+                <Stack gap={4}>
+                    {playlists.map(p => <Radio
+                        key={p.id}
+                        name='playlist'
+                        label={p.name}
+                        checked={selected === p.id}
+                        onChange={() => setSelected(p.id)}
+                    />)}
+                </Stack>}
             {Array.isArray(playlists) && playlists.length === 0 &&
                 <p>No playlists yet — create one below.</p>}
-            <Form onSubmit={handleCreateAndAdd} style={{marginTop: '1em'}}>
-                <Form.Field>
-                    <label>Or create a new playlist</label>
-                    <Input autoFocus placeholder='New playlist name...' value={newName}
-                           onChange={(e, {value}) => setNewName(value)}/>
-                </Form.Field>
-            </Form>
+            <form onSubmit={(e) => {
+                e.preventDefault();
+                handleCreateAndAdd();
+            }} style={{marginTop: '1em'}}>
+                <TextInput
+                    label='Or create a new playlist'
+                    autoFocus
+                    placeholder='New playlist name...'
+                    value={newName}
+                    onChange={(e) => setNewName(e.currentTarget.value)}
+                />
+            </form>
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
             {creating
-                ? <Button primary loading={adding} onClick={handleCreateAndAdd}>Create &amp; Add</Button>
-                : <Button primary disabled={!selected} loading={adding} onClick={handleAddExisting}>Add</Button>}
+                ? <Button role='primary' loading={adding} onClick={handleCreateAndAdd}>Create &amp; Add</Button>
+                : <Button role='primary' disabled={!selected} loading={adding} onClick={handleAddExisting}>Add</Button>}
         </Modal.Actions>
     </Modal>;
 }
@@ -104,9 +107,12 @@ export function AddToPlaylistModal({open, onClose, items = [], onComplete}) {
  *   - one FileGroup (fileGroupId) or many (fileGroupIds),
  *   - a Zim article (zim={zimId, entry, title}), or
  *   - a URL (url={url, title}) — link to anything the WROLPi browser can open (e.g. a map location).
- * Extra props are forwarded to the Button (color, size, disabled, icon, content, ...).
+ * Extra props are forwarded to the Button (size, disabled, ...).
  */
-export function AddToPlaylistButton({fileGroupId, fileGroupIds, zim, url, content = 'Add to Playlist', onComplete, ...buttonProps}) {
+export function AddToPlaylistButton({
+                                        fileGroupId, fileGroupIds, zim, url, content = 'Add to Playlist',
+                                        title, onComplete, ...buttonProps
+                                    }) {
     const [open, setOpen] = useState(false);
 
     let items;
@@ -119,13 +125,16 @@ export function AddToPlaylistButton({fileGroupId, fileGroupIds, zim, url, conten
         items = ids.map(id => ({item_kind: 'file', file_group_id: id}));
     }
 
-    // An empty `content` makes a compact icon-only button (omit content entirely so Semantic does
-    // not reserve label padding); otherwise render the labeled "Add to Playlist" button.
-    const contentProps = content ? {content} : {};
+    // An empty/null `content` makes a compact icon-only button; the accessible name comes
+    // from `title` (kept for callers that already pass it) or falls back to the action name.
+    const iconOnly = !content;
 
     return <>
-        <Button color='green' icon='list' onClick={() => setOpen(true)}
-                disabled={items.length === 0} {...contentProps} {...buttonProps}/>
+        {iconOnly
+            ? <IconButton role='save' icon='list' label={title || 'Add to Playlist'} onClick={() => setOpen(true)}
+                          disabled={items.length === 0} {...buttonProps}/>
+            : <Button role='save' icon='list' onClick={() => setOpen(true)}
+                      disabled={items.length === 0} {...buttonProps}>{content}</Button>}
         <AddToPlaylistModal open={open} onClose={() => setOpen(false)} items={items}
                             onComplete={onComplete}/>
     </>;

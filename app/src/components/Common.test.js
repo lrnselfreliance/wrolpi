@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {DirectorySearch} from './Common';
 
@@ -123,13 +123,14 @@ describe('DirectorySearch', () => {
         });
 
         it('displays with required indicator', () => {
-            const {container} = render(
+            render(
                 <DirectorySearch onSelect={mockOnSelect} value="" required/>
             );
 
-            // Semantic UI doesn't add required attribute to Search input,
-            // but we verify the prop is passed
-            expect(container.querySelector('.ui.search')).toBeInTheDocument();
+            // Unlike Semantic UI's Search, the SearchBox forwards `required` straight
+            // onto the input.
+            const input = screen.getByPlaceholderText(/search directory names/i);
+            expect(input).toBeRequired();
         });
     });
 
@@ -153,11 +154,10 @@ describe('DirectorySearch', () => {
                 loading: true,
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
+            const {container} = render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
-            const searchContainer = screen.getByPlaceholderText(/search directory names/i)
-                .closest('.ui.search');
-            expect(searchContainer).toHaveClass('loading');
+            // SearchBox renders a Loader alongside the input while `loading` is true.
+            expect(container.querySelector('.wrolpi-searchbox-loading')).toBeInTheDocument();
         });
 
         it('hides loading indicator when loading state is false', () => {
@@ -166,11 +166,9 @@ describe('DirectorySearch', () => {
                 loading: false,
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
+            const {container} = render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
-            const searchContainer = screen.getByPlaceholderText(/search directory names/i)
-                .closest('.ui.search');
-            expect(searchContainer).not.toHaveClass('loading');
+            expect(container.querySelector('.wrolpi-searchbox-loading')).not.toBeInTheDocument();
         });
 
         it('displays categorized results', async () => {
@@ -265,16 +263,16 @@ describe('DirectorySearch', () => {
             });
 
             // Render with empty value prop (different from directoryName)
-            const {container} = render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
-            // Find the Search component container and trigger blur on it
-            const searchComponent = container.querySelector('.ui.search');
+            // The SearchBox wires `onBlur` straight to the input (there is no longer a
+            // wrapping Search component to blur instead).
+            const input = screen.getByPlaceholderText(/search directory names/i);
 
-            // Blur the Search component - should trigger onBlur which calls onSelect
+            // Blur the input - should trigger onBlur which calls onSelect
             await act(async () => {
-                // Use fireEvent.blur which better simulates the Semantic UI Search blur behavior
-                const {fireEvent} = require('@testing-library/react');
-                fireEvent.blur(searchComponent);
+                const {fireEvent} = require('../test-utils');
+                fireEvent.blur(input);
             });
 
             // Should call onSelect with directoryName from hook state
@@ -319,8 +317,16 @@ describe('DirectorySearch', () => {
                 expect(screen.getByText('videos/nature')).toBeInTheDocument();
             });
 
-            // Click multiple results in succession
+            // Click multiple results in succession. Choosing a result closes the
+            // dropdown (as any combobox would) without moving focus off the input
+            // (the option is chosen on mousedown, with the default prevented), so
+            // pressing a key that reopens the list -- same as a real user -- is
+            // needed before the next selection.
             await userEvent.click(screen.getByText('videos/nature'));
+            await userEvent.keyboard('{ArrowDown}');
+            await waitFor(() => {
+                expect(screen.getByText('videos/tech')).toBeInTheDocument();
+            });
             await userEvent.click(screen.getByText('videos/tech'));
 
             // Should call onSelect for each selection

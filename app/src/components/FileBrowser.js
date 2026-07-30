@@ -266,7 +266,6 @@ export function FileBrowser() {
     }, {enableOnFormTags: false});
 
     const {settings, fetchSettings} = React.useContext(SettingsContext);
-    const {inverted} = React.useContext(ThemeContext);
 
     const selectedPathsCount = selectedPaths ? selectedPaths.length : 0;
 
@@ -397,8 +396,7 @@ export function FileBrowser() {
     // Show a label alongside the icon once there's room; otherwise the icon carries the meaning alone.
     const label = (text) => showLabels ? text : null;
 
-    const footerClassName = `sticky-footer ${inverted}`;
-    const footer = <div className={footerClassName} ref={footerRef}>
+    const footer = <div className='sticky-footer' ref={footerRef}>
         <FilesRefreshButton paths={selectedPaths} showLabel={showLabels}/>
         <APIButton
             icon='trash'

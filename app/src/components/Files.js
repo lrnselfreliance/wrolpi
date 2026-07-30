@@ -17,7 +17,8 @@ import {
     TagIcon,
     Toggle,
     textEllipsis,
-    useTitle
+    mimetypeColor,
+    useTitle,
 } from "./Common";
 import {
     usePages,
@@ -116,6 +117,7 @@ function EbookCard({file, sortField}) {
     return <Card media={<CardPoster file={file} to={detailUrl}/>}
                  title={<Tooltip label={title}>{header}</Tooltip>}
                  meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}
     />
 }
 
@@ -134,6 +136,7 @@ function ImageCard({file}) {
     return <Card media={<PreviewLink file={file}><CardPoster file={file}/></PreviewLink>}
                  title={<Tooltip label={title}>{header}</Tooltip>}
                  meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}
     />
 }
 
@@ -175,7 +178,8 @@ function FileCard({file}) {
             </>
         }
     </>;
-    return <Card media={<CardPoster file={file}/>} title={header} meta={meta}/>
+    return <Card media={<CardPoster file={file}/>} title={header} meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}/>
 }
 
 export function FileCards({files}) {

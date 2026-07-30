@@ -6,6 +6,10 @@ import {VideosTabLayout, VideosPage, VideosSettingsPage, VideosStatistics, Video
 import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
+// Theme tokens load after Semantic so the shell's colors win over Semantic's defaults.
+import './themes/fonts.css';
+import './themes/tokens.css';
+import {MediaFilterDefs} from "./themes/MediaFilterDefs";
 import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/inventory/InventoryRoute";
 import {ArchiveRoute} from "./components/Archive";
@@ -62,6 +66,7 @@ function Footer() {
 function Root() {
     return <QueryProvider>
         <ThemeProvider>
+            <MediaFilterDefs/>
             <TagsProvider>
                 <KeyboardShortcutsProvider>
                     <FilePreviewProvider>

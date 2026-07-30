@@ -1,0 +1,174 @@
+import React from 'react';
+import * as Tabler from '@tabler/icons-react';
+
+/*
+ * Icons.
+ *
+ * Semantic UI shipped an icon font; we use Tabler's bundled SVG components, which
+ * are tree-shaken at build time and need nothing from the network.
+ *
+ * Icons never name a color.  They stroke with `currentColor`, inheriting from the
+ * button or text that wraps them, so status color and every theme come for free.
+ */
+
+/** 16px inline (default), 20px emphasis, 24px page-level. */
+export type IconSize = 'small' | 'medium' | 'large';
+
+const sizes: Record<IconSize, number> = {small: 16, medium: 20, large: 24};
+
+/**
+ * Semantic icon name -> Tabler component name.
+ *
+ * Covers every name the app renders today so call sites can migrate without also
+ * choosing new icons.  New code should import the Tabler component directly and
+ * pass it as `component`; this map exists for the migration, not forever.
+ */
+const semanticNames: Record<string, keyof typeof Tabler> = {
+    'add': 'IconPlus',
+    'archive': 'IconArchive',
+    'arrow alternate circle up': 'IconCircleArrowUp',
+    'arrow down': 'IconArrowDown',
+    'arrow right': 'IconArrowRight',
+    'arrow up': 'IconArrowUp',
+    'balance scale': 'IconScale',
+    'book': 'IconBook',
+    'bug': 'IconBug',
+    'calculator': 'IconCalculator',
+    'calendar': 'IconCalendar',
+    'charset': 'IconLanguage',
+    'check': 'IconCheck',
+    'check circle': 'IconCircleCheck',
+    'checkmark': 'IconCheck',
+    'chevron left': 'IconChevronLeft',
+    'chevron right': 'IconChevronRight',
+    'chrome': 'IconBrandChrome',
+    'circle': 'IconCircle',
+    'circle notch': 'IconLoader2',
+    'circle notched': 'IconLoader2',
+    'close': 'IconX',
+    'columns': 'IconColumns',
+    'copy': 'IconCopy',
+    'cube': 'IconCube',
+    'directory': 'IconFolder',
+    'disk': 'IconDatabase',
+    'download': 'IconDownload',
+    'dropdown': 'IconChevronDown',
+    'edit': 'IconEdit',
+    'exclamation': 'IconExclamationMark',
+    'exclamation triangle': 'IconAlertTriangle',
+    'expand arrows alternate': 'IconArrowsMaximize',
+    'external': 'IconExternalLink',
+    'eye': 'IconEye',
+    'eye slash': 'IconEyeOff',
+    'file': 'IconFile',
+    'file alternate': 'IconFileDescription',
+    'file alternate outline': 'IconFileDescription',
+    'file code': 'IconFileCode',
+    'file pdf outline': 'IconFileTypePdf',
+    'file text': 'IconFileText',
+    'file video': 'IconFileSmile',
+    'film': 'IconMovie',
+    'filter': 'IconFilter',
+    'firefox': 'IconBrandFirefox',
+    'folder': 'IconFolder',
+    'folder open': 'IconFolderOpen',
+    'folder open outline': 'IconFolderOpen',
+    'folder outline': 'IconFolder',
+    'globe': 'IconWorld',
+    'hand point right': 'IconHandFinger',
+    'hdd': 'IconDeviceSdCard',
+    'heart': 'IconHeart',
+    'heartbeat': 'IconHeartRateMonitor',
+    'history': 'IconHistory',
+    'image': 'IconPhoto',
+    'lightning': 'IconBolt',
+    'linkify': 'IconLink',
+    'list': 'IconList',
+    'lock': 'IconLock',
+    'map outline': 'IconMap',
+    'microchip': 'IconCpu',
+    'minus': 'IconMinus',
+    'play': 'IconPlayerPlay',
+    'plug': 'IconPlug',
+    'plus': 'IconPlus',
+    'print': 'IconPrinter',
+    'puzzle piece': 'IconPuzzle',
+    'qrcode': 'IconQrcode',
+    'question': 'IconHelp',
+    'redo': 'IconArrowForwardUp',
+    'refresh': 'IconRefresh',
+    'rss': 'IconRss',
+    'save': 'IconDeviceFloppy',
+    'search': 'IconSearch',
+    'server': 'IconServer',
+    'settings': 'IconSettings',
+    'share': 'IconShare',
+    'shield': 'IconShield',
+    'spinner': 'IconLoader2',
+    'star': 'IconStarFilled',
+    'star outline': 'IconStar',
+    'stop': 'IconPlayerStop',
+    'sync': 'IconRefresh',
+    'tachometer alternate': 'IconGauge',
+    'tag': 'IconTag',
+    'terminal': 'IconTerminal2',
+    'th': 'IconLayoutGrid',
+    'thumbs up': 'IconThumbUp',
+    'trash': 'IconTrash',
+    'undo': 'IconArrowBackUp',
+    'unlock': 'IconLockOpen',
+    'upload': 'IconUpload',
+    'usb': 'IconUsb',
+    'volume up': 'IconVolume',
+    'warning': 'IconAlertTriangle',
+    'warning circle': 'IconAlertCircle',
+    'warning sign': 'IconAlertTriangle',
+    'wifi': 'IconWifi',
+    'wrench': 'IconTool',
+    'x': 'IconX',
+};
+
+export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'name' | 'ref'> {
+    /** A Semantic UI icon name, for migrated call sites. */
+    name?: string;
+    /** A Tabler component, for new code. */
+    component?: React.ComponentType<any>;
+    size?: IconSize | number;
+    /** Rotate continuously; for spinners and in-progress states. */
+    loading?: boolean;
+    /** Accessible name.  Omit for decorative icons, which are hidden instead. */
+    label?: string;
+}
+
+/** Resolve a Semantic icon name to its Tabler component, or undefined if unmapped. */
+export const resolveIconName = (name: string): React.ComponentType<any> | undefined => {
+    const taberName = semanticNames[name.trim().toLowerCase()];
+    return taberName ? (Tabler[taberName] as React.ComponentType<any>) : undefined;
+}
+
+export function Icon({name, component, size = 'small', loading, label, ...props}: IconProps) {
+    let Component = component;
+    if (!Component && name) {
+        Component = resolveIconName(name);
+        if (!Component) {
+            // Loud on purpose: a silently missing icon leaves a hole in the interface.
+            console.error(`No icon for Semantic name "${name}"; pass a Tabler component instead.`);
+            Component = Tabler.IconHelpCircle;
+        }
+    }
+    if (!Component) {
+        console.error('Icon requires `name` or `component`.');
+        return null;
+    }
+
+    const pixels = typeof size === 'number' ? size : sizes[size];
+    return <Component
+        size={pixels}
+        stroke={2}
+        className={loading ? 'wrolpi-icon-spin' : undefined}
+        aria-hidden={label ? undefined : 'true'}
+        aria-label={label}
+        role={label ? 'img' : undefined}
+        {...props}
+    />
+}

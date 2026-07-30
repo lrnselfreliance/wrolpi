@@ -6,6 +6,10 @@
     "@acalcutt/maplibre-contour-pmtiles": "^0.1.2",
     "@artsy/fresnel": "^8.5.0",
     "@cypress/react18": "^2.0.1",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
+    "@mantine/notifications": "^8.3.18",
+    "@tabler/icons-react": "^3.46.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "cypress": "^15.20.0",
@@ -63,7 +67,7 @@
     "@types/node": "^26.1.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
-    "typescript": "^4.9.5"
+    "typescript": "^5.9.3"
   },
   "jest": {
     "transformIgnorePatterns": [
@@ -71,21 +75,9 @@
     ]
   },
   "overrides": {
-    "@babel/code-frame": "7.29.0",
-    "@babel/compat-data": "7.20.14",
-    "@babel/core": "7.20.12",
-    "@babel/generator": "7.29.1",
-    "@babel/helper-compilation-targets": "7.20.7",
-    "@babel/helper-globals": "7.28.0",
-    "@babel/helper-module-imports": "7.28.6",
-    "@babel/helper-module-transforms": "7.28.6",
-    "@babel/helper-string-parser": "7.27.1",
-    "@babel/helper-validator-identifier": "7.28.5",
-    "@babel/helper-validator-option": "7.18.6",
-    "@babel/helpers": "7.27.0",
-    "@babel/parser": "7.29.3",
-    "@babel/template": "7.28.6",
-    "@babel/traverse": "7.29.0",
-    "@babel/types": "7.29.0"
+    "react-scripts": {
+      "typescript": "$typescript"
+    },
+    "fork-ts-checker-webpack-plugin": "^6.5.3"
   }
 }

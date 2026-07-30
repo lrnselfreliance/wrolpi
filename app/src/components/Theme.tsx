@@ -94,6 +94,9 @@ import {
     TabPaneProps,
     TextAreaProps,
 } from "semantic-ui-react";
+import {MantineProvider} from "@mantine/core";
+import {Notifications} from "@mantine/notifications";
+import {cssVariablesResolver, mantineTheme} from "../themes/mantine";
 import {ColorToSemanticHexColor} from "./Vars";
 import _ from "lodash";
 import {ThemeContextValue, ThemeName, SavedThemeName} from "../types/theme";
@@ -248,8 +251,18 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
         cycleSavedTheme,
     };
 
+    // Mantine's own scheme decides the surfaces its internals use (overlays, scrollbars,
+    // focus rings).  Night and amber are neither of its two schemes, so they ride on dark
+    // and take their actual colors from our tokens.  This is the theme `base` flag.
     return <ThemeContext.Provider value={themeValue}>
-        {children}
+        <MantineProvider
+            theme={mantineTheme}
+            cssVariablesResolver={cssVariablesResolver}
+            forceColorScheme={dark ? 'dark' : 'light'}
+        >
+            <Notifications position='bottom-right' limit={5}/>
+            {children}
+        </MantineProvider>
     </ThemeContext.Provider>
 }
 

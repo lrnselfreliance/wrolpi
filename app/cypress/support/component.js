@@ -25,6 +25,7 @@ import {QueryProvider} from "../../src/hooks/customHooks";
 import {TagsProvider} from "../../src/Tags";
 import {MantineProvider} from "@mantine/core";
 import {cssVariablesResolver, mantineTheme} from "../../src/themes/mantine";
+import {MediaFilterDefs} from "../../src/themes/MediaFilterDefs";
 import React from "react";
 
 Cypress.on('uncaught:exception', (err, runnable) => {
@@ -58,6 +59,60 @@ Cypress.Commands.add('mountWithRouter', (component, options) => {
         </MemoryRouter>,
         options
     );
+});
+
+/*
+ * Mount a component from src/components/ui with nothing but Mantine's provider and the
+ * theme stamped on <html> -- no router, no query client, no tag fixtures.
+ *
+ * That spartan setup is the whole point.  These components take props and read no ambient
+ * state, so a real browser can render one in isolation, which is what lets a spec assert
+ * things jsdom cannot compute: whether two boxes overlap, whether text is clipped, whether
+ * a token actually resolved.  The Settings page shipped five unreadable inputs because
+ * `padding-inline-start: auto` silently became zero, and no jsdom test could have seen it --
+ * getBoundingClientRect() returns zeros there.
+ *
+ * `theme` stamps data-theme the way ThemeProvider does; `mediaFilter` stamps
+ * data-media-filter and mounts the SVG filter definitions, since a filter referenced but
+ * never defined silently does nothing.
+ */
+Cypress.Commands.add('mountUI', (component, options = {}) => {
+    const {theme = 'light', mediaFilter, ...mountOptions} = options;
+
+    const html = document.documentElement;
+    html.dataset.theme = theme;
+    if (mediaFilter) html.dataset.mediaFilter = mediaFilter;
+    else delete html.dataset.mediaFilter;
+
+    return cy.mount(
+        <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+            {mediaFilter ? <MediaFilterDefs/> : null}
+            {component}
+        </MantineProvider>,
+        mountOptions
+    );
+});
+
+/**
+ * Fail unless two elements are laid out side by side.
+ *
+ * Reads real geometry, so it catches an element painted over another regardless of how the
+ * overlap came about -- an invalid length, a collapsed flex row, a stale absolute position.
+ */
+Cypress.Commands.add('shouldNotOverlap', {prevSubject: false}, (firstSelector, secondSelector) => {
+    cy.get(firstSelector).then(($first) => {
+        cy.get(secondSelector).then(($second) => {
+            const a = $first[0].getBoundingClientRect();
+            const b = $second[0].getBoundingClientRect();
+            const overlaps = a.right > b.left + 0.5 && b.right > a.left + 0.5
+                && a.bottom > b.top + 0.5 && b.bottom > a.top + 0.5;
+            expect(
+                overlaps,
+                `${firstSelector} [${a.left}, ${a.right}] must not overlap `
+                + `${secondSelector} [${b.left}, ${b.right}]`,
+            ).to.equal(false);
+        });
+    });
 });
 
 Cypress.Commands.add('mountWithTags', (component, options) => {

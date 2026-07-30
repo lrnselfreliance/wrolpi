@@ -1,15 +1,19 @@
 import React, {useContext, useState} from 'react';
 import {ThemeContext} from '../contexts/contexts';
 import {
+    ActionInput,
     Button,
     Card,
     CardGroup,
     Confirm,
+    Header,
     Icon,
     IconButton,
     Label,
     Loader,
+    Loading,
     Message,
+    Modal,
     Panel,
     Placeholder,
     Progress,
@@ -52,10 +56,12 @@ const Row = ({children}) => <div style={{display: 'flex', gap: 10, flexWrap: 'wr
 </div>;
 
 export function ThemeSamplePage() {
-    const {theme, setTheme} = useContext(ThemeContext);
+    const {theme} = useContext(ThemeContext);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [comments, setComments] = useState(true);
     const [hotspot, setHotspot] = useState(true);
+    const [dismissed, setDismissed] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
 
     return <div style={{maxWidth: 1060, margin: '0 auto', padding: '20px 16px 60px', color: 'var(--text)'}}>
         <h1 style={{fontSize: 21, fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
@@ -70,6 +76,20 @@ export function ThemeSamplePage() {
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
                     The same picker the Settings page uses. The navigation bar has a compact
                     version; both read the same list of themes.
+                </p>
+            </Panel>
+        </Section>
+
+        <Section label='Headers'>
+            <Panel>
+                <Header as='h1'>Page title (h1)</Header>
+                <Header as='h2'>Section (h2)</Header>
+                <Header as='h3' icon='folder' dividing>With an icon and a divider (h3)</Header>
+                <Header as='h4' subheader='And a subheader below it'>Subsection (h4)</Header>
+                <Header as='h5'>Smallest (h5)</Header>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                    The level picks the size, so the type scale stays a scale: call sites
+                    choose a heading level for the document outline, never a font size.
                 </p>
             </Panel>
         </Section>
@@ -129,6 +149,12 @@ export function ThemeSamplePage() {
                 </Message>
                 <Message kind='error' title='Download failed'>
                     HTTP 403 from the remote server after 3 attempts. Retry, or check the URL.
+                </Message>
+                <Message kind='info' icon='puzzle piece' title='With an icon, and dismissible'
+                         onDismiss={() => setDismissed(true)}>
+                    {dismissed
+                        ? 'Dismissed — it would be gone in the real interface.'
+                        : 'A nudge the user can clear. Only offer dismiss when clearing it is harmless.'}
                 </Message>
             </div>
         </Section>
@@ -200,6 +226,14 @@ export function ThemeSamplePage() {
                 <div style={{marginTop: 12}}>
                     <Textarea label='Notes' placeholder='Notes about this download…' minRows={2}/>
                 </div>
+                <div style={{marginTop: 12}}>
+                    <ActionInput
+                        label="This WROLPi's URL"
+                        readOnly
+                        value='https://wrolpi.local'
+                        action={<Button role='cancel' icon='copy'>Copy</Button>}
+                    />
+                </div>
                 <div style={{marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10}}>
                     <Checkbox label='Download comments' checked={comments}
                               onChange={e => setComments(e.currentTarget.checked)}/>
@@ -261,6 +295,34 @@ export function ThemeSamplePage() {
 
         <Section label='Loading placeholders'>
             <Panel><Placeholder lines={4}/></Panel>
+            <div style={{marginTop: 10}}>
+                <Panel><Loading>Loading backups…</Loading></Panel>
+            </div>
+        </Section>
+
+        <Section label='Modal'>
+            <Panel>
+                <Row>
+                    <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
+                </Row>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
+                    Semantic's compound shape is kept — Modal.Header, Modal.Content,
+                    Modal.Actions — so the 34 call sites written against it migrate by import.
+                </p>
+                <Modal open={modalOpen} onClose={() => setModalOpen(false)} size='small'>
+                    <Modal.Header>Restore Backup: channels.yaml</Modal.Header>
+                    <Modal.Content>
+                        <p style={{marginTop: 0}}>
+                            Actions sit below the body behind a hairline, right-aligned so the
+                            confirming action lands where the eye finishes reading.
+                        </p>
+                    </Modal.Content>
+                    <Modal.Actions>
+                        <Button role='cancel' onClick={() => setModalOpen(false)}>Close</Button>
+                        <Button role='save' icon='check' onClick={() => setModalOpen(false)}>Apply</Button>
+                    </Modal.Actions>
+                </Modal>
+            </Panel>
         </Section>
 
         <Section label='Danger zone'>

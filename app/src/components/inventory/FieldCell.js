@@ -1,5 +1,5 @@
 import React from "react";
-import {Input, Select} from "semantic-ui-react";
+import {Select, TextInput} from "../ui";
 import {ALL_UNITS, evaluateExpression, NUMERIC_TYPES, UNIT_GROUPS} from "./units";
 
 // Renders the correct editor for a single field/value, wiring up keyboard navigation.  The `inputRef` is attached
@@ -31,17 +31,14 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
         if (!autoFocus) {
             return;
         }
+        // Our inputs forward their ref straight to the underlying <input> DOM node, so focus + select work
+        // directly on it (unlike Semantic's Input, which wrapped the node behind `.inputRef`).
         const node = localRef.current;
-        // Semantic's Input exposes the DOM <input> via `inputRef`; selecting its contents lets the user type over
-        // the value immediately.  Other editors (e.g. Select) just take focus.
-        const dom = node && node.inputRef && node.inputRef.current;
-        if (dom) {
-            dom.focus();
-            if (dom.select) {
-                dom.select();
-            }
-        } else if (node && node.focus) {
+        if (node && node.focus) {
             node.focus();
+            if (node.select) {
+                node.select();
+            }
         }
     }, [autoFocus]);
 
@@ -81,71 +78,74 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
 
     const common = {
         value: value ?? '',
-        onChange: (e, data) => onChange(data ? data.value : e.target.value),
+        onChange: (e) => onChange(e.currentTarget.value),
         onKeyDown: handleKeyDown,
         'aria-label': field.label,
         name: field.key,
     };
 
     if (field.type === 'select') {
-        const options = (field.options || []).map(o => ({key: o, value: o, text: o}));
+        const options = (field.options || []).map(o => ({value: o, label: o}));
         // Allow clearing.
         return <Select
-            fluid search clearable selection
+            searchable
+            clearable
             ref={setRef}
             name={field.key}
-            options={options}
+            data={options}
             placeholder={field.label}
             value={value ?? ''}
-            onChange={(e, data) => onChange(data.value)}
+            onChange={value => onChange(value || '')}
             onKeyDown={handleKeyDown}
             aria-label={field.label}
         />;
     }
 
     if (field.type === 'date') {
-        return <Input {...common} type='date' fluid ref={setRef}/>;
+        return <TextInput {...common} type='date' ref={setRef}/>;
     }
 
     if (field.type === 'number' || field.type === 'calories') {
         // `calories` is a number (kcal per unit) that the Summary's ration estimate detects by type.  Text (not
         // number) input so arithmetic expressions can be typed; evaluated on blur/Enter.
-        return <Input {...common} type='text' inputMode='decimal' fluid ref={setRef} onBlur={onBlur}/>;
+        return <TextInput {...common} type='text' inputMode='decimal' ref={setRef} onBlur={onBlur}/>;
     }
 
     if (field.type === 'quantity') {
-        const unitOptions = ALL_UNITS.map(u => ({key: u, value: u, text: u}));
-        return <Input
-            type='text'
-            inputMode='decimal'
-            fluid
-            ref={setRef}
-            name={field.key}
-            value={value ?? ''}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={onBlur}
-            aria-label={field.label}
-            label={<Select
-                compact
-                name={`${field.key}_unit`}
-                options={unitOptions}
+        const unitOptions = ALL_UNITS.map(u => ({value: u, label: u}));
+        // Value + unit share one outline (the same layout `ActionInput` builds), but we need a real ref on the
+        // value input to support the parent's focus/select behavior, which a plain-function `ActionInput` cannot
+        // forward.
+        return <div className='wrolpi-action-input'>
+            <TextInput
+                type='text'
+                inputMode='decimal'
+                ref={setRef}
+                name={field.key}
+                value={value ?? ''}
+                onChange={e => onChange(e.currentTarget.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={onBlur}
+                aria-label={field.label}
+            />
+            <Select
+                data={unitOptions}
                 value={unitValue ?? field.unit ?? ''}
-                onChange={(e, data) => onUnitChange(data.value)}
+                onChange={value => onUnitChange(value)}
                 aria-label={`${field.label} unit`}
-            />}
-            labelPosition='right'
-        />;
+                style={{width: '5.5em'}}
+            />
+        </div>;
     }
 
     if (field.type === 'location') {
         // Native datalist autocomplete fed by all inventories' locations (basement, attic, ...).  Using a datalist
         // (rather than a Dropdown) keeps it a real text input, so the Tab/Enter row-entry flow still works.
-        return <Input {...common} fluid ref={setRef} list={listId}/>;
+        return <TextInput {...common} ref={setRef} list={listId}/>;
     }
 
     // text / fallback (supports a datalist via listId, e.g. catalog name suggestions on the Name field).
-    return <Input {...common} fluid ref={setRef} list={listId}/>;
+    return <TextInput {...common} ref={setRef} list={listId}/>;
 }
 
 // The list of selectable unit groups, re-exported for the field editor.

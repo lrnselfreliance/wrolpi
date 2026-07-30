@@ -1,9 +1,6 @@
 import React from "react";
-import {Button, Form, Modal, Segment} from "./Theme";
-import {Checkbox, Dropdown} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {Button, Checkbox, Grid, Message, Modal, Panel, Select} from "./ui";
 import {monthNames} from "./Common";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 
 export const dateRangeIsEmpty = (dateRange) => {
     return dateRange[0] === null && dateRange[1] === null;
@@ -39,9 +36,10 @@ export function MonthsForm({monthsSelected, setMonthsSelected}) {
         return <Checkbox
             label={label}
             checked={isChecked}
-            size='large'
-            onChange={(e, {checked}) => {
+            size='lg'
+            onChange={(e) => {
                 // Add or remove month index if the respective checkbox is checked.
+                const checked = e.currentTarget.checked;
                 if (checked) {
                     setMonthsSelected([...monthsSelected, idx]);
                 } else {
@@ -51,36 +49,37 @@ export function MonthsForm({monthsSelected, setMonthsSelected}) {
         />
     }
 
-    return <Form>
-        <Grid>
-            <Grid.Row columns={3}>
-                <Grid.Column>{monthCheckbox('January')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('February')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('March')}</Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={3}>
-                <Grid.Column>{monthCheckbox('April')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('May')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('June')}</Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={3}>
-                <Grid.Column>{monthCheckbox('July')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('August')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('September')}</Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={3}>
-                <Grid.Column>{monthCheckbox('October')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('November')}</Grid.Column>
-                <Grid.Column>{monthCheckbox('December')}</Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={4}>
-                <Grid.Column><Button onClick={handleWinter} color='blue' size='small'>Winter</Button></Grid.Column>
-                <Grid.Column><Button onClick={handleSpring} color='green' size='small'>Spring</Button></Grid.Column>
-                <Grid.Column><Button onClick={handleSummer} color='yellow' size='small'>Summer</Button></Grid.Column>
-                <Grid.Column><Button onClick={handleFall} color='red' size='small'>Fall</Button></Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+    const monthRowStyle = {display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7em', marginBottom: '0.7em'};
+    const seasonRowStyle = {display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.7em'};
+
+    return <div>
+        <div style={monthRowStyle}>
+            <div>{monthCheckbox('January')}</div>
+            <div>{monthCheckbox('February')}</div>
+            <div>{monthCheckbox('March')}</div>
+        </div>
+        <div style={monthRowStyle}>
+            <div>{monthCheckbox('April')}</div>
+            <div>{monthCheckbox('May')}</div>
+            <div>{monthCheckbox('June')}</div>
+        </div>
+        <div style={monthRowStyle}>
+            <div>{monthCheckbox('July')}</div>
+            <div>{monthCheckbox('August')}</div>
+            <div>{monthCheckbox('September')}</div>
+        </div>
+        <div style={monthRowStyle}>
+            <div>{monthCheckbox('October')}</div>
+            <div>{monthCheckbox('November')}</div>
+            <div>{monthCheckbox('December')}</div>
+        </div>
+        <div style={seasonRowStyle}>
+            <Button onClick={handleWinter} color='blue' size='small'>Winter</Button>
+            <Button onClick={handleSpring} color='green' size='small'>Spring</Button>
+            <Button onClick={handleSummer} color='yellow' size='small'>Summer</Button>
+            <Button onClick={handleFall} color='red' size='small'>Fall</Button>
+        </div>
+    </div>
 }
 
 export function DateRangeForm({dateRange, setDateRange}) {
@@ -89,20 +88,16 @@ export function DateRangeForm({dateRange, setDateRange}) {
 
     let yearRange = [];
     for (let i = 1970; i <= currentYear; i++) {
-        yearRange = [...yearRange, {
-            key: i,
-            text: i,
-            value: i,
-        }];
+        yearRange = [...yearRange, {value: i.toString(), label: i.toString()}];
     }
 
-    const handleFromYear = (e, {value}) => {
+    const handleFromYear = (value) => {
         const toYear = dateRange[1] || currentYear;
-        setDateRange([value, toYear]);
+        setDateRange([value ? parseInt(value) : null, toYear]);
     }
 
-    const handleToYear = (e, {value}) => {
-        setDateRange([dateRange[0], value]);
+    const handleToYear = (value) => {
+        setDateRange([dateRange[0], value ? parseInt(value) : null]);
     }
 
     React.useEffect(() => {
@@ -113,37 +108,33 @@ export function DateRangeForm({dateRange, setDateRange}) {
         }
     }, [dateRange])
 
-    const errorMessage = error && <Message error content={error}/>;
+    const errorMessage = error && <Message kind='error'>{error}</Message>;
 
     return <React.Fragment>
-        <Form>
-            <Grid>
-                <Grid.Row columns={2}>
-                    <Grid.Column>
-                        <Form.Field>
-                            <label>From Year</label>
-                            <Dropdown search scrolling fluid
-                                      options={yearRange}
-                                      value={dateRange[0]}
-                                      onChange={handleFromYear}
-                                      error={!!error}
-                            />
-                        </Form.Field>
-                    </Grid.Column>
-                    <Grid.Column>
-                        <Form.Field>
-                            <label>To Year</label>
-                            <Dropdown search scrolling fluid
-                                      options={yearRange.reverse()}
-                                      value={dateRange[1]}
-                                      onChange={handleToYear}
-                                      error={!!error}
-                            />
-                        </Form.Field>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Form>
+        <Grid>
+            <Grid.Col span={{base: 12, sm: 6}}>
+                <label>From Year</label>
+                <Select
+                    searchable
+                    data={yearRange}
+                    value={dateRange[0] != null ? dateRange[0].toString() : null}
+                    onChange={handleFromYear}
+                    error={!!error}
+                    maxDropdownHeight={280}
+                />
+            </Grid.Col>
+            <Grid.Col span={{base: 12, sm: 6}}>
+                <label>To Year</label>
+                <Select
+                    searchable
+                    data={[...yearRange].reverse()}
+                    value={dateRange[1] != null ? dateRange[1].toString() : null}
+                    onChange={handleToYear}
+                    error={!!error}
+                    maxDropdownHeight={280}
+                />
+            </Grid.Col>
+        </Grid>
         {errorMessage}
     </React.Fragment>
 }
@@ -221,7 +212,7 @@ export function DateSelectorButton({
 
     return <React.Fragment>
         <Button
-            icon='calendar alternate'
+            icon='calendar'
             onClick={handleOpen}
             color={color}
             {...buttonProps}
@@ -233,16 +224,16 @@ export function DateSelectorButton({
         >
             <Modal.Header>Filter by Published Date</Modal.Header>
             <Modal.Content>
-                <Segment>
+                <Panel>
                     <DateRangeForm dateRange={dateRange} setDateRange={localOnSetDateRange}/>
-                </Segment>
-                <Segment>
+                </Panel>
+                <Panel>
                     <MonthsForm monthsSelected={monthsSelected} setMonthsSelected={setMonthsSelected}/>
-                </Segment>
+                </Panel>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={handleClear} secondary>Clear</Button>
-                <Button onClick={handleClose}>Close</Button>
+                <Button onClick={handleClear} role='cancel'>Clear</Button>
+                <Button onClick={handleClose} role='primary'>Close</Button>
             </Modal.Actions>
         </Modal>
     </React.Fragment>

@@ -7,8 +7,7 @@ import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
 import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefaultLocation} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
-import {Checkbox, Icon, Segment} from "semantic-ui-react";
-import {Header} from "./Theme";
+import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 
 // Terrain DEM file prefix for hillshade and contours.
@@ -256,14 +255,17 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         });
     }, [map, visibilityRef]);
 
+    // A floating control drawn over the map canvas: it is part of the app's interface,
+    // not map data, so it is never filtered — it stays plain, token-colored chrome in
+    // every theme, same as the nav bar.
     const panelStyle = {
         position: "absolute",
         top: 10,
         left: 10,
         zIndex: 1000,
-        background: "white",
-        borderRadius: 8,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+        background: "var(--panel)",
+        border: "1px solid var(--border)",
+        color: "var(--text)",
         maxHeight: "calc(100vh - 120px)",
         overflowY: "auto",
         minWidth: iconOnly ? 0 : 200,
@@ -279,7 +281,7 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         : {
             padding: "8px 12px", cursor: "pointer", fontWeight: 600,
             display: "flex", justifyContent: "space-between", alignItems: "center",
-            borderBottom: collapsed ? "none" : "1px solid #eee", userSelect: "none",
+            borderBottom: collapsed ? "none" : "1px solid var(--border)", userSelect: "none",
         };
 
     return <div style={panelStyle}>
@@ -302,16 +304,15 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
                     <Checkbox
                         label={name}
                         checked={visibility[name]}
-                        onChange={(e, {checked}) => toggleGroup(name, checked)}
+                        onChange={(e) => toggleGroup(name, e.currentTarget.checked)}
                     />
                 </div>
             )}
-            <div style={{borderTop: "1px solid #eee", marginTop: 6, paddingTop: 6}}>
-                <Checkbox
-                    toggle
+            <div style={{borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6}}>
+                <Toggle
                     label={scaleUnit === "imperial" ? "Imperial" : "Metric"}
                     checked={scaleUnit === "imperial"}
-                    onChange={(e, {checked}) => onScaleUnitChange(checked ? "imperial" : "metric")}
+                    onChange={(e) => onScaleUnitChange(e.currentTarget.checked ? "imperial" : "metric")}
                 />
             </div>
         </div>}
@@ -324,21 +325,22 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
     const [label, setLabel] = useState("");
     const [color, setColor] = useState("red");
 
+    // A floating dialog over the canvas — page chrome, not map data, so it is never
+    // filtered and keeps flat, bordered surfaces like the rest of the app (no shadow).
     return <div style={{
         position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-        zIndex: 1002, background: "white", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+        zIndex: 1002, background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)",
         padding: 16, minWidth: 250,
     }}>
         <div style={{fontWeight: 600, marginBottom: 8}}>Add Pin</div>
-        <div style={{fontSize: 12, color: "#666", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
-        <input
-            type="text"
+        <div style={{fontSize: 12, color: "var(--muted)", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
+        <TextInput
             placeholder="Label"
             value={label}
             onChange={e => setLabel(e.target.value)}
             autoFocus
             onKeyDown={e => e.key === "Enter" && label.trim() && onSubmit(label.trim(), color)}
-            style={{width: "100%", padding: "6px 8px", marginBottom: 8, border: "1px solid #ccc", borderRadius: 4}}
+            style={{marginBottom: 8}}
         />
         <div style={{display: "flex", gap: 6, marginBottom: 12}}>
             {PIN_COLORS.map(c =>
@@ -347,20 +349,21 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
                     onClick={() => setColor(c)}
                     style={{
                         width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
-                        border: color === c ? "3px solid #333" : "2px solid #ccc",
+                        border: color === c ? "3px solid var(--text)" : "2px solid var(--border)",
                     }}
                 />
             )}
         </div>
         <div style={{display: "flex", gap: 8, justifyContent: "flex-end"}}>
-            <button onClick={onCancel} style={{padding: "4px 12px", cursor: "pointer"}}>Cancel</button>
-            <button
+            <Button role='cancel' size='sm' onClick={onCancel}>Cancel</Button>
+            <Button
+                role='primary'
+                size='sm'
                 onClick={() => label.trim() && onSubmit(label.trim(), color)}
                 disabled={!label.trim()}
-                style={{padding: "4px 12px", cursor: "pointer", background: "#6435c9", color: "white", border: "none", borderRadius: 4}}
             >
                 Add
-            </button>
+            </Button>
         </div>
     </div>;
 }
@@ -474,6 +477,8 @@ function MapSearch({map}) {
         return parts.join(" \u00b7 ");
     };
 
+    // Floating search chrome over the canvas — page interface, not map data, so it is
+    // never filtered.  Flat surfaces: bordered, no box-shadow, token colors only.
     return <div ref={containerRef} style={{
         position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
         zIndex: 5, width: 320, maxWidth: "calc(100% - 100px)",
@@ -486,24 +491,23 @@ function MapSearch({map}) {
             onFocus={() => results.length > 0 && setShowResults(true)}
             onKeyDown={handleKeyDown}
             style={{
-                width: "100%", padding: "8px 12px", border: "1px solid #ccc", borderRadius: 4,
-                fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.2)", background: "white",
+                width: "100%", padding: "8px 12px", border: "1px solid var(--border)",
+                fontSize: 14, background: "var(--panel)", color: "var(--text)",
             }}
         />
         {showResults && results.length > 0 && <div style={{
-            background: "white", border: "1px solid #ccc", borderTop: "none",
-            borderRadius: "0 0 4px 4px", maxHeight: 300, overflowY: "auto",
-            boxShadow: "0 4px 8px rgba(0,0,0,0.2)",
+            background: "var(--panel)", border: "1px solid var(--border)", borderTop: "none",
+            maxHeight: 300, overflowY: "auto",
         }}>
             {results.map((r, i) => <div
                 key={i}
                 onClick={() => handleSelect(r)}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
-                onMouseLeave={e => e.target.style.background = "transparent"}
-                style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee"}}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--head)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)"}}
             >
                 <div style={{fontWeight: 500}}>{r.name}</div>
-                {resultSubtext(r) && <div style={{fontSize: 11, color: "#888"}}>{resultSubtext(r)}</div>}
+                {resultSubtext(r) && <div style={{fontSize: 11, color: "var(--muted)"}}>{resultSubtext(r)}</div>}
             </div>)}
         </div>}
     </div>;
@@ -906,12 +910,12 @@ export default function MapViewer() {
     }, [addingPin, loadPins]);
 
     if (error) {
-        return <Segment>
+        return <Panel>
             <Header as="h3">Map failed to load</Header>
             <p>Your browser may not support WebGL. You can access the standalone map viewer
                 at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
             <p>Error: {error}</p>
-        </Segment>;
+        </Panel>;
     }
 
     return <div ref={mapContainer} style={{position: "relative", width: "100%", height: "85vh"}}>

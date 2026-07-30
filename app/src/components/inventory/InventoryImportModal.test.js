@@ -1,7 +1,6 @@
 import React from "react";
-import {fireEvent, render, screen, waitFor, within} from "@testing-library/react";
+import {fireEvent, render, screen, waitFor, within} from "../../test-utils";
 
-jest.mock("react-semantic-toasts-2", () => ({toast: jest.fn()}));
 jest.mock("../../api", () => ({
     getInventoryBackups: jest.fn(),
     postInventoryRestorePreview: jest.fn(),

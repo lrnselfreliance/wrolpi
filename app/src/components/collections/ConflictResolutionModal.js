@@ -1,7 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {Card, Grid, Icon, Image, Label, Segment, Button as SButton} from 'semantic-ui-react';
-import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
-import {Button, Modal} from '../Theme';
+import {IconVideo} from '@tabler/icons-react';
+import {Button, Icon, IconButton, Label, Message, Modal, Panel, Stack} from '../ui';
 import {deleteFileGroups} from '../../api';
 import {humanFileSize, isoDatetimeToString} from '../Common';
 import {TaggedDeleteConfirmModal} from '../TaggedDeleteConfirmModal';
@@ -57,92 +56,91 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
     };
 
     return (
-        <Card fluid>
-            <Card.Content>
-                {localError && (
-                    <Message negative size='small' style={{marginBottom: '0.5em'}}>
-                        <Icon name='warning'/> {localError}
+        <Panel style={{marginBottom: '0.5em'}}>
+            {localError && (
+                <div style={{marginBottom: '0.5em'}}>
+                    <Message kind='error' icon='warning'>
+                        {localError}
                     </Message>
-                )}
-                <Grid>
-                    <Grid.Row>
-                        {/* Poster/Thumbnail column */}
-                        <Grid.Column width={4}>
-                            {file.poster_path ? (
-                                <Image
-                                    src={`/media/${file.poster_path}`}
-                                    size='small'
-                                    style={{maxHeight: '100px', objectFit: 'cover'}}
-                                />
-                            ) : (
-                                <Segment placeholder style={{height: '80px'}}>
-                                    <Icon
-                                        name={file.model_type === 'video' ? 'video' : 'file'}
-                                        size='large'
-                                        disabled
-                                    />
-                                </Segment>
-                            )}
-                        </Grid.Column>
+                </div>
+            )}
+            <div style={{display: 'flex', gap: '1em', alignItems: 'center'}}>
+                {/* Poster/Thumbnail column */}
+                <div style={{flex: '0 0 100px'}}>
+                    {file.poster_path ? (
+                        <img
+                            src={`/media/${file.poster_path}`}
+                            alt=''
+                            style={{width: '100%', height: '80px', objectFit: 'cover'}}
+                        />
+                    ) : (
+                        <div style={{
+                            height: '80px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '1px solid var(--border)',
+                            color: 'var(--muted)',
+                        }}>
+                            {file.model_type === 'video'
+                                ? <Icon component={IconVideo} size='large'/>
+                                : <Icon name='file' size='large'/>}
+                        </div>
+                    )}
+                </div>
 
-                        {/* File info column */}
-                        <Grid.Column width={10}>
-                            <Card.Header style={{marginBottom: '0.5em'}}>
-                                {file.title || 'Untitled'}
-                                {isRecommended && (
-                                    <Label color='green' size='small' style={{marginLeft: '0.5em'}}>
-                                        <Icon name='star'/> Recommended to Keep
-                                    </Label>
-                                )}
-                            </Card.Header>
-                            <Card.Meta style={{wordBreak: 'break-all'}}>
-                                <Icon name='folder open outline'/> {file.current_path}
-                            </Card.Meta>
-                            <Card.Description>
-                                <div style={{marginTop: '0.5em'}}>
-                                    {file.size > 0 && (
-                                        <Label size='small'>
-                                            <Icon name='hdd'/> {humanFileSize(file.size)}
-                                        </Label>
-                                    )}
-                                    {file.published_datetime && (
-                                        <Label size='small'>
-                                            <Icon name='calendar'/> {isoDatetimeToString(file.published_datetime)}
-                                        </Label>
-                                    )}
-                                    {file.source_id && (
-                                        <Label size='small'>
-                                            <Icon name='linkify'/> {file.source_id}
-                                        </Label>
-                                    )}
-                                    {file.quality_rank !== null && file.quality_rank !== undefined && (
-                                        <Label size='small' color='purple'>
-                                            <Icon name='star outline'/> {file.quality_rank}
-                                        </Label>
-                                    )}
-                                    <Label size='small' color={file.model_type === 'video' ? 'blue' : 'orange'}>
-                                        {file.model_type}
-                                    </Label>
-                                </div>
-                            </Card.Description>
-                        </Grid.Column>
+                {/* File info column */}
+                <div style={{flex: '1 1 auto', minWidth: 0}}>
+                    <div style={{marginBottom: '0.5em', fontWeight: 600}}>
+                        {file.title || 'Untitled'}
+                        {isRecommended && (
+                            <Label color='green' style={{marginLeft: '0.5em'}}>
+                                <Icon name='star'/> Recommended to Keep
+                            </Label>
+                        )}
+                    </div>
+                    <div style={{wordBreak: 'break-all', color: 'var(--muted)', fontSize: '0.9em'}}>
+                        <Icon name='folder open outline'/> {file.current_path}
+                    </div>
+                    <div style={{marginTop: '0.5em', display: 'flex', flexWrap: 'wrap', gap: '0.4em'}}>
+                        {file.size > 0 && (
+                            <Label>
+                                <Icon name='hdd'/> {humanFileSize(file.size)}
+                            </Label>
+                        )}
+                        {file.published_datetime && (
+                            <Label>
+                                <Icon name='calendar'/> {isoDatetimeToString(file.published_datetime)}
+                            </Label>
+                        )}
+                        {file.source_id && (
+                            <Label>
+                                <Icon name='linkify'/> {file.source_id}
+                            </Label>
+                        )}
+                        {file.quality_rank !== null && file.quality_rank !== undefined && (
+                            <Label color='violet'>
+                                <Icon name='star outline'/> {file.quality_rank}
+                            </Label>
+                        )}
+                        <Label color={file.model_type === 'video' ? 'blue' : 'orange'}>
+                            {file.model_type}
+                        </Label>
+                    </div>
+                </div>
 
-                        {/* Delete button column */}
-                        <Grid.Column width={2} textAlign='center' verticalAlign='middle'>
-                            <SButton
-                                color='red'
-                                icon
-                                loading={isDeleting}
-                                disabled={isDeleting}
-                                onClick={() => handleDelete(false)}
-                                title='Delete this file'
-                            >
-                                <Icon name='trash'/>
-                            </SButton>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </Card.Content>
+                {/* Delete button column */}
+                <div style={{flex: '0 0 auto'}}>
+                    <IconButton
+                        role='danger'
+                        icon='trash'
+                        label='Delete this file'
+                        loading={isDeleting}
+                        disabled={isDeleting}
+                        onClick={() => handleDelete(false)}
+                    />
+                </div>
+            </div>
             <TaggedDeleteConfirmModal
                 open={taggedFileGroups !== null}
                 taggedFileGroups={taggedFileGroups}
@@ -152,7 +150,7 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
                     await handleDelete(true);
                 }}
             />
-        </Card>
+        </Panel>
     );
 }
 
@@ -212,7 +210,6 @@ export function ConflictResolutionModal({
     };
 
     const totalConflicts = localConflicts.length;
-    const totalFiles = localConflicts.reduce((sum, c) => sum + c.conflicting_files.length, 0);
 
     return (
         <Modal
@@ -222,11 +219,10 @@ export function ConflictResolutionModal({
             size='fullscreen'
         >
             <Modal.Header>
-                <Icon name='warning sign' color='yellow'/> Resolve Conflicts Before Reorganizing
+                <Icon name='warning sign'/> Resolve Conflicts Before Reorganizing
             </Modal.Header>
             <Modal.Content scrolling>
-                <Message warning>
-                    <Message.Header>Destination Path Conflicts Detected</Message.Header>
+                <Message kind='warning' title='Destination Path Conflicts Detected'>
                     <p>
                         {totalConflicts} destination {totalConflicts === 1 ? 'path has' : 'paths have'}{' '}
                         multiple files that would be moved there. This typically happens when the same{' '}
@@ -238,56 +234,58 @@ export function ConflictResolutionModal({
                     </p>
                 </Message>
 
-                {localConflicts.map((conflict, idx) => {
-                    // Find the highest quality rank in this conflict (for video recommendations)
-                    const hasRanks = conflict.conflicting_files.some(
-                        f => f.quality_rank !== null && f.quality_rank !== undefined
-                    );
-                    const highestRank = hasRanks
-                        ? Math.max(...conflict.conflicting_files.map(f => f.quality_rank || 0))
-                        : null;
-                    // Check if there are multiple files with the same highest rank
-                    const highestRankCount = hasRanks
-                        ? conflict.conflicting_files.filter(f => f.quality_rank === highestRank).length
-                        : 0;
+                <Stack>
+                    {localConflicts.map((conflict, idx) => {
+                        // Find the highest quality rank in this conflict (for video recommendations)
+                        const hasRanks = conflict.conflicting_files.some(
+                            f => f.quality_rank !== null && f.quality_rank !== undefined
+                        );
+                        const highestRank = hasRanks
+                            ? Math.max(...conflict.conflicting_files.map(f => f.quality_rank || 0))
+                            : null;
+                        // Check if there are multiple files with the same highest rank
+                        const highestRankCount = hasRanks
+                            ? conflict.conflicting_files.filter(f => f.quality_rank === highestRank).length
+                            : 0;
 
-                    return (
-                        <Segment key={idx}>
-                            <Label attached='top' color='grey'>
-                                <Icon name='folder'/> Destination: {conflict.destination_path}
-                                <Label.Detail>{conflict.conflicting_files.length} files</Label.Detail>
-                            </Label>
+                        return (
+                            <Panel key={idx}>
+                                <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '1em'}}>
+                                    <Icon name='folder'/>
+                                    <strong>Destination: {conflict.destination_path}</strong>
+                                    <Label>{conflict.conflicting_files.length} files</Label>
+                                </div>
 
-                            <div style={{marginTop: '1em'}}>
-                                {conflict.conflicting_files.map((file, fileIdx) => {
-                                    // Only show "Recommended" if there's a clear winner (one file with highest rank)
-                                    const isRecommended = hasRanks &&
-                                        highestRankCount === 1 &&
-                                        file.quality_rank === highestRank;
+                                <div>
+                                    {conflict.conflicting_files.map((file, fileIdx) => {
+                                        // Only show "Recommended" if there's a clear winner (one file with highest rank)
+                                        const isRecommended = hasRanks &&
+                                            highestRankCount === 1 &&
+                                            file.quality_rank === highestRank;
 
-                                    return (
-                                        <ConflictFileCard
-                                            key={file.file_group_id}
-                                            file={file}
-                                            onDelete={handleFileDelete}
-                                            isRecommended={isRecommended}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </Segment>
-                    );
-                })}
+                                        return (
+                                            <ConflictFileCard
+                                                key={file.file_group_id}
+                                                file={file}
+                                                onDelete={handleFileDelete}
+                                                isRecommended={isRecommended}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </Panel>
+                        );
+                    })}
+                </Stack>
 
                 {localConflicts.length === 0 && (
-                    <Message success>
-                        <Message.Header>All Conflicts Resolved</Message.Header>
+                    <Message kind='success' title='All Conflicts Resolved'>
                         <p>You can now proceed with the reorganization.</p>
                     </Message>
                 )}
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={handleClose}>
+                <Button role='cancel' onClick={handleClose}>
                     {localConflicts.length === 0 ? 'Done' : 'Close'}
                 </Button>
             </Modal.Actions>

@@ -1,5 +1,5 @@
 import {emptyToNull} from "./components/Common";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "./components/ui";
 import _ from "lodash";
 import {
     API_URI,

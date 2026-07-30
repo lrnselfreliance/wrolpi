@@ -2,7 +2,7 @@ import React from "react";
 import _ from "lodash";
 import {InfoPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
 import {Form, Icon, TextArea} from "../components/Theme";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {Message} from "../components/ui";
 
 
 async function asyncNoOp() {
@@ -341,13 +341,20 @@ export function InputForm({
     const [inputProps, inputAttrs] = form.getInputProps({name, path, validator, type, required, onChange});
     inputProps.disabled = disabled || inputProps.disabled;
 
+    /*
+     * Callers build these with Semantic's shape -- {content, header, positive|negative} --
+     * and the pages that build them are migrating separately, so both spellings are
+     * accepted until they have all moved to {kind, title}.
+     */
     let messageElm = null;
-    if (message && message.positive) {
-        messageElm = <Message {...message} positive/>;
-    } else if (message && message.negative) {
-        messageElm = <Message {...message}/>;
-    } else if (message) {
-        messageElm = <Message {...message}/>;
+    if (message) {
+        const kind = message.kind
+            || (message.positive && 'success')
+            || (message.negative && 'error')
+            || 'info';
+        messageElm = <Message kind={kind} title={message.title ?? message.header}>
+            {message.children ?? message.content}
+        </Message>;
     }
 
     return <>

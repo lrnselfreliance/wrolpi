@@ -65,7 +65,7 @@ describe('CollectionReorganizeModal', () => {
         renderWithProviders(<CollectionReorganizeModal {...defaultProps} />);
 
         // Should show loading initially
-        expect(screen.getByText(/Loading Preview/i)).toBeInTheDocument();
+        expect(screen.getByText(/Analyzing files/i)).toBeInTheDocument();
 
         // Wait for preview to load
         await waitFor(() => {

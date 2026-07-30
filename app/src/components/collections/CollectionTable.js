@@ -1,11 +1,10 @@
 import React, {useContext} from 'react';
 import {Link} from 'react-router';
-import {Message, PlaceholderHeader, PlaceholderLine, TableCell, TableRow} from 'semantic-ui-react';
-import {Placeholder, Table} from '../Theme';
+import {Button, Message, Placeholder, Table} from '../ui';
 import _ from 'lodash';
 import {SortableTable} from '../SortableTable';
 import {formatFrequency, humanFileSize} from '../Common';
-import {Media, ThemeContext} from '../../contexts/contexts';
+import {Media} from '../../contexts/contexts';
 import {TagsContext} from '../../Tags';
 
 /**
@@ -47,16 +46,24 @@ function getCollectionSearchLink(collection, routes, primaryKey) {
 }
 
 /**
+ * Convert a Semantic-style relative column width (1-16) into a CSS percentage.
+ * @param {number} width - Relative width, 1-16
+ * @returns {Object|undefined} A style object, or undefined when no width is configured
+ */
+function widthStyle(width) {
+    return width ? {width: `${(width / 16) * 100}%`} : undefined;
+}
+
+/**
  * Render a single table row for desktop view.
  *
  * @param {Object} collection - The collection data
  * @param {Array} columns - Column configurations
  * @param {Object} routes - Routes configuration
- * @param {string} inverted - Inverted theme class
  * @param {Function} SingleTag - Tag component from context
  * @param {Function} onRowClick - Optional click handler
  */
-function renderRow(collection, columns, routes, inverted, SingleTag, onRowClick) {
+function renderRow(collection, columns, routes, SingleTag, onRowClick) {
     const cells = columns.map((col) => {
         let value = collection[col.key];
 
@@ -64,9 +71,8 @@ function renderRow(collection, columns, routes, inverted, SingleTag, onRowClick)
         if (col.type === 'actions') {
             const idField = getIdField(routes);
             const editRoute = routes?.edit?.replace(':id', collection[idField]);
-            const buttonClass = `ui button secondary ${inverted}`;
-            return <Table.Cell key={col.key} textAlign={col.align || 'right'} width={col.width}>
-                {editRoute && <Link className={buttonClass} to={editRoute}>Edit</Link>}
+            return <Table.Cell key={col.key} style={{textAlign: col.align || 'right', ...widthStyle(col.width)}}>
+                {editRoute && <Button role='cancel' component={Link} to={editRoute} size='sm'>Edit</Button>}
             </Table.Cell>;
         }
 
@@ -90,7 +96,7 @@ function renderRow(collection, columns, routes, inverted, SingleTag, onRowClick)
             }
         }
 
-        return <Table.Cell key={col.key} textAlign={col.align || 'left'} width={col.width}>
+        return <Table.Cell key={col.key} style={{textAlign: col.align || 'left', ...widthStyle(col.width)}}>
             {value || '-'}
         </Table.Cell>;
     });
@@ -114,8 +120,8 @@ function MobileCollectionRow({collection, mobileColumns, routes}) {
     const editRoute = routes?.edit?.replace(':id', collection[idField]);
     const searchLink = getCollectionSearchLink(collection, routes, primaryColumn.key);
 
-    return <TableRow verticalAlign='top'>
-        <TableCell>
+    return <Table.Row style={{verticalAlign: 'top'}}>
+        <Table.Cell>
             {searchLink ? (
                 <Link to={searchLink}>
                     <strong>{collection[primaryColumn.key]}</strong>
@@ -140,11 +146,11 @@ function MobileCollectionRow({collection, mobileColumns, routes}) {
                     );
                 })
             }
-        </TableCell>
-        <TableCell textAlign='right'>
-            {editRoute && <Link className="ui button secondary" to={editRoute}>Edit</Link>}
-        </TableCell>
-    </TableRow>;
+        </Table.Cell>
+        <Table.Cell style={{textAlign: 'right'}}>
+            {editRoute && <Button role='cancel' component={Link} to={editRoute} size='sm'>Edit</Button>}
+        </Table.Cell>
+    </Table.Row>;
 }
 
 /**
@@ -165,38 +171,26 @@ export function CollectionTable({
                                     onRowClick,
                                     emptyMessage = 'No items yet'
                                 }) {
-    const {inverted} = useContext(ThemeContext);
     const {SingleTag} = useContext(TagsContext);
 
     // Loading state
     if (collections === null) {
-        return <Placeholder>
-            <PlaceholderHeader>
-                <PlaceholderLine/>
-                <PlaceholderLine/>
-            </PlaceholderHeader>
-        </Placeholder>;
+        return <Placeholder lines={2}/>;
     }
 
     // Error state
     if (collections === undefined) {
-        return <Message error>
-            <Message.Header>Could not fetch collections</Message.Header>
-        </Message>;
+        return <Message kind='error' title='Could not fetch collections'/>;
     }
 
     // Empty state
     if (collections && collections.length === 0) {
-        return <Message>
-            <Message.Header>{emptyMessage}</Message.Header>
-        </Message>;
+        return <Message title={emptyMessage}/>;
     }
 
     // No columns configured
     if (!columns || columns.length === 0) {
-        return <Message warning>
-            <Message.Header>No columns configured</Message.Header>
-        </Message>;
+        return <Message kind='warning' title='No columns configured'/>;
     }
 
     // Filter collections by search string
@@ -244,7 +238,7 @@ export function CollectionTable({
     return <>
         <Media at='mobile'>
             <SortableTable
-                tableProps={{striped: true, size: 'small', unstackable: true}}
+                tableProps={{striped: true, size: 'sm'}}
                 data={filteredCollections}
                 rowFunc={(collection) => <MobileCollectionRow key={collection.id} collection={collection}
                                                               mobileColumns={mobileColumns} routes={routes}/>}
@@ -255,9 +249,9 @@ export function CollectionTable({
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <SortableTable
-                tableProps={{striped: true, size: 'large', unstackable: true, compact: true}}
+                tableProps={{striped: true, size: 'lg', verticalSpacing: 'xs'}}
                 data={filteredCollections}
-                rowFunc={(collection) => renderRow(collection, columns, routes, inverted, SingleTag, onRowClick)}
+                rowFunc={(collection) => renderRow(collection, columns, routes, SingleTag, onRowClick)}
                 rowKey='id'
                 tableHeaders={headers}
                 defaultSortColumn={defaultSortColumn}

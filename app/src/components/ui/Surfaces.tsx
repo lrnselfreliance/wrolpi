@@ -21,6 +21,12 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
     subheader?: React.ReactNode;
     /** Hairline rule underneath, separating the section from what follows. */
     dividing?: boolean;
+    /**
+     * A token colour name (`green`, `red`, ...) for a heading that carries meaning —
+     * "3 items to add" against "2 items to remove".  Call sites kept reaching for an
+     * inline style to do this, which is how a hex ends up in the markup.
+     */
+    color?: string;
 }
 
 /**
@@ -30,11 +36,17 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
  * Sizes come from ui.css, keyed on the level, rather than each call site
  * choosing — that is what keeps the type scale a scale.
  */
-export function Header({as = 'h3', icon, subheader, dividing, className, children, ...props}: HeaderProps) {
+export function Header({
+    as = 'h3', icon, subheader, dividing, color, className, style, children, ...props
+}: HeaderProps) {
     const Tag = as;
     return <div className={['wrolpi-header', dividing ? 'wrolpi-header-dividing' : '', className]
         .filter(Boolean).join(' ')}>
-        <Tag className={`wrolpi-header-text wrolpi-header-${as}`} {...props}>
+        <Tag
+            className={`wrolpi-header-text wrolpi-header-${as}`}
+            style={color ? {color: `var(--${color})`, ...style} : style}
+            {...props}
+        >
             {icon && (typeof icon === 'string'
                 ? <Icon name={icon} size='medium'/>
                 : <Icon component={icon} size='medium'/>)}

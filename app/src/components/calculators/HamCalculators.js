@@ -1,9 +1,7 @@
 import React from "react";
-import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Header, Table} from "../Theme";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {roundDigits} from "../Common";
+import {Grid, Header, Table} from "../ui";
 import {ColoredInput} from "../Apps";
+import {roundDigits} from "../Common";
 
 // ---------------------------------------------------------------------------
 // Pure antenna math
@@ -212,9 +210,10 @@ export function DipoleAntennaCalculator() {
                 setMhzInputValue(storageMhzValue);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleMhzChange = (e, {value}) => {
+    const handleMhzChange = (value) => {
         setMhzInputValue(value);
         const parsed = parseFloat(value);
         // Require a finite positive frequency so overflow (e.g. 1e999 → Infinity) does not stick.
@@ -222,7 +221,7 @@ export function DipoleAntennaCalculator() {
         localStorage.setItem(mhzStorageKey, value);
     }
 
-    const handleWaveChange = (e, {value}) => {
+    const handleWaveChange = (value) => {
         setWaveInputValue(value);
         const parsed = parseFloat(value);
         if (value && Number.isFinite(parsed) && parsed > 0) {
@@ -257,76 +256,74 @@ export function DipoleAntennaCalculator() {
     return <>
         <Header as='h2'>Dipole Antenna</Header>
 
-        <Grid columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <ColoredInput fluid
-                                  label='MHz'
-                                  labelPosition='right'
-                                  value={mhzInputValue}
-                                  onChange={handleMhzChange}
-                                  onSelect={e => handleClick(e, 'mhz')}
-                                  color={mhzSelected ? null : 'grey'}
-                    />
-                </Grid.Column>
-                <Grid.Column>
-                    <ColoredInput fluid
-                                  label='Wavelength'
-                                  labelPosition='right'
-                                  value={waveInputValue}
-                                  onChange={handleWaveChange}
-                                  onSelect={e => handleClick(e, 'wave')}
-                                  color={mhzSelected ? 'grey' : null}
-                    />
-                </Grid.Column>
-            </Grid.Row>
+        <Grid>
+            <Grid.Col span={{base: 12, sm: 6}}>
+                <ColoredInput fluid
+                              label='MHz'
+                              labelPosition='right'
+                              value={mhzInputValue}
+                              onChange={e => handleMhzChange(e.target.value)}
+                              onSelect={e => handleClick(e, 'mhz')}
+                              color={mhzSelected ? null : 'grey'}
+                />
+            </Grid.Col>
+            <Grid.Col span={{base: 12, sm: 6}}>
+                <ColoredInput fluid
+                              label='Wavelength'
+                              labelPosition='right'
+                              value={waveInputValue}
+                              onChange={e => handleWaveChange(e.target.value)}
+                              onSelect={e => handleClick(e, 'wave')}
+                              color={mhzSelected ? 'grey' : null}
+                />
+            </Grid.Col>
         </Grid>
 
         {ANTENNA_FRACTIONS.map(i => {
             const [feet_, inches_] = convertFeetToFeetAndInches(feet * i.multiplier);
             const [half_feet, half_inches] = convertFeetToFeetAndInches(feet * i.multiplier / 2);
-            return <Table key={i.name} size='large' striped unstackable>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell>{i.name}</TableHeaderCell>
-                        <TableHeaderCell>Leg Length</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
+            return <Table key={i.name} style={{marginTop: '1em'}}>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>{i.name}</Table.HeaderCell>
+                        <Table.HeaderCell>Leg Length</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
 
-                <TableBody>
-                    <TableRow>
-                        <TableCell>
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell>
                             {feet_} ft. {inches_} in.
-                        </TableCell>
-                        <TableCell>
+                        </Table.Cell>
+                        <Table.Cell>
                             {half_feet} ft. {half_inches} in.
-                        </TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell>
+                        </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>
                             {roundDigits(inches * i.multiplier)} inches
-                        </TableCell>
-                        <TableCell>
+                        </Table.Cell>
+                        <Table.Cell>
                             {roundDigits(inches * i.multiplier / 2)} inches
-                        </TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell>
+                        </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>
                             {roundDigits(meters * i.multiplier)} meters
-                        </TableCell>
-                        <TableCell>
+                        </Table.Cell>
+                        <Table.Cell>
                             {roundDigits(meters * i.multiplier / 2)} meters
-                        </TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell>
+                        </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>
                             {roundDigits(cm * i.multiplier)} cm.
-                        </TableCell>
-                        <TableCell>
+                        </Table.Cell>
+                        <Table.Cell>
                             {roundDigits(cm * i.multiplier / 2)} cm.
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
+                        </Table.Cell>
+                    </Table.Row>
+                </Table.Body>
             </Table>
         })}
     </>

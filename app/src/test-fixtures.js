@@ -62,7 +62,8 @@ export const settingsFixture = (overrides = {}) => ({
     ignore_outdated_zims: false,
     // Relative to the media directory, as the API returns them.
     ignored_directories: [],
-    log_level: 'info',
+    // Python logging integers: 40 error, 30 warning, 20 info, 10 debug, 5 trace.
+    log_level: 20,
     map_default_location: null,
     map_destination: 'map',
     // `/media/wrolpi` on a Pi, but the API is the authority on this and a test that
@@ -108,6 +109,7 @@ export const statusFixture = (overrides = {}) => ({
         disabled: false,
         stopped: false,
         outside_download_window: false,
+        daily_limit_reached: false,
     },
     drives_stats: [],
     flags: {},

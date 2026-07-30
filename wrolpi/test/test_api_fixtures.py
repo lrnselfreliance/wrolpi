@@ -140,6 +140,84 @@ async def test_status_fixture_matches_the_spec(async_client):
     )
 
 
+def json_kind(value) -> str:
+    """The OpenAPI `type` a Python value corresponds to."""
+    # bool before int: bool is a subclass of int, so the order matters.
+    if isinstance(value, bool):
+        return 'boolean'
+    if isinstance(value, int):
+        return 'integer'
+    if isinstance(value, float):
+        return 'number'
+    if isinstance(value, str):
+        return 'string'
+    if isinstance(value, dict):
+        return 'object'
+    if isinstance(value, list):
+        return 'array'
+    return 'null'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ['/api/settings', '/api/status'])
+async def test_the_spec_declares_the_right_types(async_client, test_directory, path):
+    """Matching names is not matching shapes.
+
+    `StatusResponse` declared `downloads: int` while the handler has long sent the download
+    manager's summary object, and `wrol_mode: str` where it sends a boolean.  The published
+    contract was telling a generated client to expect a number where it will receive a dict.  A
+    name-only comparison passes straight over both, which is what the first version of this file
+    did.
+
+    Only the pairs the spec gives a `type` for and the handler actually sent are compared; a
+    `null` from an optional field says nothing about its declared type.
+    """
+    spec = await get_spec(async_client)
+    properties = spec['paths'][path]['get']['responses']['default'] \
+        ['content']['*/*']['schema']['properties']
+
+    request, response = await async_client.get(path)
+    assert response.status == 200
+
+    mismatches = []
+    for name, value in response.json.items():
+        declared = properties.get(name, {}).get('type')
+        if not declared or value is None:
+            continue
+        actual = json_kind(value)
+        if declared != actual:
+            mismatches.append(f'{name}: spec says {declared}, handler sent {actual}')
+
+    assert not mismatches, f'the OpenAPI spec declares the wrong type for {path}:\n  ' \
+                           + '\n  '.join(mismatches)
+
+
+@pytest.mark.asyncio
+async def test_downloads_summary_fixture_matches_the_download_manager(async_client, test_session):
+    """The one nested object worth checking by hand.
+
+    `/api/status` returns an empty `downloads` while the database is down, which it is for much
+    of the test suite, so the endpoint's own response cannot vouch for the shape.  The download
+    manager's summary is the authority instead -- and statusFixture was missing
+    `daily_limit_reached` from it, a field the API has always sent.
+    """
+    from wrolpi.downloader import download_manager
+
+    declared = set(download_manager.get_summary())
+
+    source = TEST_FIXTURES_JS.read_text()
+    block = re.search(r'^    downloads: \{(.*?)\n    },', source, re.S | re.M)
+    assert block, 'statusFixture no longer has a `downloads` object in the expected form'
+    fixture = set(re.findall(r'^        ([a-z0-9_]+):', block.group(1), re.M))
+    assert fixture, 'the downloads block appears to have no keys'
+
+    assert declared == fixture, (
+        "statusFixture's downloads has drifted from DownloadManager.get_summary().\n"
+        f'  manager reports, fixture omits: {sorted(declared - fixture)}\n'
+        f'  fixture invents:                {sorted(fixture - declared)}'
+    )
+
+
 @pytest.mark.asyncio
 async def test_which_fixtures_the_spec_can_vouch_for(async_client):
     """Name the API-shaped fixtures this file does not cover, and why.

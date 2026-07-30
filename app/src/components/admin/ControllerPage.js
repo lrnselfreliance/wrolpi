@@ -29,7 +29,7 @@ import {
     updateHotspotSettings,
 } from "../../api/controller";
 import QRCode from "react-qr-code";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../ui";
 import {RestartButton, ShutdownButton} from "./Settings";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {CONTROLLER_URI} from "../Vars";

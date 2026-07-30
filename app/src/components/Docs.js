@@ -24,7 +24,7 @@ import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {DeepSearchHint, docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "./ui";
 import {CollectionTable} from "./collections/CollectionTable";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {CbzViewer} from "./CbzViewer";

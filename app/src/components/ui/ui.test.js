@@ -22,6 +22,7 @@ import {
     IconButton,
     Label,
     Message,
+    Modal,
     Panel,
     Progress,
     resolveIconName,
@@ -170,6 +171,34 @@ describe('Button', () => {
         expect(screen.getByRole('link', {name: 'Save file'}).tagName).toBe('A');
     });
 
+    it('forwards a ref to the underlying DOM element', () => {
+        /*
+         * Ported from the old Theme.test.js, which caught a real crash: Semantic's Button
+         * was a class component, so a forwarded ref resolved to the class instance, and
+         * anything that called `node.contains(...)` on the trigger -- a Modal or Popup
+         * portal checking whether a click landed inside -- threw "contains is not a
+         * function".  Our Tooltip and Menu targets rely on this ref too.
+         */
+        const ref = React.createRef();
+        renderUI(<Button ref={ref}>Click</Button>);
+
+        expect(ref.current).toBeInstanceOf(HTMLElement);
+        expect(typeof ref.current.contains).toBe('function');
+        expect(ref.current.tagName).toBe('BUTTON');
+    });
+
+    it('survives a document click while used as a modal trigger', () => {
+        // The other half of that regression: the Control page crashed when the document
+        // was clicked with a modal open whose trigger was a themed Button.
+        renderUI(<>
+            <Button>Open</Button>
+            <Modal open onClose={jest.fn()}><Modal.Content>content</Modal.Content></Modal>
+        </>);
+
+        expect(() => document.body.dispatchEvent(new MouseEvent('click', {bubbles: true})))
+            .not.toThrow();
+    });
+
     it('is still a button when there is no href', () => {
         renderUI(<Button onClick={jest.fn()}>Save</Button>);
 
@@ -277,6 +306,20 @@ describe('Progress', () => {
         const bar = screen.getByRole('progressbar');
         expect(bar).toHaveAttribute('aria-valuenow', '62');
         expect(bar).toHaveTextContent('62%');
+    });
+
+    it('keeps its percent text readable on every bar colour', () => {
+        /*
+         * Ported from Theme.test.js, which asserted Semantic's `inverted-progress-text`
+         * class across all fourteen colours and both modes.  That class is gone; the
+         * mechanism now is that the text always takes `--text` while light mode lightens
+         * the fill beneath it, because the text sits across both the filled and unfilled
+         * halves of the bar.
+         */
+        const css = fs.readFileSync(path.join(__dirname, 'ui.css'), 'utf8');
+
+        expect(css).toMatch(/\.wrolpi-progress-text\s*{[^}]*color:\s*var\(--text\)/);
+        expect(css).toMatch(/html\[data-theme="light"] \.wrolpi-progress-fill\s*{[^}]*brightness/);
     });
 
     it('clamps values outside 0-100', () => {

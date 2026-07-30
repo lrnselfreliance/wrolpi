@@ -342,6 +342,54 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
     border-top: 1px solid var(--border);
 }
 
+/* A stack of form rows, replacing Semantic's `ui stackable grid` in edit forms. */
+.wrolpi-form-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* ------------------------------------------------------------- Form fields */
+/*
+ * `hooks/useForm.js` renders its own <label> and native <input> — it always did, with
+ * Semantic's Form.Input only wrapping them for field styling.  These rules supply that
+ * styling from tokens instead, so a native input matches the library's own controls.
+ */
+
+.wrolpi-form-field input {
+    width: 100%;
+    padding: 7px 9px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font: inherit;
+    font-size: 13px;
+}
+
+.wrolpi-form-field input::placeholder {
+    color: var(--muted);
+}
+
+.wrolpi-form-field input:focus {
+    outline: none;
+    border-color: var(--blue);
+}
+
+html[data-theme="night"] .wrolpi-form-field input:focus,
+html[data-theme="amber"] .wrolpi-form-field input:focus {
+    border-color: var(--text);
+}
+
+/* An invalid field is dashed, matching every other failure state in the interface. */
+.wrolpi-form-field[data-error] input {
+    border: 1.5px dashed var(--red);
+}
+
+.wrolpi-form-field input:disabled {
+    color: var(--muted);
+    background: var(--bg);
+}
+
 /* ---------------------------------------------------------- Action inputs */
 /*
  * Input and button share one outline: the input gives up its right border and

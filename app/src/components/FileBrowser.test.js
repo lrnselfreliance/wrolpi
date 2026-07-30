@@ -28,14 +28,23 @@ const mockUseUploadFile = {
     inProgress: false,
 };
 
-jest.mock('../hooks/customHooks', () => ({
-    useBrowseFiles: jest.fn(),
-    useMediaDirectory: jest.fn(() => '/media/wrolpi'),
-    useWROLMode: jest.fn(() => false),
-    useStatusFlag: jest.fn(() => false),
-    useUploadFile: () => mockUseUploadFile,
-    useElementWidth: jest.fn(() => [() => {}, 0]),
-}));
+/*
+ * Every other export of customHooks used to be dropped here -- the factory listed six hooks and
+ * returned only those, so the rest of the module was undefined for anything this spec rendered.
+ * mockModule spreads the real module first, so the next hook a component reaches for still
+ * exists.
+ */
+jest.mock('../hooks/customHooks', () => require('../test-utils').mockModule(
+    jest.requireActual('../hooks/customHooks'),
+    {
+        useBrowseFiles: jest.fn(),
+        useMediaDirectory: jest.fn(() => '/media/wrolpi'),
+        useWROLMode: jest.fn(() => false),
+        useStatusFlag: jest.fn(() => false),
+        useUploadFile: () => mockUseUploadFile,
+        useElementWidth: jest.fn(() => [() => {}, 0]),
+    },
+));
 
 // Mock react-dropzone
 jest.mock('react-dropzone', () => ({

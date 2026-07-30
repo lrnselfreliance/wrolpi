@@ -52,6 +52,21 @@ global.IntersectionObserver = class IntersectionObserver {
     }
 };
 
+// Mock ResizeObserver (used by Mantine's ScrollArea, e.g. inside Select/Combobox dropdowns).
+global.ResizeObserver = class ResizeObserver {
+    constructor() {
+    }
+
+    disconnect() {
+    }
+
+    observe() {
+    }
+
+    unobserve() {
+    }
+};
+
 // Suppress console errors during tests (optional - uncomment if needed)
 // const originalError = console.error;
 // beforeAll(() => {

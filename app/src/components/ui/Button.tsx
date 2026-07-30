@@ -39,6 +39,30 @@ const renderIcon = (icon?: string | React.ComponentType<any>) => {
     return typeof icon === 'string' ? <Icon name={icon}/> : <Icon component={icon}/>;
 }
 
+/*
+ * Semantic's size names, mapped onto Mantine's scale.
+ *
+ * Unmigrated call sites still pass `size='tiny'`, and Mantine silently ignores a
+ * size it does not know — the button renders at the default size and nobody sees
+ * a warning.  Translating here keeps those call sites looking right until they
+ * migrate, and costs nothing once they have.
+ */
+const semanticSizes: Record<string, string> = {
+    mini: 'xs',
+    tiny: 'xs',
+    small: 'sm',
+    medium: 'md',
+    large: 'lg',
+    big: 'lg',
+    huge: 'xl',
+    massive: 'xl',
+};
+
+// Generic so it passes each component's own size type straight through; only a
+// string that Semantic knew about is rewritten.
+export const resolveSize = <T, >(size: T): T =>
+    typeof size === 'string' ? ((semanticSizes[size] ?? size) as T) : size;
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
     {role, icon, iconAfter, className, ...props}, ref
 ) => {
@@ -52,6 +76,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
         leftSection={renderIcon(icon)}
         rightSection={renderIcon(iconAfter)}
         {...props}
+        size={resolveSize(props.size)}
     />
 });
 Button.displayName = 'Button';
@@ -78,6 +103,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>((
         variant={props.variant ?? fromRole?.variant ?? 'default'}
         className={[fromRole?.className, className].filter(Boolean).join(' ') || undefined}
         {...props}
+        size={resolveSize(props.size)}
     >
         {renderIcon(icon)}
     </ActionIcon>

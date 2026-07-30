@@ -1,5 +1,6 @@
 import React from "react";
-import {render, screen} from "@testing-library/react";
+import {screen} from "@testing-library/react";
+import {renderWithProviders} from "../../test-utils";
 import {InventoryItemsMobile} from "./InventoryItemsMobile";
 
 const FIELDS = [
@@ -19,7 +20,7 @@ describe('InventoryItemsMobile', () => {
             {key: 'count', label: 'Count', type: 'number', order: 2, mobile: true},
             {key: 'expiration_date', label: 'Expires', type: 'date', order: 3, mobile: true},
         ];
-        render(<InventoryItemsMobile fields={flagged} items={[{id: 1, name: 'Rice'}]}/>);
+        renderWithProviders(<InventoryItemsMobile fields={flagged} items={[{id: 1, name: 'Rice'}]}/>);
 
         const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
         expect(headers).toEqual(['Name', 'Count', 'Expires']);
@@ -28,7 +29,7 @@ describe('InventoryItemsMobile', () => {
     });
 
     test('falls back to default columns when no field is flagged mobile', () => {
-        render(<InventoryItemsMobile fields={FIELDS} items={[{id: 1, name: 'Rice'}]}/>);
+        renderWithProviders(<InventoryItemsMobile fields={FIELDS} items={[{id: 1, name: 'Rice'}]}/>);
 
         const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
         expect(headers).toEqual(['Name', 'Sub-category', 'Size', 'Count']);
@@ -44,7 +45,7 @@ describe('InventoryItemsMobile', () => {
             {key: 'purchase_date', label: 'Purchased', type: 'date', order: 3},
             {key: 'location', label: 'Location', type: 'location', order: 4},
         ];
-        render(<InventoryItemsMobile fields={fields} items={[{id: 1, fuel_type: 'Diesel'}]}/>);
+        renderWithProviders(<InventoryItemsMobile fields={fields} items={[{id: 1, fuel_type: 'Diesel'}]}/>);
         const headers = [...document.querySelectorAll('thead th')].map(th => th.textContent);
         expect(headers).toEqual(['Fuel', 'Container', 'Volume', 'Purchased']);
     });
@@ -56,17 +57,17 @@ describe('InventoryItemsMobile', () => {
             {id: 2, name: 'Fresh', subcategory: 'beans', item_size: '10', item_size_unit: 'lb', count: '4',
              expiration_date: '2999-01-01'},
         ];
-        const {container} = render(<InventoryItemsMobile fields={FIELDS} items={items}/>);
+        renderWithProviders(<InventoryItemsMobile fields={FIELDS} items={items}/>);
 
         expect(screen.getByText('5 lb')).toBeTruthy();
         const rowOf = (name) => screen.getByText(name).closest('tr');
-        expect(rowOf('Old').className).toContain('negative');
-        expect(rowOf('Fresh').className).not.toContain('negative');
-        expect(container.querySelectorAll('i.warning.sign.icon').length).toBe(1);
+        expect(rowOf('Old').className).toContain('wrolpi-row-failed');
+        expect(rowOf('Fresh').className).not.toContain('wrolpi-row-failed');
+        expect(screen.getAllByLabelText('Expired').length).toBe(1);
     });
 
     test('shows an empty state when there are no items', () => {
-        render(<InventoryItemsMobile fields={FIELDS} items={[]}/>);
+        renderWithProviders(<InventoryItemsMobile fields={FIELDS} items={[]}/>);
         expect(screen.getByText('No items yet.')).toBeTruthy();
     });
 });

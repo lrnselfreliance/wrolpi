@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {IconArrowLeft, IconArrowRight} from '@tabler/icons-react';
 import {getArchiveContents, getArchiveMemberUrl} from '../api';
-import {Icon, Label, Loader, Message} from 'semantic-ui-react';
-import {Button} from './Theme';
+import {IconButton, Label, Loading, Message} from './ui';
 import {useLocalStorage} from './Common';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i;
@@ -77,15 +77,13 @@ export function CbzViewer({path}) {
     }, [onLeftClick, onRightClick]);
 
     if (error) {
-        return <Message negative>
-            <Message.Header>Cannot load comic</Message.Header>
+        return <Message kind='error' title='Cannot load comic'>
             <p>{error}</p>
         </Message>;
     }
-    if (!pages) return <Loader active inline='centered'/>;
+    if (!pages) return <Loading/>;
     if (pages.length === 0) {
-        return <Message warning>
-            <Message.Header>No images found</Message.Header>
+        return <Message kind='warning' title='No images found'>
             <p>This archive does not contain any image files.</p>
         </Message>;
     }
@@ -94,12 +92,12 @@ export function CbzViewer({path}) {
     const hasNext = currentPage < pages.length - 1;
 
     return <div style={{marginBottom: '1em'}}>
-        <div ref={imageContainerRef} style={{
+        <div ref={imageContainerRef} className='media' style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            background: '#222',
-            borderRadius: fullscreen ? 0 : '4px',
+            background: 'var(--bg)',
+            borderRadius: 0,
             padding: '0.5em',
             minHeight: '300px',
             position: fullscreen ? 'fixed' : 'relative',
@@ -133,20 +131,14 @@ export function CbzViewer({path}) {
             gap: '0.5em',
             marginTop: '0.5em',
         }}>
-            <Button icon basic active={rtl} onClick={() => setRtl(r => !r)}
-                    aria-label='Reading direction'>
-                <Icon name={rtl ? 'hand point left' : 'hand point right'}/>
-            </Button>
+            <IconButton icon={rtl ? IconArrowLeft : IconArrowRight} label='Reading direction'
+                        variant={rtl ? 'filled' : 'default'} onClick={() => setRtl(r => !r)}/>
             <span style={{flex: 1}}/>
-            <Button icon basic disabled={rtl ? !hasNext : !hasPrev}
-                    onClick={onLeftClick} aria-label='Previous page'>
-                <Icon name='chevron left'/>
-            </Button>
+            <IconButton icon='chevron left' label='Previous page'
+                        disabled={rtl ? !hasNext : !hasPrev} onClick={onLeftClick}/>
             <Label>{currentPage + 1} / {pages.length}</Label>
-            <Button icon basic disabled={rtl ? !hasPrev : !hasNext}
-                    onClick={onRightClick} aria-label='Next page'>
-                <Icon name='chevron right'/>
-            </Button>
+            <IconButton icon='chevron right' label='Next page'
+                        disabled={rtl ? !hasPrev : !hasNext} onClick={onRightClick}/>
         </div>
     </div>;
 }

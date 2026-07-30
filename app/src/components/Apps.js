@@ -1,5 +1,4 @@
-import React, {useContext} from 'react';
-import {Input, Label, StatisticLabel, StatisticValue} from "semantic-ui-react";
+import React from 'react';
 import {Link, Route, Routes} from "react-router";
 import {
     ErrorMessage,
@@ -10,15 +9,12 @@ import {
     toLocaleString,
     useTitle
 } from "./Common";
-import {ThemeContext} from "../contexts/contexts";
-import {Header, Loader, Segment, Statistic} from "./Theme";
+import {Header, Label, Loading, Panel, Statistic, StatisticGroup, TextInput} from "./ui";
 import {useStatistics} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
 function StatisticsPage() {
     useTitle('Statistics');
-
-    const {s} = useContext(ThemeContext);
 
     const {statistics} = useStatistics();
 
@@ -49,90 +45,56 @@ function StatisticsPage() {
         return <>
             <Header as='h1'>Statistics</Header>
             <Header as='h2'>Files</Header>
-            <Segment>
-                <Statistic.Group>
-                    <Statistic>
-                        <StatisticValue>{toLocaleString(total_count)}</StatisticValue>
-                        <StatisticLabel>All Files</StatisticLabel>
-                    </Statistic>
-                    <Statistic>
-                        <StatisticValue>{humanFileSize(total_size)}</StatisticValue>
-                        <StatisticLabel>Total Size</StatisticLabel>
-                    </Statistic>
-                </Statistic.Group>
-            </Segment>
-            <Segment>
-                <Statistic.Group size='small'>
+            <Panel>
+                <StatisticGroup>
+                    <Statistic value={toLocaleString(total_count)} label='All Files'/>
+                    <Statistic value={humanFileSize(total_size)} label='Total Size'/>
+                </StatisticGroup>
+            </Panel>
+            <Panel>
+                <StatisticGroup>
                     <Link to={'/videos/statistics'}>
-                        <Statistic color={mimetypeColor('video/')}>
-                            <StatisticValue>{toLocaleString(video_count)}</StatisticValue>
-                            <StatisticLabel>Videos</StatisticLabel>
-                        </Statistic>
+                        <Statistic color={mimetypeColor('video/')} value={toLocaleString(video_count)}
+                                   label='Videos'/>
                     </Link>
-                    <Statistic color={mimetypeColor('application/pdf')}>
-                        <StatisticValue>{toLocaleString(pdf_count)}</StatisticValue>
-                        <StatisticLabel>PDFs</StatisticLabel>
-                    </Statistic>
-                    <Statistic color={mimetypeColor('application/epub')}>
-                        <StatisticValue>{toLocaleString(ebook_count)}</StatisticValue>
-                        <StatisticLabel>eBooks</StatisticLabel>
-                    </Statistic>
-                    <Statistic color={mimetypeColor('text/html')}>
-                        <StatisticValue>{toLocaleString(archive_count)}</StatisticValue>
-                        <StatisticLabel>Archives</StatisticLabel>
-                    </Statistic>
-                    <Statistic color={mimetypeColor('image/')}>
-                        <StatisticValue>{toLocaleString(image_count)}</StatisticValue>
-                        <StatisticLabel>Images</StatisticLabel>
-                    </Statistic>
-                </Statistic.Group>
-            </Segment>
-            <Segment>
-                <Statistic.Group size='tiny'>
-                    <Statistic>
-                        <StatisticValue>{toLocaleString(zip_count)}</StatisticValue>
-                        <StatisticLabel>ZIP</StatisticLabel>
-                    </Statistic>
-                    <Statistic color={mimetypeColor('audio/')}>
-                        <StatisticValue>{toLocaleString(audio_count)}</StatisticValue>
-                        <StatisticLabel>Audio</StatisticLabel>
-                    </Statistic>
-                </Statistic.Group>
-            </Segment>
+                    <Statistic color={mimetypeColor('application/pdf')} value={toLocaleString(pdf_count)}
+                               label='PDFs'/>
+                    <Statistic color={mimetypeColor('application/epub')} value={toLocaleString(ebook_count)}
+                               label='eBooks'/>
+                    <Statistic color={mimetypeColor('text/html')} value={toLocaleString(archive_count)}
+                               label='Archives'/>
+                    <Statistic color={mimetypeColor('image/')} value={toLocaleString(image_count)}
+                               label='Images'/>
+                </StatisticGroup>
+            </Panel>
+            <Panel>
+                <StatisticGroup>
+                    <Statistic value={toLocaleString(zip_count)} label='ZIP'/>
+                    <Statistic color={mimetypeColor('audio/')} value={toLocaleString(audio_count)} label='Audio'/>
+                </StatisticGroup>
+            </Panel>
 
             <Header as='h2'>Tags</Header>
-            <Segment>
-                <Statistic.Group>
-                    <Statistic>
-                        <StatisticValue>{humanNumber(tags_count)}</StatisticValue>
-                        <StatisticLabel>Tags</StatisticLabel>
-                    </Statistic>
-                    <Statistic>
-                        <StatisticValue>{humanNumber(tagged_files)}</StatisticValue>
-                        <StatisticLabel>Tagged Files</StatisticLabel>
-                    </Statistic>
-                    <Statistic>
-                        <StatisticValue>{humanNumber(tagged_zims)}</StatisticValue>
-                        <StatisticLabel>Tagged Zims</StatisticLabel>
-                    </Statistic>
-                </Statistic.Group>
-            </Segment>
+            <Panel>
+                <StatisticGroup>
+                    <Statistic value={humanNumber(tags_count)} label='Tags'/>
+                    <Statistic value={humanNumber(tagged_files)} label='Tagged Files'/>
+                    <Statistic value={humanNumber(tagged_zims)} label='Tagged Zims'/>
+                </StatisticGroup>
+            </Panel>
 
             <Header as='h2'>Database</Header>
-            <Segment>
-                <Statistic.Group>
-                    <Statistic>
-                        <StatisticValue>{humanFileSize(db_size)}</StatisticValue>
-                        <StatisticLabel>Size</StatisticLabel>
-                    </Statistic>
-                </Statistic.Group>
-            </Segment>
+            <Panel>
+                <StatisticGroup>
+                    <Statistic value={humanFileSize(db_size)} label='Size'/>
+                </StatisticGroup>
+            </Panel>
         </>;
     }
 
     return <>
         <Header as='h1'>Statistics</Header>
-        <Segment><Loader inline active/></Segment>
+        <Panel><Loading/></Panel>
     </>;
 
 }
@@ -146,7 +108,16 @@ export function MoreRoute(props) {
     </PageContainer>
 }
 
-export function ColoredInput({name, value, label, color, ...props}) {
-    label = label ? <Label color={color}>{label}</Label> : null;
-    return <Input value={value} name={name} label={label} {...props}/>
+/**
+ * A text input with a colored tag attached to its leading (or trailing) edge.
+ * Replaces Semantic's `<Input label={<Label color={...}/>} labelPosition=.../>`.
+ */
+export function ColoredInput({name, value, label, color, labelPosition = 'left', fluid, style, ...props}) {
+    const labelNode = label ? <Label color={color || 'grey'}>{label}</Label> : null;
+
+    return <div style={{display: 'flex', alignItems: 'stretch', gap: 6, width: fluid ? '100%' : undefined, ...style}}>
+        {labelNode && labelPosition === 'left' && labelNode}
+        <TextInput name={name} value={value} style={{flex: fluid ? 1 : undefined}} {...props}/>
+        {labelNode && labelPosition !== 'left' && labelNode}
+    </div>
 }

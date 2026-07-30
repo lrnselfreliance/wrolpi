@@ -409,7 +409,7 @@ describe('FileBrowser', () => {
             });
 
             // Click delete button (red trash button) - uses APIButton which has confirm modal
-            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            const deleteButton = document.querySelector('.tabler-icon-trash').closest('button');
             await act(async () => {
                 fireEvent.click(deleteButton);
             });
@@ -454,7 +454,7 @@ describe('FileBrowser', () => {
             });
 
             // Click delete button
-            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            const deleteButton = document.querySelector('.tabler-icon-trash').closest('button');
             await act(async () => {
                 fireEvent.click(deleteButton);
             });

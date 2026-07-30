@@ -68,10 +68,12 @@ export interface StatisticProps {
     value: React.ReactNode;
     label: React.ReactNode;
     color?: string;
+    className?: string;
+    style?: React.CSSProperties;
 }
 
-export function Statistic({value, label, color}: StatisticProps) {
-    return <div>
+export function Statistic({value, label, color, className, style}: StatisticProps) {
+    return <div className={['wrolpi-statistic', className].filter(Boolean).join(' ')} style={style}>
         <div className='wrolpi-statistic-value' style={{color: color ? `var(--${color})` : undefined}}>
             {value}
         </div>
@@ -89,6 +91,7 @@ export function StatisticGroup({children}: {children: React.ReactNode}) {
     }}>
         {items.map((child, index) => <div
             key={index}
+            className='wrolpi-statistic-cell'
             style={{
                 background: 'var(--panel)',
                 padding: '14px 16px',

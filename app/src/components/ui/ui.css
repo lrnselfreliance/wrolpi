@@ -599,8 +599,11 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 
 .wrolpi-tag {
     position: relative;
-    /* Room for the point, which is drawn outside the body. */
-    margin-left: 15px;
+    /*
+     * Room for the point, which is drawn outside the body: half its diagonal (14.1px) plus
+     * the 1px it is nudged left, rounded up.
+     */
+    margin-left: 16px;
     /* Tags wrap, and a wrapped row was sitting on the row above it. */
     margin-bottom: 5px;
     /*
@@ -619,7 +622,15 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     right: 100%;
     width: 20px;
     height: 20px;
-    transform: translate(50%, -50%) rotate(45deg);
+    /*
+     * Nudged 1px left of where `right: 100%` puts it.  That property positions against the
+     * containing block's *padding* box, and the body carries a 1px border, so a square centred
+     * there sits a pixel inside the visible left edge -- and the point read as set slightly
+     * into the tag rather than growing out of it.  This is exactly that border: 2px opened a
+     * visible gap on the inner side, because the point's edges then meet the body's left edge
+     * short of its corners and leave the difference showing.
+     */
+    transform: translate(calc(50% - 1px), -50%) rotate(45deg);
     background: var(--label-color);
 }
 

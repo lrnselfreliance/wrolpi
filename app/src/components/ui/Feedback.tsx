@@ -63,16 +63,23 @@ export function Message({kind = 'info', title, children, icon, onDismiss, classN
 export interface LabelProps {
     color?: SemanticColorName | 'black' | 'white';
     icon?: string | React.ComponentType<any>;
+    /**
+     * Draw it as a physical tag — pointed left edge and an eyelet — rather than a plain
+     * chip.  Reserved for things that actually are tags: the same component also carries
+     * the count badges in the Tags table, and a point on a number reads as an arrow.
+     */
+    tag?: boolean;
     children?: React.ReactNode;
     onClick?: React.MouseEventHandler<HTMLSpanElement>;
     className?: string;
 }
 
-/** A tag/chip.  Filled in light and dark; an outline in night, where a filled
+/** A chip.  Filled in light, dark and amber; an outline in night, where a filled
  *  patch would be a bright surface. */
-export function Label({color = 'grey', icon, children, onClick, className}: LabelProps) {
+export function Label({color = 'grey', icon, tag, children, onClick, className}: LabelProps) {
     return <span
-        className={['wrolpi-label', `wrolpi-label-${color}`, className].filter(Boolean).join(' ')}
+        className={['wrolpi-label', `wrolpi-label-${color}`, tag ? 'wrolpi-tag' : '', className]
+            .filter(Boolean).join(' ')}
         style={{['--label-color' as string]: `var(--${color})`, cursor: onClick ? 'pointer' : undefined}}
         onClick={onClick}
     >

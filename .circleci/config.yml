@@ -44,12 +44,12 @@ jobs:
   # Python jobs, so it costs a venv restore and one test file.
   api-contract-tests:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.13
     resource_class: medium
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-5
       - run:
           name: Install Requirements
           command: |

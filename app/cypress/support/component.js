@@ -116,6 +116,48 @@ Cypress.Commands.add('shouldNotOverlap', {prevSubject: false}, (firstSelector, s
     });
 });
 
+/**
+ * Contrast ratio between an element's text and the surface actually behind it, per WCAG.
+ *
+ * "The surface actually behind it" is the point.  A transparent element -- which is what a
+ * tag becomes in night mode -- has no background of its own to compare against, so a naive
+ * check reads `rgba(0,0,0,0)` and concludes anything is legible.  This walks up to the first
+ * ancestor that paints something, which is what the eye sees.
+ */
+const parseRgb = (value) => {
+    const parts = (value.match(/[\d.]+/g) || []).map(Number);
+    return {r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1};
+};
+
+const relativeLuminance = ({r, g, b}) => {
+    const channel = (v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+
+const effectiveBackground = (el) => {
+    let node = el;
+    while (node && node !== document.documentElement) {
+        const bg = parseRgb(getComputedStyle(node).backgroundColor);
+        if (bg.a > 0) return bg;
+        node = node.parentElement;
+    }
+    return parseRgb(getComputedStyle(document.documentElement).backgroundColor);
+};
+
+Cypress.Commands.add('contrastRatio', {prevSubject: false}, (selector) => {
+    return cy.get(selector).then(($el) => {
+        const el = $el[0];
+        const text = relativeLuminance(parseRgb(getComputedStyle(el).color));
+        const behind = relativeLuminance(effectiveBackground(el));
+        const lighter = Math.max(text, behind);
+        const darker = Math.min(text, behind);
+        return (lighter + 0.05) / (darker + 0.05);
+    });
+});
+
 Cypress.Commands.add('mountWithTags', (component, options) => {
     cy.fixture('tagsMock.json').then((mockTags) => {
         cy.intercept('GET', '**/api/tag', {

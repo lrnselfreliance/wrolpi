@@ -1,7 +1,9 @@
 import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
-import {DirectorySearch, SearchResultsInput} from './Common';
+import {
+    contrastingColor, contrastRatio, DirectorySearch, SearchResultsInput, TAG_TEXT_DARK, TAG_TEXT_LIGHT,
+} from './Common';
 
 // Mock debounce to make tests run faster
 jest.mock('lodash/debounce', () => jest.fn(fn => {
@@ -477,5 +479,55 @@ describe('SearchResultsInput', () => {
         await userEvent.click(screen.getByRole('combobox'));
 
         expect(screen.getByText('rendered:Cooking')).toBeInTheDocument();
+    });
+});
+
+describe('contrastingColor', () => {
+    /*
+     * This decides the text colour on every tag, against a fill the user picked, so it is the
+     * one place in the app where legibility is computed rather than designed.
+     */
+
+    it('picks whichever of the two options actually reads better', () => {
+        // Semantic's blue.  The old threshold check chose light text here, at 2.9:1, when dark
+        // text on the same fill gives 5.3:1 -- the worse of the only two available answers.
+        // Every mid-tone blue, teal and purple a user might choose sat in that band.
+        const blue = '#2185d0';
+
+        const chosen = contrastingColor(blue);
+        const rejected = chosen === TAG_TEXT_DARK ? TAG_TEXT_LIGHT : TAG_TEXT_DARK;
+
+        expect(contrastRatio(chosen, blue)).toBeGreaterThan(contrastRatio(rejected, blue));
+        expect(chosen).toBe(TAG_TEXT_DARK);
+    });
+
+    it('never picks the worse option, for any colour', () => {
+        // The property, rather than a list of examples: whatever it returns must be at least as
+        // legible as the alternative would have been.
+        const colours = [
+            '#000000', '#ffffff', '#f2f2f2', '#1b1c1d', '#2185d0', '#21ba45', '#db2828',
+            '#fbbd08', '#6435c9', '#a5673f', '#00b5ad', '#e03997', '#b5cc18', '#767676',
+            '#808080', '#7f7f7f',
+        ];
+
+        for (const colour of colours) {
+            const chosen = contrastingColor(colour);
+            const rejected = chosen === TAG_TEXT_DARK ? TAG_TEXT_LIGHT : TAG_TEXT_DARK;
+            expect(contrastRatio(chosen, colour))
+                .toBeGreaterThanOrEqual(contrastRatio(rejected, colour));
+        }
+    });
+
+    it('returns one of the two text colours and nothing else', () => {
+        // It is written into `--label-text`; anything undefined leaves the tag unstyled.
+        for (const colour of ['#000000', '#ffffff', '#2185d0']) {
+            expect([TAG_TEXT_DARK, TAG_TEXT_LIGHT]).toContain(contrastingColor(colour));
+        }
+    });
+
+    it('measures contrast on the WCAG scale', () => {
+        // Anchors the ratio itself, so "better" above is comparing real numbers.
+        expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 1);
+        expect(contrastRatio('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
     });
 });

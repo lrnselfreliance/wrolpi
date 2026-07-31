@@ -111,18 +111,26 @@ export function useTags() {
         if (tag !== null && tag !== undefined) {
             const tagColor = tag['color'] || DEFAULT_TAG_COLOR;
             const textColor = contrastingColor(tagColor);
-            const className = ['wrolpi-label', props.onClick ? 'clickable' : ''].filter(Boolean).join(' ');
+            const className = ['wrolpi-label', 'wrolpi-tag', props.onClick ? 'clickable' : '']
+                .filter(Boolean).join(' ');
             return <span
                 {...props} // onClick passed here.
                 className={className}
-                style={{...props['style'], ['--label-color']: tagColor, color: textColor}}
+                /*
+                 * The contrasting text colour goes in a custom property, not in `color`.  As
+                 * `color` it was an inline declaration, which no stylesheet rule can outrank --
+                 * so night, where a tag becomes an outline over a near-black page, still got
+                 * the black text calculated for a bright tag's fill.  The tag was legible only
+                 * by its border.  A custom property lets each theme decide instead.
+                 */
+                style={{...props['style'], ['--label-color']: tagColor, ['--label-text']: textColor}}
             >
                 {name}
             </span>;
         }
 
         // No tags have been fetched.
-        return <Label>{name}</Label>;
+        return <Label tag>{name}</Label>;
     }
 
     const TagsGroup = ({tagNames, onClick}) => {

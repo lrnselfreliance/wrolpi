@@ -1529,9 +1529,29 @@ export const toLocaleString = (num, locale = 'en-US') => {
     return num.toLocaleString(locale);
 }
 
-function luma(color) {
-    let rgb = (typeof color === 'string') ? hexToRGBArray(color) : color;
-    return (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]); // SMPTE C, Rec. 709 weightings
+/**
+ * WCAG relative luminance: sRGB channels linearised first, then Rec. 709 weighted.
+ *
+ * The linearisation is the part that matters.  Weighting the gamma-encoded bytes directly --
+ * which is what this did before -- is a rough approximation that misjudges mid-tone blues and
+ * purples badly enough to pick the wrong text colour for them.
+ */
+function relativeLuminance(color) {
+    const rgb = (typeof color === 'string') ? hexToRGBArray(color) : color;
+    if (!rgb) {
+        return 0;
+    }
+    const linear = rgb.map(value => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    });
+    return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+/** WCAG contrast ratio between two colours, from 1:1 (identical) to 21:1 (black on white). */
+export function contrastRatio(a, b) {
+    const luminances = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (luminances[0] + 0.05) / (luminances[1] + 0.05);
 }
 
 function hexToRGBArray(color) {
@@ -1547,8 +1567,21 @@ function hexToRGBArray(color) {
     return rgb;
 }
 
+export const TAG_TEXT_DARK = '#000000';
+export const TAG_TEXT_LIGHT = '#dddddd';
+
+/**
+ * Dark or light text, whichever a user's chosen tag colour actually reads better against.
+ *
+ * Measures both instead of comparing a brightness figure to a threshold.  The threshold
+ * version put light text on Semantic's blue (`#2185d0`) at 2.9:1 when dark text on the same
+ * fill gives 5.3:1 -- it had picked the worse of the only two options.  Every mid-tone blue,
+ * teal and purple a user might choose sat in that band.
+ */
 export function contrastingColor(color) {
-    return (luma(color) >= 120) ? '#000000' : '#dddddd';
+    return contrastRatio(TAG_TEXT_DARK, color) >= contrastRatio(TAG_TEXT_LIGHT, color)
+        ? TAG_TEXT_DARK
+        : TAG_TEXT_LIGHT;
 }
 
 export const encodeMediaPath = (path) => {

@@ -36,6 +36,7 @@ import {
     toast,
 } from './ui';
 import {semanticColorNames} from '../themes/mantine';
+import {contrastingColor} from './Common';
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -386,6 +387,38 @@ export function ThemeSamplePage() {
                     <Label color='white'>white</Label>
                     <Label color='blue' icon='tag'>tagged</Label>
                 </Row>
+            </Panel>
+        </Section>
+
+        <Section label='Tags'>
+            <Panel>
+                {/*
+                  * Tag colours are the user's, stored per tag, so these are raw hex values --
+                  * the only place in the app that paints with something no theme chose.  That
+                  * is exactly why they belong here: the gallery had label swatches in theme
+                  * colours and no user-coloured tag, so nobody saw that night was calculating
+                  * the text colour against a fill it had already thrown away.
+                  *
+                  * Deliberately spans the range: near-white and near-black fills, where the
+                  * black-or-light text decision flips, plus enough tags to wrap a row.
+                  */}
+                <Row>
+                    {[
+                        ['Water', '#2185d0'], ['Food', '#21ba45'], ['Medical', '#db2828'],
+                        ['Shelter', '#a5673f'], ['Power', '#fbbd08'], ['Comms', '#6435c9'],
+                        ['Reference', '#f2f2f2'], ['Archived', '#1b1c1d'],
+                        ['Seeds', '#b5cc18'], ['Tools', '#00b5ad'], ['Navigation', '#e03997'],
+                    ].map(([name, color]) => <span
+                        key={name}
+                        className='wrolpi-label wrolpi-tag'
+                        style={{'--label-color': color, '--label-text': contrastingColor(color)}}
+                    >{name}</span>)}
+                </Row>
+                <p style={{marginTop: 14, fontSize: 13, color: 'var(--muted)'}}>
+                    Every tag must be readable in all four themes. In night and amber the
+                    user's colour is discarded, so all tags look alike — that is the same
+                    trade the labels above make, and it is deliberate.
+                </p>
             </Panel>
         </Section>
 

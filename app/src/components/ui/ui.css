@@ -191,6 +191,13 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
     color: var(--muted);
     text-decoration: none;
     font-size: 13px;
+    /*
+     * A tab is a NavLink in the app's nav bars but a <button> on Inventory and in the
+     * gallery, and a button carries the UA's own `buttonface` background -- rgb(239,239,239).
+     * Only the active tab set a background, so every inactive one was a near-white block in
+     * dark, night and amber.  The bar's own surface has to show through instead.
+     */
+    background: transparent;
     border: 1px solid transparent;
     /* Sits on the bar's own rule, so the active tab can erase it and read as
        connected to the panel below. */
@@ -554,27 +561,101 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 
 /* ----------------------------------------------------------------- Labels */
 
+/*
+ * Sized to Semantic's label (12px text, ~7px of vertical padding), which these replaced.
+ * The first pass came out at 11.5px with 3px of padding and read as noticeably smaller than
+ * what users had before -- a tag is a hit target as well as a word.
+ */
 .wrolpi-label {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 9px;
-    font-size: 11.5px;
+    padding: 5px 10px;
+    font-size: 12.5px;
     font-weight: 500;
     line-height: 1.3;
     background: var(--label-color);
-    color: var(--btn-text);
+    /*
+     * `--label-text` is set per-tag by Tags.js, which calculates black or light text against
+     * the user's chosen fill.  The fallback covers every label whose fill is a theme token.
+     * It is a variable rather than an inline `color` so that a theme which discards the fill
+     * can also discard the text colour calculated for it.
+     */
+    color: var(--label-text, var(--btn-text));
     border: 1px solid transparent;
 }
 
-/* White and black labels would vanish into the surface they sit on. */
+/* ------------------------------------------------------------------- Tags */
+/*
+ * A tag is a label with a physical shape: a pointed left edge and an eyelet, like a tag
+ * tied to a garment.  The point is a square rotated 45 degrees behind the left edge -- its
+ * right half sits under the body in the same colour and merges, leaving the left half
+ * showing as the point.  At 20px a side its diagonal is 28px, which is the body's height,
+ * so the two edges of the point meet the body exactly at its corners.
+ *
+ * The eyelet is drawn in `currentColor`, so it reads as a hole punched through the tag on
+ * any surface, filled or outlined, without needing to know what is behind it.
+ */
+
+.wrolpi-tag {
+    position: relative;
+    /* Room for the point, which is drawn outside the body. */
+    margin-left: 15px;
+    /* Tags wrap, and a wrapped row was sitting on the row above it. */
+    margin-bottom: 5px;
+    /*
+     * The point is centred on the left edge, so its inner half covers the body's first 10px
+     * -- and a positioned pseudo-element paints above the parent's text, not behind it, so
+     * without this the first letter is hidden under the point.  Semantic's tag label carried
+     * the same asymmetry (`padding-left: 1.5em`) for the same reason.
+     */
+    padding-left: 13px;
+}
+
+.wrolpi-tag::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: 20px;
+    height: 20px;
+    transform: translate(50%, -50%) rotate(45deg);
+    background: var(--label-color);
+}
+
+/*
+ * The eyelet sits in the point, where a real tag's hole is -- inside the body it reads as a
+ * bullet in front of the word.  It is outside the element's own box, over the ::before, and
+ * paints on top of it by being the later pseudo-element.
+ */
+.wrolpi-tag::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -7px;
+    width: 5px;
+    height: 5px;
+    margin-top: -2.5px;
+    border-radius: 50%;
+    background: currentColor;
+    /* A hole, not a dot: it should read as absence rather than as a bullet. */
+    opacity: 0.45;
+}
+
+/*
+ * White and black labels would vanish into the surface they sit on.  They set the text
+ * colour through `--label-text` rather than `color` for the same reason the per-tag colour
+ * does: setting `color` here outranked the base rule, so amber -- which replaces every fill
+ * with its own and has no `color` rule of its own -- was left painting `--white` on `--text`,
+ * light orange on orange.
+ */
 .wrolpi-label-white {
-    color: var(--black);
+    --label-text: var(--black);
     border-color: var(--border);
 }
 
 .wrolpi-label-black {
-    color: var(--white);
+    --label-text: var(--white);
     border-color: var(--border);
 }
 
@@ -586,6 +667,21 @@ html[data-theme="night"] .wrolpi-label {
     background: transparent;
     color: var(--label-color);
     border-color: var(--label-color);
+}
+
+/*
+ * Night draws the tag as an outline, so the point has to be two strokes rather than a solid
+ * diamond, and the body's own left border has to go -- otherwise a line closes across the
+ * base of the point and it reads as a chip with a triangle stuck to it.
+ */
+html[data-theme="night"] .wrolpi-tag {
+    border-left-color: transparent;
+}
+
+html[data-theme="night"] .wrolpi-tag::before {
+    background: transparent;
+    border-left: 1px solid var(--label-color);
+    border-bottom: 1px solid var(--label-color);
 }
 
 /* ---------------------------------------------------------------- Headers */
@@ -659,6 +755,17 @@ html[data-theme="night"] .wrolpi-label {
 html[data-theme="night"] .wrolpi-label,
 html[data-theme="amber"] .wrolpi-label {
     --label-color: var(--text) !important;
+    /*
+     * The per-tag text colour goes with the fill it was calculated against.  Tags.js works
+     * out black-or-light from the user's chosen hex, and once that hex is discarded the
+     * answer is not just useless but wrong: amber was painting `#dddddd` on `#ff9500`, about
+     * 1.9:1 and a neutral grey in a theme whose whole point is that nothing else is.  Night,
+     * which is an outline over a near-black page, was painting that black text on nothing.
+     *
+     * There is no contrast to calculate here, which is why this is a token and not a second
+     * version of `contrastingColor`: the fill is the theme's own, so the answer is fixed.
+     */
+    --label-text: var(--btn-text) !important;
 }
 
 /* --------------------------------------------------------------- Messages */

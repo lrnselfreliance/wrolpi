@@ -423,17 +423,60 @@ describe('a tag looks like a physical tag', () => {
         });
     });
 
-    it('protrudes to the left, and reserves the room it needs', () => {
-        // The point is drawn outside the body, so without a matching margin it would print
-        // over whatever sits to the left -- the previous tag in the row.
+    /*
+     * Where the tip of the point actually lands, relative to the body's left edge.
+     *
+     * The square's box spans [-side, 0] in padding-box coordinates (`right: 100%`), is shifted
+     * by the transform's resolved horizontal translation, and then rotates about its own centre
+     * -- so the tip reaches half a diagonal beyond that centre.  Padding-box coordinates are
+     * inside the border, which is the whole reason the point needed nudging, so the border
+     * width comes off at the end.
+     */
+    const tipOffset = (el) => {
+        const before = getComputedStyle(el, '::before');
+        const side = parseFloat(before.width);
+        const translateX = parseFloat(before.transform.match(/matrix\(([^)]+)\)/)[1].split(',')[4]);
+        const centre = -side + translateX + side / 2;
+        return centre - (side * Math.SQRT2 / 2) - parseFloat(getComputedStyle(el).borderLeftWidth);
+    };
+
+    /* Where the point's centre sits, relative to the body's visible (border-box) left edge. */
+    const pointCentreOffset = (el) => {
+        const before = getComputedStyle(el, '::before');
+        const side = parseFloat(before.width);
+        const translateX = parseFloat(before.transform.match(/matrix\(([^)]+)\)/)[1].split(',')[4]);
+        return (-side + translateX + side / 2) - parseFloat(getComputedStyle(el).borderLeftWidth);
+    };
+
+    it('grows the point out of the left edge rather than setting it into the body', () => {
+        /*
+         * `right: 100%` positions against the containing block's *padding* box, and the body
+         * carries a 1px border -- so a square centred there sits a pixel inside the visible left
+         * edge, and the point reads as set into the tag instead of growing out of it.
+         *
+         * Asserting the tip lands somewhere far to the left does not catch this: the un-nudged
+         * version's tip is only 2px further right, still well clear of the body.  The claim is
+         * about where the point is *centred*, which is the thing that differs.
+         */
+        cy.mountUI(tag);
+
+        cy.get('.wrolpi-tag').should(($tag) =>
+            expect(pointCentreOffset($tag[0]), 'the point is centred left of the visible edge')
+                .to.be.at.most(-2));
+    });
+
+    it('reserves exactly the room the point takes', () => {
+        // Without a margin covering the full protrusion the point prints over whatever sits to
+        // its left -- the previous tag in the row.  The old value, 15px, was 2px short of this.
         cy.mountUI(tag);
 
         cy.get('.wrolpi-tag').should(($tag) => {
             const el = $tag[0];
-            const side = parseFloat(getComputedStyle(el, '::before').width);
-            const protrusion = side / 2;
-            expect(parseFloat(getComputedStyle(el).marginLeft), 'room for the point')
-                .to.be.at.least(protrusion - 1);
+            const needed = Math.abs(tipOffset(el));
+            const margin = parseFloat(getComputedStyle(el).marginLeft);
+            expect(margin, 'margin covers the protrusion').to.be.at.least(needed - 0.5);
+            // And is not wasteful about it, or tags drift apart for no visible reason.
+            expect(margin, 'margin is not far beyond it').to.be.at.most(needed + 3);
         });
     });
 

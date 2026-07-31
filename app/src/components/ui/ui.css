@@ -865,38 +865,44 @@ html[data-theme="amber"] .wrolpi-card-tag {
 }
 
 /*
- * The group's hairlines are an outline on each cell, drawn into a 1px grid gap.
+ * The group is spacing and nothing else: no frame, no rules between cells, and
+ * no surface of its own, so the statistics sit on whatever they are dropped onto
+ * -- the page in one place, a Panel in another -- and pick up its colour.
  *
- * Not a border per cell: a border can only separate the siblings the author can
- * count -- the old code suppressed `border-right` on the last child -- and
- * `auto-fit` wraps, so the seven statistics on the Docs page became four rows on
- * a phone with no rule between them, while the cell ending each earlier row drew
- * its border straight onto the outer one.
+ * That also settles a question this went round twice on.  Ruling the cells needs
+ * a technique that survives wrapping, because `auto-fit` decides the number of
+ * rows at paint time: a `border-right` per cell rules columns but not rows, and
+ * a border-coloured background behind a 1px gap rules both but paints every
+ * track no cell landed in.  With no rules at all, neither problem exists.
  *
- * Nor a border-coloured background behind the gaps, which rules both axes but
- * also paints every track no cell landed in: seven statistics in two columns
- * left the eighth slot a solid grey block.  An outline is drawn outside the
- * cell, so it appears only where a cell actually is.  Adjacent outlines meet in
- * the same 1px of gap, and the outer ones land on the group's own border, all in
- * the same colour, so every rule reads as a single hairline.
+ * The gap is wider across than down.  Two statistics side by side have nothing
+ * between them but air, so they need enough of it not to read as one column of
+ * text; stacked ones are already separated by the label's line.
  */
 .wrolpi-statistic-group {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1px;
-    background-color: var(--panel);
-    border: 1px solid var(--border);
+    gap: 18px 30px;
 }
 
-.wrolpi-statistic-cell {
-    background-color: var(--panel);
-    outline: 1px solid var(--border);
-    padding: 14px 16px;
+/*
+ * With the frame gone there is nothing holding the group off whatever precedes it, and on
+ * most pages that is a Header -- the first row of values sat directly against the heading.
+ *
+ * Only when something does precede it, though.  Apps opens each of its Panels with a group,
+ * and a blanket `margin-top` there pushed the values down off the panel's own top padding
+ * while leaving the bottom where it was, so the whole panel read as lopsided.
+ */
+* + .wrolpi-statistic-group {
+    margin-top: 18px;
 }
 
 /*
  * A statistic that renders nothing -- Status omits the fan reading on a device
- * with no fan connector -- must not leave a padded cell and a hairline behind.
+ * with no fan connector -- must not hold a track open.  The group cannot know in
+ * advance, since it would have to render the child to find out, so the cell is
+ * emitted either way and this takes the empty ones back out.  It is also why the
+ * cells carry no inline style: there is nothing here for it to outrank.
  */
 .wrolpi-statistic-cell:empty {
     display: none;

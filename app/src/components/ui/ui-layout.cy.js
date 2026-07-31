@@ -1,5 +1,5 @@
 import React from 'react';
-import {ActionInput, Button, PathInput, Statistic, StatisticGroup, TextInput} from './index';
+import {ActionInput, Button, Header, PathInput, Statistic, StatisticGroup, TextInput} from './index';
 import {themeNames} from '../../themes/names';
 
 /*
@@ -133,12 +133,13 @@ describe('ActionInput', () => {
     });
 });
 
-describe('StatisticGroup rules every row it ends up with', () => {
+describe('StatisticGroup separates its statistics with nothing but space', () => {
     /*
-     * The group wraps: `auto-fit` with a 150px minimum gives seven statistics one row on a
-     * desktop and four on a phone, and how many rows there are is decided by the viewport at
-     * paint time.  Only a browser can say -- jsdom has no tracks, no rows and no widths -- so
-     * the row-separator claims live here.
+     * The group has no frame, no rules between cells and no surface of its own: the
+     * statistics sit on whatever they were dropped onto and take its colour.  That leaves
+     * the gap as the only thing keeping them apart, and `auto-fit` decides how many rows
+     * there are at paint time -- so whether they actually stay apart is a question only a
+     * browser can answer.  jsdom has no tracks, no rows and no widths.
      */
 
     // Narrow enough that six statistics cannot fit on one row at a 150px minimum.
@@ -164,12 +165,12 @@ describe('StatisticGroup rules every row it ends up with', () => {
             expect(rowTops($cells).length, 'rows the group wrapped into').to.be.greaterThan(1));
     });
 
-    it('draws a hairline between wrapped rows', () => {
+    it('leaves real space between wrapped rows', () => {
         /*
-         * This is the defect: the old group put a `border-right` on every cell but the last,
-         * which rules between columns and says nothing about rows.  Wrapped rows sat flush
-         * against each other, so the Docs page's seven statistics ran together into one block
-         * on a phone.  A row boundary must be a visible 1px of border colour.
+         * With nothing drawn between them, the space *is* the separation.  The old group ruled
+         * columns only -- a `border-right` on every cell but the last, which says nothing about
+         * rows -- so wrapped rows sat flush and the Docs page's seven statistics ran together
+         * into one block on a phone.  A row boundary has to be a gap you can see.
          */
         cy.mountUI(inNarrowColumn(sixStatistics));
 
@@ -181,72 +182,99 @@ describe('StatisticGroup rules every row it ends up with', () => {
                 const previousRowBottom = Math.max(...cells
                     .filter((rect) => Math.round(rect.top) === tops[row - 1])
                     .map((rect) => rect.bottom));
-                const separation = tops[row] - previousRowBottom;
-                expect(separation, `hairline above row ${row + 1}`).to.be.closeTo(1, 0.6);
+                expect(tops[row] - previousRowBottom, `space above row ${row + 1}`)
+                    .to.be.at.least(12);
             }
         });
     });
 
-    it('draws a hairline between columns too', () => {
+    it('leaves more space between columns than between rows', () => {
+        /*
+         * Two statistics side by side have only air between them, and a value sitting close to
+         * the label of the one beside it reads as a single column of text.  Stacked statistics
+         * already have the label's own line between them, so they need less.
+         */
         cy.mountUI(inNarrowColumn(sixStatistics));
+
+        cy.get('.wrolpi-statistic-group').should(($group) => {
+            const styles = getComputedStyle($group[0]);
+            const columnGap = parseFloat(styles.columnGap);
+            const rowGap = parseFloat(styles.rowGap);
+            expect(rowGap, 'row gap').to.be.at.least(12);
+            expect(columnGap, 'column gap is the wider of the two').to.be.greaterThan(rowGap);
+        });
 
         cy.get('.wrolpi-statistic-cell').should(($cells) => {
             const cells = [...$cells].map((cell) => cell.getBoundingClientRect());
-            const firstRowTop = rowTops($cells)[0];
             const firstRow = cells
-                .filter((rect) => Math.round(rect.top) === firstRowTop)
+                .filter((rect) => Math.round(rect.top) === rowTops($cells)[0])
                 .sort((a, b) => a.left - b.left);
 
             expect(firstRow.length, 'columns in the first row').to.be.greaterThan(1);
             for (let column = 1; column < firstRow.length; column++) {
-                expect(firstRow[column].left - firstRow[column - 1].right, 'hairline between columns')
-                    .to.be.closeTo(1, 0.6);
+                expect(firstRow[column].left - firstRow[column - 1].right, 'space between columns')
+                    .to.be.at.least(20);
             }
         });
     });
 
-    it('does not double the outer border where a row ends', () => {
+    it('takes no colour of its own, so it sits on the surface it is given', () => {
         /*
-         * The old code suppressed `border-right` on the last child only, so the cell ending
-         * every earlier row -- there is one per wrap -- drew its own hairline directly onto the
-         * group's outer border, giving a 2px edge on the right and a 1px edge on the left.
-         * Now no cell has a border at all and the single outer one is the edge.
+         * This is the point of having no chrome: dropped on the page it reads as page, dropped
+         * in a Panel it reads as panel.  A background on the group or a cell -- which is how
+         * this was built first, to carry hairlines -- would show as a patch of the wrong colour
+         * on every surface but the one it was picked for.
          */
-        cy.mountUI(inNarrowColumn(sixStatistics));
+        cy.mountUI(<div style={{background: 'rgb(1, 2, 3)', padding: 10}}>{sixStatistics}</div>);
 
-        cy.get('.wrolpi-statistic-cell').each(($cell) =>
-            expect(getComputedStyle($cell[0]).borderRightWidth, 'cell draws no border of its own')
-                .to.equal('0px'));
-        cy.get('.wrolpi-statistic-group').should(($group) =>
-            expect(getComputedStyle($group[0]).borderRightWidth, 'one outer hairline').to.equal('1px'));
+        cy.get('.wrolpi-statistic-group').should(($group) => {
+            const styles = getComputedStyle($group[0]);
+            expect(styles.backgroundColor, 'group is transparent').to.equal('rgba(0, 0, 0, 0)');
+            expect(styles.borderTopWidth, 'no frame').to.equal('0px');
+            expect(styles.borderRightWidth, 'no frame').to.equal('0px');
+            expect(styles.borderBottomWidth, 'no frame').to.equal('0px');
+            expect(styles.borderLeftWidth, 'no frame').to.equal('0px');
+            expect(styles.outlineStyle, 'no outline standing in for a frame').to.equal('none');
+        });
+
+        cy.get('.wrolpi-statistic-cell').each(($cell) => {
+            const styles = getComputedStyle($cell[0]);
+            expect(styles.backgroundColor, 'cell is transparent').to.equal('rgba(0, 0, 0, 0)');
+            expect(styles.borderRightWidth, 'no rule between cells').to.equal('0px');
+            expect(styles.outlineStyle, 'no rule between cells').to.equal('none');
+        });
     });
 
-    it('leaves no painted block in a track no statistic landed in', () => {
+    it('clears whatever precedes it, but does not indent itself', () => {
         /*
-         * An odd count leaves the last row short: seven statistics in two columns fill the
-         * eighth slot with nothing.  Ruling the gaps with a border-coloured background behind
-         * the grid -- the obvious way to do it -- painted that empty slot a solid block of
-         * border grey, which read as a broken cell.  The hairlines are outlines on the cells
-         * instead, so a track with no cell in it is just surface.
+         * Nothing frames the group any more, so a Header directly above it put the heading
+         * text against the first row of values.  A plain `margin-top` fixed that and broke
+         * Apps, which opens each of its Panels with a group: the values were pushed down off
+         * the panel's top padding while the bottom stayed put, leaving every panel lopsided.
+         * So the margin is conditional on having a sibling before it.
          */
-        cy.mountUI(inNarrowColumn(<StatisticGroup>
-            <Statistic value='1,432' label='Videos'/>
-            <Statistic value='896' label='Archives'/>
-            <Statistic value='12,904' label='Files'/>
-            <Statistic value='87.4 GiB' label='Free space'/>
-            <Statistic value='14' label='Zim files'/>
-            <Statistic value='312' label='eBooks'/>
-            <Statistic value={0} label='Downloading'/>
-        </StatisticGroup>));
+        cy.mountUI(<div>
+            <div className='probe-panel' style={{padding: 20}}>
+                <StatisticGroup>
+                    <Statistic value='1,097' label='All files'/>
+                </StatisticGroup>
+            </div>
+            <div className='probe-with-header' style={{padding: 20}}>
+                <Header as='h2'>Files</Header>
+                <StatisticGroup>
+                    <Statistic value='1,097' label='All files'/>
+                </StatisticGroup>
+            </div>
+        </div>);
 
-        cy.get('.wrolpi-statistic-cell').should(($cells) => {
-            // An odd number of cells over an even number of columns, or this proves nothing.
-            expect($cells.length % 2, 'a short last row').to.equal(1);
-        });
-        cy.get('.wrolpi-statistic-group').should(($group) => {
-            const group = getComputedStyle($group[0]);
-            expect(group.backgroundColor, 'the empty track shows surface, not hairline')
-                .to.not.equal(group.borderRightColor);
+        cy.get('.probe-panel .wrolpi-statistic-group').should(($group) =>
+            expect(getComputedStyle($group[0]).marginTop, 'first child of a panel adds nothing')
+                .to.equal('0px'));
+
+        cy.get('.probe-with-header').then(($panel) => {
+            const header = $panel[0].querySelector('.wrolpi-header').getBoundingClientRect();
+            const group = $panel[0].querySelector('.wrolpi-statistic-group').getBoundingClientRect();
+            expect(group.top - header.bottom, 'space below a heading').to.be.at.least(10);
         });
     });
 
@@ -255,13 +283,13 @@ describe('StatisticGroup rules every row it ends up with', () => {
          * Status omits the fan reading on a device with no fan connector -- most of them --
          * by returning null from FanRPMStatistic.  The group still emits its cell, because it
          * cannot render a child to find out, so `:empty` has to take the cell out of the grid.
-         * Left in, it was a blank padded panel and a stray hairline in the middle of the row.
+         * Left in, it held a track open and opened a hole in the middle of the row.
          */
         const NoFanFitted = () => null;
         cy.mountUI(<StatisticGroup>
             <Statistic value='0.4' label='1 Min. Load'/>
             <NoFanFitted/>
-            <Statistic value='48' label='Temp C°'/>
+            <Statistic value='48' label='Temp C'/>
         </StatisticGroup>);
 
         cy.get('.wrolpi-statistic-cell').should('have.length', 3);
@@ -271,27 +299,21 @@ describe('StatisticGroup rules every row it ends up with', () => {
     });
 
     themeNames.forEach((theme) => {
-        it(`takes its hairline and surface from ${theme}'s tokens`, () => {
-            // Drawn from --border and --panel rather than a fixed grey, which is what lets the
-            // group survive night mode without putting a non-red pixel on the screen.
+        it(`reads its value and label from ${theme}'s tokens`, () => {
+            // The contrast between value and label is all that structures a statistic now that
+            // there is no cell around it, so both colours have to resolve in every theme.
             cy.mountUI(inNarrowColumn(sixStatistics), {theme});
 
-            cy.get('.wrolpi-statistic-group').then(($group) => {
-                const group = getComputedStyle($group[0]);
+            cy.get('.wrolpi-statistic-value').first().then(($value) => {
+                const value = getComputedStyle($value[0]).color;
 
-                cy.get('.wrolpi-statistic-cell').first().should(($cell) => {
-                    const cell = getComputedStyle($cell[0]);
-
-                    // The inner hairlines are the cells' outlines and the outer one is the
-                    // group's border; they meet at every edge, so a theme that resolved them
-                    // to different values would show a two-tone frame.
-                    expect(cell.outlineColor, 'inner hairline matches the outer')
-                        .to.equal(group.borderRightColor);
-                    // And the hairline has to be visible against the surface it sits on --
-                    // both resolved from tokens, so a theme that forgot one shows up here.
-                    expect(cell.outlineColor, 'hairline is not the surface colour')
-                        .to.not.equal(cell.backgroundColor);
-                    expect(cell.backgroundColor, 'cell has a surface').to.not.equal('rgba(0, 0, 0, 0)');
+                cy.get('.wrolpi-statistic-label').first().should(($label) => {
+                    const label = getComputedStyle($label[0]).color;
+                    expect(value, 'value colour resolved').to.match(/^rgba?\(/);
+                    expect(label, 'label colour resolved').to.match(/^rgba?\(/);
+                    // The label is the muted token and the value is body text; if either fell
+                    // back the two would come out the same and the statistic would flatten.
+                    expect(label, 'label is distinct from the value').to.not.equal(value);
                 });
             });
         });

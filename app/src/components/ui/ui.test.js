@@ -725,8 +725,8 @@ describe('StatisticGroup', () => {
     it('leaves a cell empty when its statistic renders nothing', () => {
         // `FanRPMStatistic` returns null on a device with no fan connector, which is most of
         // them.  The group cannot know that in advance, so the cell is still emitted and
-        // `.wrolpi-statistic-cell:empty` hides it -- which only works while the cell has no
-        // padding or background of its own inline for that rule to have to outrank.
+        // `.wrolpi-statistic-cell:empty` takes it back out -- which only works while the cell
+        // has nothing of its own inline for that rule to have to outrank.
         const Nothing = () => null;
         const {container} = renderUI(<StatisticGroup>
             <Statistic value='1,432' label='Videos'/>
@@ -738,21 +738,30 @@ describe('StatisticGroup', () => {
         expect(cells[1].getAttribute('style')).toBeNull();
     });
 
-    it('draws its hairlines with the grid, not a border per cell', () => {
-        // A per-cell border can only separate siblings the author can count -- the old code
-        // suppressed `borderRight` on the last child -- and `auto-fit` wraps.  Seven
-        // statistics on a phone became four rows with no rule between them, while the cell
-        // ending each earlier row drew its border straight onto the outer one.  A 1px gap
-        // over a border-coloured background rules both axes however the tracks fall.
+    it('draws no chrome of its own, in markup or in style', () => {
+        // The group is spacing only: the statistics sit on whatever surface they were dropped
+        // onto and take its colour.  An inline border or background here would override the
+        // stylesheet and could not be themed, so nothing may set one.
         const {container} = renderUI(<StatisticGroup>
             <Statistic value='1,432' label='Videos'/>
             <Statistic value='896' label='Archives'/>
         </StatisticGroup>);
 
+        const group = container.querySelector('.wrolpi-statistic-group');
+        expect(group.style.border).toBe('');
+        expect(group.style.background).toBe('');
+        expect(group.style.backgroundColor).toBe('');
         for (const cell of container.querySelectorAll('.wrolpi-statistic-cell')) {
-            expect(cell.style.borderRight).toBe('');
+            expect(cell.getAttribute('style')).toBeNull();
         }
-        expect(container.querySelector('.wrolpi-statistic-group')).toBeInTheDocument();
+    });
+
+    it('still passes a style from the caller through', () => {
+        const {container} = renderUI(<StatisticGroup style={{maxWidth: 600}}>
+            <Statistic value='1,432' label='Videos'/>
+        </StatisticGroup>);
+
+        expect(container.querySelector('.wrolpi-statistic-group')).toHaveStyle({maxWidth: '600px'});
     });
 });
 

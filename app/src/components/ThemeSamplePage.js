@@ -166,9 +166,12 @@ export function ThemeSamplePage() {
                 <Statistic value={0} label='Downloading'/>
             </StatisticGroup>
 
-            {/* Status colours a reading that carries meaning.  Check these in night, where
-                there is no hue to spend and the value has to read by brightness. */}
-            <StatisticGroup style={{marginTop: 14}}>
+            {/* Status colours a reading that carries meaning.  Check these in night and amber,
+                where there is no hue to spend and the value has to read some other way. */}
+            {/* The group above ends in a label, and a heading has no margin of its own, so
+                without this the two run together. */}
+            <Header as='h5' style={{marginTop: 24}}>Coloured readings, as Status draws them</Header>
+            <StatisticGroup>
                 <Statistic value='0.4' label='1 Min. Load'/>
                 <Statistic value='2.6' label='5 Min. Load' color='orange'/>
                 <Statistic value='4.1' label='15 Min. Load' color='red'/>

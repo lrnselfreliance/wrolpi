@@ -1,10 +1,13 @@
 name: Controller Tests
 
+# `pull_request` is unfiltered for the same reason as jest-tests.yml: `branches: [master]` meant
+# this never ran on a pull request into any other branch.  It is why Controller Tests is absent
+# from the checks on the pull request that moved this job to Python 3.13 -- the change to this
+# file could not be verified by the run that contained it.
 on:
   push:
     branches: [master, feature/*]
   pull_request:
-    branches: [master]
 
 jobs:
   controller-tests:

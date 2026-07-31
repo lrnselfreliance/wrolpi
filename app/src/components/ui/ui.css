@@ -852,15 +852,54 @@ html[data-theme="amber"] .wrolpi-card-tag {
 /* ------------------------------------------------------------- Statistics */
 /*
  * A statistic carries its own spacing rather than relying on a parent to supply
- * it: unmigrated pages still drop these inside Semantic's `Statistic.Group`,
- * whose CSS only spaces elements carrying Semantic's own classes, and without
- * this the labels run together into one unreadable line.
+ * it, so that one dropped on a page by itself still sits clear of its
+ * neighbours.  Semantic's `Statistic.Group` only spaced elements carrying
+ * Semantic's own classes, so without this the labels ran together into one
+ * unreadable line.
  */
 
 .wrolpi-statistic {
     display: inline-block;
     vertical-align: top;
     margin: 0 26px 10px 0;
+}
+
+/*
+ * The group's hairlines are an outline on each cell, drawn into a 1px grid gap.
+ *
+ * Not a border per cell: a border can only separate the siblings the author can
+ * count -- the old code suppressed `border-right` on the last child -- and
+ * `auto-fit` wraps, so the seven statistics on the Docs page became four rows on
+ * a phone with no rule between them, while the cell ending each earlier row drew
+ * its border straight onto the outer one.
+ *
+ * Nor a border-coloured background behind the gaps, which rules both axes but
+ * also paints every track no cell landed in: seven statistics in two columns
+ * left the eighth slot a solid grey block.  An outline is drawn outside the
+ * cell, so it appears only where a cell actually is.  Adjacent outlines meet in
+ * the same 1px of gap, and the outer ones land on the group's own border, all in
+ * the same colour, so every rule reads as a single hairline.
+ */
+.wrolpi-statistic-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background-color: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.wrolpi-statistic-cell {
+    background-color: var(--panel);
+    outline: 1px solid var(--border);
+    padding: 14px 16px;
+}
+
+/*
+ * A statistic that renders nothing -- Status omits the fan reading on a device
+ * with no fan connector -- must not leave a padded cell and a hairline behind.
+ */
+.wrolpi-statistic-cell:empty {
+    display: none;
 }
 
 /* Inside our own group the grid does the spacing, so the intrinsic margin goes. */

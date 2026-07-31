@@ -12,6 +12,7 @@ import {
     ActionInput,
     Button,
     Card,
+    CardGroup,
     Confirm,
     Header,
     Icon,
@@ -28,6 +29,8 @@ import {
     PathInput,
     Progress,
     resolveIconName,
+    Statistic,
+    StatisticGroup,
     Status,
     Table,
     ThemePicker,
@@ -642,6 +645,114 @@ describe('Card', () => {
         const {container} = renderUI(<Card title='Plain'/>);
 
         expect(container.firstChild.style.borderBottom).toBe('');
+    });
+});
+
+describe('CardGroup', () => {
+    it('renders every card it is given', () => {
+        renderUI(<CardGroup>
+            <Card title='One'/>
+            <Card title='Two'/>
+            <Card title='Three'/>
+        </CardGroup>);
+
+        expect(screen.getByText('One')).toBeInTheDocument();
+        expect(screen.getByText('Two')).toBeInTheDocument();
+        expect(screen.getByText('Three')).toBeInTheDocument();
+    });
+
+    it('lays cards out on a track no narrower than minWidth', () => {
+        // The default suits file results; a group of wide cards raises it.  If the value were
+        // dropped the grid would fall back to one column, which is how a card wall becomes a
+        // list on a desktop.
+        const {container} = renderUI(<CardGroup minWidth={320}><Card title='One'/></CardGroup>);
+
+        expect(container.querySelector('.wrolpi-card-group'))
+            .toHaveStyle({gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))'});
+    });
+});
+
+describe('Statistic', () => {
+    it('shows the value and its label', () => {
+        renderUI(<Statistic value='87.4 GiB' label='Free space'/>);
+
+        expect(screen.getByText('87.4 GiB')).toBeInTheDocument();
+        expect(screen.getByText('Free space')).toBeInTheDocument();
+    });
+
+    it('colours the value from a token, not a hex', () => {
+        // Status turns load, temperature and IO wait red or orange.  A hex here would not
+        // remap in night mode, putting a green or orange pixel on a red-only screen.
+        const {container} = renderUI(<Statistic value='3.9' label='1 Min. Load' color='red'/>);
+
+        expect(container.querySelector('.wrolpi-statistic-value')).toHaveStyle({color: 'var(--red)'});
+    });
+
+    it('leaves the value in body text when no colour is given', () => {
+        const {container} = renderUI(<Statistic value='0.4' label='1 Min. Load'/>);
+
+        expect(container.querySelector('.wrolpi-statistic-value').style.color).toBe('');
+    });
+
+    it('renders a zero rather than nothing', () => {
+        // `pending_downloads` is 0 on an idle WROLPi, and a falsy check would blank the cell.
+        renderUI(<Statistic value={0} label='Downloading'/>);
+
+        expect(screen.getByText('0')).toBeInTheDocument();
+    });
+
+    it('forwards the props its wrappers spread onto it', () => {
+        // `LoadStatistic` and the four Status wrappers (`CPUTemperatureStatistic`,
+        // `FanRPMStatistic`, `IOWaitStatistic`, `UptimeStatistic`) all end in `{...props}`.
+        // Statistic destructured a fixed five and dropped the rest on the floor, so anything
+        // a caller passed through a wrapper vanished with no error anywhere.
+        renderUI(<Statistic value='42' label='Fan RPM' title='Reported by the fan connector'/>);
+
+        expect(screen.getByTitle('Reported by the fan connector')).toBeInTheDocument();
+    });
+});
+
+describe('StatisticGroup', () => {
+    it('gives each statistic its own cell', () => {
+        const {container} = renderUI(<StatisticGroup>
+            <Statistic value='1,432' label='Videos'/>
+            <Statistic value='896' label='Archives'/>
+        </StatisticGroup>);
+
+        expect(container.querySelectorAll('.wrolpi-statistic-cell')).toHaveLength(2);
+    });
+
+    it('leaves a cell empty when its statistic renders nothing', () => {
+        // `FanRPMStatistic` returns null on a device with no fan connector, which is most of
+        // them.  The group cannot know that in advance, so the cell is still emitted and
+        // `.wrolpi-statistic-cell:empty` hides it -- which only works while the cell has no
+        // padding or background of its own inline for that rule to have to outrank.
+        const Nothing = () => null;
+        const {container} = renderUI(<StatisticGroup>
+            <Statistic value='1,432' label='Videos'/>
+            <Nothing/>
+        </StatisticGroup>);
+
+        const cells = container.querySelectorAll('.wrolpi-statistic-cell');
+        expect(cells[1].childNodes).toHaveLength(0);
+        expect(cells[1].getAttribute('style')).toBeNull();
+    });
+
+    it('draws its hairlines with the grid, not a border per cell', () => {
+        // A per-cell border can only separate siblings the author can count -- the old code
+        // suppressed `borderRight` on the last child -- and `auto-fit` wraps.  Seven
+        // statistics on a phone became four rows with no rule between them, while the cell
+        // ending each earlier row drew its border straight onto the outer one.  A 1px gap
+        // over a border-coloured background rules both axes however the tracks fall.
+        const {container} = renderUI(<StatisticGroup>
+            <Statistic value='1,432' label='Videos'/>
+            <Statistic value='896' label='Archives'/>
+        </StatisticGroup>);
+
+        for (const cell of container.querySelectorAll('.wrolpi-statistic-cell')) {
+            expect(cell.style.borderRight).toBe('');
+        }
+        expect(container.querySelector('.wrolpi-statistic-group')).toBeInTheDocument();
     });
 });
 

@@ -76,16 +76,21 @@ export function Panel({danger, className, children, ...props}: PanelProps) {
 
 // ---------------------------------------------------------------- Statistics
 
-export interface StatisticProps {
+export interface StatisticProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'> {
+    /** The number.  Rendered as given, so `0` shows as a zero rather than nothing. */
     value: React.ReactNode;
     label: React.ReactNode;
+    /** A token colour name, for a reading that carries meaning: load, temperature, IO wait. */
     color?: string;
-    className?: string;
-    style?: React.CSSProperties;
 }
 
-export function Statistic({value, label, color, className, style}: StatisticProps) {
-    return <div className={['wrolpi-statistic', className].filter(Boolean).join(' ')} style={style}>
+/**
+ * One figure and its label.  The rest of the props reach the outer element, because
+ * `LoadStatistic` and the four Status wrappers all end in `{...props}` and used to have
+ * everything past the named five silently dropped.
+ */
+export function Statistic({value, label, color, className, ...props}: StatisticProps) {
+    return <div className={['wrolpi-statistic', className].filter(Boolean).join(' ')} {...props}>
         <div className='wrolpi-statistic-value' style={{color: color ? `var(--${color})` : undefined}}>
             {value}
         </div>
@@ -93,25 +98,16 @@ export function Statistic({value, label, color, className, style}: StatisticProp
     </div>
 }
 
-/** A row of statistics separated by hairlines, sharing one outer border. */
-export function StatisticGroup({children}: {children: React.ReactNode}) {
-    const items = React.Children.toArray(children);
-    return <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(auto-fit, minmax(150px, 1fr))`,
-        border: '1px solid var(--border)',
-    }}>
-        {items.map((child, index) => <div
-            key={index}
-            className='wrolpi-statistic-cell'
-            style={{
-                background: 'var(--panel)',
-                padding: '14px 16px',
-                borderRight: index === items.length - 1 ? undefined : '1px solid var(--border)',
-            }}
-        >
-            {child}
-        </div>)}
+/**
+ * A row of statistics separated by hairlines, sharing one outer border.  The cells carry
+ * no inline style of their own so that `.wrolpi-statistic-cell:empty` can hide the ones
+ * whose statistic rendered nothing — Status omits the fan reading on the devices, most of
+ * them, with no fan connector.
+ */
+export function StatisticGroup({children, className, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+    return <div className={['wrolpi-statistic-group', className].filter(Boolean).join(' ')} {...props}>
+        {React.Children.toArray(children).map((child, index) =>
+            <div key={index} className='wrolpi-statistic-cell'>{child}</div>)}
     </div>
 }
 
@@ -161,12 +157,26 @@ export function Card({media, title, meta, children, onClick, color, className}: 
     </MCard>
 }
 
-export function CardGroup({children, minWidth = 200}: {children: React.ReactNode; minWidth?: number}) {
-    return <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
-        gap: 14,
-    }}>
+export interface CardGroupProps extends React.HTMLAttributes<HTMLDivElement> {
+    /**
+     * The narrowest a card may be laid out.  `auto-fill` rather than `auto-fit`, so a group
+     * of two cards in a wide column keeps them card-sized instead of stretching each to half
+     * the page.
+     */
+    minWidth?: number;
+}
+
+export function CardGroup({children, minWidth = 200, className, style, ...props}: CardGroupProps) {
+    return <div
+        className={['wrolpi-card-group', className].filter(Boolean).join(' ')}
+        style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
+            gap: 14,
+            ...style,
+        }}
+        {...props}
+    >
         {children}
     </div>
 }

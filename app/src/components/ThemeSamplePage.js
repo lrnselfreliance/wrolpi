@@ -151,12 +151,28 @@ export function ThemeSamplePage() {
         </Section>
 
         <Section label='Statistics'>
+            {/*
+              * Seven, deliberately: enough to wrap on a narrow window, which is where the row
+              * hairlines are worth looking at.  The group rules both axes from --border, so the
+              * grid holds together however the tracks fall.
+              */}
             <StatisticGroup>
                 <Statistic value='1,432' label='Videos'/>
                 <Statistic value='896' label='Archives'/>
                 <Statistic value='12,904' label='Files'/>
                 <Statistic value='87.4 GiB' label='Free space'/>
                 <Statistic value='14' label='Zim files'/>
+                <Statistic value='312' label='eBooks'/>
+                <Statistic value={0} label='Downloading'/>
+            </StatisticGroup>
+
+            {/* Status colours a reading that carries meaning.  Check these in night, where
+                there is no hue to spend and the value has to read by brightness. */}
+            <StatisticGroup style={{marginTop: 14}}>
+                <Statistic value='0.4' label='1 Min. Load'/>
+                <Statistic value='2.6' label='5 Min. Load' color='orange'/>
+                <Statistic value='4.1' label='15 Min. Load' color='red'/>
+                <Statistic value='48' label='Temp C°'/>
             </StatisticGroup>
         </Section>
 

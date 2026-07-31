@@ -795,7 +795,7 @@ export function VideosStatistics() {
             <StatisticGroup>
                 {names.map(
                     ({key, label}) =>
-                        <Statistic key={key} value={stats[key]} label={label} style={{margin: '2em'}}/>
+                        <Statistic key={key} value={stats[key]} label={label}/>
                 )}
             </StatisticGroup>
         </Panel>

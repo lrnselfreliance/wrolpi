@@ -1,5 +1,8 @@
 import React from 'react';
-import {ActionInput, Button, Header, PathInput, Statistic, StatisticGroup, TextInput} from './index';
+import {
+    ActionInput, Button, Header, PathInput, Statistic, StatisticGroup, TabBar, tabClassName, TextInput,
+} from './index';
+import {contrastingColor} from '../Common';
 import {themeNames} from '../../themes/names';
 
 /*
@@ -316,6 +319,183 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
                     expect(label, 'label is distinct from the value').to.not.equal(value);
                 });
             });
+        });
+    });
+});
+
+describe('a tag is legible in every theme, whatever colour the user picked', () => {
+    /*
+     * Tag colours are the user's, stored per tag -- the only thing in the app painted with a
+     * value no theme chose.  Tags.js calculates black or light text against that fill, and
+     * night discards the fill entirely (a filled tag would be a bright patch) while amber
+     * replaces it with its own.  Whether the text still reads afterwards is a question about
+     * resolved colour against a real painted surface, so it can only be asked here.
+     */
+
+    // The extremes of the black-or-light decision, plus a mid tone.
+    const TAG_COLOURS = [
+        ['Reference', '#f2f2f2'],   // near-white: text is calculated black
+        ['Archived', '#1b1c1d'],    // near-black: text is calculated light
+        ['Water', '#2185d0'],
+    ];
+
+    const tags = <div>
+        {TAG_COLOURS.map(([name, color]) => <span
+            key={name}
+            className='wrolpi-label wrolpi-tag'
+            data-tag={name}
+            style={{'--label-color': color, '--label-text': contrastingColor(color)}}
+        >{name}</span>)}
+    </div>;
+
+    themeNames.forEach((theme) => {
+        TAG_COLOURS.forEach(([name]) => {
+            it(`reads ${name} against its real surface in ${theme}`, () => {
+                cy.mountUI(tags, {theme});
+
+                /*
+                 * 4.5:1 is WCAG AA for body text.  Before this, night measured 1.1:1 on a
+                 * near-white tag -- the black text calculated for that fill, painted onto a
+                 * transparent tag over a near-black page.  The tag was readable only as an
+                 * empty outline.
+                 */
+                cy.contrastRatio(`[data-tag="${name}"]`).should('be.at.least', 4.5);
+            });
+        });
+    });
+
+    it('detects the unreadable tag this started as, so the check has teeth', () => {
+        /*
+         * The original defect, reproduced deliberately: the calculated text colour written to
+         * `color` inline, which no stylesheet rule can outrank.  In night the tag becomes a
+         * transparent outline over a near-black page, so the black text calculated for a
+         * near-white fill is painted onto near-black.
+         *
+         * Asserting that this IS unreadable proves contrastRatio measures the surface actually
+         * behind the text rather than the tag's own missing background.  A contrast check that
+         * has never gone red is indistinguishable from one that cannot.
+         */
+        cy.mountUI(
+            <span
+                className='wrolpi-label wrolpi-tag'
+                data-tag='Legacy'
+                style={{'--label-color': '#f2f2f2', color: contrastingColor('#f2f2f2')}}
+            >Reference</span>,
+            {theme: 'night'},
+        );
+
+        cy.contrastRatio('[data-tag="Legacy"]').should('be.lessThan', 1.5);
+    });
+
+    it('is at least as large as the Semantic label it replaced', () => {
+        // The first pass came out at 11.5px against Semantic's 12px and read as shrunken.
+        // A tag is a hit target as well as a word, so it also has to stay tall enough to hit.
+        cy.mountUI(tags);
+
+        cy.get('.wrolpi-tag').first().should(($tag) => {
+            expect(parseFloat(getComputedStyle($tag[0]).fontSize), 'font size').to.be.at.least(12);
+            expect($tag[0].getBoundingClientRect().height, 'height').to.be.at.least(26);
+        });
+    });
+});
+
+describe('a tag looks like a physical tag', () => {
+    const tag = <span
+        className='wrolpi-label wrolpi-tag'
+        style={{'--label-color': '#2185d0', '--label-text': '#ffffff'}}
+    >Water</span>;
+
+    it('has a pointed left edge that spans the full height', () => {
+        /*
+         * The point is a square rotated 45 degrees behind the left edge.  Its diagonal has to
+         * equal the body's height, or the two edges meet the body short of its corners and the
+         * result reads as a notch stuck on the side rather than one tag-shaped outline.
+         */
+        cy.mountUI(tag);
+
+        cy.get('.wrolpi-tag').should(($tag) => {
+            const el = $tag[0];
+            const height = el.getBoundingClientRect().height;
+            const side = parseFloat(getComputedStyle(el, '::before').width);
+            expect(side, 'the point is drawn at all').to.be.greaterThan(0);
+            expect(side * Math.SQRT2, "the point's diagonal matches the body height")
+                .to.be.closeTo(height, 2);
+        });
+    });
+
+    it('protrudes to the left, and reserves the room it needs', () => {
+        // The point is drawn outside the body, so without a matching margin it would print
+        // over whatever sits to the left -- the previous tag in the row.
+        cy.mountUI(tag);
+
+        cy.get('.wrolpi-tag').should(($tag) => {
+            const el = $tag[0];
+            const side = parseFloat(getComputedStyle(el, '::before').width);
+            const protrusion = side / 2;
+            expect(parseFloat(getComputedStyle(el).marginLeft), 'room for the point')
+                .to.be.at.least(protrusion - 1);
+        });
+    });
+
+    it('does not print the point over the first letter', () => {
+        /*
+         * A positioned pseudo-element paints above the parent's text, not behind it, and the
+         * point's inner half lies over the body.  Removing the left padding once hid the first
+         * character of every tag: "Water" read as "ater".
+         */
+        cy.mountUI(tag);
+
+        cy.get('.wrolpi-tag').should(($tag) => {
+            const el = $tag[0];
+            const styles = getComputedStyle(el);
+            const overlapIntoBody = parseFloat(getComputedStyle(el, '::before').width) / 2;
+            const textStartsAt = parseFloat(styles.paddingLeft) + parseFloat(styles.borderLeftWidth);
+            expect(textStartsAt, 'text starts clear of the point').to.be.greaterThan(overlapIntoBody);
+        });
+    });
+
+    it('keeps wrapped rows of tags off each other', () => {
+        // Tags wrap wherever they are listed, and a wrapped row was sitting on the row above.
+        cy.mountUI(<div style={{width: 240}}>
+            {['Water', 'Food', 'Medical', 'Shelter', 'Power', 'Comms'].map((name) => <span
+                key={name}
+                className='wrolpi-label wrolpi-tag'
+                style={{'--label-color': '#2185d0', '--label-text': '#ffffff'}}
+            >{name}</span>)}
+        </div>);
+
+        cy.get('.wrolpi-tag').should(($tags) => {
+            const rects = [...$tags].map((el) => el.getBoundingClientRect());
+            const rows = [...new Set(rects.map((r) => Math.round(r.top)))].sort((a, b) => a - b);
+            expect(rows.length, 'the tags wrapped').to.be.greaterThan(1);
+
+            for (let row = 1; row < rows.length; row++) {
+                const previousBottom = Math.max(...rects
+                    .filter((r) => Math.round(r.top) === rows[row - 1])
+                    .map((r) => r.bottom));
+                expect(rows[row] - previousBottom, `gap above row ${row + 1}`).to.be.at.least(3);
+            }
+        });
+    });
+});
+
+describe('tabs', () => {
+    themeNames.forEach((theme) => {
+        it(`gives an inactive tab no surface of its own in ${theme}`, () => {
+            /*
+             * A tab is a NavLink in the app's nav bars but a <button> on Inventory and in the
+             * gallery, and a button carries the UA's `buttonface` background -- rgb(239,239,239).
+             * Only the active tab set a background, so every inactive one was a near-white block
+             * in dark, night and amber.
+             */
+            cy.mountUI(<TabBar>
+                <button className={tabClassName(true)}>Videos</button>
+                <button className={tabClassName(false)}>Channels</button>
+            </TabBar>, {theme});
+
+            cy.contains('button', 'Channels').should(($tab) =>
+                expect(getComputedStyle($tab[0]).backgroundColor, 'inactive tab is transparent')
+                    .to.equal('rgba(0, 0, 0, 0)'));
         });
     });
 });

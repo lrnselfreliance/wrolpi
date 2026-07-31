@@ -573,6 +573,32 @@ describe('Label', () => {
     });
 });
 
+describe('Label as a tag', () => {
+    it('is a plain chip unless asked to be a tag', () => {
+        // The same component carries the count badges in the Tags table -- file, zim, channel
+        // and domain counts -- and a pointed left edge on a number reads as an arrow.
+        const {container} = renderUI(<Label color='blue'>1,432</Label>);
+
+        expect(container.querySelector('.wrolpi-label')).toBeInTheDocument();
+        expect(container.querySelector('.wrolpi-tag')).not.toBeInTheDocument();
+    });
+
+    it('takes the tag shape when asked', () => {
+        const {container} = renderUI(<Label tag color='blue'>Water</Label>);
+
+        expect(container.querySelector('.wrolpi-tag')).toBeInTheDocument();
+    });
+
+    it('leaves the text colour to the stylesheet', () => {
+        // Every label routes its text colour through `--label-text` so that night and amber,
+        // which replace the fill with their own, can replace the text colour with it.  An
+        // inline `color` could not be overridden by either.
+        const {container} = renderUI(<Label tag color='blue'>Water</Label>);
+
+        expect(container.querySelector('.wrolpi-label').style.color).toBe('');
+    });
+});
+
 describe('Table', () => {
     it('renders a Semantic-shaped compound table', () => {
         renderUI(<Table>

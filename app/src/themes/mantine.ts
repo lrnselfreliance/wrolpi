@@ -19,6 +19,16 @@ import {createTheme, CSSVariablesResolver, MantineColorsTuple} from '@mantine/co
 const tokenColor = (token: string): MantineColorsTuple =>
     Array(10).fill(`var(--${token})`) as unknown as MantineColorsTuple;
 
+/**
+ * The semantic roles.  A component asks for what a colour MEANS; the theme decides
+ * how that looks.  Registered as Mantine colors too, so `color='danger'` works on any
+ * Mantine component the same way `color='red'` does.  See the note in tokens.css --
+ * in night and amber these are brightnesses, not hues.
+ */
+export const roleNames = ['neutral', 'info', 'success', 'warning', 'danger'] as const;
+
+export type RoleName = typeof roleNames[number];
+
 /** The Semantic UI color names WROLPi uses.  Each maps to a token of the same name. */
 export const semanticColorNames = [
     'red', 'orange', 'yellow', 'olive', 'green', 'teal', 'blue', 'violet', 'purple', 'pink',
@@ -28,7 +38,7 @@ export const semanticColorNames = [
 export type SemanticColorName = typeof semanticColorNames[number];
 
 const semanticColors = Object.fromEntries(
-    semanticColorNames.map(name => [name, tokenColor(name)])
+    [...semanticColorNames, ...roleNames].map(name => [name, tokenColor(name)])
 );
 
 export const mantineTheme = createTheme({

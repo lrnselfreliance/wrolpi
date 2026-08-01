@@ -50,17 +50,45 @@ html[data-theme="light"] {
 
     /* Switch thumbs and slider handles. */
     --knob: #ffffff;
-}
 
-/*
- * Role aliases.  Declared once: `var()` resolves on <html>, where each theme
- * has already redefined the color it points at.
- */
-:root {
-    --primary: var(--blue);
+    /* Roles: light has hues to spend, so each role is simply the hue that means it. */
+    --neutral: var(--grey);
+    --info: var(--blue);
     --success: var(--green);
     --warning: var(--amber);
     --danger: var(--red);
+}
+
+/*
+ * Semantic roles.
+ *
+ * What a colour MEANS, separate from what hue it happens to be.  A call site asks
+ * for `--danger`, not `--red`, and each theme decides how danger looks.
+ *
+ * This matters because two of the four themes have no hues to spend.  Night is red
+ * and nothing else; amber is amber and nothing else.  There, a role is a step on a
+ * BRIGHTNESS ramp -- and it has to be, because `--orange` in night is byte-identical
+ * to `--text` and `--yellow` is byte-identical to `--amber`, so a call site choosing
+ * between hue names there is choosing between synonyms.  That is why all four toast
+ * kinds looked the same in night, and why a warning and an error were the same pixel.
+ *
+ * The ramps below are built so that in every theme:
+ *   - the order neutral < info < success < warning < danger is strictly increasing in
+ *     contrast against the panel, so severity reads as brightness even without hue;
+ *   - every role except neutral clears 3:1 against the panel;
+ *   - danger reaches that theme's own `--text` brightness, so the loudest role is
+ *     never quieter than ordinary prose;
+ *   - neutral sits deliberately below the rest -- for `pending` and disabled, being
+ *     dim IS the signal.
+ *
+ * `ui-layout.cy.js` asserts all of that, per theme, in a real browser.
+ *
+ * `--primary` is deliberately NOT one of these.  "The colour of a primary button" and
+ * "the colour that means informational" are different jobs, and a user who recolours
+ * their buttons should not thereby recolour their messages.
+ */
+:root {
+    --primary: var(--blue);
 }
 
 html[data-theme="dark"] {
@@ -91,6 +119,13 @@ html[data-theme="dark"] {
 
     --btn-text: #1c1f21;
     --knob: var(--text);
+
+    /* Roles: as light -- a hue each.  See the note above the :root block. */
+    --neutral: var(--grey);
+    --info: var(--blue);
+    --success: var(--green);
+    --warning: var(--amber);
+    --danger: var(--red);
 }
 
 /*
@@ -126,6 +161,13 @@ html[data-theme="night"] {
 
     --btn-text: #0a0000;
     --knob: var(--text);
+
+    /* Roles: one hue, five brightnesses; saturation climbs with severity too. */
+    --neutral: #992c2c;
+    --info: #c02929;
+    --success: #e02323;
+    --warning: #ee3434;
+    --danger: #ff3e3e;
 }
 
 /* Amber: a monochrome amber terminal palette, same flat style as the rest. */
@@ -160,6 +202,13 @@ html[data-theme="amber"] {
 
     /* Amber assigns the mono face to the body role; that is its character. */
     --font-body: var(--font-system-mono);
+
+    /* Roles: scaled to amber's own headroom (--text is 8.6:1, night's is 5.0:1). */
+    --neutral: #815825;
+    --info: #b06e1f;
+    --success: #d37c11;
+    --warning: #f18806;
+    --danger: #ff9e29;
 }
 
 /* ------------------------------------------------------------------------- */

@@ -1,5 +1,6 @@
 import React from 'react';
 import {notifications} from '@mantine/notifications';
+import {RoleName} from '../../themes/mantine';
 
 /*
  * Toasts.
@@ -9,7 +10,8 @@ import {notifications} from '@mantine/notifications';
  * ThemeProvider.
  */
 
-export type ToastType = 'info' | 'success' | 'warning' | 'error';
+/* `error` is the original spelling and stays; `danger` is the token's name for it. */
+export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'danger';
 
 export interface ToastOptions {
     type?: ToastType;
@@ -25,11 +27,18 @@ export interface ToastOptions {
     onClick?: () => void;
 }
 
-const toastColors: Record<ToastType, string> = {
-    info: 'blue',
-    success: 'green',
-    warning: 'yellow',
-    error: 'red',
+/*
+ * Roles, not hues.  With hues, all four kinds were the same pixel in night and amber:
+ * `--yellow` there is byte-identical to `--amber`, and `--orange` to `--text`.  An
+ * error toast was indistinguishable from an informational one, which is the failure
+ * mode a toast exists to avoid.
+ */
+const toastRoles: Record<ToastType, RoleName> = {
+    info: 'info',
+    success: 'success',
+    warning: 'warning',
+    error: 'danger',
+    danger: 'danger',
 };
 
 /**
@@ -64,7 +73,7 @@ export function toast({type = 'info', title, description, time = 5000, onClick}:
     notifications.show({
         title,
         message: description,
-        color: toastColors[type],
+        color: toastRoles[type],
         // Semantic treated 0 as "stay up"; Mantine wants false for that.  Its `getAutoClose`
         // returns any number as given and the container then calls `setTimeout(hide, 0)`, so
         // passing the 0 through dismisses the toast on the next tick.

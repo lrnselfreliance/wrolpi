@@ -288,7 +288,7 @@ export function ThemeSamplePage() {
                 </Row>
 
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
-                    Bottom right, five at a time, five seconds each unless the caller says
+                    Top right, five at a time, five seconds each unless the caller says
                     otherwise. Check each type in all four themes: night has no second hue to
                     spend, so info, success, warning and error cannot be told apart by colour
                     there.

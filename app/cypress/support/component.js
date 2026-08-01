@@ -19,12 +19,16 @@ import '../../src/index.css';
 import '../../src/themes/fonts.css';
 import '../../src/themes/tokens.css';
 import '@mantine/core/styles.css';
+// App.js loads this too.  Without it a Notification renders unstyled here, so a toast had no
+// surface and no title colour of Mantine's -- and its contrast test could not fail.
+import '@mantine/notifications/styles.css';
 // react-router v7 ships these directly; `react-router-dom` is not installed.
 import {MemoryRouter, Route, Routes} from "react-router";
 import {QueryProvider} from "../../src/hooks/customHooks";
 import {TagsProvider} from "../../src/Tags";
 import {MantineProvider} from "@mantine/core";
 import {cssVariablesResolver, mantineTheme} from "../../src/themes/mantine";
+import {isDarkTheme} from "../../src/themes/names";
 import {MediaFilterDefs} from "../../src/themes/MediaFilterDefs";
 import React from "react";
 
@@ -75,6 +79,13 @@ Cypress.Commands.add('mountWithRouter', (component, options) => {
  * `theme` stamps data-theme the way ThemeProvider does; `mediaFilter` stamps
  * data-media-filter and mounts the SVG filter definitions, since a filter referenced but
  * never defined silently does nothing.
+ *
+ * `forceColorScheme` matters as much as the token table, and was missing.  Mantine keys its
+ * own rules on data-mantine-color-scheme, which ThemeProvider sets from the theme -- night and
+ * amber ride on dark.  Without it every theme rendered against Mantine's LIGHT scheme here, so
+ * a per-theme test could pass on a page that was broken in the app: the toast title, which
+ * Mantine paints with `--mantine-color-white` in dark scheme only, resolved correctly by
+ * accident and its contrast test could not fail.
  */
 Cypress.Commands.add('mountUI', (component, options = {}) => {
     const {theme = 'light', mediaFilter, ...mountOptions} = options;
@@ -85,7 +96,11 @@ Cypress.Commands.add('mountUI', (component, options = {}) => {
     else delete html.dataset.mediaFilter;
 
     return cy.mount(
-        <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+        <MantineProvider
+            theme={mantineTheme}
+            cssVariablesResolver={cssVariablesResolver}
+            forceColorScheme={isDarkTheme(theme) ? 'dark' : 'light'}
+        >
             {mediaFilter ? <MediaFilterDefs/> : null}
             {component}
         </MantineProvider>,

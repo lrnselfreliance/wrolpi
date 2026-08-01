@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Placeholder, Statistic, StatisticGroup, TabBar, tabClassName, TextInput,
+    Placeholder, Statistic, StatisticGroup, TabBar, Table, tabClassName, TextInput,
 } from './index';
 import {contrastingColor} from '../Common';
 import {Notifications} from '@mantine/notifications';
@@ -143,6 +143,177 @@ describe('ActionInput', () => {
         );
 
         cy.shouldNotOverlap('.wrolpi-action-input input', '.wrolpi-action-input button');
+    });
+});
+
+/* WCAG contrast between two rgb() strings, for judging how loud a border is. */
+const luminance = (colour) => {
+    const [r, g, b] = (colour.match(/[\d.]+/g) || []).map(Number);
+    const channel = (v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+
+const contrast = (a, b) => {
+    const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+};
+
+const sampleTable = <Table>
+    <Table.Header>
+        <Table.Row>
+            <Table.HeaderCell>URL</Table.HeaderCell>
+            <Table.HeaderCell>Size</Table.HeaderCell>
+        </Table.Row>
+    </Table.Header>
+    <Table.Body>
+        <Table.Row><Table.Cell>one</Table.Cell><Table.Cell>1 kB</Table.Cell></Table.Row>
+        <Table.Row><Table.Cell>two</Table.Cell><Table.Cell>2 kB</Table.Cell></Table.Row>
+        <Table.Row><Table.Cell>three</Table.Cell><Table.Cell>3 kB</Table.Cell></Table.Row>
+    </Table.Body>
+</Table>;
+
+describe('a table header is a surface, not just bold text', () => {
+    themeNames.forEach((theme) => {
+        it(`separates the header from every body row in ${theme}`, () => {
+            /*
+             * Mantine gives thead no background, so the header painted whatever was behind
+             * the table -- which is exactly what an unstriped body row paints.  Against a
+             * striped body the header read as one more stripe, and weight was the only
+             * thing telling them apart.  None of this is visible to jsdom: the colours are
+             * tokens, and "what is behind an unstriped row" is a question about painting.
+             */
+            cy.mountUI(sampleTable, {theme});
+
+            cy.get('thead th').first().should(($th) => {
+                const header = getComputedStyle($th[0]).backgroundColor;
+                expect(header, 'the header paints a surface of its own')
+                    .to.not.match(/^rgba\(.*,\s*0(\.0+)?\)$/);
+
+                const rows = [...Cypress.$('tbody tr')].map(row => {
+                    // An unstriped row paints nothing, so what shows is the page behind it.
+                    const own = getComputedStyle(row).backgroundColor;
+                    return /^rgba\(.*,\s*0(\.0+)?\)$/.test(own)
+                        ? getComputedStyle(document.documentElement).backgroundColor
+                        : own;
+                });
+                expect(rows.length).to.be.greaterThan(2);
+                rows.forEach((row, index) => {
+                    expect(header, `header vs body row ${index}`).to.not.equal(row);
+                });
+            });
+        });
+    });
+
+    it('rules off the header with a heavier line than it puts between rows', () => {
+        /*
+         * The header/body division is the one that carries meaning -- everything above it
+         * names, everything below is data -- so it is the one line allowed to be loud.
+         */
+        cy.mountUI(sampleTable, {theme: 'light'});
+
+        cy.get('thead th').first().should(($th) => {
+            const header = getComputedStyle($th[0]);
+            const row = getComputedStyle(Cypress.$('tbody tr')[0]);
+            expect(parseFloat(header.borderBottomWidth), 'header rule width')
+                .to.be.greaterThan(parseFloat(row.borderBottomWidth));
+        });
+    });
+});
+
+describe('table rules', () => {
+    themeNames.forEach((theme) => {
+        it(`keeps the rule between rows quieter than the table outline in ${theme}`, () => {
+            /*
+             * With a rule under every row at full border strength, a long table reads as a
+             * stack of boxes rather than a list.  `--table-line` is the quieter token; the
+             * outline around the table is not a row rule and keeps `--border`.
+             *
+             * Measured as contrast against the row's own surface rather than compared to a
+             * token, so the claim is about what the eye gets.
+             */
+            cy.mountUI(sampleTable, {theme});
+
+            cy.get('tbody tr').first().should(($row) => {
+                const table = Cypress.$('table')[0];
+                const token = (name) => hexToRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue(name).trim());
+                /*
+                 * Against `--panel`, the surface a row paints on.  Not against the root
+                 * background: nothing paints <html> under a mounted component, so it reads
+                 * `rgba(0, 0, 0, 0)`, and measuring both lines against black ranks the
+                 * *paler* one as louder -- which is how this assertion first passed
+                 * backwards.
+                 */
+                const surface = token('--panel');
+                const rule = contrast(getComputedStyle($row[0]).borderBottomColor, surface);
+                const outline = contrast(getComputedStyle(table).borderTopColor, surface);
+
+                expect(rule, 'row rule is quieter than the table outline').to.be.lessThan(outline);
+            });
+        });
+
+        it(`draws nothing between the cells of a row in ${theme}`, () => {
+            cy.mountUI(sampleTable, {theme});
+
+            cy.get('tbody tr').first().find('td').first().should(($cell) => {
+                expect(parseFloat(getComputedStyle($cell[0]).borderRightWidth),
+                    'no rule between columns').to.equal(0);
+            });
+        });
+    });
+});
+
+describe('a file row lines its icon up with its name', () => {
+    /*
+     * The file browser writes an icon and a filename as inline siblings in one cell.  An
+     * inline SVG sits on the text baseline, so a 24px glyph beside 13px text hangs well
+     * above it -- the icon looked centred in the row and the name looked like it was
+     * resting on the icon's floor.
+     *
+     * Purely a question of layout: jsdom returns zeros from getBoundingClientRect, so
+     * nothing there can tell a centred glyph from one hanging off a baseline.
+     */
+    const fileRow = <Table>
+        <Table.Body>
+            <Table.Row>
+                <Table.Cell className='file-path'>
+                    <Icon name='file audio'/>
+                    big_buck_bunny.mp3
+                </Table.Cell>
+            </Table.Row>
+        </Table.Body>
+    </Table>;
+
+    it('centres the glyph against the text rather than sitting it on the baseline', () => {
+        cy.mountUI(fileRow, {theme: 'light'});
+
+        cy.get('td.file-path svg').should(($icon) => {
+            const icon = $icon[0].getBoundingClientRect();
+            // The text node's own box, which is what the eye compares the icon to.
+            const range = document.createRange();
+            range.selectNodeContents($icon[0].nextSibling);
+            const text = range.getBoundingClientRect();
+
+            const iconCentre = icon.top + icon.height / 2;
+            const textCentre = text.top + text.height / 2;
+            expect(Math.abs(iconCentre - textCentre), 'icon centre vs text centre')
+                .to.be.at.most(2);
+        });
+    });
+
+    it('leaves a gap between the glyph and the name', () => {
+        // They touched: the folder icon ran into the first letter of its own folder name.
+        cy.mountUI(fileRow, {theme: 'light'});
+
+        cy.get('td.file-path svg').should(($icon) => {
+            const range = document.createRange();
+            range.selectNodeContents($icon[0].nextSibling);
+            const gap = range.getBoundingClientRect().left - $icon[0].getBoundingClientRect().right;
+            expect(gap, 'gap between icon and filename').to.be.greaterThan(2);
+        });
     });
 });
 

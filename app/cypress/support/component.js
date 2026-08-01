@@ -22,6 +22,12 @@ import '@mantine/core/styles.css';
 // App.js loads this too.  Without it a Notification renders unstyled here, so a toast had no
 // surface and no title colour of Mantine's -- and its contrast test could not fail.
 import '@mantine/notifications/styles.css';
+/*
+ * App.js loads this as well.  Rules for things outside the component library live here --
+ * the nav bar, the file browser rows -- and without it a spec covering one of them measures
+ * a component the app never renders.
+ */
+import '../../src/App.css';
 // react-router v7 ships these directly; `react-router-dom` is not installed.
 import {MemoryRouter, Route, Routes} from "react-router";
 import {QueryProvider} from "../../src/hooks/customHooks";

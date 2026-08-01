@@ -13,10 +13,14 @@ import {
     Button,
     Card,
     CardGroup,
+    Checkbox,
     Confirm,
     Header,
     Icon,
     IconStack,
+    Loader,
+    Loading,
+    Placeholder,
     Pagination,
     SearchBox,
     TabBar,
@@ -877,6 +881,119 @@ describe('Toggle', () => {
         await userEvent.click(toggle);
 
         expect(onChange).toHaveBeenCalled();
+    });
+});
+
+describe('Checkbox', () => {
+    it('reports and changes its state', async () => {
+        const onChange = jest.fn();
+        renderUI(<Checkbox label='Download comments' checked={false} onChange={onChange}/>);
+
+        const box = screen.getByRole('checkbox', {name: 'Download comments'});
+        expect(box).not.toBeChecked();
+        await userEvent.click(box);
+
+        expect(onChange).toHaveBeenCalled();
+    });
+
+    it('points Mantine\'s own variables at tokens', () => {
+        /*
+         * The only reason this wrapper exists.  Mantine draws the box and the tick from
+         * --checkbox-color and --checkbox-icon-color; left alone they are Mantine's blue and
+         * a literal white, and a white tick is exactly the pixel night mode forbids.
+         */
+        const {container} = renderUI(<Checkbox label='Download comments'/>);
+
+        const root = container.querySelector('.mantine-Checkbox-root');
+        expect(root.style.getPropertyValue('--checkbox-color')).toBe('var(--blue)');
+        expect(root.style.getPropertyValue('--checkbox-icon-color')).toBe('var(--btn-text)');
+    });
+
+    it('keeps those variables when the caller brings a style of its own', () => {
+        // `style={style}` instead of `style={{...checkboxStyles, ...style}}` would drop the
+        // tokens for any call site that sets so much as a margin, and only in that one place.
+        const {container} = renderUI(<Checkbox label='Download comments' style={{marginTop: 4}}/>);
+
+        const root = container.querySelector('.mantine-Checkbox-root');
+        expect(root.style.marginTop).toBe('4px');
+        expect(root.style.getPropertyValue('--checkbox-color')).toBe('var(--blue)');
+    });
+});
+
+describe('Loader', () => {
+    it('has an accessible name, because a spinner with no name is silence', () => {
+        renderUI(<Loader/>);
+
+        expect(screen.getByLabelText('Loading')).toBeInTheDocument();
+    });
+
+    it('says what is being waited on when the caller knows', () => {
+        renderUI(<Loader label='Fetching channels'/>);
+
+        expect(screen.getByLabelText('Fetching channels')).toBeInTheDocument();
+    });
+
+    it('takes its colour from a token rather than a fixed value', () => {
+        // A hex here would be one colour in all four themes, and a blue one in night mode.
+        const {container} = renderUI(<Loader/>);
+
+        expect(container.querySelector('.mantine-Loader-root').style.getPropertyValue('--loader-color'))
+            .toBe('var(--blue)');
+    });
+});
+
+describe('Loading', () => {
+    it('names the spinner after the caption, so the wait is announced', () => {
+        renderUI(<Loading>Loading backups…</Loading>);
+
+        expect(screen.getByLabelText('Loading backups…')).toBeInTheDocument();
+    });
+
+    it('falls back to a generic name when the caption is not text', () => {
+        // aria-label takes a string; handing it a React element yields "[object Object]".
+        renderUI(<Loading><strong>Loading backups…</strong></Loading>);
+
+        expect(screen.getByLabelText('Loading')).toBeInTheDocument();
+    });
+
+    it('renders no caption when there is nothing to say', () => {
+        const {container} = renderUI(<Loading/>);
+
+        expect(container.querySelector('.mantine-Loader-root')).toBeInTheDocument();
+        // An empty caption div would still take its line-height, moving the spinner off centre.
+        expect(container.querySelectorAll('div').length).toBe(1);
+    });
+});
+
+describe('Placeholder', () => {
+    const lineWidths = (container) =>
+        [...container.querySelectorAll('.mantine-Skeleton-root')]
+            .map(line => line.style.getPropertyValue('--skeleton-width'));
+
+    it('stands in for three lines by default', () => {
+        const {container} = renderUI(<Placeholder/>);
+
+        expect(lineWidths(container)).toHaveLength(3);
+    });
+
+    it('honours the number of lines asked for', () => {
+        const {container} = renderUI(<Placeholder lines={5}/>);
+
+        expect(lineWidths(container)).toHaveLength(5);
+    });
+
+    it('ends ragged, so it reads as text rather than a block', () => {
+        const {container} = renderUI(<Placeholder lines={4}/>);
+
+        expect(lineWidths(container)).toEqual(['100%', '100%', '100%', '60%']);
+    });
+
+    it('leaves a single line short as well', () => {
+        // lines={1} makes the first line the last one; an off-by-one here would render one
+        // full-width bar, which is a block and not a line of text.
+        const {container} = renderUI(<Placeholder lines={1}/>);
+
+        expect(lineWidths(container)).toEqual(['60%']);
     });
 });
 

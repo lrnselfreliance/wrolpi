@@ -313,6 +313,61 @@ export function ThemeSamplePage() {
             </Panel>
         </Section>
 
+        <Section label='Semantic roles'>
+            <Panel>
+                {/*
+                  The roles side by side, which is the only way to see the thing that
+                  matters: in night and amber these are five brightnesses of one hue, and
+                  they have to stay tellable apart with no hue to help.
+                */}
+                {/* 120px so all five usually sit on one row; they still wrap on a phone,
+                    which is why the caption says "in order" and not "left to right". */}
+                <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                    gap: 12,
+                }}>
+                    {[
+                        ['neutral', 'pending, disabled, unknown'],
+                        ['info', 'in progress, informational'],
+                        ['success', 'complete, healthy'],
+                        ['warning', 'needs attention'],
+                        ['danger', 'failed, destructive'],
+                    ].map(([role, meaning]) => <div key={role}>
+                        <div style={{
+                            height: 34, background: `var(--${role})`, marginBottom: 6,
+                        }}/>
+                        <div style={{fontSize: 13, fontWeight: 600, color: `var(--${role})`}}>
+                            {role}
+                        </div>
+                        <div style={{fontSize: 11, color: 'var(--muted)'}}>{meaning}</div>
+                    </div>)}
+                </div>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
+                    Components ask for a <em>meaning</em> — <code>danger</code> — not a hue.
+                    Light and dark spend a colour on each. Night and amber have only one hue,
+                    so a role is a step on a brightness ramp instead; that is why an error and
+                    an info toast used to be the same pixel there. Severity climbs in the order
+                    shown for those two themes, and <code>danger</code> is never quieter than
+                    ordinary text.
+                </p>
+            </Panel>
+        </Section>
+
+        <Section label='Status'>
+            <Panel>
+                <div style={{display: 'flex', gap: 18, flexWrap: 'wrap'}}>
+                    <Status kind='complete'>complete</Status>
+                    <Status kind='active'>downloading</Status>
+                    <Status kind='pending'>pending</Status>
+                    <Status kind='failed'>failed</Status>
+                </div>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 12, marginBottom: 0}}>
+                    Four states drawn from four roles. Failure also carries weight, because
+                    brightness is the first thing lost on a dim screen and it is all night has.
+                </p>
+            </Panel>
+        </Section>
+
         <Section label='Messages'>
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                 <Message kind='info' title='Refresh started'>

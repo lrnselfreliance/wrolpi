@@ -663,6 +663,37 @@ describe('Label as a tag', () => {
     });
 });
 
+describe('the library names severity by role, never by hue', () => {
+    /*
+     * A source guard, because a hue here is invisible in review and invisible in most tests.
+     * In night `--red` and `--danger` are nearly the same pixel, so a rule that reverts to
+     * `var(--red)` looks right in every screenshot and every distinctness check -- and is
+     * still wrong, because the whole point is that a theme gets to decide what danger looks
+     * like.  This is how `.wrolpi-message-error` kept a hardcoded `var(--red)` frame through
+     * the change that moved its accent and icon onto roles.
+     *
+     * Focus rings and active-tab accents deliberately stay `--blue`: those are the primary
+     * accent, not a severity, and `--primary` is a separate token for exactly that reason.
+     */
+    const severity = /(danger|error|failed|invalid|warning|success|complete)/i;
+
+    it('uses no severity hue in a rule whose name means severity', () => {
+        const css = fs.readFileSync(path.join(__dirname, 'ui.css'), 'utf8');
+        const hues = /var\(--(red|green|amber|yellow|orange)\)/;
+
+        // Split into rules, keeping each selector with its body.
+        const offenders = [];
+        for (const match of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+            const [, selector, body] = match;
+            if (severity.test(selector) && hues.test(body)) {
+                offenders.push(`${selector.trim().split('\n').pop().trim()} -> ${body.match(hues)[0]}`);
+            }
+        }
+
+        expect(offenders).toEqual([]);
+    });
+});
+
 describe('nothing paints a label\'s text with an inline colour', () => {
     /*
      * A source guard, because this defect appeared at three separate call sites and fixing the

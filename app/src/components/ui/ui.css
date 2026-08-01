@@ -92,8 +92,8 @@
  */
 html[data-theme="night"] .wrolpi-button-danger {
     background: transparent;
-    color: var(--red);
-    border: 1.5px dashed var(--red);
+    color: var(--danger);
+    border: 1.5px dashed var(--danger);
 }
 
 html[data-theme="night"] .wrolpi-button-danger:hover:not(:disabled) {
@@ -431,7 +431,7 @@ html[data-theme="amber"] .wrolpi-form-field input:focus {
 
 /* An invalid field is dashed, matching every other failure state in the interface. */
 .wrolpi-form-field[data-error] input {
-    border: 1.5px dashed var(--red);
+    border: 1.5px dashed var(--danger);
 }
 
 .wrolpi-form-field input:disabled {
@@ -471,7 +471,7 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 }
 
 .wrolpi-path-input-control[data-error] {
-    border: 1.5px dashed var(--red);
+    border: 1.5px dashed var(--danger);
 }
 
 .wrolpi-path-input-control[data-disabled] {
@@ -533,7 +533,7 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 
 .wrolpi-path-input-error {
     font-size: 12px;
-    color: var(--red);
+    color: var(--danger);
     margin-top: 3px;
 }
 
@@ -925,8 +925,13 @@ html .mantine-Notification-closeButton:hover {
 }
 
 /* Errors take the danger treatment in every theme, so "dashed" stays one rule. */
+/*
+ * The dashed frame tracks the role the message was given, exactly as its accent and
+ * icon already do.  Naming a hue here meant the frame and the accent could disagree --
+ * invisible in night, where they are nearly the same pixel, but still wrong.
+ */
 .wrolpi-message-error {
-    border: 1.5px dashed var(--red);
+    border: 1.5px dashed var(--message-color);
 }
 
 /* --------------------------------------------------------------- Progress */
@@ -1019,7 +1024,7 @@ html[data-theme="amber"] .wrolpi-progress-fill {
 
 /* Danger zones are dashed in every theme; it doubles as a colorblind-safe cue. */
 .wrolpi-panel-danger {
-    border: 1.5px dashed var(--red);
+    border: 1.5px dashed var(--danger);
 }
 
 /* ----------------------------------------------------------- Card posters */
@@ -1245,16 +1250,16 @@ html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
 
 /* A failed row carries the danger border, matching failed messages. */
 .wrolpi-row-failed > td {
-    border-top: 1.5px dashed var(--red);
-    border-bottom: 1.5px dashed var(--red);
+    border-top: 1.5px dashed var(--danger);
+    border-bottom: 1.5px dashed var(--danger);
 }
 
 .wrolpi-row-failed > td:first-child {
-    border-left: 1.5px dashed var(--red);
+    border-left: 1.5px dashed var(--danger);
 }
 
 .wrolpi-row-failed > td:last-child {
-    border-right: 1.5px dashed var(--red);
+    border-right: 1.5px dashed var(--danger);
 }
 
 /* Wide tables scroll inside their own container; the page never scrolls sideways. */

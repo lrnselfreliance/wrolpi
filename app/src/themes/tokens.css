@@ -72,16 +72,24 @@ html[data-theme="light"] {
  * between hue names there is choosing between synonyms.  That is why all four toast
  * kinds looked the same in night, and why a warning and an error were the same pixel.
  *
- * The ramps below are built so that in every theme:
- *   - the order neutral < info < success < warning < danger is strictly increasing in
- *     contrast against the panel, so severity reads as brightness even without hue;
- *   - every role except neutral clears 3:1 against the panel;
- *   - danger reaches that theme's own `--text` brightness, so the loudest role is
- *     never quieter than ordinary prose;
- *   - neutral sits deliberately below the rest -- for `pending` and disabled, being
- *     dim IS the signal.
+ * In EVERY theme:
+ *   - the five roles resolve to five distinct colours;
+ *   - every role except neutral clears 3:1 against the panel.  Neutral sits below the
+ *     rest deliberately -- for `pending` and disabled, being dim IS the signal.
  *
- * `ui-layout.cy.js` asserts all of that, per theme, in a real browser.
+ * In the MONOCHROME themes only (night and amber):
+ *   - the order neutral < info < success < warning < danger is strictly increasing in
+ *     contrast against the panel, so severity reads as brightness with no hue to help;
+ *   - danger reaches that theme's own `--text` brightness, so the loudest role is never
+ *     quieter than ordinary prose.
+ *
+ * Those last two are NOT true of light and dark and must not be made true.  There a role
+ * is a hue, and the contrast order is an accident of which hues were chosen -- blue is
+ * darker than green on white, so light "fails" a brightness ramp while looking perfectly
+ * correct.  Reordering light's hues to satisfy a ramp would be changing the design to
+ * satisfy a test.
+ *
+ * `ui-layout.cy.js` asserts exactly this split, per theme, in a real browser.
  *
  * `--primary` is deliberately NOT one of these.  "The colour of a primary button" and
  * "the colour that means informational" are different jobs, and a user who recolours

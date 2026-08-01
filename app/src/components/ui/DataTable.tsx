@@ -5,9 +5,15 @@ import {Icon} from './Icon';
 /*
  * Tables.
  *
- * Borders do structural work here: full 1px cell borders, a `--head` header row,
- * and zebra striping.  Wide tables scroll in their own container so the page
- * body never scrolls sideways.
+ * Rows are separated by a horizontal rule and nothing else.  There are no column
+ * borders: a full grid draws a line around every cell, which is a lot of ink to
+ * say something the column headings already say, and it made the header row --
+ * which had no surface of its own -- read as one more cell in the grid.  The
+ * header now carries `--head` and a full-strength rule under it, and the rules
+ * between body rows are `--table-line`, deliberately fainter.  See ui.css.
+ *
+ * Wide tables scroll in their own container so the page body never scrolls
+ * sideways.
  *
  * The compound names mirror Semantic's (Header/Body/Row/Cell/HeaderCell/Footer)
  * so migrating a call site is a rename, not a rewrite.
@@ -21,7 +27,6 @@ export interface TableProps extends MTableProps {
 function TableBase({scrollable = true, ...props}: TableProps) {
     const table = <MTable
         withTableBorder
-        withColumnBorders
         striped
         highlightOnHover={false}
         verticalSpacing={7}

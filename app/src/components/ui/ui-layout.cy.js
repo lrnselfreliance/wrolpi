@@ -621,12 +621,19 @@ describe('a toast is readable in every theme', () => {
 });
 
 /*
- * The colour a box actually shows: its own background, or the first pseudo-element that
- * paints one.  Mantine's Skeleton draws itself entirely from ::before and ::after, so
- * reading the root alone reports `rgba(0, 0, 0, 0)` and any test built on it is vacuous.
+ * The colour a box actually shows, looking through the layers in the order given.
+ *
+ * The order is the caller's business, because "the background" is ambiguous once
+ * pseudo-elements are involved and picking wrong makes a test vacuous rather than wrong.
+ * A Skeleton is three layers: the element paints nothing, ::before paints
+ * --mantine-color-body (our `--bg`) at z-index 10, and ::after paints the bar the user
+ * actually sees -- --mantine-color-gray-3 in light, --mantine-color-dark-4 in dark, which
+ * themes/mantine.ts maps to `--head` and `--border` -- at z-index 11, on top.  Walk from
+ * the element outward and you get `--bg` and compare the page background to the panel,
+ * which differ by design in every theme, so the bars could vanish and nothing would fail.
  */
-const paintedBackground = (el) => {
-    for (const pseudo of [null, '::before', '::after']) {
+const paintedBackground = (el, order = [null, '::before', '::after']) => {
+    for (const pseudo of order) {
         const colour = getComputedStyle(el, pseudo).backgroundColor;
         if (colour && !/^rgba\(.*,\s*0(\.0+)?\)$/.test(colour) && colour !== 'transparent') {
             return colour;
@@ -639,19 +646,18 @@ describe('a loading placeholder is visible on the surface it covers', () => {
     themeNames.forEach((theme) => {
         it(`separates the skeleton from the panel in ${theme}`, () => {
             /*
-             * A Skeleton is Mantine's, and Mantine draws it from --mantine-color-gray-1 or
-             * --mantine-color-dark-4.  Those are remapped to our tokens in themes/mantine.ts,
-             * which is exactly what makes this worth checking: `dark-4` is `--border` and
-             * `gray-1` is `--bg`, and neither was chosen with a panel behind it in mind.  If
-             * the bars come out the same colour as the panel there is no placeholder at all,
-             * only an empty box, and nothing in jsdom can see that.
+             * `--head` and `--border` are what the bars come out as, and neither was chosen
+             * with a panel behind it in mind.  If they land on the panel's own colour there
+             * is no placeholder at all, only an empty box, and jsdom cannot see that.
              */
             cy.mountUI(<Panel><Placeholder lines={3}/></Panel>, {theme});
 
             cy.get('.mantine-Skeleton-root').first().should(($line) => {
-                const line = paintedBackground($line[0]);
-                const panel = paintedBackground($line[0].closest('.wrolpi-panel'));
+                // Topmost layer first for the bar; the panel paints on the element itself.
+                const line = paintedBackground($line[0], ['::after', '::before', null]);
+                const panel = paintedBackground($line[0].closest('.wrolpi-panel'), [null]);
                 expect(line, 'the skeleton paints something').to.not.equal(null);
+                expect(panel, 'the panel paints something').to.not.equal(null);
                 expect(line, 'the skeleton is not the panel it sits on').to.not.equal(panel);
             });
         });
@@ -703,8 +709,10 @@ describe('an icon stack carries the surface it was placed on', () => {
         it(`matches a filled button in ${theme}`, () => {
             cy.mountUI(
                 <Button color='blue'>
-                    <IconStack corner={<Icon name='add'/>} label='New folder'
-                               style={{'--icon-stack-bg': 'var(--blue)'}}>
+                    {/* No style: a filled button supplies the surface through the cascade,
+                        which is the point -- the call site cannot know it is about to be
+                        disabled and repainted. */}
+                    <IconStack corner={<Icon name='add'/>} label='New folder'>
                         <Icon name='folder'/>
                     </IconStack>
                 </Button>,
@@ -716,6 +724,29 @@ describe('an icon stack carries the surface it was placed on', () => {
                 const button = getComputedStyle($corner[0].closest('button')).backgroundColor;
                 expect(disc, 'the disc is the button fill').to.equal(button);
             });
+        });
+    });
+
+    it('follows a filled button when it is disabled', () => {
+        /*
+         * The file browser's New Folder button is disabled in WROL mode, and Mantine swaps a
+         * disabled button's fill for --mantine-color-disabled.  A disc pinned to `--blue`
+         * then becomes a blue chip on a grey surface -- the same defect as the original
+         * hole, inverted.  The disc has to follow the button, not the button's enabled fill.
+         */
+        cy.mountUI(
+            <Button color='blue' disabled>
+                <IconStack corner={<Icon name='add'/>} label='New folder'>
+                    <Icon name='folder'/>
+                </IconStack>
+            </Button>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-icon-stack-corner').should(($corner) => {
+            const disc = getComputedStyle($corner[0]).backgroundColor;
+            const button = getComputedStyle($corner[0].closest('button')).backgroundColor;
+            expect(disc, 'the disc is the disabled fill').to.equal(button);
         });
     });
 
@@ -742,8 +773,10 @@ describe('an icon stack carries the surface it was placed on', () => {
     });
 
     it('defaults to the page background when nothing says otherwise', () => {
-        // The other half of the claim: the default still has to be right for the nav bar,
-        // which is where every other stack in the app lives.
+        // The fallback, for a stack standing on the page rather than under something that
+        // sets a surface.  Both stacks in the app are covered by the two tests above -- the
+        // nav bar by inheritance, the file browser by the button cascade -- so this one
+        // guards the default that everything else is defined against.
         cy.mountUI(
             <IconStack corner={<Icon name='question'/>} label='WiFi status unknown'>
                 <Icon name='wifi'/>

@@ -1554,16 +1554,26 @@ export function contrastRatio(a, b) {
     return (luminances[0] + 0.05) / (luminances[1] + 0.05);
 }
 
+/**
+ * A hex colour as [r, g, b], accepting both `#rrggbb` and the shorthand `#rgb`.
+ *
+ * The shorthand matters because tag colours are not only chosen in the colour picker: they
+ * live in the database and in a config file, and a config is something a user edits by hand
+ * -- configs are the source of truth in WROLPi.  Rejecting `#fff` left the luminance at zero,
+ * so a near-white tag was treated as black and handed light text.
+ */
 function hexToRGBArray(color) {
-    if (color.length === 7) {
-        color = color.slice(1);
+    let hex = (typeof color === 'string' ? color : '').replace(/^#/, '');
+    if (hex.length === 3) {
+        // #abc means #aabbcc, not #0a0b0c.
+        hex = hex.split('').map(digit => digit + digit).join('');
     }
-    if (color.length !== 6) {
+    if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
         console.error('Invalid hex color: ' + color);
         return;
     }
     let rgb = [];
-    for (let i = 0; i <= 2; i++) rgb[i] = parseInt(color.substr(i * 2, 2), 16);
+    for (let i = 0; i <= 2; i++) rgb[i] = parseInt(hex.substr(i * 2, 2), 16);
     return rgb;
 }
 

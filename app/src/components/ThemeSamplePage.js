@@ -276,6 +276,14 @@ export function ThemeSamplePage() {
                             + 'keeps/going/for/a/while.html: the remote server closed the '
                             + 'connection after sending part of the response body.',
                     })}>Long text</Button>
+                    {/* Events.js sends three of these, each opening a URL.  Click the toast
+                        body, or Tab to it and press Enter; the dismiss button does not follow. */}
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'info', title: 'Screenshot Generated',
+                        description: 'Click here to view it.',
+                        time: 10000,
+                        onClick: () => toast({type: 'success', title: 'Followed the toast'}),
+                    })}>Clickable</Button>
                     <Button role='danger' onClick={() => clearToasts()}>Clear all</Button>
                 </Row>
 

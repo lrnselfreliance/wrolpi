@@ -24,6 +24,22 @@ export const darkThemes: ThemeName[] = [darkTheme, nightTheme, amberTheme];
 /** Themes a user must choose deliberately; `prefers-color-scheme` never picks them. */
 export const explicitOnlyThemes: ThemeName[] = [nightTheme, amberTheme];
 
+/*
+ * Themes built on a single hue, which is the constraint the semantic roles exist for.
+ *
+ * These have no second colour to spend, so a role cannot be a hue there -- it has to be
+ * a step on a brightness ramp, and `--orange` being byte-identical to `--text` in night
+ * is what that costs when it is ignored.  Light and dark have hues and are free to use
+ * them, so severity does NOT read as brightness there and must not be asserted to.
+ *
+ * The same set as `explicitOnlyThemes` today, deliberately named separately: one is about
+ * how a theme is chosen, the other about what a theme has to work with.
+ */
+export const monochromeThemes: ThemeName[] = [nightTheme, amberTheme];
+
+export const isMonochromeTheme = (theme: ThemeName): boolean =>
+    monochromeThemes.includes(theme);
+
 export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(theme);
 
 export const isThemeName = (value: unknown): value is ThemeName =>

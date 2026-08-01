@@ -1139,46 +1139,26 @@ html[data-theme="amber"] .wrolpi-card-tag {
 
 /* ---------------------------------------------------------------- Status */
 /*
- * Status is encoded by hue in light/dark.  In night mode hue is unavailable, so
- * brightness carries it instead: dim = done, mid = active, brightest + bold =
- * failed.  Callers use these classes rather than naming a color.
+ * One rule for four states in four themes.  The colour is the role the component
+ * chose, and the role already knows what it looks like here -- which is what
+ * replaced the three `html[data-theme="night"]` overrides that used to live below.
  */
-
 .wrolpi-status {
     font-size: 12.5px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     gap: 5px;
+    color: var(--status-color);
 }
 
-.wrolpi-status-complete {
-    color: var(--green);
-}
-
-.wrolpi-status-active {
-    color: var(--blue);
-}
-
-.wrolpi-status-pending {
-    color: var(--muted);
-}
-
+/*
+ * Failure is not left to colour alone.  Night and amber distinguish the roles by
+ * brightness, and brightness is the first thing lost on a dim screen or to a user
+ * who cannot separate these hues, so the loudest state also carries weight.
+ */
 .wrolpi-status-failed {
-    color: var(--red);
-}
-
-html[data-theme="night"] .wrolpi-status-complete {
-    color: var(--muted);
-}
-
-html[data-theme="night"] .wrolpi-status-active {
-    color: var(--text);
-}
-
-html[data-theme="night"] .wrolpi-status-failed {
-    color: var(--red);
-    font-weight: 500;
+    font-weight: 600;
 }
 
 /* ----------------------------------------------------------------- Tables */

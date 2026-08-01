@@ -1183,6 +1183,51 @@ html[data-theme="night"] .wrolpi-status-failed {
 
 /* ----------------------------------------------------------------- Tables */
 
+/*
+ * The header is a surface, not just bold text.
+ *
+ * Mantine gives `thead` no background at all, so the header showed whatever was
+ * behind the table -- which is exactly what the unstriped body rows show.  Bold
+ * type was the only thing separating the two, and against a striped body the
+ * header read as one more stripe.  `--head` is the token for a recessed surface
+ * and is distinct from both the panel and the stripe in all four themes.
+ */
+.mantine-Table-thead .mantine-Table-th {
+    background: var(--head);
+}
+
+/*
+ * A full-strength rule under the header, because that is the one division in a
+ * table that carries meaning: everything above it names, everything below it is
+ * data.  The rules between body rows are `--table-line` and much fainter -- see
+ * the note there.  Applied to the last header row so a grouped header does not
+ * get a hard rule through the middle of itself.
+ */
+.mantine-Table-thead .mantine-Table-tr:last-child .mantine-Table-th {
+    border-bottom: 2px solid var(--border);
+}
+
+/*
+ * Row rules are quieter than any other border in the interface.  They only have
+ * to let the eye track across a row; at `--border` strength, with a rule under
+ * every row, a long table turns into a stack of boxes.
+ *
+ * `html` for specificity, not decoration: Mantine declares this variable on its
+ * own hashed class, which ties with `.mantine-Table-table` and wins on source
+ * order because its stylesheet is imported after this one.
+ */
+html .mantine-Table-table {
+    --table-border-color: var(--table-line);
+}
+
+/*
+ * The outline around the whole table is not a row rule and keeps full strength;
+ * Mantine draws both from the same variable, so it has to be restated.
+ */
+html .mantine-Table-table[data-with-table-border] {
+    border-color: var(--border);
+}
+
 /* A sortable header: a real button, so the column is reachable by keyboard. */
 .wrolpi-th-sort {
     display: inline-flex;

@@ -215,6 +215,21 @@ td.file-path {
     cursor: pointer;
 }
 
+/*
+ * The row is an icon followed by a filename, as inline siblings.  An inline SVG
+ * sits on the text baseline by default, so a 24px glyph next to 13px text hangs
+ * well above it and the name looks like it is resting on the icon's floor.
+ * `middle` centres the glyph against the text instead.
+ *
+ * The margin is the gap that was never there: the folder icon touched the first
+ * letter of its own name, and two icons (a folder and its ignored marker) touched
+ * each other.
+ */
+td.file-path > svg {
+    vertical-align: middle;
+    margin-right: 0.35em;
+}
+
 /* Necessary until react-semantic-toasts is upgraded to Node 18 */
 .ui-alerts {
     position: fixed;

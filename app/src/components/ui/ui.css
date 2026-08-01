@@ -35,13 +35,18 @@
 /*
  * The corner glyph sits on the main one, so it carries the surface color behind
  * it — without that the two sets of strokes cross and neither reads.
+ *
+ * Which surface that is depends on where the stack was placed, and only the call
+ * site knows: the file browser puts one inside a filled blue button, where a disc
+ * of the page background is a hole punched in the button.  `--icon-stack-bg`
+ * defaults to the page, and a call site anywhere else sets it.
  */
 .wrolpi-icon-stack-corner {
     position: absolute;
     right: -3px;
     bottom: -3px;
     display: flex;
-    background: var(--bg);
+    background: var(--icon-stack-bg, var(--bg));
     border-radius: 50%;
     padding: 1px;
 }
@@ -357,6 +362,17 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
 }
 
 /* ------------------------------------------------------------- Form fields */
+/*
+ * A Pill is what MultiSelect renders for each chosen option, and it is the one place
+ * Mantine does not honour the radius theme: `Pill` writes `--pill-radius: rem(1000)`
+ * on the element itself, which no amount of zeroing `--mantine-radius-xl` can reach.
+ * Everything else in the library has hard corners, so these do too.
+ */
+.mantine-Pill-root {
+    --pill-radius: 0;
+    border-radius: 0;
+}
+
 /*
  * `hooks/useForm.js` renders its own <label> and native <input> — it always did, with
  * Semantic's Form.Input only wrapping them for field styling.  These rules supply that

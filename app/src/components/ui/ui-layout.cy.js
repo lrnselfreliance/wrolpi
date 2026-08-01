@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-    ActionInput, Button, Header, PathInput, Statistic, StatisticGroup, TabBar, tabClassName, TextInput,
+    ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
+    Placeholder, Statistic, StatisticGroup, TabBar, tabClassName, TextInput,
 } from './index';
 import {contrastingColor} from '../Common';
 import {Notifications} from '@mantine/notifications';
@@ -615,6 +616,164 @@ describe('a toast is readable in every theme', () => {
         cy.get('[class*="mantine-Notification-root"]').should(($toast) => {
             const panel = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim();
             expect(getComputedStyle($toast[0]).backgroundColor).to.equal(hexToRgb(panel));
+        });
+    });
+});
+
+/*
+ * The colour a box actually shows: its own background, or the first pseudo-element that
+ * paints one.  Mantine's Skeleton draws itself entirely from ::before and ::after, so
+ * reading the root alone reports `rgba(0, 0, 0, 0)` and any test built on it is vacuous.
+ */
+const paintedBackground = (el) => {
+    for (const pseudo of [null, '::before', '::after']) {
+        const colour = getComputedStyle(el, pseudo).backgroundColor;
+        if (colour && !/^rgba\(.*,\s*0(\.0+)?\)$/.test(colour) && colour !== 'transparent') {
+            return colour;
+        }
+    }
+    return null;
+};
+
+describe('a loading placeholder is visible on the surface it covers', () => {
+    themeNames.forEach((theme) => {
+        it(`separates the skeleton from the panel in ${theme}`, () => {
+            /*
+             * A Skeleton is Mantine's, and Mantine draws it from --mantine-color-gray-1 or
+             * --mantine-color-dark-4.  Those are remapped to our tokens in themes/mantine.ts,
+             * which is exactly what makes this worth checking: `dark-4` is `--border` and
+             * `gray-1` is `--bg`, and neither was chosen with a panel behind it in mind.  If
+             * the bars come out the same colour as the panel there is no placeholder at all,
+             * only an empty box, and nothing in jsdom can see that.
+             */
+            cy.mountUI(<Panel><Placeholder lines={3}/></Panel>, {theme});
+
+            cy.get('.mantine-Skeleton-root').first().should(($line) => {
+                const line = paintedBackground($line[0]);
+                const panel = paintedBackground($line[0].closest('.wrolpi-panel'));
+                expect(line, 'the skeleton paints something').to.not.equal(null);
+                expect(line, 'the skeleton is not the panel it sits on').to.not.equal(panel);
+            });
+        });
+    });
+
+    it('keeps the last line short so the block reads as text', () => {
+        // The jest test asserts the declared width; this asserts it survived layout.
+        cy.mountUI(<Panel><Placeholder lines={3}/></Panel>, {theme: 'light'});
+
+        cy.get('.mantine-Skeleton-root').should(($lines) => {
+            const widths = [...$lines].map(line => line.getBoundingClientRect().width);
+            expect(widths[2], 'last line').to.be.lessThan(widths[0] * 0.75);
+            expect(widths[0], 'first two lines are the same length').to.be.closeTo(widths[1], 1);
+        });
+    });
+});
+
+describe('a spinner is visible in every theme', () => {
+    themeNames.forEach((theme) => {
+        it(`resolves the loader colour in ${theme}`, () => {
+            // `color='var(--blue)'` reaches Mantine as a string it does not understand and
+            // passes straight through to CSS.  If the token were misspelled the property
+            // would resolve to nothing and the spinner would paint in currentColor -- or,
+            // for the segmented variants, not at all.
+            cy.mountUI(<Loading>Loading backups…</Loading>, {theme});
+
+            cy.get('.mantine-Loader-root').should(($loader) => {
+                const blue = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--blue').trim();
+                const resolved = getComputedStyle($loader[0])
+                    .getPropertyValue('--loader-color').trim();
+                expect(resolved, '--loader-color resolved through the token')
+                    .to.be.oneOf([blue, hexToRgb(blue)]);
+            });
+
+            cy.get('.mantine-Loader-root').should('be.visible');
+        });
+    });
+});
+
+describe('an icon stack carries the surface it was placed on', () => {
+    /*
+     * The corner glyph paints a disc behind itself so the two sets of strokes do not cross.
+     * That disc was hardcoded to the page background, which is right in the nav bar and
+     * wrong inside the file browser's filled blue button, where it read as a hole punched
+     * through the button.  It is now `--icon-stack-bg`, and the call site says.
+     */
+    themeNames.forEach((theme) => {
+        it(`matches a filled button in ${theme}`, () => {
+            cy.mountUI(
+                <Button color='blue'>
+                    <IconStack corner={<Icon name='add'/>} label='New folder'
+                               style={{'--icon-stack-bg': 'var(--blue)'}}>
+                        <Icon name='folder'/>
+                    </IconStack>
+                </Button>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-icon-stack-corner').should(($corner) => {
+                const disc = getComputedStyle($corner[0]).backgroundColor;
+                const button = getComputedStyle($corner[0].closest('button')).backgroundColor;
+                expect(disc, 'the disc is the button fill').to.equal(button);
+            });
+        });
+    });
+
+    it('takes the surface from an ancestor, which is how the nav bar sets it', () => {
+        /*
+         * The nav bar's colour is a user setting written inline on the <nav>, so the stack
+         * inside it cannot name a token.  It sets --icon-stack-bg on the bar itself and lets
+         * it inherit -- and this is the test for that, because setting the property on the
+         * stack (as the file browser does) would pass even if inheritance were broken.
+         */
+        cy.mountUI(
+            <div style={{background: 'var(--red)', '--icon-stack-bg': 'var(--red)', padding: 20}}>
+                <IconStack corner={<Icon name='question'/>} label='WiFi status unknown'>
+                    <Icon name='wifi'/>
+                </IconStack>
+            </div>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-icon-stack-corner').should(($corner) => {
+            const red = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
+            expect(getComputedStyle($corner[0]).backgroundColor).to.equal(hexToRgb(red));
+        });
+    });
+
+    it('defaults to the page background when nothing says otherwise', () => {
+        // The other half of the claim: the default still has to be right for the nav bar,
+        // which is where every other stack in the app lives.
+        cy.mountUI(
+            <IconStack corner={<Icon name='question'/>} label='WiFi status unknown'>
+                <Icon name='wifi'/>
+            </IconStack>,
+            {theme: 'night'},
+        );
+
+        cy.get('.wrolpi-icon-stack-corner').should(($corner) => {
+            const background = getComputedStyle(document.documentElement)
+                .getPropertyValue('--bg').trim();
+            expect(getComputedStyle($corner[0]).backgroundColor).to.equal(hexToRgb(background));
+        });
+    });
+});
+
+describe('corners stay hard', () => {
+    it('squares off the pills a MultiSelect renders for its chosen options', () => {
+        /*
+         * The design has no rounded corners, and mantine.ts zeroes every radius variable so
+         * a component that asks for `radius="md"` still gets none.  Pill escapes that: it
+         * writes `--pill-radius: rem(1000)` onto the element, which outranks the theme, and
+         * the tags in a MultiSelect came out as lozenges among a page of square boxes.
+         */
+        cy.mountUI(
+            <MultiSelect data={['Preserve', 'Radio']} defaultValue={['Preserve']} label='Tags'/>,
+            {theme: 'light'},
+        );
+
+        cy.get('[class*="mantine-Pill-root"]').should(($pill) => {
+            expect(getComputedStyle($pill[0]).borderRadius).to.equal('0px');
         });
     });
 });

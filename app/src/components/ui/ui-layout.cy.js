@@ -1,11 +1,12 @@
 import React from 'react';
 import {
     ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName, TextInput,
+    Message, Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName,
+    TextInput,
 } from './index';
 import {contrastingColor} from '../Common';
 import {Notifications} from '@mantine/notifications';
-import {toast} from './toast';
+import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
@@ -13,6 +14,24 @@ const hexToRgb = (hex) => {
     const value = hex.replace('#', '');
     const [r, g, b] = [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16));
     return `rgb(${r}, ${g}, ${b})`;
+};
+
+/*
+ * Normalise a colour to rgb(), and REFUSE anything that is neither a hex nor already
+ * rgb().  Strictness is the point: feeding an unresolved `var(--blue)` to a luminance
+ * calculation yields NaN, and `expect(NaN).to.not.equal(x)` passes -- a test that cannot
+ * fail.  Better to blow up naming the value than to quietly measure nothing.
+ *
+ * Tokens do resolve: `getPropertyValue('--info')` returns `#20629c` in light, because
+ * custom properties are substituted at computed-value time.  This guards the day that
+ * stops being true on some engine, and catches the hex/rgb mismatch that is easy to hit
+ * when reading a Mantine variable rather than a painted property.
+ */
+const toRgb = (value) => {
+    const trimmed = String(value).trim();
+    if (/^rgba?\(/.test(trimmed)) return trimmed;
+    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return hexToRgb(trimmed);
+    throw new Error(`Not a resolved colour: "${trimmed}"`);
 };
 
 /*
@@ -192,13 +211,11 @@ describe('semantic roles read as severity in every theme', () => {
 
     const roleColours = () => {
         const root = getComputedStyle(document.documentElement);
-        const panel = hexToRgb(root.getPropertyValue('--panel').trim());
+        const panel = toRgb(root.getPropertyValue('--panel'));
         return {
             panel,
-            text: hexToRgb(root.getPropertyValue('--text').trim()),
-            roles: ROLES.map(role => ({
-                role, colour: hexToRgb(root.getPropertyValue(`--${role}`).trim()),
-            })),
+            text: toRgb(root.getPropertyValue('--text')),
+            roles: ROLES.map(role => ({role, colour: toRgb(root.getPropertyValue(`--${role}`))})),
         };
     };
 
@@ -951,6 +968,73 @@ describe('a toast is readable in every theme', () => {
             // same bar as the title rather than treated as decoration.
             cy.contrastRatio('[class*="mantine-Notification-title"]').should('be.at.least', 4.5);
             cy.contrastRatio('[class*="mantine-Notification-description"]').should('be.at.least', 4.5);
+        });
+    });
+
+    monochromeThemes.forEach((theme) => {
+        it(`tells its four kinds apart in ${theme}, which is the bug roles exist for`, () => {
+            /*
+             * The end of the chain, measured rather than inferred.  The jest tests assert the
+             * Mantine variable NAME on the style attribute, which would still pass if someone
+             * put four hue names back -- four distinct strings that resolve to two colours here.
+             * This reads what is painted.
+             */
+            cy.mountUI(<>
+                <Notifications position='top-right' limit={5}/>
+                <button type='button' onClick={() => {
+                    /*
+                     * Mantine's notification store is module scope and outlives the mount, so
+                     * a toast raised by an earlier test in this file is still queued here --
+                     * which is how this first ran with five.
+                     */
+                    clearToasts();
+                    ['info', 'success', 'warning', 'error'].forEach(type =>
+                        toast({type, title: type, time: 0}));
+                }}>Raise all four</button>
+            </>, {theme});
+
+            cy.contains('button', 'Raise all four').click();
+
+            cy.get('[class*="mantine-Notification-root"]').should('have.length', 4);
+            cy.get('[class*="mantine-Notification-root"]').should(($toasts) => {
+                const colours = [...$toasts].map(t =>
+                    getComputedStyle(t).getPropertyValue('--notification-color').trim());
+                expect(new Set(colours).size, `four distinct kinds, got ${colours.join(' ')}`)
+                    .to.equal(4);
+
+                /*
+                 * Distinctness alone does not catch the regression this is for.  Reverting to
+                 * hue names gives four distinct values in night too -- blue, green, yellow and
+                 * red are not the same colour there.  What they are is cramped and badly
+                 * ranked, with `--blue` at 2.29:1 against the toast surface: present, and
+                 * invisible.  So the floor is the assertion that has teeth.
+                 */
+                const surface = toRgb(getComputedStyle($toasts[0]).backgroundColor);
+                colours.forEach((colour, index) => {
+                    expect(contrast(toRgb(colour), surface), `toast ${index} against its surface`)
+                        .to.be.at.least(3);
+                });
+            });
+        });
+
+        it(`tells four Messages apart in ${theme}`, () => {
+            cy.mountUI(
+                <Panel>
+                    <Message kind='info' title='info'/>
+                    <Message kind='success' title='success'/>
+                    <Message kind='warning' title='warning'/>
+                    <Message kind='error' title='error'/>
+                </Panel>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-message').should(($all) => {
+                expect($all.length).to.equal(4);
+                const colours = [...$all].map(m =>
+                    getComputedStyle(m).getPropertyValue('--message-color').trim());
+                expect(new Set(colours).size, `four distinct kinds, got ${colours.join(' ')}`)
+                    .to.equal(4);
+            });
         });
     });
 

@@ -192,33 +192,43 @@ describe('a table header is a surface, not just bold text', () => {
                 expect(header, 'the header paints a surface of its own')
                     .to.not.match(/^rgba\(.*,\s*0(\.0+)?\)$/);
 
+                const page = hexToRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--bg').trim());
                 const rows = [...Cypress.$('tbody tr')].map(row => {
-                    // An unstriped row paints nothing, so what shows is the page behind it.
+                    /*
+                     * An unstriped row paints nothing, so what shows through is the page.
+                     * That is `--bg`, taken from the token -- NOT
+                     * getComputedStyle(documentElement).backgroundColor, which is
+                     * `rgba(0, 0, 0, 0)` because `body` carries the page colour and the root
+                     * element carries none.  Comparing an opaque header against that string
+                     * can never fail, which is how this passed before it was fixed.
+                     */
                     const own = getComputedStyle(row).backgroundColor;
-                    return /^rgba\(.*,\s*0(\.0+)?\)$/.test(own)
-                        ? getComputedStyle(document.documentElement).backgroundColor
-                        : own;
+                    return /^rgba\(.*,\s*0(\.0+)?\)$/.test(own) ? page : own;
                 });
                 expect(rows.length).to.be.greaterThan(2);
+                // Both kinds have to be present or the comparison only covers one of them.
+                expect(new Set(rows).size, 'the body is striped').to.equal(2);
                 rows.forEach((row, index) => {
                     expect(header, `header vs body row ${index}`).to.not.equal(row);
                 });
             });
         });
-    });
 
-    it('rules off the header with a heavier line than it puts between rows', () => {
-        /*
-         * The header/body division is the one that carries meaning -- everything above it
-         * names, everything below is data -- so it is the one line allowed to be loud.
-         */
-        cy.mountUI(sampleTable, {theme: 'light'});
+        it(`rules off the header more heavily than it rules between rows in ${theme}`, () => {
+            /*
+             * The header/body division is the one that carries meaning -- everything above
+             * it names, everything below is data -- so it is the one line allowed to be
+             * loud.  Per theme, because a theme is free to restyle borders.
+             */
+            cy.mountUI(sampleTable, {theme});
 
-        cy.get('thead th').first().should(($th) => {
-            const header = getComputedStyle($th[0]);
-            const row = getComputedStyle(Cypress.$('tbody tr')[0]);
-            expect(parseFloat(header.borderBottomWidth), 'header rule width')
-                .to.be.greaterThan(parseFloat(row.borderBottomWidth));
+            cy.get('thead th').first().should(($th) => {
+                const header = getComputedStyle($th[0]);
+                const row = getComputedStyle(Cypress.$('tbody tr')[0]);
+                expect(parseFloat(header.borderBottomWidth), 'header rule width')
+                    .to.be.greaterThan(parseFloat(row.borderBottomWidth));
+            });
         });
     });
 });
@@ -276,12 +286,31 @@ describe('a file row lines its icon up with its name', () => {
      * Purely a question of layout: jsdom returns zeros from getBoundingClientRect, so
      * nothing there can tell a centred glyph from one hanging off a baseline.
      */
+    /*
+     * 24px, which is what the app renders.  A file row calls `<FileIcon size={null}/>`, and
+     * a null size falls past Icon's 'small' default to Tabler's own 24.  The default 16px
+     * icon is a much easier centring case and can look fine while the real one is visibly
+     * off, so a fixture using it would be testing a size the file browser never draws.
+     */
     const fileRow = <Table>
         <Table.Body>
             <Table.Row>
                 <Table.Cell className='file-path'>
-                    <Icon name='file audio'/>
+                    <Icon name='file audio' size={24}/>
                     big_buck_bunny.mp3
+                </Table.Cell>
+            </Table.Row>
+        </Table.Body>
+    </Table>;
+
+    // A folder that is also ignored draws two glyphs before its name; they touched too.
+    const folderRow = <Table>
+        <Table.Body>
+            <Table.Row>
+                <Table.Cell className='file-path'>
+                    <Icon name='folder' size={24}/>
+                    <Icon name='eye slash' size={24}/>
+                    config/
                 </Table.Cell>
             </Table.Row>
         </Table.Body>
@@ -313,6 +342,27 @@ describe('a file row lines its icon up with its name', () => {
             range.selectNodeContents($icon[0].nextSibling);
             const gap = range.getBoundingClientRect().left - $icon[0].getBoundingClientRect().right;
             expect(gap, 'gap between icon and filename').to.be.greaterThan(2);
+        });
+    });
+
+    it('keeps two glyphs apart, and both clear of the name', () => {
+        cy.mountUI(folderRow, {theme: 'light'});
+
+        cy.get('td.file-path svg').should(($icons) => {
+            expect($icons.length, 'two glyphs').to.equal(2);
+            const [folder, ignored] = [...$icons].map(icon => icon.getBoundingClientRect());
+            expect(ignored.left - folder.right, 'gap between the two glyphs')
+                .to.be.greaterThan(2);
+
+            const range = document.createRange();
+            range.selectNodeContents($icons[1].nextSibling);
+            expect(range.getBoundingClientRect().left - ignored.right, 'gap before the name')
+                .to.be.greaterThan(2);
+
+            // And the second glyph is centred on the name as well, not just the first.
+            const text = range.getBoundingClientRect();
+            expect(Math.abs((ignored.top + ignored.height / 2) - (text.top + text.height / 2)),
+                'second glyph centre vs text centre').to.be.at.most(2);
         });
     });
 });

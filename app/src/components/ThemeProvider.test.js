@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import React, {useContext} from 'react';
-import {act, render, screen} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ThemeContext} from '../contexts/contexts';
 import {
@@ -16,6 +16,7 @@ import {
     themeSessionKey,
 } from './Theme';
 import {mediaFilterSessionKey, resolveMediaFilter, themeMediaFilter} from '../themes/names';
+import {clearToasts, toast} from './ui';
 
 // Lets a test drive `prefers-color-scheme` and assert on what the provider applied.
 let prefersDark = false;
@@ -300,5 +301,71 @@ describe('theme helpers', () => {
         expect(isDarkTheme(darkTheme)).toBe(true);
         expect(isDarkTheme(nightTheme)).toBe(true);
         expect(isDarkTheme(amberTheme)).toBe(true);
+    });
+});
+
+describe('the toast container ThemeProvider mounts', () => {
+    /*
+     * Observing the wiring rather than re-stating it.
+     *
+     * `toast.test.js` and `ui-layout.cy.js` each mount their own `<Notifications>` with the
+     * position and limit they expect, so neither would notice if this file moved the container
+     * back, changed its limit, or dropped it altogether -- and a missing container while
+     * thirteen call sites keep firing is the failure that has already shipped once.  Those
+     * suites test `toast()`; this tests that the app has somewhere to put what it produces.
+     */
+
+    beforeEach(() => {
+        prefersDark = false;
+        localStorage.clear();
+        mockMatchMedia();
+    });
+
+    afterEach(() => act(() => clearToasts()));
+
+    const notifications = () =>
+        document.querySelectorAll('[class*="mantine-Notification-root"]');
+
+    it('shows a toast raised by a call site', async () => {
+        // The regression that already shipped: no container, thirteen call sites still firing,
+        // nothing thrown and nothing shown.
+        renderProvider();
+
+        act(() => toast({title: 'Refresh started'}));
+
+        expect(await screen.findByText('Refresh started')).toBeInTheDocument();
+    });
+
+    it('puts it in the top right', async () => {
+        /*
+         * Asserted through a real toast rather than by finding a container.  Mantine renders an
+         * empty container for every position it supports, so querying for one returns whichever
+         * comes first in the DOM -- `top-center` -- whatever the provider was configured with.
+         */
+        renderProvider();
+
+        act(() => toast({title: 'Somewhere'}));
+        const notification = await screen.findByText('Somewhere');
+
+        expect(notification.closest('[class*="mantine-Notifications-root"]'))
+            .toHaveAttribute('data-position', 'top-right');
+    });
+
+    it('shows five at once and queues the rest', async () => {
+        /*
+         * The user-visible behaviour, not the prop: Mantine's own default limit is also 5, so
+         * this stays green if `limit={5}` is deleted from the provider.  It is here to catch a
+         * limit being *raised* -- a background task that reports twenty times should not bury
+         * the page -- rather than to prove the prop is present.
+         */
+        renderProvider();
+
+        act(() => {
+            for (let i = 1; i <= 7; i += 1) {
+                toast({title: `Toast ${i}`});
+            }
+        });
+
+        await waitFor(() => expect(notifications()).toHaveLength(5));
     });
 });

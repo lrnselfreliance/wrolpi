@@ -114,6 +114,66 @@ describe('Icon', () => {
         expect(names.filter(name => !resolveIconName(name))).toEqual([]);
     });
 
+    it('maps every icon name written anywhere in the app', () => {
+        /*
+         * The three checks above cover the theme picker, the mimetype helpers, and the map's
+         * own integrity -- and between them they missed eleven names, because none of them
+         * looks at what call sites actually write.  The calculators page had seven "?"
+         * glyphs in a row: `cogs`, `tint`, `food`, `signal`, `thermometer`, `car`, `th
+         * large`.  `arrow left` was missing while `arrow down`, `right` and `up` were there.
+         *
+         * An unmapped name is not subtle -- it is a help-circle glyph and a console error --
+         * but nothing failed, so it shipped and stayed until somebody looked at the page.
+         *
+         * Every spelling matters, and each one hid a real defect:
+         *   `<Icon name='x'/>` and `icon='x'`      -- the plain JSX prop
+         *   `{icon: 'x'}`                          -- a data table; how calculators declare theirs
+         *   `icon={active ? 'tags' : 'tag'}`       -- a ternary, where `tags` was unmapped
+         * The last two are exactly the forms an audit by eye skips.
+         */
+        const patterns = [
+            /<Icon\s[^>]*?\bname=['"]([^'"]+)['"]/gs,
+            /\bicons?(?:After)?=['"]([^'"]+)['"]/g,
+            /\bicons?(?:Name)?\s*:\s*['"]([^'"]+)['"]/g,
+        ];
+        // Any string literal inside an icon={...} expression is a candidate name.
+        const expressions = /\b(?:icons?(?:After)?|name)=\{([^}]*)\}/g;
+
+        const src = path.join(__dirname, '..', '..');
+        const walk = (directory) => fs.readdirSync(directory, {withFileTypes: true})
+            .flatMap(entry => {
+                const full = path.join(directory, entry.name);
+                if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : walk(full);
+                if (!/\.(js|jsx|ts|tsx)$/.test(entry.name)) return [];
+                // This file names an unmapped icon on purpose, one test below.
+                if (full === __filename) return [];
+                return [[full, fs.readFileSync(full, 'utf8')]];
+            });
+
+        const unmapped = [];
+        for (const [file, source] of walk(src)) {
+            const names = patterns.flatMap(pattern => [...source.matchAll(pattern)].map(m => m[1]));
+            for (const match of source.matchAll(expressions)) {
+                /*
+                 * Drop comparison operands first.  `name={sorted === 'descending' ? 'arrow
+                 * down' : 'arrow up'}` picks an icon by testing a sort direction, and
+                 * 'descending' is the thing being tested, not a name.
+                 */
+                const expression = match[1]
+                    .replace(/[=!]==?\s*['"][^'"]*['"]/g, '')
+                    .replace(/['"][^'"]*['"]\s*[=!]==?/g, '');
+                names.push(...[...expression.matchAll(/['"]([^'"]+)['"]/g)].map(m => m[1]));
+            }
+            for (const name of names) {
+                if (!resolveIconName(name)) {
+                    unmapped.push(`${path.relative(src, file)}: ${name}`);
+                }
+            }
+        }
+
+        expect([...new Set(unmapped)]).toEqual([]);
+    });
+
     it('reports an unknown name instead of failing silently', () => {
         const error = jest.spyOn(console, 'error').mockImplementation(() => {});
 

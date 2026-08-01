@@ -1,5 +1,6 @@
 import React from 'react';
 import {act, render, screen, waitFor} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {MantineProvider} from '@mantine/core';
 import {Notifications} from '@mantine/notifications';
 import {cssVariablesResolver, mantineTheme} from '../../themes/mantine';
@@ -149,6 +150,79 @@ describe('toast', () => {
         withToasts();
 
         expect(() => showToast()).not.toThrow();
+    });
+});
+
+describe('a toast that can be clicked', () => {
+    /*
+     * Semantic's toast took an `onClick` in its options and made the whole toast activate it.
+     * `Events.js` still passes one -- it did before the migration and was never changed -- for
+     * three events that each open a URL: a shared page pushed from the browser extension, a
+     * finished archive upload, and a generated screenshot.  The migrated helper destructured
+     * four keys and dropped the rest, so all three became dead toasts.  The first of them
+     * renders the description "Click here to view the shared page", which it was not.
+     */
+
+    it('runs the handler when the toast is clicked', async () => {
+        const onClick = jest.fn();
+        withToasts();
+
+        showToast({title: 'Archive Uploaded', description: 'example.com', onClick});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+        await userEvent.click(screen.getByText('Archive Uploaded'));
+
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not run the handler when the toast is dismissed', async () => {
+        // The close button sits inside the toast, so its click reaches the root too.  Dismissing
+        // a notification is not the same as following it, and for these three that difference is
+        // a page navigation the user did not ask for.
+        const onClick = jest.fn();
+        withToasts();
+
+        showToast({title: 'Archive Uploaded', onClick});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+        await userEvent.click(screen.getByRole('button', {name: 'Dismiss notification'}));
+
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('can be reached and activated from the keyboard', async () => {
+        // WROLPi runs on devices with a keyboard and no mouse.  A toast that only a pointer can
+        // follow is a feature half the deployments cannot use.
+        const onClick = jest.fn();
+        withToasts();
+
+        showToast({title: 'Screenshot Generated', onClick});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+        visibleToasts()[0].focus();
+        expect(visibleToasts()[0]).toHaveFocus();
+        await userEvent.keyboard('{Enter}');
+
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('looks clickable only when it is', async () => {
+        withToasts();
+
+        showToast({title: 'Plain'});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+
+        const plain = visibleToasts()[0];
+        expect(plain.style.cursor).not.toBe('pointer');
+        expect(plain).not.toHaveAttribute('tabindex');
+    });
+
+    it('marks a clickable toast as clickable', async () => {
+        const onClick = jest.fn();
+        withToasts();
+
+        showToast({title: 'Follow me', onClick});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+
+        expect(visibleToasts()[0].style.cursor).toBe('pointer');
+        expect(visibleToasts()[0]).toHaveAttribute('tabindex', '0');
     });
 });
 

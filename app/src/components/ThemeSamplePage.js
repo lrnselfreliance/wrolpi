@@ -12,7 +12,11 @@ import {
     Label,
     Loader,
     Loading,
+    IconStack,
+    MediaFilterToggle,
     Message,
+    MultiSelect,
+    NumberInput,
     Modal,
     Pagination,
     Panel,
@@ -132,11 +136,24 @@ export function ThemeSamplePage() {
                         Night filters to red unless you turn it off; amber tints to match only if
                         you ask. Light and dark offer no filter, so both images look the same here.
                         <br/><br/>
-                        Use the toggle in the theme picker above to see the difference. An
-                        element can opt out with <code>night-unfiltered</code> — that is what
-                        the right-hand copy does, which is why it is behind a click: an
-                        unfiltered image is a bright patch, and night mode should not spring
-                        one on you.
+                        Use the toggle below to see the difference. An element can opt out
+                        with <code>night-unfiltered</code> — that is what the right-hand copy
+                        does, which is why it is behind a click: an unfiltered image is a
+                        bright patch, and night mode should not spring one on you.
+                    </p>
+                </div>
+                {/*
+                  The same control the theme picker renders, and the same state: flipping
+                  either one moves both.  It renders nothing at all in light and dark, which
+                  is why it appears to be missing there.
+                */}
+                <div style={{marginTop: 14}}>
+                    <MediaFilterToggle/>
+                    <p style={{fontSize: 12, color: 'var(--muted)', margin: '8px 0 0'}}>
+                        <code>MediaFilterToggle</code>, the control the theme picker ends with.
+                        It is per theme — turning it off for night leaves amber's alone — and it
+                        renders nothing for a theme that offers no filter, so light and dark
+                        show only this caption.
                     </p>
                 </div>
             </Panel>
@@ -383,6 +400,22 @@ export function ThemeSamplePage() {
                             data={['Videos', 'Archive', 'File', 'Scrape']}/>
                     <TextInput label='Destination' defaultValue='videos/'/>
                 </div>
+                <div style={{marginTop: 12, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12}}>
+                    {/*
+                      MultiSelect with a value already set, because the pills it renders for
+                      chosen options are its own surface and they were the part most likely to
+                      come out neutral grey.  Open it to check the dropdown too.
+                    */}
+                    <MultiSelect
+                        label='Tags'
+                        description='Applied to everything this download creates.'
+                        data={['Preserve', 'Homestead', 'Radio', 'Medical', 'Reference']}
+                        defaultValue={['Preserve', 'Radio']}
+                        clearable
+                    />
+                    <NumberInput label='Depth' description='Follow links this far.'
+                                 defaultValue={2} min={1} max={4}/>
+                </div>
                 <div style={{marginTop: 12}}>
                     <Textarea label='Notes' placeholder='Notes about this download…' minRows={2}/>
                 </div>
@@ -518,6 +551,32 @@ export function ThemeSamplePage() {
                         <Icon name='circle notch' loading/>
                         <span style={{fontSize: 12, color: 'var(--muted)'}}>
                             Icons inherit currentColor, so they follow every theme.
+                        </span>
+                    </Row>
+                </div>
+                {/*
+                  These are on a Panel, so each one says so.  The default is the page
+                  background, which is right for the nav bar and wrong everywhere else.
+                */}
+                <div style={{marginTop: 18}}>
+                    <Row>
+                        <IconStack corner={<Icon name='question' size={12}/>} label='WiFi status unknown'
+                                   style={{'--icon-stack-bg': 'var(--panel)'}}>
+                            <Icon name='wifi' size='large'/>
+                        </IconStack>
+                        <IconStack corner={<Icon name='add' size={12}/>} label='New folder'
+                                   style={{'--icon-stack-bg': 'var(--panel)'}}>
+                            <Icon name='folder' size='large'/>
+                        </IconStack>
+                        <IconStack corner={<Icon name='x' size={12}/>} label='Download failed'
+                                   style={{'--icon-stack-bg': 'var(--panel)'}}>
+                            <Icon name='download' size='large'/>
+                        </IconStack>
+                        <span style={{fontSize: 12, color: 'var(--muted)', maxWidth: 400}}>
+                            <code>IconStack</code> composes two glyphs into one symbol. The corner
+                            glyph paints the surface behind itself so the two sets of strokes do not
+                            cross, which means it has to be told what that surface is:{' '}
+                            <code>--icon-stack-bg</code>, set to the panel here.
                         </span>
                     </Row>
                 </div>

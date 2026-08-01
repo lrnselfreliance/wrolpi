@@ -156,6 +156,12 @@ export interface IconStackProps {
     corner: React.ReactNode;
     /** Accessible name for the pair; the two glyphs mean one thing together. */
     label: string;
+    /**
+     * The surface behind the stack, as `{'--icon-stack-bg': 'var(--blue)'}`.  Needed
+     * wherever the stack is not on the page background — a filled button, a panel.
+     */
+    style?: React.CSSProperties;
+    className?: string;
 }
 
 /**
@@ -163,10 +169,15 @@ export interface IconStackProps {
  * say.  Replaces Semantic's IconGroup.
  *
  * The corner glyph gets a background matching the surface so it stays legible
- * over the icon beneath it.
+ * over the icon beneath it; see `--icon-stack-bg` in ui.css.
  */
-export function IconStack({children, corner, label}: IconStackProps) {
-    return <span className='wrolpi-icon-stack' role='img' aria-label={label}>
+export function IconStack({children, corner, label, style, className}: IconStackProps) {
+    return <span
+        className={['wrolpi-icon-stack', className].filter(Boolean).join(' ')}
+        style={style}
+        role='img'
+        aria-label={label}
+    >
         {children}
         <span className='wrolpi-icon-stack-corner' aria-hidden='true'>{corner}</span>
     </span>

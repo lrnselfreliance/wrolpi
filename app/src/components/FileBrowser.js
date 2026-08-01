@@ -437,7 +437,10 @@ export function FileBrowser() {
             disabled={wrolModeEnabled}
             style={{paddingLeft: '1em', paddingRight: showLabels ? '1em' : '0.8em'}}
         >
-            <IconStack corner={<Icon name='add'/>} label='New folder'>
+            {/* On a filled button, so the corner disc must be the button's fill and not
+                the page background, which would read as a hole punched in the button. */}
+            <IconStack corner={<Icon name='add'/>} label='New folder'
+                       style={{'--icon-stack-bg': 'var(--blue)'}}>
                 <Icon name='folder'/>
             </IconStack>
             {showLabels ? <>&nbsp;New Folder</> : null}

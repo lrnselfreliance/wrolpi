@@ -363,7 +363,14 @@ export function NavBar() {
     return <>
         <Media between={['mobile', 'tablet']}>
             <nav className='wrolpi-navbar' id='global_navbar'
-                 style={{background: `var(--${navColor})`, color: 'var(--btn-text)'}}>
+                 style={{
+                     background: `var(--${navColor})`,
+                     color: 'var(--btn-text)',
+                     // The hotspot glyph stacks two icons, and the corner one paints a disc
+                     // of its surface behind itself.  The bar's colour is the user's choice,
+                     // so it has to be handed down rather than looked up from a token.
+                     '--icon-stack-bg': `var(--${navColor})`,
+                 }}>
                 {homeLink}
                 <div className='wrolpi-navbar-right'>
                     {icons}
@@ -394,7 +401,14 @@ function DesktopNav({navColor, homeLink, icons}) {
     return (
         <div ref={containerRef}>
             <nav className='wrolpi-navbar' id='global_navbar'
-                 style={{background: `var(--${navColor})`, color: 'var(--btn-text)'}}>
+                 style={{
+                     background: `var(--${navColor})`,
+                     color: 'var(--btn-text)',
+                     // The hotspot glyph stacks two icons, and the corner one paints a disc
+                     // of its surface behind itself.  The bar's colour is the user's choice,
+                     // so it has to be handed down rather than looked up from a token.
+                     '--icon-stack-bg': `var(--${navColor})`,
+                 }}>
                 <span ref={homeRef} style={{display: 'contents'}}>{homeLink}</span>
                 {(isReady ? visibleLinks : allLinks).map((link, idx) => (
                     <span

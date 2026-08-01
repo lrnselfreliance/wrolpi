@@ -599,6 +599,65 @@ describe('Label as a tag', () => {
     });
 });
 
+describe('nothing paints a label\'s text with an inline colour', () => {
+    /*
+     * A source guard, because this defect appeared at three separate call sites and fixing the
+     * first one did not fix the others.
+     *
+     * A label's text colour has to travel through `--label-text`.  An inline `color` is a
+     * declaration no stylesheet rule can outrank, so night -- which turns a label into an
+     * outline over a near-black page -- keeps whatever was calculated for the fill it just
+     * discarded.  A bright fill leaves black text on near-black: the tag reads as an empty
+     * outline, and nothing fails.
+     *
+     * The three were the tag chip, the tag edit preview (the very preview of the colour being
+     * chosen), and the Flasher's chip badges.  The stylesheet comment explaining the night and
+     * amber override already named the Flasher, and it was still missed.
+     */
+
+    const sourceFiles = (directory) => fs.readdirSync(directory, {withFileTypes: true})
+        .flatMap(entry => {
+            const full = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                return entry.name === 'node_modules' ? [] : sourceFiles(full);
+            }
+            if (!/\.(js|tsx)$/.test(entry.name) || /\.test\.|\.cy\./.test(entry.name)) {
+                return [];
+            }
+            return [[full, fs.readFileSync(full, 'utf8')]];
+        });
+
+    it('sets --label-text instead, everywhere', () => {
+        const src = path.join(__dirname, '..', '..');
+        const offenders = [];
+
+        for (const [file, source] of sourceFiles(src)) {
+            const stripped = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+            let from = 0;
+            while (true) {
+                const at = stripped.indexOf('wrolpi-label', from);
+                if (at === -1) break;
+                from = at + 1;
+
+                // The style object belonging to this element, if it has one nearby.
+                const styleAt = stripped.indexOf('style={{', at);
+                if (styleAt === -1 || styleAt - at > 200) continue;
+                const styleEnd = stripped.indexOf('}}', styleAt);
+                if (styleEnd === -1) continue;
+                const styleObject = stripped.slice(styleAt, styleEnd);
+
+                // A bare `color:` -- not `--label-color`, and not `backgroundColor` and friends,
+                // which are camelCase and so do not match a lowercase `color:`.
+                if (/(?:^|[^-\w])color\s*:/.test(styleObject)) {
+                    offenders.push(`${path.relative(src, file)}: ${styleObject.slice(0, 90)}`);
+                }
+            }
+        }
+
+        expect(offenders).toEqual([]);
+    });
+});
+
 describe('Table', () => {
     it('renders a Semantic-shaped compound table', () => {
         renderUI(<Table>

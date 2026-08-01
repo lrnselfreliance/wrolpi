@@ -531,3 +531,32 @@ describe('contrastingColor', () => {
         expect(contrastRatio('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
     });
 });
+
+describe('contrastingColor with shorthand hex', () => {
+    /*
+     * Tag colours reach the UI from the database, and a tags config is a file a user can edit
+     * by hand -- configs are the source of truth in WROLPi -- so a perfectly valid `#fff` can
+     * arrive here.  `hexToRGBArray` used to reject anything but six digits, which left the
+     * luminance at zero: a near-white tag was treated as black and given light text.
+     */
+
+    it('reads a three-digit hex as the colour it is', () => {
+        expect(contrastRatio('#000000', '#fff')).toBeCloseTo(21, 1);
+        expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(contrastRatio('#000000', '#fff'), 5);
+    });
+
+    it('picks dark text for a near-white shorthand fill', () => {
+        expect(contrastingColor('#fff')).toBe(TAG_TEXT_DARK);
+    });
+
+    it('picks light text for a near-black shorthand fill', () => {
+        expect(contrastingColor('#000')).toBe(TAG_TEXT_LIGHT);
+    });
+
+    it('agrees with the six-digit form of the same colour', () => {
+        for (const [short, long] of [['#fff', '#ffffff'], ['#000', '#000000'],
+                                     ['#f00', '#ff0000'], ['#1b2', '#11bb22']]) {
+            expect(contrastingColor(short)).toBe(contrastingColor(long));
+        }
+    });
+});

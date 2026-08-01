@@ -783,9 +783,12 @@ export function FlasherPage() {
                                     <Table.Cell>{humanFileSize(result.size)}</Table.Cell>
                                     <Table.Cell>
                                         {result.esp_chip
+                                            // `--label-text` rather than `color`: an inline
+                                            // `color` cannot be overridden, and night and
+                                            // amber replace the chip's fill with their own.
                                             ? <span className='wrolpi-label' style={{
                                                 '--label-color': chipColor(result.esp_chip),
-                                                color: chipTextColor(chipColor(result.esp_chip)),
+                                                '--label-text': chipTextColor(chipColor(result.esp_chip)),
                                             }}>{result.esp_chip}</span>
                                             : <span style={{opacity: 0.5}}>—</span>}
                                     </Table.Cell>

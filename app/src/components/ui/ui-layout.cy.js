@@ -3,7 +3,16 @@ import {
     ActionInput, Button, Header, PathInput, Statistic, StatisticGroup, TabBar, tabClassName, TextInput,
 } from './index';
 import {contrastingColor} from '../Common';
+import {Notifications} from '@mantine/notifications';
+import {toast} from './toast';
 import {themeNames} from '../../themes/names';
+
+/* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
+const hexToRgb = (hex) => {
+    const value = hex.replace('#', '');
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16));
+    return `rgb(${r}, ${g}, ${b})`;
+};
 
 /*
  * Layout and theming assertions for the component library, run in a real browser.
@@ -539,6 +548,73 @@ describe('tabs', () => {
             cy.contains('button', 'Channels').should(($tab) =>
                 expect(getComputedStyle($tab[0]).backgroundColor, 'inactive tab is transparent')
                     .to.equal('rgba(0, 0, 0, 0)'));
+        });
+    });
+});
+
+describe('a toast is readable in every theme', () => {
+    /*
+     * Mantine paints a dark-scheme notification title with `--mantine-color-white`, and the
+     * bridge aliases that to `--btn-text` -- the text drawn on a filled button, which is
+     * near-black in dark, night and amber.  The title measured about 1.1:1 against the toast's
+     * own surface: present, and invisible.
+     *
+     * Only a browser can catch that.  jsdom resolves no `var()`, so the title's colour there is
+     * the literal string `var(--mantine-color-white)` and every contrast check passes.
+     */
+
+    /*
+     * Mounts once, with the theme, and raises a toast.  Mounting a second time to raise it --
+     * which is how this was first written -- resets the theme to the default, so all four
+     * per-theme cases silently ran in light and none of them could fail.
+     */
+    const showToast = (theme) => {
+        cy.mountUI(<>
+            <Notifications position='top-right' limit={5}/>
+            <button type='button' onClick={() => toast({
+                type: 'error', title: 'Download failed',
+                description: 'HTTP 403 from the remote server after 3 attempts.',
+            })}>Raise one</button>
+        </>, {theme});
+        cy.contains('button', 'Raise one').click();
+        cy.get('[class*="mantine-Notification-root"]').should('exist');
+    };
+
+    themeNames.forEach((theme) => {
+        it(`reads its title and message in ${theme}`, () => {
+            showToast(theme);
+
+            // WCAG AA for both.  The description is the message itself, so it is held to the
+            // same bar as the title rather than treated as decoration.
+            cy.contrastRatio('[class*="mantine-Notification-title"]').should('be.at.least', 4.5);
+            cy.contrastRatio('[class*="mantine-Notification-description"]').should('be.at.least', 4.5);
+        });
+    });
+
+    it('keeps the title more prominent than the message', () => {
+        /*
+         * Night and amber drop the description's muting, because `--muted` on a panel is 2.0:1
+         * in night.  Weight has to carry the hierarchy once colour cannot.
+         */
+        showToast('night');
+
+        cy.get('[class*="mantine-Notification-title"]').then(($title) => {
+            cy.get('[class*="mantine-Notification-description"]').should(($description) => {
+                const weight = (el) => parseInt(getComputedStyle(el).fontWeight, 10);
+                expect(weight($title[0]), 'title weight')
+                    .to.be.greaterThan(weight($description[0]));
+            });
+        });
+    });
+
+    it('takes its surface from the theme, not from Mantine', () => {
+        // A toast is a panel.  Left to Mantine it would be `--mantine-color-body`, which is not
+        // one of our tokens and does not follow night or amber.
+        showToast('night');
+
+        cy.get('[class*="mantine-Notification-root"]').should(($toast) => {
+            const panel = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim();
+            expect(getComputedStyle($toast[0]).backgroundColor).to.equal(hexToRgb(panel));
         });
     });
 });

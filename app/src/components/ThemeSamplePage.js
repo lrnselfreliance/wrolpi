@@ -33,6 +33,7 @@ import {
     ThemePicker,
     Toggle,
     Tooltip,
+    clearToasts,
     toast,
 } from './ui';
 import {semanticColorNames} from '../themes/mantine';
@@ -60,6 +61,10 @@ const Section = ({label, children}) => <section style={{marginBottom: 34}}>
 const Row = ({children}) => <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
     {children}
 </div>;
+
+// Numbers the stacked toasts so it is obvious which press produced which, and that a second
+// press adds a toast rather than replacing the first.  Module scope, so it survives re-renders.
+let toastCounter = 0;
 
 export function ThemeSamplePage() {
     const {theme} = useContext(ThemeContext);
@@ -208,6 +213,77 @@ export function ThemeSamplePage() {
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
                     In night mode Delete drops its fill for a dashed red outline; dashed means
                     destructive or failed, and nothing else uses it.
+                </p>
+            </Panel>
+        </Section>
+
+        <Section label='Toasts'>
+            <Panel>
+                {/*
+                  * `toast` has thirteen call sites and no test, and it has already failed once
+                  * app-wide: App.js dropped Semantic's toast container while seven pages were
+                  * still importing the old helper, and every notification silently vanished.
+                  * A toast is also the one component you cannot see by loading a page -- it has
+                  * to be provoked -- which is why it needs buttons here rather than a sample.
+                  */}
+                <Row>
+                    <Button role='primary' onClick={() => toast({
+                        type: 'info', title: 'Refresh started',
+                        description: 'Indexing the media directory.',
+                    })}>Info</Button>
+                    <Button role='save' onClick={() => toast({
+                        type: 'success', title: 'Saved',
+                        description: 'Channel settings written to config/channels.yaml.',
+                    })}>Success</Button>
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'warning', title: 'Daily download limit reached',
+                        description: 'Downloads will resume tomorrow at 00:00.',
+                    })}>Warning</Button>
+                    <Button role='danger' onClick={() => toast({
+                        type: 'error', title: 'Download failed',
+                        description: 'HTTP 403 from the remote server after 3 attempts.',
+                    })}>Error</Button>
+                </Row>
+
+                <Row>
+                    {/* Click this repeatedly: each press is a separate toast, and the
+                        container holds five at once. */}
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'info', title: `Stacked toast ${++toastCounter}`,
+                        description: 'Press again before this one expires.',
+                    })}>Stack one more</Button>
+                    <Button role='cancel' onClick={() => {
+                        // All five at once, to see the container at its limit.
+                        for (let i = 1; i <= 5; i += 1) {
+                            toast({
+                                type: 'info', title: `Toast ${i} of 5`,
+                                description: 'Filling the container to its limit.',
+                            });
+                        }
+                    }}>Fill the stack</Button>
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'error', title: 'This one stays',
+                        description: 'time: 0 means it waits to be dismissed. Close it yourself.',
+                        time: 0,
+                    })}>Never expires</Button>
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'warning',
+                        description: 'No title, only a description — some call sites send just this.',
+                    })}>No title</Button>
+                    <Button role='cancel' onClick={() => toast({
+                        type: 'error', title: 'A long one, to see how it wraps',
+                        description: 'Failed to fetch https://example.com/a/very/long/path/that/'
+                            + 'keeps/going/for/a/while.html: the remote server closed the '
+                            + 'connection after sending part of the response body.',
+                    })}>Long text</Button>
+                    <Button role='danger' onClick={() => clearToasts()}>Clear all</Button>
+                </Row>
+
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                    Bottom right, five at a time, five seconds each unless the caller says
+                    otherwise. Check each type in all four themes: night has no second hue to
+                    spend, so info, success, warning and error cannot be told apart by colour
+                    there.
                 </p>
             </Panel>
         </Section>

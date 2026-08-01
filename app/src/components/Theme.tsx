@@ -215,7 +215,12 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
             cssVariablesResolver={cssVariablesResolver}
             forceColorScheme={dark ? 'dark' : 'light'}
         >
-            <Notifications position='bottom-right' limit={5}/>
+            {/*
+              * Top right.  Bottom right put toasts over the sticky footer on the file browser
+              * and over the player controls on a video, which are the two places a background
+              * task is most likely to report while the user is doing something else.
+              */}
+            <Notifications position='top-right' limit={5}/>
             {children}
         </MantineProvider>
     </ThemeContext.Provider>

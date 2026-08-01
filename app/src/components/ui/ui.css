@@ -779,6 +779,54 @@ html[data-theme="amber"] .wrolpi-label {
     --label-text: var(--btn-text) !important;
 }
 
+/* ----------------------------------------------------------------- Toasts */
+/*
+ * Notifications take their colours from our tokens rather than from Mantine's colour scheme.
+ *
+ * Mantine paints a dark-scheme notification title with `--mantine-color-white`, and the
+ * bridge aliases that to `--btn-text` -- deliberately, because it is the text drawn on a
+ * filled button, which is near-black in dark, night and amber.  So the title came out at
+ * rgb(28, 31, 33) on a rgb(38, 41, 43) surface: about 1.1:1, present and invisible.  Fixing
+ * the alias is not an option; it is correct for the buttons it exists for.
+ *
+ * The `html` prefix is only there to outrank Mantine's single-class rules.  One set of values
+ * covers every theme, because the tokens are what differ.
+ */
+
+html .mantine-Notification-root {
+    background-color: var(--panel);
+    border-color: var(--border);
+}
+
+html .mantine-Notification-title {
+    color: var(--text);
+}
+
+html .mantine-Notification-description {
+    color: var(--muted);
+}
+
+/*
+ * The description is the message itself, so it has to be read, and `--muted` is too dim to
+ * read on a panel in the two monochrome themes -- 2.0:1 in night, 3.1:1 in amber, against
+ * 5.1:1 and 5.7:1 in dark and light.  Those two drop the muting and let the title's weight
+ * carry the hierarchy instead, which is the same brightness-over-hue trade the rest of night
+ * makes.
+ */
+html[data-theme="night"] .mantine-Notification-description,
+html[data-theme="amber"] .mantine-Notification-description {
+    color: var(--text);
+}
+
+html .mantine-Notification-closeButton {
+    color: var(--muted);
+}
+
+html .mantine-Notification-closeButton:hover {
+    background-color: var(--head);
+    color: var(--text);
+}
+
 /* --------------------------------------------------------------- Messages */
 
 .wrolpi-message {

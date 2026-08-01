@@ -737,6 +737,25 @@ describe('Table', () => {
         expect(screen.getByRole('cell', {name: 'example.com'})).toBeInTheDocument();
     });
 
+    it('draws no borders between columns', () => {
+        /*
+         * A full grid is a lot of ink to repeat what the column headings already say, and
+         * it cost the header its identity: with no surface of its own, a bordered header
+         * cell looked like one more cell in the grid.  Mantine marks the choice on the
+         * table, so the absence is assertable without a browser.
+         */
+        const {container} = renderUI(<Table>
+            <Table.Body>
+                <Table.Row><Table.Cell>a</Table.Cell><Table.Cell>b</Table.Cell></Table.Row>
+            </Table.Body>
+        </Table>);
+
+        const table = container.querySelector('table');
+        expect(table).not.toHaveAttribute('data-with-column-border');
+        // The outline around the table is a different thing and stays.
+        expect(table).toHaveAttribute('data-with-table-border');
+    });
+
     it('marks failed rows for the danger border', () => {
         const {container} = renderUI(<Table>
             <Table.Body>

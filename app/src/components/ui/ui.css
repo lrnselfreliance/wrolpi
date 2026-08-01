@@ -51,6 +51,30 @@
     padding: 1px;
 }
 
+/*
+ * A stack inside a button is the one case the call site should not have to describe,
+ * because the surface changes underneath it: Mantine paints a filled button from
+ * `--button-bg` but a disabled one from `--mantine-color-disabled`, whatever its variant.
+ * The file browser's New Folder button is disabled in WROL mode, so a disc pinned to the
+ * enabled fill would be a blue chip on a grey button -- the original hole, inverted.
+ *
+ * Only `filled` gets the first rule: an outline or subtle button sets `--button-bg` to
+ * `transparent`, and there the surface behind the button is still the right answer.
+ * `:not([data-variant])` is that same case -- Mantine omits the attribute entirely when a
+ * call site names a colour but no variant, which is how every filled button here is
+ * written, and keying on the attribute alone matched none of them.  `--button-bg` itself
+ * is absent when a button names neither, hence the fallback chain.
+ */
+.mantine-Button-root:not([data-variant]) .wrolpi-icon-stack-corner,
+.mantine-Button-root[data-variant="filled"] .wrolpi-icon-stack-corner {
+    background: var(--button-bg, var(--icon-stack-bg, var(--bg)));
+}
+
+.mantine-Button-root:disabled .wrolpi-icon-stack-corner,
+.mantine-Button-root[data-disabled] .wrolpi-icon-stack-corner {
+    background: var(--mantine-color-disabled);
+}
+
 /* ---------------------------------------------------------------- Buttons */
 /*
  * Dashed borders mean "destructive or failed", and nothing else may use them.
@@ -364,9 +388,11 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
 /* ------------------------------------------------------------- Form fields */
 /*
  * A Pill is what MultiSelect renders for each chosen option, and it is the one place
- * Mantine does not honour the radius theme: `Pill` writes `--pill-radius: rem(1000)`
- * on the element itself, which no amount of zeroing `--mantine-radius-xl` can reach.
- * Everything else in the library has hard corners, so these do too.
+ * Mantine does not honour the radius theme.  MultiSelect leaves `radius` undefined, so
+ * Pill emits no `--pill-radius` at all and its stylesheet falls back to
+ * `border-radius: var(--pill-radius, 1000rem)` -- a literal in Mantine's own CSS, which
+ * zeroing `--mantine-radius-xl` never touches.  Defining the variable is what stops the
+ * fallback from ever applying.  Everything else in the library has hard corners.
  */
 .mantine-Pill-root {
     --pill-radius: 0;

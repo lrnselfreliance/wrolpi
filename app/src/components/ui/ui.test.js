@@ -886,14 +886,34 @@ describe('Toggle', () => {
 
 describe('Checkbox', () => {
     it('reports and changes its state', async () => {
-        const onChange = jest.fn();
-        renderUI(<Checkbox label='Download comments' checked={false} onChange={onChange}/>);
+        // Uncontrolled, so the box actually has to become checked.  Held at `checked={false}`
+        // it never can, and the test could only ever say "a handler fired".
+        renderUI(<Checkbox label='Download comments' defaultChecked={false}/>);
 
         const box = screen.getByRole('checkbox', {name: 'Download comments'});
         expect(box).not.toBeChecked();
         await userEvent.click(box);
 
-        expect(onChange).toHaveBeenCalled();
+        expect(box).toBeChecked();
+    });
+
+    it('hands the caller the new state', async () => {
+        /*
+         * Read inside the handler, as every call site does: `currentTarget` is only set
+         * while the event is being dispatched and is null by the time the mock is inspected.
+         * The claim is that the handler sees the state the user just asked for -- fire it
+         * with the old value and each call site writes the state back unchanged.
+         */
+        let checkedWhenCalled;
+        const onChange = jest.fn(event => {
+            checkedWhenCalled = event.currentTarget.checked;
+        });
+        renderUI(<Checkbox label='Download comments' checked={false} onChange={onChange}/>);
+
+        await userEvent.click(screen.getByRole('checkbox', {name: 'Download comments'}));
+
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(checkedWhenCalled).toBe(true);
     });
 
     it('points Mantine\'s own variables at tokens', () => {
@@ -959,9 +979,14 @@ describe('Loading', () => {
     it('renders no caption when there is nothing to say', () => {
         const {container} = renderUI(<Loading/>);
 
-        expect(container.querySelector('.mantine-Loader-root')).toBeInTheDocument();
-        // An empty caption div would still take its line-height, moving the spinner off centre.
-        expect(container.querySelectorAll('div').length).toBe(1);
+        const loader = container.querySelector('.mantine-Loader-root');
+        expect(loader).toBeInTheDocument();
+        /*
+         * An empty caption div would still take its line-height and push the spinner off
+         * centre.  Counted against the loader's own parent rather than the container: the
+         * provider is free to add wrappers, and a global count would fail on that instead.
+         */
+        expect(loader.parentElement.children).toHaveLength(1);
     });
 });
 

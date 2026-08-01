@@ -437,10 +437,9 @@ export function FileBrowser() {
             disabled={wrolModeEnabled}
             style={{paddingLeft: '1em', paddingRight: showLabels ? '1em' : '0.8em'}}
         >
-            {/* On a filled button, so the corner disc must be the button's fill and not
-                the page background, which would read as a hole punched in the button. */}
-            <IconStack corner={<Icon name='add'/>} label='New folder'
-                       style={{'--icon-stack-bg': 'var(--blue)'}}>
+            {/* The corner disc follows the button's fill on its own -- including when WROL
+                mode disables it and Mantine repaints it grey.  See ui.css. */}
+            <IconStack corner={<Icon name='add'/>} label='New folder'>
                 <Icon name='folder'/>
             </IconStack>
             {showLabels ? <>&nbsp;New Folder</> : null}

@@ -619,7 +619,6 @@ export function AddTagsButton({
     </>
 }
 
-export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
 export const TagsSelector = ({
                                  hideEdit = false,

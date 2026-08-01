@@ -1,12 +1,12 @@
 import React from 'react';
 import {
     ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Placeholder, Statistic, StatisticGroup, TabBar, Table, tabClassName, TextInput,
+    Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName, TextInput,
 } from './index';
 import {contrastingColor} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {toast} from './toast';
-import {themeNames} from '../../themes/names';
+import {monochromeThemes, themeNames} from '../../themes/names';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
@@ -174,6 +174,147 @@ const sampleTable = <Table>
         <Table.Row><Table.Cell>three</Table.Cell><Table.Cell>3 kB</Table.Cell></Table.Row>
     </Table.Body>
 </Table>;
+
+describe('semantic roles read as severity in every theme', () => {
+    /*
+     * The point of the roles, and the only thing that makes them worth having.
+     *
+     * Light and dark spend a hue per role, so this is nearly free there.  Night is red and
+     * nothing else and amber is amber and nothing else, so a role there is a step on a
+     * brightness ramp -- and it has to be, because `--orange` in night is byte-identical to
+     * `--text` and `--yellow` to `--amber`.  Picking between hue names in night is picking
+     * between synonyms, which is why all four toast kinds were the same pixel.
+     *
+     * None of this is checkable in jsdom: every value is a token behind two levels of
+     * var(), and the claim is about resolved luminance.
+     */
+    const ROLES = ['neutral', 'info', 'success', 'warning', 'danger'];
+
+    const roleColours = () => {
+        const root = getComputedStyle(document.documentElement);
+        const panel = hexToRgb(root.getPropertyValue('--panel').trim());
+        return {
+            panel,
+            text: hexToRgb(root.getPropertyValue('--text').trim()),
+            roles: ROLES.map(role => ({
+                role, colour: hexToRgb(root.getPropertyValue(`--${role}`).trim()),
+            })),
+        };
+    };
+
+    themeNames.forEach((theme) => {
+        it(`gives every role a colour of its own in ${theme}`, () => {
+            // True everywhere.  Two roles resolving to the same value is the original bug.
+            cy.mountUI(<Panel>roles</Panel>, {theme});
+
+            cy.get('.wrolpi-panel').should(() => {
+                const {roles} = roleColours();
+                const colours = roles.map(r => r.colour);
+                colours.forEach((colour, index) => {
+                    expect(colour, `${roles[index].role} resolved`).to.match(/^rgb\(/);
+                });
+                expect(new Set(colours).size, `five distinct roles, got ${colours.join(' ')}`)
+                    .to.equal(5);
+            });
+        });
+
+        it(`keeps every role legible in ${theme}`, () => {
+            cy.mountUI(<Panel>roles</Panel>, {theme});
+
+            cy.get('.wrolpi-panel').should(() => {
+                const {panel, roles} = roleColours();
+                roles.forEach(({role, colour}) => {
+                    /*
+                     * 3:1 is the floor for anything that is not body text.  `neutral` is
+                     * allowed to sit at the bottom of the ramp -- for `pending` and disabled,
+                     * being dim IS the signal -- but it still has to be visible at all.
+                     */
+                    expect(contrast(colour, panel), `${role} against the panel`)
+                        .to.be.at.least(role === 'neutral' ? 2.5 : 3);
+                });
+            });
+        });
+
+
+        it(`gives each Status kind a colour of its own in ${theme}`, () => {
+            /*
+             * The end of the chain, through a real component: four states, four distinct
+             * painted colours.  In night these used to need three hand-written
+             * `html[data-theme="night"]` overrides; the roles replaced all of them.
+             */
+            cy.mountUI(
+                <Panel>
+                    <Status kind='complete'>complete</Status>
+                    <Status kind='active'>downloading</Status>
+                    <Status kind='pending'>pending</Status>
+                    <Status kind='failed'>failed</Status>
+                </Panel>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-status').should(($all) => {
+                expect($all.length).to.equal(4);
+                const colours = [...$all].map(el => getComputedStyle(el).color);
+                expect(new Set(colours).size, `four distinct colours, got ${colours.join(' ')}`)
+                    .to.equal(4);
+            });
+        });
+    });
+
+    monochromeThemes.forEach((theme) => {
+        it(`orders the roles by brightness in ${theme}, which is all it has`, () => {
+            /*
+             * Only here.  Light and dark spend a hue per role, so their contrast order is
+             * an accident of which hues were chosen -- in light, blue is DARKER than green
+             * on white, so asserting a ramp there fails on a design that is perfectly fine.
+             * With hue gone, though, ordering is the only thing severity can be encoded in.
+             */
+            cy.mountUI(<Panel>roles</Panel>, {theme});
+
+            cy.get('.wrolpi-panel').should(() => {
+                const {panel, roles} = roleColours();
+                const ratios = roles.map(({role, colour}) => ({role, ratio: contrast(colour, panel)}));
+                ratios.slice(1).forEach((entry, index) => {
+                    expect(entry.ratio, `${entry.role} is louder than ${ratios[index].role}`)
+                        .to.be.greaterThan(ratios[index].ratio);
+                });
+            });
+        });
+
+        it(`makes danger at least as loud as ordinary text in ${theme}`, () => {
+            /*
+             * Also only here.  A light theme's text is near-black at ~14:1 and no danger
+             * colour will ever match it; on a single hue the roles and the text are drawn
+             * from the same ramp, so the loudest role must not be quieter than the prose.
+             */
+            cy.mountUI(<Panel>roles</Panel>, {theme});
+
+            cy.get('.wrolpi-panel').should(() => {
+                const {panel, text, roles} = roleColours();
+                const danger = roles.find(r => r.role === 'danger').colour;
+                expect(contrast(danger, panel), 'danger vs --text against the panel')
+                    .to.be.at.least(contrast(text, panel) * 0.95);
+            });
+        });
+    });
+
+    it('does not leave failure to colour alone', () => {
+        // Brightness is the first thing lost on a dim screen, and it is all night has.
+        cy.mountUI(
+            <Panel>
+                <Status kind='failed'>failed</Status>
+                <Status kind='complete'>complete</Status>
+            </Panel>,
+            {theme: 'night'},
+        );
+
+        cy.get('.wrolpi-status-failed').should(($failed) => {
+            const other = Cypress.$('.wrolpi-status-complete')[0];
+            expect(parseInt(getComputedStyle($failed[0]).fontWeight, 10), 'failed is heavier')
+                .to.be.greaterThan(parseInt(getComputedStyle(other).fontWeight, 10));
+        });
+    });
+});
 
 describe('a table header is a surface, not just bold text', () => {
     themeNames.forEach((theme) => {

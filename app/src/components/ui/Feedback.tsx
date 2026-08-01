@@ -1,7 +1,7 @@
 import React from 'react';
 import {Loader as MLoader, Skeleton} from '@mantine/core';
 import {Icon} from './Icon';
-import {SemanticColorName} from '../../themes/mantine';
+import {RoleName, SemanticColorName} from '../../themes/mantine';
 
 /*
  * Feedback: messages, labels, progress, status text, loaders.
@@ -12,13 +12,20 @@ import {SemanticColorName} from '../../themes/mantine';
 
 // ------------------------------------------------------------------ Messages
 
-export type MessageKind = 'info' | 'success' | 'warning' | 'error';
+/*
+ * `error` is the original spelling and stays: 26 call sites use it, and renaming those
+ * is app-level churn for no behaviour change.  `danger` is the same thing under the
+ * name the token uses, and is what new code should write.
+ */
+export type MessageKind = 'info' | 'success' | 'warning' | 'error' | 'danger';
 
-const messageColors: Record<MessageKind, string> = {
-    info: 'var(--blue)',
-    success: 'var(--green)',
-    warning: 'var(--amber)',
-    error: 'var(--red)',
+/** The role each kind means.  Never a hue -- see the note on roles in tokens.css. */
+const messageRoles: Record<MessageKind, RoleName> = {
+    info: 'info',
+    success: 'success',
+    warning: 'warning',
+    error: 'danger',
+    danger: 'danger',
 };
 
 export interface MessageProps {
@@ -35,10 +42,10 @@ export interface MessageProps {
 export function Message({kind = 'info', title, children, icon, onDismiss, className}: MessageProps) {
     return <div
         // Errors and warnings interrupt; info and success are announced politely.
-        role={kind === 'error' ? 'alert' : 'status'}
-        className={['wrolpi-message', kind === 'error' ? 'wrolpi-message-error' : '', className]
+        role={messageRoles[kind] === 'danger' ? 'alert' : 'status'}
+        className={['wrolpi-message', messageRoles[kind] === 'danger' ? 'wrolpi-message-error' : '', className]
             .filter(Boolean).join(' ')}
-        style={{['--message-color' as string]: messageColors[kind]}}
+        style={{['--message-color' as string]: `var(--${messageRoles[kind]})`}}
     >
         {icon && <div className='wrolpi-message-icon'>
             {typeof icon === 'string' ? <Icon name={icon} size={20}/> : <Icon component={icon} size={20}/>}
@@ -61,7 +68,7 @@ export function Message({kind = 'info', title, children, icon, onDismiss, classN
 // -------------------------------------------------------------------- Labels
 
 export interface LabelProps {
-    color?: SemanticColorName | 'black' | 'white';
+    color?: SemanticColorName | RoleName | 'black' | 'white';
     icon?: string | React.ComponentType<any>;
     /**
      * Draw it as a physical tag — pointed left edge and an eyelet — rather than a plain
@@ -100,7 +107,7 @@ export interface ProgressProps {
     indeterminate?: boolean;
     /** Show the percentage inside the bar. */
     showPercent?: boolean;
-    color?: SemanticColorName;
+    color?: SemanticColorName | RoleName;
     /** Replaces the percentage with arbitrary text (e.g. "2.1 GB / 5.3 GB"). */
     label?: React.ReactNode;
     className?: string;
@@ -137,6 +144,19 @@ export function Progress({
 
 export type StatusKind = 'complete' | 'active' | 'pending' | 'failed';
 
+/*
+ * Status was the one component already doing this correctly: it had per-theme overrides
+ * in ui.css because night has no hues to distinguish four states with.  Those are gone --
+ * the roles carry the brightness ramp now, so this table is the whole of it and every
+ * theme is served by the same rule.
+ */
+const statusRoles: Record<StatusKind, RoleName> = {
+    complete: 'success',
+    active: 'info',
+    pending: 'neutral',
+    failed: 'danger',
+};
+
 const statusIcons: Record<StatusKind, string> = {
     complete: 'check',
     active: 'circle notch',
@@ -157,7 +177,10 @@ export interface StatusProps {
  * the color.
  */
 export function Status({kind, children, plain}: StatusProps) {
-    return <span className={`wrolpi-status wrolpi-status-${kind}`}>
+    return <span
+        className={`wrolpi-status wrolpi-status-${kind}`}
+        style={{['--status-color' as string]: `var(--${statusRoles[kind]})`}}
+    >
         {!plain && <Icon name={statusIcons[kind]} size={14} loading={kind === 'active'}/>}
         {children}
     </span>

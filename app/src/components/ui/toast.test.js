@@ -106,16 +106,33 @@ describe('toast', () => {
         await waitFor(() => expect(visibleToasts()).toHaveLength(0));
     });
 
-    it('carries the colour its type maps to', async () => {
+    it('carries the ROLE its type maps to, never a hue', async () => {
         withToasts();
 
         showToast({type: 'error', title: 'Download failed'});
 
         await waitFor(() => expect(visibleToasts()).toHaveLength(1));
-        // The whole custom property, not a substring: `toContain('red')` would also be
-        // satisfied by any other declaration that happens to carry those three letters.
+        /*
+         * The whole custom property, not a substring: `toContain('danger')` would also be
+         * satisfied by any other declaration that happens to carry those letters.
+         *
+         * A hue here is the bug, not a detail.  `red` resolves per theme, but in night
+         * `--yellow` and `--amber` are the same value and `--orange` is `--text`, so hue
+         * names cannot keep four kinds of toast apart there.  The role can.
+         */
         expect(visibleToasts()[0].getAttribute('style'))
-            .toMatch(/--notification-color:\s*var\(--mantine-color-red-/);
+            .toMatch(/--notification-color:\s*var\(--mantine-color-danger-/);
+    });
+
+    it('accepts `danger` as well as `error`, so new code can use the token name', async () => {
+        // `error` is what 26 call sites already write; both must reach the same role.
+        withToasts();
+
+        showToast({type: 'danger', title: 'Download failed'});
+
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+        expect(visibleToasts()[0].getAttribute('style'))
+            .toMatch(/--notification-color:\s*var\(--mantine-color-danger-/);
     });
 
     it('gives each type a colour of its own', async () => {
@@ -145,7 +162,7 @@ describe('toast', () => {
 
         await waitFor(() => expect(visibleToasts()).toHaveLength(1));
         expect(visibleToasts()[0].getAttribute('style'))
-            .toMatch(/--notification-color:\s*var\(--mantine-color-blue-/);
+            .toMatch(/--notification-color:\s*var\(--mantine-color-info-/);
     });
 
     it('survives being called with nothing at all', () => {

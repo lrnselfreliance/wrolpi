@@ -336,9 +336,16 @@ function EditTagsModal() {
             <Modal.Header>Edit Tags</Modal.Header>
             <div id='editModalContent'>
                 <Group gap={6}>
+                    {/*
+                      * `--label-text`, not `color`, for the same reason as the chip itself:
+                      * inline `color` cannot be overridden, so in night this preview showed
+                      * black text on a transparent outline over a near-black page.  It is the
+                      * preview of the colour being chosen, so being honest about how the tag
+                      * will actually look matters here more than anywhere.
+                      */}
                     <span
-                        className='wrolpi-label'
-                        style={{['--label-color']: tagColor, color: textColor}}
+                        className='wrolpi-label wrolpi-tag'
+                        style={{['--label-color']: tagColor, ['--label-text']: textColor}}
                     >
                         {tagName || 'Example Tag'}
                     </span>

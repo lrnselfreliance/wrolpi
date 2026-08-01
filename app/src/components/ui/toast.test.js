@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import {MantineProvider} from '@mantine/core';
 import {Notifications} from '@mantine/notifications';
 import {cssVariablesResolver, mantineTheme} from '../../themes/mantine';
+import {notificationsStore} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
 
 /*
@@ -111,9 +112,10 @@ describe('toast', () => {
         showToast({type: 'error', title: 'Download failed'});
 
         await waitFor(() => expect(visibleToasts()).toHaveLength(1));
-        // Mantine writes the resolved colour onto the element as a custom property.
-        const notification = visibleToasts()[0];
-        expect(notification.getAttribute('style')).toContain('red');
+        // The whole custom property, not a substring: `toContain('red')` would also be
+        // satisfied by any other declaration that happens to carry those three letters.
+        expect(visibleToasts()[0].getAttribute('style'))
+            .toMatch(/--notification-color:\s*var\(--mantine-color-red-/);
     });
 
     it('gives each type a colour of its own', async () => {
@@ -142,7 +144,8 @@ describe('toast', () => {
         showToast({title: 'Refresh started'});
 
         await waitFor(() => expect(visibleToasts()).toHaveLength(1));
-        expect(visibleToasts()[0].getAttribute('style')).toContain('blue');
+        expect(visibleToasts()[0].getAttribute('style'))
+            .toMatch(/--notification-color:\s*var\(--mantine-color-blue-/);
     });
 
     it('survives being called with nothing at all', () => {
@@ -203,6 +206,20 @@ describe('a toast that can be clicked', () => {
         expect(onClick).toHaveBeenCalledTimes(1);
     });
 
+    it('can also be activated with Space', async () => {
+        // `toast.ts` handles Enter and Space; only Enter was covered, so dropping the Space
+        // branch -- or switching to `event.code` -- would have stayed green.
+        const onClick = jest.fn();
+        withToasts();
+
+        showToast({title: 'Screenshot Generated', onClick});
+        await waitFor(() => expect(visibleToasts()).toHaveLength(1));
+        visibleToasts()[0].focus();
+        await userEvent.keyboard(' ');
+
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
     it('looks clickable only when it is', async () => {
         withToasts();
 
@@ -244,15 +261,38 @@ describe('how long a toast stays up', () => {
         await waitFor(() => expect(screen.queryByText('Saved')).not.toBeInTheDocument());
     });
 
-    it('is still up a moment after being shown, when no time is given', async () => {
-        // The default is five seconds, which is not worth waiting for; what is worth asserting
-        // is that a caller who names no time does not get a toast that vanishes instantly.
+    /*
+     * The dismissal deadline `toast()` hands Mantine, read back off its store.
+     *
+     * Waiting is no good for this.  Sleeping 150ms and finding the toast still there catches
+     * "vanishes on the next tick" and nothing else -- it passes just as happily for a 200ms
+     * default, a 1000ms one, `false`, or Mantine's own container default of 4000ms.  Waiting
+     * the full five seconds instead would put five seconds into every run.  The store holds
+     * exactly what was passed, which is the thing worth asserting.
+     */
+    const autoCloseOf = (options) => {
+        showToast(options);
+        const [notification] = notificationsStore.getState().notifications;
+        return notification.autoClose;
+    };
+
+    it('gives a toast five seconds when the caller names no time', () => {
         withToasts();
-        showToast({title: 'Refresh started'});
 
-        await new Promise(resolve => setTimeout(resolve, 150));
+        expect(autoCloseOf({title: 'Refresh started'})).toBe(5000);
+    });
 
-        expect(screen.getByText('Refresh started')).toBeInTheDocument();
+    it('passes a time the caller chose straight through', () => {
+        withToasts();
+
+        expect(autoCloseOf({title: 'Brief', time: 250})).toBe(250);
+    });
+
+    it('turns time 0 into no deadline at all', () => {
+        // Not 0.  Mantine reads a number as a delay, so a literal 0 dismisses on the next tick.
+        withToasts();
+
+        expect(autoCloseOf({title: 'Download failed', time: 0})).toBe(false);
     });
 
     it('stays until dismissed when the caller asks for time 0', async () => {

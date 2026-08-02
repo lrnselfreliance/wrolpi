@@ -83,7 +83,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
      * too narrow for words.  Those buttons are icon-only at exactly the widths where the
      * offset is most visible.
      */
-    const labelled = React.Children.toArray(children).length > 0;
+    /*
+     * Blank text is not a label.  `toArray` drops null, undefined and booleans, but keeps an
+     * empty or whitespace-only string, which would leave the icon in `leftSection` with its
+     * margin and the glyph off-centre again.  No call site does that today; the predicate
+     * should not depend on that staying true.
+     *
+     * Two limits, both deliberate.  "Icon-only" means exactly one of `icon`/`iconAfter`: a
+     * label-less button with both would keep both section margins and stay mis-centred, and
+     * there are no such call sites to design for.  And any ELEMENT child counts as a label,
+     * including an empty fragment -- `toArray` does not look inside one, so `<></>` is
+     * indistinguishable from real content without recursing into fragment props.
+     */
+    const labelled = React.Children.toArray(children)
+        .some(child => typeof child !== 'string' || child.trim().length > 0);
     const soleIcon = !labelled && (icon || iconAfter) && !(icon && iconAfter)
         ? renderIcon(icon || iconAfter)
         : undefined;

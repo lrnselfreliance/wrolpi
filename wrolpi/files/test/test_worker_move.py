@@ -7,6 +7,7 @@ import time
 import pytest
 
 from wrolpi.conftest import production_like_sessions
+from wrolpi.files import worker as worker_module
 from wrolpi.files.lib import _move_file_group_files
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.files.worker import file_worker, FileTask, FileTaskType, build_move_plan_bulk
@@ -592,13 +593,14 @@ async def test_build_move_plan_waits_for_concurrent_writer(
 
 @pytest.mark.asyncio
 async def test_file_worker_move_survives_concurrent_writer(
-        async_client, test_session, test_directory, make_files_structure
+        async_client, test_session, test_directory, make_files_structure, monkeypatch
 ):
-    """A move of already-indexed files must survive a concurrent writer holding the write lock.
+    """Executing a move must survive a concurrent writer holding the write lock.
 
-    Planning writes nothing here (every file is already indexed), so the first write is the
-    `FileGroup` UPDATE inside `_execute_move_chunks`.  That transaction must begin as a writer,
-    or SQLite refuses the mid-transaction lock upgrade instantly and the move aborts.
+    `_execute_move_chunks` reads FileGroups/Directories and then writes them, so its transaction
+    must begin as a writer too - SQLite refuses the mid-transaction lock upgrade instantly and the
+    move aborts.  The lock is taken only *after* planning finishes, so this fails if the execute
+    site alone regresses; planning cannot absorb the contention on the execute site's behalf.
     """
     file1, = make_files_structure(['source/file1.txt'])
     FileGroup.from_paths(test_session, file1)
@@ -612,9 +614,20 @@ async def test_file_worker_move_survives_concurrent_writer(
     task = FileTask(FileTaskType.move, [file1], destination=dest)
     file_worker.private_queue.put_nowait(task)
 
-    with production_like_sessions(test_session) as maker:
-        with _write_lock_held_briefly(db_file):
-            await file_worker.process_queue()
+    with contextlib.ExitStack() as stack:
+        maker = stack.enter_context(production_like_sessions(test_session))
+
+        real_build_move_plan_bulk = worker_module.build_move_plan_bulk
+
+        async def build_plan_then_hold_write_lock(*args, **kwargs):
+            plan = await real_build_move_plan_bulk(*args, **kwargs)
+            # Planning is done; the contention now falls entirely on the execute phase.
+            stack.enter_context(_write_lock_held_briefly(db_file))
+            return plan
+
+        monkeypatch.setattr(worker_module, 'build_move_plan_bulk', build_plan_then_hold_write_lock)
+
+        await file_worker.process_queue()
 
         assert (dest / 'file1.txt').is_file(), 'file was not moved'
         assert not file1.exists(), 'file was left at its old path'

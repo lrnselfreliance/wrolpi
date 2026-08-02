@@ -556,6 +556,46 @@ async def build_move_plan_bulk(
         if progress_callback and i % 100 == 0:
             progress_callback(i, total_sources * 2)  # *2 because file collection is second half
 
+    # Collect all paths to insert: file paths + expanded directory contents.  This walks the whole
+    # source tree, which is slow on Pi storage, so it must finish before the DB session opens - the
+    # session holds the SQLite write lock for its lifetime and would starve every other writer.
+    all_file_paths: list[pathlib.Path] = []
+    files_collected = 0
+    # Use total_sources as the denominator for the second half of progress
+    total_items = len(file_sources) + len(dir_sources)
+
+    # For files, collect the file and its shared-stem siblings
+    file_source_set: Set[str] = set()
+    for i, source in enumerate(file_sources, 1):
+        files = glob_shared_stem(source)
+        all_file_paths.extend(files)
+        file_source_set.update(str(f) for f in files)
+        files_collected += 1
+        # Report progress (second half: 50-100%)
+        if progress_callback and files_collected % 50 == 0:
+            progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+            progress_callback(progress, total_sources * 2)
+
+    # For directories, walk and collect all files
+    dir_file_mapping: Dict[pathlib.Path, pathlib.Path] = {}  # file -> source_dir
+    for i, source_dir in enumerate(dir_sources, 1):
+        for f in walk(source_dir):
+            if f.is_file():
+                all_file_paths.append(f)
+                dir_file_mapping[f] = source_dir
+        files_collected += 1
+        # Report progress during directory walking (every 10 directories)
+        if progress_callback and files_collected % 10 == 0:
+            progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+            progress_callback(progress, total_sources * 2)
+
+    # Final progress update before deduplication
+    if progress_callback:
+        progress_callback(total_sources * 2, total_sources * 2)
+
+    # Deduplicate
+    all_file_paths = list(set(all_file_paths))
+
     # Planning reads FileGroups and then INSERTs the ones missing from the DB, so the transaction
     # must begin as a writer.  A deferred transaction upgrading to a writer mid-way gets "database
     # is locked" *immediately* (busy_timeout is skipped for lock upgrades), so any concurrent
@@ -574,42 +614,6 @@ async def build_move_plan_bulk(
                                  )
                                  """))
             session.execute(text("DELETE FROM move_sources"))
-
-            # Collect all paths to insert: file paths + expanded directory contents
-            all_file_paths: list[pathlib.Path] = []
-            files_collected = 0
-            # Use total_sources as the denominator for the second half of progress
-            total_items = len(file_sources) + len(dir_sources)
-
-            # For files, collect the file and its shared-stem siblings
-            for i, source in enumerate(file_sources, 1):
-                files = glob_shared_stem(source)
-                all_file_paths.extend(files)
-                files_collected += 1
-                # Report progress (second half: 50-100%)
-                if progress_callback and files_collected % 50 == 0:
-                    progress = total_sources + (files_collected * total_sources // max(total_items, 1))
-                    progress_callback(progress, total_sources * 2)
-
-            # For directories, walk and collect all files
-            dir_file_mapping: Dict[pathlib.Path, pathlib.Path] = {}  # file -> source_dir
-            for i, source_dir in enumerate(dir_sources, 1):
-                for f in walk(source_dir):
-                    if f.is_file():
-                        all_file_paths.append(f)
-                        dir_file_mapping[f] = source_dir
-                files_collected += 1
-                # Report progress during directory walking (every 10 directories)
-                if progress_callback and files_collected % 10 == 0:
-                    progress = total_sources + (files_collected * total_sources // max(total_items, 1))
-                    progress_callback(progress, total_sources * 2)
-
-            # Final progress update before deduplication
-            if progress_callback:
-                progress_callback(total_sources * 2, total_sources * 2)
-
-            # Deduplicate
-            all_file_paths = list(set(all_file_paths))
 
             # Bulk insert file paths into temp table
             if all_file_paths:
@@ -647,13 +651,7 @@ async def build_move_plan_bulk(
 
             logger.info(f'build_move_plan_bulk: found {len(fg_by_path)} FileGroups for {len(all_file_paths)} files')
 
-            # Build plan for file sources (direct files, not from directories)
-            file_source_set = set()
-            for source in file_sources:
-                files = glob_shared_stem(source)
-                file_source_set.update(str(f) for f in files)
-
-            # Process files from direct file sources
+            # Process files from direct file sources (`file_source_set` was collected above)
             for path_str, (fg_id, primary_path, directory) in fg_by_path.items():
                 path = pathlib.Path(path_str)
                 primary_path = pathlib.Path(primary_path)

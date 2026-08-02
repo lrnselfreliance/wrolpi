@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
@@ -558,5 +560,48 @@ describe('contrastingColor with shorthand hex', () => {
                                      ['#f00', '#ff0000'], ['#1b2', '#11bb22']]) {
             expect(contrastingColor(short)).toBe(contrastingColor(long));
         }
+    });
+});
+
+describe('LoadStatistic ranks load by role, not by hue', () => {
+    /*
+     * A source guard, not a render test, and deliberately so: jsdom's CSS parser REJECTS
+     * `color: var(--danger)` as an invalid declaration and drops it, so every inline colour
+     * reads back as the empty string here.  A render test would pass whatever the component
+     * did -- the first version of this asserted `''` for the below-threshold cases and would
+     * have gone on passing with the hues restored.
+     *
+     * What is painted is asserted in ui-layout.cy.js, in a browser, at the thresholds.
+     */
+    it('names roles rather than hues at both thresholds', () => {
+        const source = fs.readFileSync(path.join(__dirname, 'Common.js'), 'utf8');
+        const helper = source.slice(
+            source.indexOf('export function LoadStatistic'),
+            source.indexOf('export function', source.indexOf('export function LoadStatistic') + 10));
+
+        expect(helper).toContain("color = 'danger'");
+        expect(helper).toContain("color = 'warning'");
+        expect(helper.match(/'(red|green|amber|yellow|orange)'/)).toBeNull();
+    });
+});
+
+describe('a drive\'s SMART assessment is a severity, not a colour', () => {
+    /*
+     * A source guard: `getHealthColor` is module-private, and exporting it only so a test
+     * can reach it would be shaping the code around the test.  What matters is that the
+     * helper stays on the ramp -- all four branches or none, since a helper where PASS and
+     * FAIL rank but WARN is an unranked hue is worse than either choice.
+     */
+    it('maps every branch to a role', () => {
+        const source = fs.readFileSync(
+            path.join(__dirname, 'admin', 'ControllerPage.js'), 'utf8');
+        const helper = source.slice(
+            source.indexOf('const getHealthColor'),
+            source.indexOf('};', source.indexOf('const getHealthColor')));
+
+        expect(helper).toContain("'var(--success)'");
+        expect(helper).toContain("'var(--warning)'");
+        expect(helper).toContain("'var(--danger)'");
+        expect(helper.match(/var\(--(red|green|amber|yellow|orange)\)/)).toBeNull();
     });
 });

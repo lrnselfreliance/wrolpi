@@ -42,6 +42,35 @@
     background: rgba(0, 0, 0, 0.12);
 }
 
+/*
+ * Everything in the bar takes the bar's foreground.
+ *
+ * `color: inherit` on the links alone was not enough, because two of the things in the
+ * corner do not inherit at all and both came out blue on every bar in every theme:
+ *
+ *   - An anchor takes `a {color: var(--blue)}` from tokens.css, which outranks an inherited
+ *     value however the bar sets it.  The search glyph is an anchor, and so is every status
+ *     icon that links to /admin -- those only looked right because they carry an inline
+ *     colour of their own, which still wins here and is meant to.
+ *   - A Mantine ActionIcon paints `--ai-color`, its own themed blue.  The hamburger and the
+ *     theme toggle are ActionIcons.  The variable is no use as a hook: Mantine writes it
+ *     INLINE on the element, so a stylesheet declaring it loses every time (the same trap
+ *     as `--group-justify` on Pagination).  The painted property has to be set instead, and
+ *     `html` lifts this over Mantine's own single-class rule.
+ *
+ * Measuring the foreground against the bar is worth nothing if the icons opt out of it.
+ */
+.wrolpi-navbar a,
+html .wrolpi-navbar .mantine-ActionIcon-root {
+    color: inherit;
+}
+
+/* The bar's own hover, rather than a blue tint from Mantine's palette. */
+html .wrolpi-navbar .mantine-ActionIcon-root:hover {
+    background: rgba(0, 0, 0, 0.12);
+    color: inherit;
+}
+
 .channel-edit {
     border-radius: 3px;
     padding: 0.75em;

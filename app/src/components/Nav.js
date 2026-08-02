@@ -208,7 +208,7 @@ export function NavBar() {
      * user's colour, not taken from a single token.  See themes/navColors.
      */
     const navColors = useNavColors(navColor);
-    const wrolpiIcon =<img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
+    const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
     const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
 

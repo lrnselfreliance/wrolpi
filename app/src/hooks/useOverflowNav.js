@@ -15,7 +15,25 @@ export function useOverflowNav({links, containerRef, homeRef, rightMenuRef, more
         const container = containerRef.current;
         if (!container || itemWidths.current.length === 0) return;
 
-        const containerWidth = container.offsetWidth;
+        /*
+         * The width a row of links actually has, which is NOT the wrapper's.
+         *
+         * The bar carries `padding: 0 0.25em`, and this measured the wrapper and subtracted
+         * only the home link and the corner -- so it believed it had about 8px more room
+         * than the row does.  Any width where the last link overhangs by less than that was
+         * kept in the bar, the bar wrapped, and the user got two rows.  A narrow band, which
+         * is why it showed up only "at certain widths" while resizing rather than always.
+         *
+         * SAFETY covers subpixel rounding on top: item widths come from
+         * getBoundingClientRect and are fractional, while clientWidth is an integer.
+         */
+        const SAFETY = 1;
+        const bar = container.firstElementChild || container;
+        const barStyle = window.getComputedStyle(bar);
+        const containerWidth = bar.clientWidth
+            - (parseFloat(barStyle.paddingLeft) || 0)
+            - (parseFloat(barStyle.paddingRight) || 0)
+            - SAFETY;
         const homeEl = homeRef.current?.firstElementChild || homeRef.current;
         const homeWidth = homeEl ? homeEl.getBoundingClientRect().width : 0;
         const rightWidth = rightMenuRef.current ? rightMenuRef.current.getBoundingClientRect().width : 0;

@@ -19,6 +19,7 @@ import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
 import {HELP_VIEWER_URI, NAME, semanticUIColorMap} from "./Vars";
 import {useOverflowNav} from "../hooks/useOverflowNav";
+import {defaultNavColor, navBarStyle, useNavColors} from "../themes/navColors";
 import _ from "lodash";
 
 function updateFavicon(colorName) {
@@ -141,7 +142,7 @@ function NavIconWrapper({children}) {
 function useNavColorSetting() {
     // Use localstorage to avoid flickering navbar color on startup.
     const {settings} = React.useContext(SettingsContext);
-    const [navColor, setNavColor] = useLocalStorage('nav_color', 'violet');
+    const [navColor, setNavColor] = useLocalStorage('nav_color', defaultNavColor);
 
     React.useEffect(() => {
         if (!_.isEmpty(settings)) {
@@ -163,7 +164,12 @@ export function NavBar() {
     const wrolModeEnabled = useWROLMode();
     const {status} = React.useContext(StatusContext);
     const navColor = useNavColorSetting();
-    const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
+    /*
+     * The bar's foreground is measured against the background the theme resolved for the
+     * user's colour, not taken from a single token.  See themes/navColors.
+     */
+    const navColors = useNavColors(navColor);
+    const wrolpiIcon =<img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
     const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
 
@@ -362,15 +368,7 @@ export function NavBar() {
 
     return <>
         <Media between={['mobile', 'tablet']}>
-            <nav className='wrolpi-navbar' id='global_navbar'
-                 style={{
-                     background: `var(--${navColor})`,
-                     color: 'var(--btn-text)',
-                     // The hotspot glyph stacks two icons, and the corner one paints a disc
-                     // of its surface behind itself.  The bar's colour is the user's choice,
-                     // so it has to be handed down rather than looked up from a token.
-                     '--icon-stack-bg': `var(--${navColor})`,
-                 }}>
+            <nav className='wrolpi-navbar' id='global_navbar' style={navBarStyle(navColors)}>
                 {homeLink}
                 <div className='wrolpi-navbar-right'>
                     {icons}
@@ -380,12 +378,12 @@ export function NavBar() {
             </nav>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <DesktopNav navColor={navColor} homeLink={homeLink} icons={icons}/>
+            <DesktopNav navColors={navColors} homeLink={homeLink} icons={icons}/>
         </Media>
     </>
 }
 
-function DesktopNav({navColor, homeLink, icons}) {
+function DesktopNav({navColors, homeLink, icons}) {
     const containerRef = React.useRef(null);
     const homeRef = React.useRef(null);
     const rightMenuRef = React.useRef(null);
@@ -400,15 +398,7 @@ function DesktopNav({navColor, homeLink, icons}) {
 
     return (
         <div ref={containerRef}>
-            <nav className='wrolpi-navbar' id='global_navbar'
-                 style={{
-                     background: `var(--${navColor})`,
-                     color: 'var(--btn-text)',
-                     // The hotspot glyph stacks two icons, and the corner one paints a disc
-                     // of its surface behind itself.  The bar's colour is the user's choice,
-                     // so it has to be handed down rather than looked up from a token.
-                     '--icon-stack-bg': `var(--${navColor})`,
-                 }}>
+            <nav className='wrolpi-navbar' id='global_navbar' style={navBarStyle(navColors)}>
                 <span ref={homeRef} style={{display: 'contents'}}>{homeLink}</span>
                 {(isReady ? visibleLinks : allLinks).map((link, idx) => (
                     <span

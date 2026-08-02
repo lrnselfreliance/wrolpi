@@ -10,6 +10,8 @@ import {CardPoster, contrastingColor, HelpHeader, LoadStatistic} from '../Common
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
+import {navColorNames} from '../../themes/navColors';
+import {NavBarSample} from '../ThemeSamplePage';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
@@ -2068,6 +2070,131 @@ describe('pagination sits in the middle of its container', () => {
                 .map(button => button.getBoundingClientRect());
             expect(Math.min(...buttons.map(b => b.left)), 'nothing hangs off the left')
                 .to.be.at.least(container.left - 0.5);
+        });
+    });
+});
+
+describe('the navigation bar is legible on every colour a user can pick', () => {
+    /*
+     * The bar's background is the one surface the USER chooses, by hue name, and each theme
+     * resolves those twelve names to twelve of its own colours.  Forty-eight backgrounds; the
+     * links and status icons have to read on all of them.  They did not -- every one was
+     * drawn in `--btn-text`, near-black in three of the four themes, against backgrounds like
+     * night's `--brown` (#451212).  That glyph was 1.33:1 against the bar behind it.
+     *
+     * navColors.test.js measures the mapping against the palette parsed out of tokens.css,
+     * which is the cheap and exhaustive half.  What it cannot see is whether the value the
+     * mapping returns reaches the pixels: whether the tokens resolve through the cascade,
+     * whether the style lands on the bar, and what an icon inside it actually inherits.  So
+     * this measures the painted result and holds it against the number the component claims.
+     *
+     * `NavBarSample` is the gallery's bar rather than <NavBar/> itself, which needs the
+     * settings, status and worker contexts and a dozen polling hooks.  Both build their style
+     * with the same `navBarStyle(useNavColors(colour))` call, and navColors.test.js has a
+     * source guard holding NavBar to that.
+     */
+    const barsFor = (theme) => {
+        cy.mountUI(<div>
+            {navColorNames.map(color => <NavBarSample key={color} color={color}/>)}
+        </div>, {theme});
+    };
+
+    themeNames.forEach((theme) => {
+        it(`paints a resolved background for all twelve colours in ${theme}`, () => {
+            barsFor(theme);
+
+            navColorNames.forEach((color) => {
+                cy.get(`[data-nav-sample="${color}"] .wrolpi-navbar`).should(($nav) => {
+                    const background = getComputedStyle($nav[0]).backgroundColor;
+                    // An unresolved token paints nothing at all, and a transparent bar over
+                    // the page would read as "the colour just looks wrong" rather than as a
+                    // broken style.
+                    expect(background, `${theme}/${color} bar background`)
+                        .to.not.equal('rgba(0, 0, 0, 0)');
+                });
+            });
+        });
+
+        it(`clears 3:1 on every colour in ${theme}`, () => {
+            /*
+             * 3:1 is the WCAG floor for graphical objects, which is what these icons are.
+             * Twelve of the forty-eight combinations were below it before measurement.
+             * Ten are still under 4.5:1 and cannot be lifted by any foreground -- a
+             * monochrome theme resolves all twelve names onto one ramp, and a mid-tone of a
+             * hue carries no text of that same hue.  That residue is the palette's, and it
+             * is printed beside each sample in the gallery so it can be decided on.
+             */
+            barsFor(theme);
+
+            navColorNames.forEach((color) => {
+                cy.contrastRatio(`[data-nav-sample="${color}"] .wrolpi-navbar-link`)
+                    .then((ratio) => {
+                        expect(ratio, `${theme}/${color} link contrast`).to.be.greaterThan(3);
+                    });
+            });
+        });
+
+        it(`gives its icons the same foreground as its links in ${theme}`, () => {
+            // The actual complaint was about the icons, not the words.  They take `color`
+            // by inheritance, which is a thing a stylesheet can quietly break.
+            barsFor(theme);
+
+            navColorNames.forEach((color) => {
+                cy.get(`[data-nav-sample="${color}"]`).should(($sample) => {
+                    const link = $sample[0].querySelector('.wrolpi-navbar-link');
+                    const icon = $sample[0].querySelector('.wrolpi-navbar-right svg');
+                    expect(icon, `${theme}/${color} has an icon to measure`).to.not.be.null;
+                    expect(getComputedStyle(icon).color, `${theme}/${color} icon colour`)
+                        .to.equal(getComputedStyle(link).color);
+                });
+            });
+        });
+
+        it(`paints the ratio it reports in ${theme}`, () => {
+            /*
+             * Ties the number to the pixels.  Without this the gallery could print a
+             * comfortable figure beside a bar drawn in something else entirely, and both
+             * halves would look right on their own.
+             */
+            barsFor(theme);
+
+            navColorNames.forEach((color) => {
+                cy.get(`[data-nav-sample-ratio="${color}"]`).invoke('text').then((text) => {
+                    const reported = parseFloat(text);
+                    expect(reported, `${theme}/${color} reported a ratio`).to.be.greaterThan(1);
+                    cy.contrastRatio(`[data-nav-sample="${color}"] .wrolpi-navbar-link`)
+                        .then((painted) => {
+                            expect(painted, `${theme}/${color} painted vs reported`)
+                                .to.be.closeTo(reported, 0.05);
+                        });
+                });
+            });
+        });
+    });
+
+    it('does not simply use --btn-text everywhere, which is what it replaced', () => {
+        /*
+         * The inverse.  Every case above would pass on the old fixed foreground in the two
+         * themes where `--btn-text` happens to be the right end of the palette, so without
+         * this the suite could go green on a revert.  Night is where the difference is
+         * largest: `--brown` takes `--white` (#ff8a8a) and `--red` keeps `--btn-text`, so
+         * the bar's foreground is demonstrably not one value.
+         */
+        cy.mountUI(<div>
+            <NavBarSample color='brown'/>
+            <NavBarSample color='red'/>
+        </div>, {theme: 'night'});
+
+        cy.get('[data-nav-sample="brown"] .wrolpi-navbar-link').then(($brown) => {
+            cy.get('[data-nav-sample="red"] .wrolpi-navbar-link').then(($red) => {
+                const brown = getComputedStyle($brown[0]).color;
+                const red = getComputedStyle($red[0]).color;
+                expect(brown, 'brown and red bars take different foregrounds')
+                    .to.not.equal(red);
+                // And the one that changed is the one that was unreadable.
+                expect(toRgb(brown), 'brown no longer takes --btn-text')
+                    .to.not.equal(toRgb('#0a0000'));
+            });
         });
     });
 });

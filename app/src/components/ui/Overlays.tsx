@@ -107,7 +107,13 @@ function useModalStackPosition(opened: boolean): {isTop: boolean; zIndex: number
 
     const depth = openModalIds.indexOf(id);
     return {
-        isTop: depth === -1 || depth === openModalIds.length - 1,
+        /*
+         * Not yet registered -- the first paint of a modal that just opened, before the
+         * effect runs.  It is only on top if nothing else is open; claiming top while a
+         * parent is registered gives both modals the same z-index for a frame, which is a
+         * visible flash of the wrong one in front when a child opens.
+         */
+        isTop: depth === -1 ? openModalIds.length === 0 : depth === openModalIds.length - 1,
         /*
          * Two per level, so a child's overlay clears its parent's content.  Kept small on
          * purpose: Mantine puts popovers and select dropdowns at 300, and a modal stack that
@@ -117,7 +123,27 @@ function useModalStackPosition(opened: boolean): {isTop: boolean; zIndex: number
     };
 }
 
-function ModalBase({open, opened, size, closeIcon, title, children, ...props}: ModalProps) {
+function ModalBase({
+    open, opened, size, closeIcon, title, children,
+    /*
+     * Pulled out of `props` so the spread below cannot overwrite the stack's decision.
+     *
+     * These were set BEFORE `{...props}` at first, which meant a call site passing
+     * `closeOnEscape` won and re-armed Mantine's window-level Escape listener on a modal
+     * that is not on top -- reinstating the exact bug this exists to fix.  Three call sites
+     * pass it: CollectionReorganizeModal and BatchReorganizeModal disable Escape while a
+     * reorganize is running, and Flasher while it is writing an image.  Conflict resolution
+     * opens as a sibling ON TOP of the reorganize modal, so once the reorganize finished and
+     * `closeOnEscape` went back to true, one Escape closed both again.
+     *
+     * They are composed rather than ignored: "only the top modal answers Escape" and "this
+     * modal must not be dismissed while it is busy" are both true, and the answer is AND.
+     */
+    closeOnEscape = true,
+    trapFocus = true,
+    zIndex,
+    ...props
+}: ModalProps) {
     const slots: Record<string, React.ReactNode[]> = {header: [], actions: [], body: []};
     React.Children.forEach(children, child => {
         const type = React.isValidElement(child) ? child.type : undefined;
@@ -127,7 +153,7 @@ function ModalBase({open, opened, size, closeIcon, title, children, ...props}: M
     });
 
     const isOpen = opened ?? open ?? false;
-    const {isTop, zIndex} = useModalStackPosition(isOpen);
+    const {isTop, zIndex: stackZIndex} = useModalStackPosition(isOpen);
 
     return <MModal
         opened={isOpen}
@@ -136,16 +162,18 @@ function ModalBase({open, opened, size, closeIcon, title, children, ...props}: M
         title={slots.header.length ? slots.header : title}
         // Flat surfaces: the overlay separates the modal from the page, not a shadow.
         overlayProps={{backgroundOpacity: 0.55, blur: 0}}
-        /*
-         * Only the modal on top answers the keyboard.  Without this every open modal has its
-         * own window-level Escape listener and one press closes the lot.  Focus goes with it:
-         * two traps fighting over the same Tab is its own bug, and the user is working in the
-         * top one.
-         */
-        closeOnEscape={isTop}
-        trapFocus={isTop}
-        zIndex={zIndex}
         {...props}
+        /*
+         * AFTER the spread, deliberately -- see the destructuring above.  Only the modal on
+         * top answers the keyboard: without this every open modal has its own window-level
+         * Escape listener and one press closes the lot.  Focus goes with it, because two
+         * traps fighting over the same Tab is its own bug and the user is working in the top
+         * one.  Mantine's own Modal.Stack applies its stack props after the caller's for the
+         * same reason.
+         */
+        closeOnEscape={isTop && closeOnEscape}
+        trapFocus={isTop && trapFocus}
+        zIndex={zIndex ?? stackZIndex}
     >
         {slots.body}
         {slots.actions.length > 0 && <div className='wrolpi-modal-actions'>{slots.actions}</div>}
@@ -185,7 +213,9 @@ export function Confirm({
     onConfirm,
     onCancel,
 }: ConfirmProps) {
-    return <Modal opened={open} onClose={() => onCancel?.()} title={title} size='sm'>
+    // `tiny`, not Mantine's raw `sm`.  Same 380px, but the audited vocabulary -- and the
+    // guard in ui.test.js exists to keep raw Mantine names out of call sites.
+    return <Modal opened={open} onClose={() => onCancel?.()} title={title} size='tiny'>
         {children}
         <div style={{display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18}}>
             <Button role='cancel' onClick={onCancel}>{cancelLabel}</Button>

@@ -597,6 +597,19 @@ table.ratio-table td.min-width {
     background-color: var(--panel);
     border-top: 1px solid var(--border);
     z-index: 100;
+    /*
+     * A row with gaps, like every other group of buttons in the app.
+     *
+     * This was a plain block, so the buttons -- inline-block elements with no whitespace
+     * between them, because JSX drops whitespace-only lines -- sat flush against each other
+     * in one unbroken slab.  Everywhere else buttons are laid out with Mantine's `Group`,
+     * which is a flex row with a gap; the file browser's footer is hand-rolled and never got
+     * one.  It wraps because the bar carries eight controls and a phone cannot hold them.
+     */
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
 }
 
 /* Drag selection visual feedback for FileBrowser */

@@ -116,6 +116,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
         className={[fromRole?.className, className].filter(Boolean).join(' ') || undefined}
         leftSection={soleIcon ? undefined : renderIcon(icon)}
         rightSection={soleIcon ? undefined : renderIcon(iconAfter)}
+        /*
+         * Marks the icon-only case for ui.css, which makes such a button square so it matches
+         * an IconButton of the same size.  A Button is as wide as its content plus padding and
+         * an ActionIcon is square, so a row mixing the two -- the map's pin actions are edit
+         * (Button), add-to-playlist (IconButton) and delete (Button) -- came out 46, 30 and 46
+         * wide at the same nominal size.
+         */
+        data-icon-only={soleIcon ? 'true' : undefined}
         {...props}
         size={resolveSize(props.size)}
     >

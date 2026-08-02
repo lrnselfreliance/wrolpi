@@ -307,10 +307,17 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
 .wrolpi-searchbox-control {
     display: flex;
     align-items: center;
-    gap: 8px;
+    /*
+     * One inset for the padding, the gap between children, and the negative margin that
+     * welds the clear button to the edge.  They were three separate 8px literals that had to
+     * stay in lockstep: changing the padding alone would have pushed the clear button past
+     * the border, and changing the gap alone would have re-inset it.
+     */
+    --searchbox-inset: 8px;
+    gap: var(--searchbox-inset);
     background: var(--panel);
     border: 1px solid var(--border);
-    padding: 0 8px;
+    padding: 0 var(--searchbox-inset);
 }
 
 .wrolpi-searchbox-control:focus-within {
@@ -357,20 +364,26 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
  * the field: measured on the QA Pi, zero gap to the input, zero to the outer edge, and the
  * full 44px height.
  *
- * Negative margins rather than removing the control's padding: the padding is what holds the
- * search icon and the text off the border, and only this one child should escape it.  The
- * left margin cancels the flex gap as well, so the divider lands against the text the way
- * the attached button did.
+ * A negative right margin rather than removing the control's padding: the padding is what
+ * holds the search icon and the text off the border, and only this one child should escape
+ * it.  The gap to its LEFT is deliberately left alone -- cancelling that too welded the
+ * loading spinner to the divider whenever a field was both `loading` and `clearable`, which
+ * SearchResultsInput does, and the spinner is not part of this control.
  *
  * `html` because Mantine sets ActionIcon's height from `--ai-size` on its own single class;
  * at equal specificity the winner is whichever stylesheet loaded last, which is not a thing
- * to rely on.
+ * to rely on.  `min-height` has to go with it: stretch cannot shrink a box below its own
+ * minimum, so leaving that at `--ai-size` would mean this rule only half-owned the height it
+ * claims to set -- true today only because the field happens to be the taller of the two.
+ *
+ * The corner radius needs no rule: the theme zeroes every `--mantine-radius-*`, so there are
+ * no rounded corners to leave panel-coloured wedges against the square field.
  */
 html .wrolpi-searchbox-clear {
     align-self: stretch;
     height: auto;
-    margin-left: -8px;
-    margin-right: -8px;
+    min-height: unset;
+    margin-right: calc(-1 * var(--searchbox-inset));
     border-left: 1px solid var(--border);
 }
 

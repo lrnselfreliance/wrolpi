@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
-from sqlalchemy import asc, or_
+from sqlalchemy import asc, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1594,23 +1594,25 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
     if not chunk_plan:
         return
 
-    with get_db_curs(commit=True) as curs:
-        # Build the update rows: [old_path, new_dir, new_path]
-        updates = json.dumps([
-            [str(old_path), str(new_path.parent), str(new_path)]
-            for old_path, new_path in chunk_plan.items()
-        ])
+    # Build the update rows: [old_path, new_dir, new_path]
+    updates = json.dumps([
+        [str(old_path), str(new_path.parent), str(new_path)]
+        for old_path, new_path in chunk_plan.items()
+    ])
 
-        # Use UPDATE FROM json_each pattern for efficient batch update
-        sql = '''
-            UPDATE file_group AS fg SET
-                directory = json_extract(v.value, '$[1]'),
-                primary_path = json_extract(v.value, '$[2]'),
-                indexed = CASE WHEN fg.data IS NULL THEN FALSE ELSE fg.indexed END
-            FROM json_each(?) AS v
-            WHERE fg.primary_path = json_extract(v.value, '$[0]')
-        '''
-        curs.execute(sql, (updates,))
+    # Use UPDATE FROM json_each pattern for efficient batch update.  This runs on the caller's
+    # session (rather than a second connection) so it shares the move's transaction: a second
+    # connection would deadlock against the write lock the caller already holds, and its separate
+    # commit would survive a rollback of the rest of the move.
+    sql = '''
+        UPDATE file_group AS fg SET
+            directory = json_extract(v.value, '$[1]'),
+            primary_path = json_extract(v.value, '$[2]'),
+            indexed = CASE WHEN fg.data IS NULL THEN FALSE ELSE fg.indexed END
+        FROM json_each(:updates) AS v
+        WHERE fg.primary_path = json_extract(v.value, '$[0]')
+    '''
+    session.execute(sa_text(sql), dict(updates=updates))
 
 
 def _json_serial(obj):

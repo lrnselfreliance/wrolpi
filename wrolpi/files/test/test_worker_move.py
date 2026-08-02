@@ -1,9 +1,15 @@
 """Tests for the FileWorker move task."""
+import contextlib
+import sqlite3
+import threading
+import time
+
 import pytest
 
+from wrolpi.conftest import production_like_sessions
 from wrolpi.files.lib import _move_file_group_files
 from wrolpi.files.models import FileGroup, Directory
-from wrolpi.files.worker import file_worker, FileTask, FileTaskType
+from wrolpi.files.worker import file_worker, FileTask, FileTaskType, build_move_plan_bulk
 
 
 @pytest.mark.asyncio
@@ -530,3 +536,89 @@ async def test_file_worker_move_cleans_directory_records(
     ).one_or_none()
     assert source_record is not None, "source Directory record should remain (directory still exists)"
     assert source_dir.exists(), "source should still exist on disk (empty)"
+
+
+@contextlib.contextmanager
+def _write_lock_held_briefly(db_file: str, seconds: float = 1.0):
+    """Hold the SQLite write lock on `db_file` for `seconds`, from another connection.
+
+    Simulates the concurrent writer (refresh, download, config save) that a real WROLPi runs
+    alongside a move.  The lock is released while the test's move is still planning, so a
+    correctly-written move waits (busy_timeout) and then succeeds.
+    """
+    holder = sqlite3.connect(db_file, timeout=30, check_same_thread=False)
+    holder.isolation_level = None
+    holder.execute('PRAGMA busy_timeout=30000')
+    holder.execute('BEGIN IMMEDIATE')
+
+    def release():
+        time.sleep(seconds)
+        holder.execute('ROLLBACK')
+        holder.close()
+
+    thread = threading.Thread(target=release, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        thread.join(timeout=30)
+
+
+@pytest.mark.asyncio
+async def test_build_move_plan_waits_for_concurrent_writer(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """`build_move_plan_bulk` must not fail instantly when another connection is writing.
+
+    Regression test for the tag-a-channel move that died with `database is locked` while
+    INSERTing a FileGroup for an unindexed file.  The plan's transaction begins *deferred*
+    (a read), then upgrades to a writer at that INSERT; SQLite refuses a lock upgrade
+    immediately, skipping busy_timeout, so any concurrent writer aborts the whole move.
+    Beginning the transaction as a writer lets busy_timeout absorb the contention instead.
+    """
+    # An unindexed file, so planning must INSERT a FileGroup (the write that failed in production).
+    file1, = make_files_structure(['source/file1.txt'])
+    dest = test_directory / 'destination'
+    dest.mkdir()
+
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session):
+        with _write_lock_held_briefly(db_file):
+            plan, _ = await build_move_plan_bulk([file1], dest)
+
+    assert plan == {file1: dest / 'file1.txt'}
+
+
+@pytest.mark.asyncio
+async def test_file_worker_move_survives_concurrent_writer(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """A move of already-indexed files must survive a concurrent writer holding the write lock.
+
+    Planning writes nothing here (every file is already indexed), so the first write is the
+    `FileGroup` UPDATE inside `_execute_move_chunks`.  That transaction must begin as a writer,
+    or SQLite refuses the mid-transaction lock upgrade instantly and the move aborts.
+    """
+    file1, = make_files_structure(['source/file1.txt'])
+    FileGroup.from_paths(test_session, file1)
+    test_session.commit()
+
+    dest = test_directory / 'destination'
+    dest.mkdir()
+
+    db_file = test_session.get_bind().url.database
+
+    task = FileTask(FileTaskType.move, [file1], destination=dest)
+    file_worker.private_queue.put_nowait(task)
+
+    with production_like_sessions(test_session) as maker:
+        with _write_lock_held_briefly(db_file):
+            await file_worker.process_queue()
+
+        assert (dest / 'file1.txt').is_file(), 'file was not moved'
+        assert not file1.exists(), 'file was left at its old path'
+
+        session = maker()
+        fg = session.query(FileGroup).one()
+        assert fg.primary_path == dest / 'file1.txt', 'FileGroup was not updated to the new path'

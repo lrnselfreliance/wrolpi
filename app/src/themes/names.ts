@@ -42,6 +42,28 @@ export const isMonochromeTheme = (theme: ThemeName): boolean =>
 
 export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(theme);
 
+/*
+ * The basemap flavor for a theme.
+ *
+ * The map viewer draws with protomaps-themes-base, which takes a flavor of its own and is
+ * NOT a place to pass a WROLPi theme name.  It looks the flavor up in a record and then
+ * dereferences the result without checking, so an unknown name is not a fallback but a
+ * `TypeError: Cannot read properties of undefined (reading 'background')` thrown before the
+ * first tile -- which is what /map did in night and amber once those themes existed.
+ *
+ * Only `light` and `dark` are available: the flavor is also interpolated into
+ * `/map-assets/sprites/<flavor>`, and those are the two sprite sets we ship.  protomaps'
+ * `black` and `grayscale` would load a style and then fail to find any icons.
+ *
+ * Night and amber take `dark` and let the media filter tint the canvas from there.  Handing
+ * them `light` would not work even with the filter on: a filter shifts hue, so a white
+ * basemap becomes a red one, which is the opposite of what a night-vision theme is for.
+ */
+export type MapFlavor = 'light' | 'dark';
+
+export const mapFlavor = (theme: ThemeName): MapFlavor =>
+    isDarkTheme(theme) ? 'dark' : 'light';
+
 export const isThemeName = (value: unknown): value is ThemeName =>
     themeNames.includes(value as ThemeName);
 

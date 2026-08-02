@@ -1,8 +1,8 @@
 import React from 'react';
 import {
     ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Message, Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName,
-    TextInput,
+    Message, Placeholder, Progress, Statistic, StatisticGroup, Status, TabBar, Table,
+    tabClassName, TextInput,
 } from './index';
 import {contrastingColor, HelpHeader, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
@@ -505,6 +505,136 @@ describe('a heading opens a section rather than closing the last one', () => {
         cy.get('.wrolpi-header').should(($header) => {
             expect(getComputedStyle($header[0]).marginTop, 'first child has no top margin')
                 .to.equal('0px');
+        });
+    });
+});
+
+describe('a progress bar has room for the label inside it', () => {
+    const bar = (props) => <Panel><Progress {...props}/></Panel>;
+
+    it('leaves air above and below the text', () => {
+        /*
+         * The Status page draws 44 of these.  At 16px tall the 11px bold label left about
+         * half a pixel of air, which is legible only if you already know what it says.
+         */
+        cy.mountUI(bar({percent: 62, label: 'CPU Usage (16 cores)'}), {theme: 'light'});
+
+        cy.get('.wrolpi-progress').should(($bar) => {
+            const box = $bar[0].getBoundingClientRect();
+            const text = $bar[0].querySelector('.wrolpi-progress-text')
+                .firstChild.getBoundingClientRect
+                ? $bar[0].querySelector('.wrolpi-progress-text').getBoundingClientRect()
+                : null;
+            expect(box.height, 'bar height').to.be.at.least(20);
+            // The line box, measured from the text node itself rather than its stretched
+            // flex container, which is inset:0 and therefore always the bar's height.
+            const range = document.createRange();
+            range.selectNodeContents($bar[0].querySelector('.wrolpi-progress-text'));
+            const line = range.getBoundingClientRect();
+            expect(box.height - line.height, 'air around the label').to.be.at.least(4);
+        });
+    });
+
+    it('keeps a long label on one line', () => {
+        /*
+         * `white-space: nowrap` on the label.  The first version of this asserted the bar did
+         * not get wider -- which it cannot: the label is `position: absolute; inset: 0`, so it
+         * takes no part in its parent's width and the claim was unfalsifiable.  What a long
+         * label really does is wrap to a second line inside a 22px bar and get cut in half by
+         * the clip, so that is what is measured.
+         */
+        cy.mountUI(
+            <div style={{width: 200}}>
+                <Progress percent={40} label='nbd0 read 128.4 MBps sustained over 5 minutes'/>
+            </div>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-progress-text').should(($text) => {
+            const range = document.createRange();
+            range.selectNodeContents($text[0]);
+            const lines = range.getClientRects().length;
+            expect(lines, 'the label occupies one line box').to.equal(1);
+        });
+    });
+
+    it('separates bars that are stacked directly on one another', () => {
+        // The Status page's CPU and RAM bars are bare siblings in a Panel and were touching.
+        cy.mountUI(
+            <Panel>
+                <Progress percent={20} label='CPU Usage'/>
+                <Progress percent={70} label='RAM Usage'/>
+            </Panel>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-progress').should(($bars) => {
+            const [first, second] = [...$bars].map(b => b.getBoundingClientRect());
+            expect(second.top - first.bottom, 'gap between stacked bars').to.be.at.least(6);
+        });
+    });
+
+    it('adds no gap to a bar its container already spaces', () => {
+        /*
+         * The other half, and the reason for `* +` rather than a blanket margin: the drive
+         * bandwidth bars each sit alone in a Grid column, which supplies the gutters.  A
+         * blanket margin would add a second one on top.
+         */
+        cy.mountUI(
+            <Panel>
+                <div><Progress percent={20} label='nbd0 read'/></div>
+                <div><Progress percent={30} label='nbd0 write'/></div>
+            </Panel>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-progress').should(($bars) => {
+            [...$bars].forEach((bar, index) =>
+                expect(getComputedStyle(bar).marginTop, `bar ${index} is an only child`)
+                    .to.equal('0px'));
+        });
+    });
+
+    themeNames.forEach((theme) => {
+        it(`reads its label against the track in ${theme}`, () => {
+            /*
+             * The label spans the whole bar, so it sits on the fill AND on the track.  This
+             * asserts the track half only, and that is deliberate: over the FILL it measures
+             * 5.49 in light but 2.35 / 2.48 / 2.74 in dark, night and amber -- below any
+             * legibility floor.  Fixing that needs a per-half text colour, which is a design
+             * decision rather than a bug fix, so it is reported rather than quietly asserted
+             * at a threshold low enough to pass.  See the note in ui.css.
+             */
+            cy.mountUI(bar({percent: 20, label: 'CPU Usage'}), {theme});
+
+            cy.get('.wrolpi-progress').should(($bar) => {
+                const text = toRgb(getComputedStyle(
+                    $bar[0].querySelector('.wrolpi-progress-text')).color);
+                const track = toRgb(getComputedStyle($bar[0]).backgroundColor);
+                expect(contrast(text, track), 'label against the empty part of the bar')
+                    .to.be.at.least(4.5);
+            });
+        });
+    });
+
+    it('keeps the indeterminate band inside the bar', () => {
+        /*
+         * The band slides on `margin-left`, from -35% to 100%.  Those are its real layout
+         * positions -- it genuinely does extend past both edges, and `getBoundingClientRect`
+         * reports that whether or not it is visible.  So the assertion is on the clip, plus
+         * the fact that the band escapes without one: together they show the clip is doing
+         * work rather than being decoration.
+         */
+        cy.mountUI(bar({indeterminate: true, label: 'Uploading…'}), {theme: 'light'});
+
+        cy.get('.wrolpi-progress-indeterminate').should(($bar) => {
+            expect(getComputedStyle($bar[0]).overflow, 'the bar clips its contents')
+                .to.equal('hidden');
+
+            const box = $bar[0].getBoundingClientRect();
+            const band = $bar[0].querySelector('.wrolpi-progress-fill').getBoundingClientRect();
+            expect(band.left < box.left - 1 || band.right > box.right + 1,
+                'the band does leave the box, so the clip is load-bearing').to.equal(true);
         });
     });
 });

@@ -376,6 +376,55 @@ export function ThemeSamplePage() {
             </Panel>
         </Section>
 
+        <Section label='Progress'>
+            <Panel>
+                {/*
+                  The label sits on BOTH halves of the bar, so every one of these is really a
+                  contrast test: the text has to read over the fill and over the track, in all
+                  four themes.  That is why light brightens the fill rather than using the raw
+                  token, and why night and amber drop it to --muted instead of a hue.
+                */}
+                <div style={{maxWidth: 460}}>
+                    <Progress percent={0}/>
+                    <Progress percent={8}/>
+                    <Progress percent={37}/>
+                    <Progress percent={62}/>
+                    <Progress percent={94}/>
+                    <Progress percent={100}/>
+                </div>
+
+                <Header as='h5'>Its own label instead of the percentage</Header>
+                <div style={{maxWidth: 460}}>
+                    <Progress percent={41} label='2.1 GB / 5.3 GB'/>
+                    <Progress percent={73} label='CPU Usage (16 cores)'/>
+                    <Progress percent={12} label='nbd0 read 4.2 MBps'/>
+                </div>
+
+                <Header as='h5'>No label at all, and unknown size</Header>
+                <div style={{maxWidth: 460}}>
+                    <Progress percent={55} showPercent={false}/>
+                    {/* Indeterminate: a band sliding inside the bar, for work whose size is
+                        not known yet.  It must stay within the track -- it used to slide out
+                        past both edges, because nothing clipped it. */}
+                    <Progress indeterminate label='Uploading…'/>
+                    <Progress indeterminate showPercent={false}/>
+                </div>
+
+                <Header as='h5'>Carrying a meaning</Header>
+                <div style={{maxWidth: 460}}>
+                    <Progress percent={64} color='info' label='Downloading'/>
+                    <Progress percent={100} color='success' label='Complete'/>
+                    <Progress percent={80} color='warning' label='Disk 80% full'/>
+                    <Progress percent={100} color='danger' label='Error: HTTP 403'/>
+                </div>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
+                    A bar is 22px so its label has room; at 16px the text filled the bar edge to
+                    edge. Check the mid-range ones — 37% and 62% are where the label crosses the
+                    boundary between fill and track, which is the case that has to work.
+                </p>
+            </Panel>
+        </Section>
+
         <Section label='Messages'>
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                 <Message kind='info' title='Refresh started'>
@@ -683,9 +732,6 @@ export function ThemeSamplePage() {
                 <Row>
                     <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
                 </Row>
-                <div style={{marginTop: 12, maxWidth: 320}}>
-                    <Progress indeterminate label='Uploading…'/>
-                </div>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
                     Semantic's compound shape is kept — Modal.Header, Modal.Content,
                     Modal.Actions — so the 34 call sites written against it migrate by import.

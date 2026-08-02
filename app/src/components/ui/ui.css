@@ -1193,6 +1193,9 @@ html[data-theme="amber"] .wrolpi-progress-fill {
  */
 :root {
     --card-poster-max-height: 200px;
+    /* How far a disabled control fades.  Semantic used 0.45 and it reads correctly against
+       every theme's panel; the tests read this rather than repeating the number. */
+    --disabled-opacity: 0.45;
 }
 
 /*
@@ -1476,21 +1479,50 @@ html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
  * the call site asked for is still in `--button-bg` and can simply be reinstated.  `--button-bd`
  * is a whole border shorthand, not a colour, so it is set with `border`.
  *
- * The `html` prefix beats Mantine's own `.m_hash:disabled` at (0,2,0) without needing
- * `!important`.
+ * `:not([data-loading])` mirrors Mantine, and is not decoration.  Mantine renders a loading
+ * button as `disabled={disabled || loading}`, so every busy control in the app is `:disabled`
+ * -- every APIButton mid-request, the refresh button, the flasher's connect.  Its own grey
+ * repaint is careful to exclude them; without the same exclusion here, "working..." fades to
+ * 0.45 and reads as unavailable rather than busy.
+ *
+ * On specificity: Mantine's disabled paint is
+ * `.m_hash:where(:disabled:not([data-loading]), ...)`, and `:where()` contributes nothing, so
+ * it scores (0,1,0) -- a single class.  The `html` prefix is not needed to beat THAT.  It is
+ * needed to stay level with the app's other `html ...` overrides, and the night danger rule
+ * below shows why that matters: at equal specificity the later rule wins, which is how this
+ * one silently repainted night's dashed danger buttons until it was told not to.
  */
-html .mantine-Button-root:disabled,
-html .mantine-Button-root[data-disabled] {
+html .mantine-Button-root:disabled:not([data-loading]),
+html .mantine-Button-root[data-disabled]:not([data-loading]) {
     background: var(--button-bg);
     color: var(--button-color);
     border: var(--button-bd);
-    opacity: 0.45;
+    opacity: var(--disabled-opacity);
 }
 
-html .mantine-ActionIcon-root:disabled,
-html .mantine-ActionIcon-root[data-disabled] {
+html .mantine-ActionIcon-root:disabled:not([data-loading]),
+html .mantine-ActionIcon-root[data-disabled]:not([data-loading]) {
     background: var(--ai-bg);
     color: var(--ai-color);
     border: var(--ai-bd);
-    opacity: 0.45;
+    opacity: var(--disabled-opacity);
+}
+
+/*
+ * Night keeps its dashed danger treatment when disabled.
+ *
+ * Night has no second hue to spend, so danger is encoded by a dashed border on a transparent
+ * fill rather than by a red fill.  The general rule above repaints from `--button-bg`, which
+ * is the filled red Mantine put in the variable, and at (0,2,1) it tied with the night rule
+ * and won on source order -- turning the file browser's disabled Delete into a solid red chip
+ * in the one theme where a solid red chip is not what danger looks like.
+ *
+ * (0,3,1), so it does not depend on where it sits in the file.  No `background`/`color`
+ * shorthand games: it restates the night treatment, and the fade comes from the rule above.
+ */
+html[data-theme="night"] .wrolpi-button-danger:disabled:not([data-loading]),
+html[data-theme="night"] .wrolpi-button-danger[data-disabled]:not([data-loading]) {
+    background: transparent;
+    color: var(--danger);
+    border: 1.5px dashed var(--danger);
 }

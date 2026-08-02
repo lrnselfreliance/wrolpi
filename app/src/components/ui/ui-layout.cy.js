@@ -298,19 +298,26 @@ describe('semantic roles read as severity in every theme', () => {
             });
         });
 
-        it(`makes danger at least as loud as ordinary text in ${theme}`, () => {
+        it(`makes warning and danger louder than ordinary text in ${theme}`, () => {
             /*
-             * Also only here.  A light theme's text is near-black at ~14:1 and no danger
-             * colour will ever match it; on a single hue the roles and the text are drawn
-             * from the same ramp, so the loudest role must not be quieter than the prose.
+             * Only here.  A light theme's text is near-black at ~14:1 and no warning colour
+             * will ever match it -- there, hue is what marks a reading as flagged.  On a
+             * single hue the roles and the text come off the same ramp, so anything meaning
+             * "look at this" has to outrank the prose or it does not read as flagged at all.
+             *
+             * This is the assertion the Status page needed: an uncoloured load reading
+             * inherits `--text`, and warning used to sit just below it.
              */
             cy.mountUI(<Panel>roles</Panel>, {theme});
 
             cy.get('.wrolpi-panel').should(() => {
                 const {panel, text, roles} = roleColours();
-                const danger = roles.find(r => r.role === 'danger').colour;
-                expect(contrast(danger, panel), 'danger vs --text against the panel')
-                    .to.be.at.least(contrast(text, panel) * 0.95);
+                const prose = contrast(text, panel);
+                ['warning', 'danger'].forEach((name) => {
+                    const role = roles.find(r => r.role === name).colour;
+                    expect(contrast(role, panel), `${name} against --text on the panel`)
+                        .to.be.greaterThan(prose);
+                });
             });
         });
     });
@@ -366,23 +373,15 @@ describe('a load reading ranks itself in the monochrome themes', () => {
                     Cypress.$('.wrolpi-panel')[0]).backgroundColor);
 
                 expect(new Set([fine, warning, danger]).size, 'three distinct readings').to.equal(3);
+                /*
+                 * Both flagged readings outrank a plain one.  This is what the ramp change
+                 * bought: warning used to sit just UNDER `--text`, so a machine under load
+                 * rendered marginally quieter than a healthy one.
+                 */
+                expect(contrast(warning, panel), 'warning is louder than a plain reading')
+                    .to.be.greaterThan(contrast(fine, panel));
                 expect(contrast(danger, panel), 'danger is louder than warning')
                     .to.be.greaterThan(contrast(warning, panel));
-                expect(contrast(danger, panel), 'danger is louder than a plain reading')
-                    .to.be.greaterThan(contrast(fine, panel));
-
-                /*
-                 * NOT asserted: that warning outranks a plain reading.  It does not, and that
-                 * is a live question rather than an oversight -- an uncoloured value inherits
-                 * `--text`, which in night is 4.98:1 against 4.91:1 for `--warning`.  So a
-                 * machine under load is marginally QUIETER than one that is fine.
-                 *
-                 * Lifting warning above text is a palette change, not a call-site one: on a
-                 * dark panel the only way up is lightness, and night's danger would desaturate
-                 * from #ff3e3e to about #ff5d5d -- trading the theme's "red only" character
-                 * for loudness.  Worth a deliberate decision, so it is flagged rather than
-                 * quietly made here.
-                 */
             });
         });
     });

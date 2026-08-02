@@ -3105,6 +3105,56 @@ describe('a button with an icon and no label centres the icon', () => {
         });
     });
 
+    it('treats blank and empty children as no label', () => {
+        /*
+         * `Children.toArray` drops null, undefined and booleans but KEEPS an empty or
+         * whitespace-only string, so a length check alone would call these labelled and leave
+         * the glyph off-centre.
+         */
+        cy.mountUI(<div>
+            <Button icon='upload' aria-label='Empty' data-testid='empty'>{''}</Button>
+            <Button icon='upload' aria-label='Blank' data-testid='blank'>{'   '}</Button>
+        </div>);
+
+        cy.get('[data-testid="blank"]').should(() => {
+            ['empty', 'blank'].forEach((id) => {
+                const button = Cypress.$(`[data-testid="${id}"]`)[0];
+                const box = button.getBoundingClientRect();
+                const glyph = button.querySelector('svg').getBoundingClientRect();
+
+                expect((glyph.left + glyph.width / 2) - (box.left + box.width / 2),
+                    `${id} glyph centre`).to.be.closeTo(0, 1);
+            });
+        });
+    });
+
+    it('treats any element child as a label, including an empty fragment', () => {
+        /*
+         * Recording what actually happens rather than what would be tidy.  `toArray` does not
+         * look inside a fragment -- it returns the fragment itself as one child -- so `<></>`
+         * is indistinguishable from real content and the icon stays in `leftSection`.
+         *
+         * Detecting it would mean recursing into fragment props, and no call site writes an
+         * empty fragment as a button's children.  `<>Delete</>` is the shape that does occur,
+         * and it lands on the same path for the right reason.
+         */
+        cy.mountUI(<div>
+            <Button icon='trash' data-testid='fragment'><></></Button>
+            <Button icon='trash' data-testid='wrapped'><>Delete</></Button>
+        </div>);
+
+        cy.get('[data-testid="wrapped"]').should(() => {
+            ['fragment', 'wrapped'].forEach((id) => {
+                const button = Cypress.$(`[data-testid="${id}"]`)[0];
+                const box = button.getBoundingClientRect();
+                const glyph = button.querySelector('svg').getBoundingClientRect();
+
+                expect((glyph.left + glyph.width / 2) - (box.left + box.width / 2),
+                    `${id} keeps the icon leading`).to.be.lessThan(-3);
+            });
+        });
+    });
+
     it('centres a trailing-only icon too', () => {
         // `rightSection` has the mirror-image margin.
         cy.mountUI(<Button iconAfter='upload' aria-label='Send' data-testid='after-only'/>);
@@ -3222,6 +3272,73 @@ describe('the search field\'s clear button is attached to it', () => {
             expect(parseFloat(style.borderLeftWidth), 'a divider on its left')
                 .to.be.greaterThan(0);
             expect(style.borderLeftStyle).to.not.equal('none');
+        });
+    });
+
+    it('keeps the loading spinner off the clear button', () => {
+        /*
+         * `SearchResultsInput` can pass `loading` and `clearable` together, and the DOM order
+         * is input, spinner, clear.  An earlier version of the weld cancelled the flex gap on
+         * the clear button's LEFT as well as the padding on its right, which welded the
+         * spinner to the divider -- the spinner is not part of this control.
+         */
+        cy.mountUI(<div style={{width: 420}}>
+            <SearchBox value='wind turbine' clearable loading onChange={() => {}}/>
+        </div>);
+
+        cy.get('.wrolpi-searchbox-loading').should(($spinner) => {
+            const clear = Cypress.$('.wrolpi-searchbox-clear')[0].getBoundingClientRect();
+
+            expect(clear.left - $spinner[0].getBoundingClientRect().right,
+                'gap between the spinner and the divider').to.be.greaterThan(2);
+        });
+    });
+
+    it('owns the height in both directions, not just downwards', () => {
+        /*
+         * `align-self: stretch` cannot shrink a box below its own `min-height`, and Mantine
+         * sets that from `--ai-size` alongside `height`.  Overriding `height` alone owns the
+         * sizing in one direction only -- it happens to look right because the field is
+         * 36.15px against a 36px minimum, a margin of 0.15px.
+         *
+         * The property rather than the geometry, deliberately.  Making the field genuinely
+         * shorter than 36px means overriding the input's own font size and padding, which no
+         * part of the app does, and a test that fabricates a layout to prove a rule is not
+         * evidence about this app.  This asserts what the rule is for: the minimum is no
+         * longer `--ai-size`.  Removing `min-height: unset` fails it.
+         */
+        cy.mountUI(<div style={{width: 420}}>
+            <SearchBox value='wind turbine' clearable onChange={() => {}}/>
+            {/* An ActionIcon outside the field, to show where the minimum comes from. */}
+            <IconButton icon='trash' label='Delete' data-testid='plain'/>
+        </div>);
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            /*
+             * Resolved lengths, not the raw variable: `--ai-size` reads back as
+             * `calc(2.25rem * var(--mantine-scale))` while `min-height` computes to `36px`, so
+             * comparing the two strings can never match and asserts nothing.  The first
+             * version of this did exactly that and stayed green with the rule removed.
+             */
+            const minimum = (element) => parseFloat(getComputedStyle(element).minHeight) || 0;
+
+            // The inverse and the premise together: an ordinary IconButton DOES carry the
+            // minimum, so its absence here is this rule's doing and not Mantine's default.
+            expect(minimum(Cypress.$('[data-testid="plain"]')[0]),
+                'an ordinary icon button has a minimum height').to.be.greaterThan(0);
+            expect(minimum($clear[0]), 'the welded one does not').to.equal(0);
+        });
+    });
+
+    it('has square corners, so nothing shows through at the field edge', () => {
+        // A rounded ActionIcon stretched flush to a square field leaves panel-coloured wedges
+        // at the corners.  Nothing sets this here: the theme zeroes every radius, and this
+        // records that the weld depends on it.
+        mountField();
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            expect(getComputedStyle($clear[0]).borderRadius, 'no rounded corners')
+                .to.equal('0px');
         });
     });
 

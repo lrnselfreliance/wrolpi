@@ -65,9 +65,29 @@ export const resolveSize = <T, >(size: T): T =>
     typeof size === 'string' ? ((semanticSizes[size] ?? size) as T) : size;
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
-    {role, icon, iconAfter, className, ...props}, ref
+    {role, icon, iconAfter, className, children, ...props}, ref
 ) => {
     const fromRole = role ? roleProps[role] : undefined;
+
+    /*
+     * An icon with no label is the button's CONTENT, not a leading icon.
+     *
+     * Mantine gives `leftSection` a `margin-inline-end` to hold it off the label.  With no
+     * label that margin is pure offset: the glyph sits about 8px left of the button's centre,
+     * which is what the import and save buttons on the Settings config table looked like next
+     * to a correctly centred Restore -- Restore is an IconButton, which centres a lone glyph
+     * by construction.
+     *
+     * `React.Children.toArray` drops null, undefined and booleans, which matters because the
+     * file browser's footer passes `{label('Delete')}` and that is null whenever the bar is
+     * too narrow for words.  Those buttons are icon-only at exactly the widths where the
+     * offset is most visible.
+     */
+    const labelled = React.Children.toArray(children).length > 0;
+    const soleIcon = !labelled && (icon || iconAfter) && !(icon && iconAfter)
+        ? renderIcon(icon || iconAfter)
+        : undefined;
+
     return <MButton
         ref={ref}
         /*
@@ -81,11 +101,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
         color={props.color ?? fromRole?.color}
         variant={props.variant ?? fromRole?.variant}
         className={[fromRole?.className, className].filter(Boolean).join(' ') || undefined}
-        leftSection={renderIcon(icon)}
-        rightSection={renderIcon(iconAfter)}
+        leftSection={soleIcon ? undefined : renderIcon(icon)}
+        rightSection={soleIcon ? undefined : renderIcon(iconAfter)}
         {...props}
         size={resolveSize(props.size)}
-    />
+    >
+        {soleIcon ?? children}
+    </MButton>
 });
 Button.displayName = 'Button';
 

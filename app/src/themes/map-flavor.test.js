@@ -101,3 +101,60 @@ describe('the monochrome themes get an achromatic basemap', () => {
         expect(hued.length).toBeGreaterThan(0);
     });
 });
+
+describe('every buildStyle call goes through the mapping', () => {
+    /*
+     * MapViewer builds a style in two places: once at init, and again in an effect keyed on
+     * `[theme, mapReady, scaleUnit]` that calls `map.setStyle` when any of them change.
+     *
+     * Only the first is reachable from an e2e.  The theme picker lives on Settings and in the
+     * gallery, never in the nav, so there is no way to change the theme while /map is open --
+     * navigating to Settings unmounts the viewer.  The rebuild branch is real code that a
+     * future compact picker would light up, and a regression confined to it (capturing the
+     * flavor once at init, say) would pass every browser test in this repo.
+     *
+     * So it is checked in the source.  Crude, and the honest alternative to a browser test
+     * that cannot reach the branch it claims to cover.
+     */
+    const source = fs.readFileSync(
+        path.join(__dirname, '../components/MapViewer.js'), 'utf8');
+
+    /*
+     * Paren-counting rather than a regex: the arguments are themselves calls, so anything
+     * non-greedy stops at `mapFlavor(theme)` and reports half an argument list as the whole
+     * of it -- which is how the first version of this test passed while looking wrong.
+     */
+    const buildStyleCalls = (text) => {
+        const calls = [];
+        const marker = 'buildStyle(';
+        for (let at = text.indexOf(marker); at !== -1; at = text.indexOf(marker, at + 1)) {
+            let depth = 0;
+            for (let i = at + marker.length - 1; i < text.length; i++) {
+                if (text[i] === '(') depth++;
+                else if (text[i] === ')' && --depth === 0) {
+                    calls.push(text.slice(at, i + 1));
+                    break;
+                }
+            }
+        }
+        // The `function buildStyle(...)` declaration matches too; drop it.
+        return calls.filter(call => !text.includes(`function ${call}`));
+    };
+
+    it('passes mapFlavor and mapSprite at both call sites', () => {
+        const calls = buildStyleCalls(source);
+
+        // Two call sites plus the declaration; if this drops to one the test below is
+        // covering half of what it claims.
+        expect(calls.length).toBe(2);
+        calls.forEach((call) => {
+            expect(call).toContain('mapFlavor(theme)');
+            expect(call).toContain('mapSprite(theme)');
+        });
+    });
+
+    it('never passes a bare theme as the flavor', () => {
+        // The original bug, written out: `buildStyle(sources, theme, ...)`.
+        expect(source).not.toMatch(/buildStyle\([^)]*,\s*theme\s*,/);
+    });
+});

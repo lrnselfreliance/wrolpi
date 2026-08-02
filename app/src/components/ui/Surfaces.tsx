@@ -27,6 +27,14 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
      * inline style to do this, which is how a hex ends up in the markup.
      */
     color?: string;
+    /**
+     * Trailing content on the heading's own line — a help button, a count, a small
+     * control.  It goes inside the heading's flex row, which is the only place it can
+     * sit beside the text: the wrapper is a block, so a sibling placed after it wraps
+     * to the next line.  That is exactly what happened to every help icon in the app
+     * when these headings stopped being a bare `<h3>`.
+     */
+    after?: React.ReactNode;
 }
 
 /**
@@ -37,7 +45,7 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
  * choosing — that is what keeps the type scale a scale.
  */
 export function Header({
-    as = 'h3', icon, subheader, dividing, color, className, style, children, ...props
+    as = 'h3', icon, subheader, dividing, color, after, className, style, children, ...props
 }: HeaderProps) {
     const Tag = as;
     return <div className={['wrolpi-header', dividing ? 'wrolpi-header-dividing' : '', className]
@@ -51,6 +59,7 @@ export function Header({
                 ? <Icon name={icon} size='medium'/>
                 : <Icon component={icon} size='medium'/>)}
             <span>{children}</span>
+            {after && <span className='wrolpi-header-after'>{after}</span>}
         </Tag>
         {subheader && <div className='wrolpi-header-sub'>{subheader}</div>}
     </div>

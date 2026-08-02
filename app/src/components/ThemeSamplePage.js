@@ -166,6 +166,14 @@ export function ThemeSamplePage() {
                 <Header as='h3' icon='folder' dividing>With an icon and a divider (h3)</Header>
                 <Header as='h4' subheader='And a subheader below it'>Subsection (h4)</Header>
                 <Header as='h5'>Smallest (h5)</Header>
+                {/*
+                  The `after` slot.  A help button beside the text rather than under it --
+                  which is where every one of them sat until headings gained an `after`,
+                  because a sibling placed after the heading's block wrapper wraps.
+                */}
+                <Header as='h3' after={<Icon name='question' size='small'/>}>
+                    With a help icon beside it
+                </Header>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
                     The level picks the size, so the type scale stays a scale: call sites
                     choose a heading level for the document outline, never a font size.

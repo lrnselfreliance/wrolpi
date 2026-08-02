@@ -810,14 +810,22 @@ export function InfoHeader({
                                required = false,
                                ...props
                            }) {
-    return <div className='inline-header' {...props}>
-        <label htmlFor={for_}>
-            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
-        </label>
-        <span>
-            <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition} {...popupProps}/>
-        </span>
-    </div>
+    /*
+     * The icon goes in the heading's own `after` slot.  It used to be a sibling `<span>`
+     * beside a `<label>`, held on one line by `.inline-header h1..h5 {display: inline-block}`
+     * -- which worked while these headings were a bare `<h2>` and stopped working the moment
+     * they gained a block wrapper: the label's block child forced a break and every help icon
+     * in the app dropped to its own line.
+     *
+     * The label stays, now inside the heading, because `for_` associates the text with a
+     * field on three of these call sites.
+     */
+    return <Header as={headerSize} {...props} after={
+        <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}
+                   {...popupProps}/>
+    }>
+        <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+    </Header>
 }
 
 export function HelpModal({
@@ -856,14 +864,13 @@ export function HelpHeader({
                                 required = false,
                                 ...props
                             }) {
-    return <div className='inline-header' {...props}>
-        <label htmlFor={for_}>
-            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
-        </label>
-        <span>
-            <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle} {...helpModalProps}/>
-        </span>
-    </div>
+    // See the note in InfoHeader: the icon belongs in the heading's row, not beside it.
+    return <Header as={headerSize} {...props} after={
+        <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle}
+                   {...helpModalProps}/>
+    }>
+        <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+    </Header>
 }
 
 // All the hardware toggles share this shape: a Toggle whose state comes from a

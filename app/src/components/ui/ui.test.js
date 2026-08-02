@@ -346,6 +346,26 @@ describe('Header', () => {
         expect(container.querySelector('svg')).toBeInTheDocument();
         expect(screen.getByText('Paste this into the extension')).toBeInTheDocument();
     });
+
+    it('puts trailing content inside the heading, not after its wrapper', () => {
+        /*
+         * The whole point of the slot.  `.wrolpi-header` is a block, so anything placed after
+         * it starts a new line -- which is what happened to every help icon in the app when
+         * these headings stopped being a bare `<h3>`.  Inside the heading element it joins
+         * the existing flex row.
+         */
+        const {container} = renderUI(
+            <Header as='h3' after={<button type='button'>Help</button>}>Root CA Certificate</Header>);
+
+        const heading = container.querySelector('h3');
+        expect(heading).toContainElement(screen.getByRole('button', {name: 'Help'}));
+    });
+
+    it('renders nothing extra when there is no trailing content', () => {
+        const {container} = renderUI(<Header as='h3'>Root CA Certificate</Header>);
+
+        expect(container.querySelector('.wrolpi-header-after')).toBeNull();
+    });
 });
 
 describe('PathInput', () => {

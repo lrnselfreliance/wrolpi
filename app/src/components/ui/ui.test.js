@@ -347,18 +347,46 @@ describe('Header', () => {
         expect(screen.getByText('Paste this into the extension')).toBeInTheDocument();
     });
 
-    it('puts trailing content inside the heading, not after its wrapper', () => {
+    it("puts trailing content in the heading's row, not after its wrapper", () => {
         /*
          * The whole point of the slot.  `.wrolpi-header` is a block, so anything placed after
          * it starts a new line -- which is what happened to every help icon in the app when
-         * these headings stopped being a bare `<h3>`.  Inside the heading element it joins
-         * the existing flex row.
+         * these headings stopped being a bare `<h3>`.  A shared flex row holds them together.
          */
         const {container} = renderUI(
             <Header as='h3' after={<button type='button'>Help</button>}>Root CA Certificate</Header>);
 
-        const heading = container.querySelector('h3');
-        expect(heading).toContainElement(screen.getByRole('button', {name: 'Help'}));
+        const row = container.querySelector('.wrolpi-header-row');
+        expect(row).toContainElement(container.querySelector('h3'));
+        expect(row).toContainElement(screen.getByRole('button', {name: 'Help'}));
+    });
+
+    it("keeps the control out of the heading's accessible name", () => {
+        // Inside the <h3> the control becomes part of the name, so heading navigation
+        // announces "Root CA Certificate Help".
+        renderUI(<Header as='h3' after={<button type='button'>Help</button>}>Root CA Certificate</Header>);
+
+        expect(screen.getByRole('heading')).toHaveAccessibleName('Root CA Certificate');
+    });
+
+    it('puts layout styles on the block, not on the heading inside it', () => {
+        /*
+         * `style` is used for spacing the header as a whole -- marginBottom on Status's
+         * "Drive Bandwidth", marginTop on the extension page.  On the inner heading those set
+         * a margin inside the wrapper and worked only through margin collapse, which stops as
+         * soon as the wrapper gains padding or a border.
+         */
+        const {container} = renderUI(
+            <Header as='h3' style={{marginBottom: '1em'}}>Drive Bandwidth</Header>);
+
+        expect(container.querySelector('.wrolpi-header')).toHaveStyle({marginBottom: '1em'});
+        expect(container.querySelector('h3').style.marginBottom).toBe('');
+    });
+
+    it('still colours the heading text from the colour prop', () => {
+        const {container} = renderUI(<Header as='h4' color='danger'>2 items to remove</Header>);
+
+        expect(container.querySelector('h4')).toHaveStyle({color: 'var(--danger)'});
     });
 
     it('renders nothing extra when there is no trailing content', () => {

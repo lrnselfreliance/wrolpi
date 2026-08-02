@@ -333,9 +333,9 @@ export function FilesView(
 ) {
     const {view} = useSearchView();
 
-    const paginator = <center style={{marginTop: '2em'}}>
+    const paginator = <div style={{marginTop: '2em'}}>
         <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
-    </center>;
+    </div>;
 
     let body;
     if (view === 'list') {

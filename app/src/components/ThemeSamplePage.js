@@ -355,8 +355,9 @@ export function ThemeSamplePage() {
                     Light and dark spend a colour on each. Night and amber have only one hue,
                     so a role is a step on a brightness ramp instead; that is why an error and
                     an info toast used to be the same pixel there. Severity climbs in the order
-                    shown for those two themes, and <code>danger</code> is never quieter than
-                    ordinary text.
+                    shown for those two themes, and both <code>warning</code> and{' '}
+                    <code>danger</code> are brighter than ordinary text — with no hue to carry
+                    "look at this", brighter is the only thing left.
                 </p>
             </Panel>
         </Section>

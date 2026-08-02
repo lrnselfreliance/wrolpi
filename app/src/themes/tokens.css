@@ -80,8 +80,18 @@ html[data-theme="light"] {
  * In the MONOCHROME themes only (night and amber):
  *   - the order neutral < info < success < warning < danger is strictly increasing in
  *     contrast against the panel, so severity reads as brightness with no hue to help;
- *   - danger reaches that theme's own `--text` brightness, so the loudest role is never
- *     quieter than ordinary prose.
+ *   - BOTH warning and danger reach that theme's own `--text` brightness.  Anything that
+ *     means "look at this" has to be louder than the prose around it, and with no hue to
+ *     carry the signal, louder means brighter.  Warning used to sit just under `--text`
+ *     (4.91 against 4.98 in night), so a machine under load rendered marginally quieter
+ *     than a healthy one.
+ *
+ * Getting warning and danger above `--text` costs a little saturation, and it is worth
+ * knowing exactly how little: red contributes only 21% of luminance, so in night nothing
+ * above ~4.9:1 can be a pure hue -- `#ff0000` itself is only 4.99:1 there.  `--text` is
+ * already `#e04a4a`, carrying 74 of green and blue.  The new `--warning` `#f54040` carries
+ * 64, LESS than the text beside it; only `--danger` `#ff5757` goes further, at 87.  The
+ * theme's red-only character survives; a pure-hue ramp was never available.
  *
  * Those last two are NOT true of light and dark and must not be made true.  There a role
  * is a hue, and the contrast order is an accident of which hues were chosen -- blue is
@@ -174,8 +184,8 @@ html[data-theme="night"] {
     --neutral: #992c2c;
     --info: #c02929;
     --success: #e02323;
-    --warning: #ee3434;
-    --danger: #ff3e3e;
+    --warning: #f54040;
+    --danger: #ff5757;
 }
 
 /* Amber: a monochrome amber terminal palette, same flat style as the rest. */
@@ -215,8 +225,8 @@ html[data-theme="amber"] {
     --neutral: #815825;
     --info: #b06e1f;
     --success: #d37c11;
-    --warning: #f18806;
-    --danger: #ff9e29;
+    --warning: #fa9f31;
+    --danger: #ffb760;
 }
 
 /* ------------------------------------------------------------------------- */

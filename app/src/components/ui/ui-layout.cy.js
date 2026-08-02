@@ -388,6 +388,94 @@ describe('a load reading ranks itself in the monochrome themes', () => {
     });
 });
 
+describe('a heading keeps its trailing control on its own line', () => {
+    /*
+     * The defect this fixes: `.wrolpi-header` is a block, so a help icon placed after it
+     * wrapped to the next line -- every `HelpHeader` and `InfoHeader` in the app, most
+     * visibly "Root CA Certificate" on the Settings page.
+     *
+     * A pure layout claim, so jsdom cannot judge it: getBoundingClientRect returns zeros
+     * there, and containment alone (which the jest tests assert) does not prove two boxes
+     * share a line.
+     */
+    themeNames.forEach((theme) => {
+        it(`sits the control beside the text in ${theme}`, () => {
+            cy.mountUI(
+                <Header as='h3' after={<Button role='cancel' size='xs'>Help</Button>}>
+                    Root CA Certificate
+                </Header>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-header-after').should(($after) => {
+                const control = $after[0].getBoundingClientRect();
+                const text = $after[0].previousElementSibling.getBoundingClientRect();
+
+                // Beside, not below: they overlap vertically and the control is to the right.
+                expect(control.top, 'control starts above the text baseline')
+                    .to.be.lessThan(text.bottom);
+                expect(text.top, 'text starts above the control baseline')
+                    .to.be.lessThan(control.bottom);
+                expect(control.left, 'control is after the text').to.be.at.least(text.right);
+            });
+        });
+    });
+
+    it('does not stretch the heading to make room', () => {
+        // A wrapped control would make the heading two lines tall.  One line is the claim.
+        cy.mountUI(
+            <Header as='h3' after={<Button role='cancel' size='xs'>Help</Button>}>
+                Root CA Certificate
+            </Header>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-header-text').should(($heading) => {
+            const control = Cypress.$('.wrolpi-header-after')[0].getBoundingClientRect();
+            expect($heading[0].getBoundingClientRect().height, 'heading is one row tall')
+                .to.be.lessThan(control.height * 2);
+        });
+    });
+});
+
+describe('a heading opens a section rather than closing the last one', () => {
+    it('leaves room above a heading that follows something', () => {
+        /*
+         * With no top margin a heading sat flush against the panel above it and read as part
+         * of it -- "Tags" on /more/statistics touched the panel above with a 0px gap.
+         */
+        cy.mountUI(
+            <div>
+                <Panel>Files</Panel>
+                <Header as='h3'>Tags</Header>
+                <Panel>34 tags</Panel>
+            </div>,
+            {theme: 'light'},
+        );
+
+        cy.get('.wrolpi-header').should(($header) => {
+            const panel = Cypress.$('.wrolpi-panel')[0].getBoundingClientRect();
+            const gap = $header[0].getBoundingClientRect().top - panel.bottom;
+            expect(gap, 'gap above the heading').to.be.at.least(12);
+
+            // And more above than below, because the heading belongs to what follows it.
+            const below = Cypress.$('.wrolpi-panel')[1].getBoundingClientRect().top
+                - $header[0].getBoundingClientRect().bottom;
+            expect(gap, 'more air above the heading than below it').to.be.greaterThan(below);
+        });
+    });
+
+    it('does not dent the top of its own container', () => {
+        // A blanket margin would push a heading that opens a Panel away from the Panel's edge.
+        cy.mountUI(<Panel><Header as='h3'>Downloads</Header><p>body</p></Panel>, {theme: 'light'});
+
+        cy.get('.wrolpi-header').should(($header) => {
+            expect(getComputedStyle($header[0]).marginTop, 'first child has no top margin')
+                .to.equal('0px');
+        });
+    });
+});
+
 describe('a table header is a surface, not just bold text', () => {
     themeNames.forEach((theme) => {
         it(`separates the header from every body row in ${theme}`, () => {

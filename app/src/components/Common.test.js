@@ -2,8 +2,8 @@ import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {
-    contrastingColor, contrastRatio, DirectorySearch, loadRole, SearchResultsInput,
-    TAG_TEXT_DARK, TAG_TEXT_LIGHT,
+    contrastingColor, contrastRatio, DirectorySearch, HelpHeader, InfoHeader, loadRole,
+    SearchResultsInput, TAG_TEXT_DARK, TAG_TEXT_LIGHT,
 } from './Common';
 import {healthRole} from './admin/ControllerPage';
 
@@ -620,5 +620,51 @@ describe('healthRole', () => {
         // Reporting an unreadable drive as PASS would be the dangerous direction.
         [undefined, null, '', 'SOMETHING_ELSE'].forEach(value =>
             expect(healthRole(value)).toBe('neutral'));
+    });
+});
+
+describe('a heading with a help icon keeps the icon on its own line', () => {
+    /*
+     * `HelpHeader` and `InfoHeader` put their icon in a sibling `<span>` beside a `<label>`,
+     * held on one line by `.inline-header h1..h5 {display: inline-block}` in App.css.  That
+     * worked while the heading was a bare `<h2>`; the moment it gained a block wrapper the
+     * label's block child forced a break, and every help icon in the app dropped below its
+     * own heading -- visible on "Root CA Certificate" in Settings.
+     *
+     * They pass the icon through the heading's `after` slot now.  Containment is the claim
+     * jsdom can judge; that the two actually share a line is asserted in ui-layout.cy.js,
+     * since jsdom has no layout at all.
+     */
+    it('renders the help control inside the heading element', () => {
+        render(<HelpHeader headerSize='h3' headerContent='Root CA Certificate'
+                           helpPath='/system/certificates/'/>);
+
+        const heading = screen.getByRole('heading', {name: /Root CA Certificate/});
+        expect(heading).toContainElement(screen.getByRole('button', {name: 'Help'}));
+    });
+
+    it('renders the info popup inside the heading element', () => {
+        render(<InfoHeader headerSize='h4' headerContent='Video Resolutions'
+                           popupContent='Highest available is tried first.'/>);
+
+        const heading = screen.getByRole('heading', {name: /Video Resolutions/});
+        expect(heading.querySelector('svg')).not.toBeNull();
+    });
+
+    it('keeps the label association, which is what `for_` is for', () => {
+        // Three call sites use it to tie the heading text to the field below it.
+        render(<InfoHeader headerSize='h4' headerContent='Video Resolutions'
+                           for_='video_resolutions_input' popupContent='...'/>);
+
+        expect(screen.getByText(/Video Resolutions/).closest('label'))
+            .toHaveAttribute('for', 'video_resolutions_input');
+    });
+
+    it('leaves no .inline-header behind', () => {
+        // The class and its stylesheet rules are gone; a stray one would be dead markup
+        // relying on CSS that no longer exists.
+        const {container} = render(<HelpHeader headerContent='Root CA Certificate' helpPath='/x/'/>);
+
+        expect(container.querySelector('.inline-header')).toBeNull();
     });
 });

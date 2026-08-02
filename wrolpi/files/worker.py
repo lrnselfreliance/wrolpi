@@ -27,7 +27,7 @@ from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.common import get_media_directory, get_wrolpi_config, logger, walk, chunks, unique_by_predicate
 from wrolpi.dates import now
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, get_immediate_db_session
 from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.files.lib import (
@@ -556,7 +556,11 @@ async def build_move_plan_bulk(
         if progress_callback and i % 100 == 0:
             progress_callback(i, total_sources * 2)  # *2 because file collection is second half
 
-    with get_db_session() as session:
+    # Planning reads FileGroups and then INSERTs the ones missing from the DB, so the transaction
+    # must begin as a writer.  A deferred transaction upgrading to a writer mid-way gets "database
+    # is locked" *immediately* (busy_timeout is skipped for lock upgrades), so any concurrent
+    # writer - a refresh, a download, a config save - would abort the whole move.
+    with get_immediate_db_session() as session:
         try:
             # Create temp table for source paths.  SQLite has no ON COMMIT DROP; the table is
             # explicitly dropped below on success/failure (and IF NOT EXISTS + DELETE guard
@@ -1616,13 +1620,15 @@ class FileWorker:
                         revert_plan[new_path] = old_file
                     chunk_plan[old_file] = new_path
 
-            # Delete old directories
+            # Delete old directories.  `delete_directory` is not used here because it opens its own
+            # session; a second connection deadlocks against the write lock this transaction holds.
             for old_dir in old_dirs:
                 if old_dir.is_dir():
                     try:
-                        delete_directory(old_dir)
+                        old_dir.rmdir()
                     except OSError:
-                        pass  # Directory not empty yet
+                        continue  # Directory not empty yet
+                    session.query(Directory).filter_by(path=str(old_dir)).delete(synchronize_session=False)
 
             # Insert new Directory records
             missing_dirs = new_directories - existing_directories - inserted_directories
@@ -2037,9 +2043,11 @@ class FileWorker:
                 operation_total=len(plan),
             )
 
-            # Execute the plan in chunks
+            # Execute the plan in chunks.  This reads FileGroups/Directories then updates them, so
+            # it must begin as a writer; a deferred transaction's lock upgrade fails instantly when
+            # anything else is writing (see `build_move_plan_bulk`).
             with flags.file_worker_discovery:
-                with get_db_session(commit=True) as session:
+                with get_immediate_db_session() as session:
                     await self._execute_move_chunks(
                         plan, session, created_directories, revert_plan
                     )

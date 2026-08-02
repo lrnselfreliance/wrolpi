@@ -115,7 +115,7 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
         return () => { if (map) map.remove(); };
     }, [open, bbox]);
 
-    return <Modal open={open} onClose={onClose} size='large' closeIcon title={name}>
+    return <Modal open={open} onClose={onClose} size='fullscreen' closeIcon title={name}>
         {/* No `.media` here: the bbox highlight is drawn as a map layer on the canvas itself
             (see the `bbox` source/layers above), so the automatic `canvas` element-type filter
             already covers it. There is no separate DOM overlay to wrap. */}

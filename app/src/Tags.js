@@ -332,7 +332,7 @@ function EditTagsModal() {
     ];
 
     return <>
-        <Modal open={open} onClose={localOnClose}>
+        <Modal size='large' open={open} onClose={localOnClose}>
             <Modal.Header>Edit Tags</Modal.Header>
             <div id='editModalContent'>
                 <Group gap={6}>
@@ -567,7 +567,7 @@ export function AddTagsButton({
             type='button'
             disabled={disabled}
         />
-        <Modal open={open} onClose={() => setOpen(false)}>
+        <Modal size='small' open={open} onClose={() => setOpen(false)}>
             <Modal.Content>
                 {loading && <Loading size='xs'>Updating tags…</Loading>}
                 <Header as='h4'>Applied Tags</Header>

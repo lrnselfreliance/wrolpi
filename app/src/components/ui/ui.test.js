@@ -1487,3 +1487,75 @@ describe('Confirm', () => {
         expect(screen.getByRole('button', {name: 'Wipe'})).toHaveClass('wrolpi-button-danger');
     });
 });
+
+describe('modal sizes', () => {
+    /*
+     * The size table is the single thing that halved every modal in the migration.
+     *
+     * Semantic's names were measured on the pre-migration build: mini 360, tiny 540, small
+     * 720, large 1080, fullscreen 95%.  They are mapped onto Mantine's much smaller scale, so
+     * a modal that said `small` went from 720px to 440px and one that said nothing at all
+     * went from 900px to 440px.  That is deliberate now -- the sizes were audited call site
+     * by call site against this scale -- but it means the table IS the design, and a quiet
+     * edit to it moves seventy modals at once.
+     */
+    const MANTINE_PX = {xs: 320, sm: 380, md: 440, lg: 620, xl: 780};
+
+    it('resolves each name to the width the audit was done against', () => {
+        // Read out of Mantine's own stylesheet rather than restated, so a version bump that
+        // changes the scale fails here instead of silently resizing the app.
+        const css = fs.readFileSync(
+            path.join(__dirname, '../../../node_modules/@mantine/core/styles.css'), 'utf8');
+
+        Object.entries(MANTINE_PX).forEach(([name, px]) => {
+            const declared = css.match(
+                new RegExp(`--modal-size-${name}:\\s*calc\\(([\\d.]+)rem`));
+            expect({name, px: declared && Math.round(parseFloat(declared[1]) * 16)})
+                .toEqual({name, px});
+        });
+    });
+
+    it('maps every Semantic name onto that scale', () => {
+        // The mapping the call sites are written against.  `fullscreen` is the one that did
+        // not shrink, and the one several audited modals were moved TO.
+        const source = fs.readFileSync(path.join(__dirname, 'Overlays.tsx'), 'utf8');
+        const table = source.match(/const modalSizes[^=]*=\s*{([^}]*)}/)[1];
+        const pairs = Object.fromEntries([...table.matchAll(/(\w+):\s*'([^']+)'/g)]
+            .map(m => [m[1], m[2]]));
+
+        expect(pairs).toEqual({
+            mini: 'xs', tiny: 'sm', small: 'md', large: 'lg', fullscreen: '100%',
+        });
+    });
+
+    it('never lets a call site name a size the table does not know', () => {
+        /*
+         * A name the table has never heard of is passed straight to Mantine, which ignores
+         * anything it does not recognise and renders the default -- so a typo is a modal that
+         * silently reverts to 440px with no warning anywhere.  Flasher was passing Mantine's
+         * own `sm` directly, which worked but bypassed the naming the audit used.
+         */
+        const known = new Set(['mini', 'tiny', 'small', 'large', 'fullscreen']);
+        const offenders = [];
+
+        const walk = (directory) => fs.readdirSync(directory, {withFileTypes: true})
+            .flatMap(entry => {
+                const full = path.join(directory, entry.name);
+                if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : walk(full);
+                if (!/\.(js|jsx|tsx)$/.test(entry.name)) return [];
+                if (/\.(test|cy)\./.test(entry.name)) return [];
+                return [[full, fs.readFileSync(full, 'utf8')]];
+            });
+
+        for (const [file, source] of walk(path.join(__dirname, '..', '..'))) {
+            // Only `<Modal ... size='x'>`; a computed `size={...}` is the caller's business.
+            for (const match of source.matchAll(/<Modal\b[^>]*?\bsize='([^']+)'/g)) {
+                if (!known.has(match[1])) {
+                    offenders.push(`${path.basename(file)}: size='${match[1]}'`);
+                }
+            }
+        }
+
+        expect(offenders).toEqual([]);
+    });
+});

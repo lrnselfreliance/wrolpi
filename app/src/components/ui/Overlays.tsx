@@ -45,6 +45,78 @@ export interface ModalProps extends Omit<React.ComponentProps<typeof MModal>, 'o
     closeIcon?: boolean;
 }
 
+/*
+ * Nested modals: which one is on top.
+ *
+ * Mantine binds a window-level `keydown` listener per open modal, gated only on whether that
+ * modal is open -- there is no check for whether it is the one the user is looking at.  Two
+ * modals open meant two listeners, so a single Escape closed BOTH: opening the search modal
+ * over the dashboard's download modal and pressing Escape once left you on the dashboard.
+ * Semantic handled this; the migration lost it.
+ *
+ * Mantine's own answer is `Modal.Stack` with a `stackId` per modal, which is the only thing
+ * that gates `closeOnEscape`.  It is not used here for two reasons: it requires every call
+ * site to be rewritten to hoist its modal into a stack, and it sets `__hidden` on everything
+ * below the top -- the parent disappears while the child is open.  We want the parent dimmed
+ * and still visible behind the child, which is what it did before.
+ *
+ * So the wrapper keeps the register itself.  A module-level list rather than React context,
+ * because the two modals in the bug are not nested in the JSX at all: the search modal is
+ * rendered by KeyboardShortcutsProvider near the app root while the download modal is
+ * rendered by the dashboard.  They are siblings that happen to be open at once, and no
+ * context relates them.  Most recently opened is on top.
+ */
+let openModalIds: string[] = [];
+const modalStackListeners = new Set<() => void>();
+const notifyModalStack = () => modalStackListeners.forEach(listener => listener());
+
+/** Mantine's default modal z-index; popovers and tooltips sit at 300. */
+const MODAL_Z_INDEX = 200;
+
+/**
+ * Where this modal sits in the stack of open ones.
+ *
+ * Exported for the tests, which need to assert the register empties -- a modal that failed to
+ * deregister would leave every later modal believing it was not on top, and nothing would
+ * close on Escape at all.
+ */
+export const openModalCount = () => openModalIds.length;
+
+function useModalStackPosition(opened: boolean): {isTop: boolean; zIndex: number} {
+    const id = React.useId();
+    const [, rerender] = React.useReducer((count: number) => count + 1, 0);
+
+    React.useEffect(() => {
+        modalStackListeners.add(rerender);
+        return () => {
+            modalStackListeners.delete(rerender);
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (!opened) return;
+        // Re-opening an already-registered modal moves it to the top, which is what a user
+        // who clicked its trigger again means.
+        openModalIds = [...openModalIds.filter(other => other !== id), id];
+        notifyModalStack();
+        return () => {
+            openModalIds = openModalIds.filter(other => other !== id);
+            notifyModalStack();
+        };
+    }, [opened, id]);
+
+    const depth = openModalIds.indexOf(id);
+    return {
+        isTop: depth === -1 || depth === openModalIds.length - 1,
+        /*
+         * Two per level, so a child's overlay clears its parent's content.  Kept small on
+         * purpose: Mantine puts popovers and select dropdowns at 300, and a modal stack that
+         * climbed past that would paint over the dropdowns inside itself.
+         */
+        zIndex: MODAL_Z_INDEX + Math.max(depth, 0) * 2,
+    };
+}
+
 function ModalBase({open, opened, size, closeIcon, title, children, ...props}: ModalProps) {
     const slots: Record<string, React.ReactNode[]> = {header: [], actions: [], body: []};
     React.Children.forEach(children, child => {
@@ -54,13 +126,25 @@ function ModalBase({open, opened, size, closeIcon, title, children, ...props}: M
         else slots.body.push(child);
     });
 
+    const isOpen = opened ?? open ?? false;
+    const {isTop, zIndex} = useModalStackPosition(isOpen);
+
     return <MModal
-        opened={opened ?? open ?? false}
+        opened={isOpen}
         centered
         size={typeof size === 'string' ? (modalSizes[size] ?? size) : size}
         title={slots.header.length ? slots.header : title}
         // Flat surfaces: the overlay separates the modal from the page, not a shadow.
         overlayProps={{backgroundOpacity: 0.55, blur: 0}}
+        /*
+         * Only the modal on top answers the keyboard.  Without this every open modal has its
+         * own window-level Escape listener and one press closes the lot.  Focus goes with it:
+         * two traps fighting over the same Tab is its own bug, and the user is working in the
+         * top one.
+         */
+        closeOnEscape={isTop}
+        trapFocus={isTop}
+        zIndex={zIndex}
         {...props}
     >
         {slots.body}

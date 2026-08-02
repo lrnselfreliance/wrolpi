@@ -644,7 +644,7 @@ export function SearchFilterModal(
         >{i}</Button>
     );
 
-    return <Modal open={open} onClose={handleClose} closeIcon size='small'>
+    return <Modal open={open} onClose={handleClose} closeIcon size='large'>
         <Modal.Header>Search Filters</Modal.Header>
         <Modal.Content>
             <Stack gap='lg'>

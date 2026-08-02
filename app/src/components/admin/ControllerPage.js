@@ -1383,7 +1383,7 @@ function SambaSection() {
             <Modal open={addOpen} onClose={() => {
                 setAddOpen(false);
                 setShareAll(true);
-            }} size='small'>
+            }} size='large'>
                 <Modal.Header>Add Samba Share</Modal.Header>
                 <Modal.Content>
                     <TextInput
@@ -1589,7 +1589,7 @@ function HotspotSettingsForm() {
                 style={{marginLeft: '0.5em'}}
                 onClick={() => setQrOpen(true)}
             />
-            <Modal open={qrOpen} onClose={() => setQrOpen(false)} closeIcon>
+            <Modal size='small' open={qrOpen} onClose={() => setQrOpen(false)} closeIcon>
                 <Modal.Header>Scan this code to join the hotspot</Modal.Header>
                 <Modal.Content>
                     {/* `media`: filtered as a unit by night mode; a QR code needs real black-on-white

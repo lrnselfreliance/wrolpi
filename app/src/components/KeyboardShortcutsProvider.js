@@ -81,7 +81,7 @@ function SearchModal({open, onClose}) {
     if (!open) return null;
 
     return (
-        <Modal open={open} onClose={onClose} centered={false} title='Search'>
+        <Modal size='small' open={open} onClose={onClose} centered={false} title='Search'>
             <Modal.Content>
                 {/*
                   * `wrolpi-search-modal` makes the suggestion list part of the panel rather

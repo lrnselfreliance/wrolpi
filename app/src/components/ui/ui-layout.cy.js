@@ -4,7 +4,7 @@ import {
     Message, Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName,
     TextInput,
 } from './index';
-import {contrastingColor} from '../Common';
+import {contrastingColor, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
@@ -335,26 +335,31 @@ describe('semantic roles read as severity in every theme', () => {
 
 describe('a load reading ranks itself in the monochrome themes', () => {
     /*
-     * LoadStatistic is the Status page's CPU load, and the clearest payoff of the roles
-     * outside the library: it used to be `orange` above half the cores and `red` above three
-     * quarters, and in night `--orange` is byte-identical to `--text`, so a machine under
-     * load rendered its warning as an ordinary uncoloured number.
+     * The real `LoadStatistic`, at the real thresholds -- NOT a hand-built `Statistic` with
+     * the roles typed in.  The first version of this did that, and it would have stayed green
+     * with `LoadStatistic` reverted to `orange`/`red`: it proved only that role tokens resolve
+     * distinctly, which the roles suite above already covers.
      *
-     * Only a browser can see this.  jsdom rejects `color: var(--warning)` as invalid and
-     * drops it, so the inline colour reads back empty whatever the component did.
+     * This is the Status page's CPU load, and the clearest payoff of the roles outside the
+     * library: `orange` above half the cores was byte-identical to `--text` in night, so a
+     * machine under load rendered its warning as an ordinary uncoloured number.
+     *
+     * Only a browser can see it.  jsdom rejects `color: var(--warning)` as invalid and drops
+     * it, so the inline colour reads back empty whatever the component did.
      */
     monochromeThemes.forEach((theme) => {
         it(`separates fine, warning and danger loads in ${theme}`, () => {
             cy.mountUI(
                 <Panel>
-                    <Statistic value='1.9' label='fine' cores={4} color={undefined}/>
-                    <Statistic value='2.6' label='warning' color='warning'/>
-                    <Statistic value='4.1' label='danger' color='danger'/>
+                    <LoadStatistic label='1 Min. Load' value={1.9} cores={4}/>
+                    <LoadStatistic label='5 Min. Load' value={2.6} cores={4}/>
+                    <LoadStatistic label='15 Min. Load' value={4.1} cores={4}/>
                 </Panel>,
                 {theme},
             );
 
             cy.get('.wrolpi-statistic-value').should(($values) => {
+                expect($values.length, 'three readings').to.equal(3);
                 const [fine, warning, danger] = [...$values]
                     .map(el => toRgb(getComputedStyle(el).color));
                 const panel = toRgb(getComputedStyle(

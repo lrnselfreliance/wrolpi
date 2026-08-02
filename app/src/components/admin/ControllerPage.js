@@ -605,18 +605,32 @@ function ServicesSection() {
 
 
 // Helper to get health status color from SMART assessment
-const getHealthColor = (assessment) => {
-    // Roles, not hues: a drive's assessment is a severity and has to rank as one.  All
-    // four branches together -- a helper where PASS and FAIL rank but WARN is an
-    // unranked hue is worse than either choice, and in night `--amber` is byte-identical
-    // to `--yellow` so WARN would stop sitting between them.
-    if (!assessment) return 'var(--neutral)';
-    const upper = assessment.toUpperCase();
-    if (upper === 'PASS') return 'var(--success)';
-    if (upper === 'WARN') return 'var(--warning)';
-    if (upper === 'FAIL') return 'var(--danger)';
-    return 'var(--neutral)';
+/**
+ * The severity of a SMART assessment.
+ *
+ * Roles, not hues: a drive's health is a severity and has to rank as one.  All four
+ * branches together -- a helper where PASS and FAIL rank but WARN is an unranked hue is
+ * worse than either choice, and in night `--amber` is byte-identical to `--yellow`, so WARN
+ * would stop sitting between them.
+ *
+ * Exported and pure so the mapping can be tested as a mapping rather than scraped out of
+ * the source, which is what this needed before it was separated from the CSS wrapper.
+ */
+export const healthRole = (assessment) => {
+    if (!assessment) return 'neutral';
+    switch (assessment.toUpperCase()) {
+        case 'PASS':
+            return 'success';
+        case 'WARN':
+            return 'warning';
+        case 'FAIL':
+            return 'danger';
+        default:
+            return 'neutral';
+    }
 };
+
+const getHealthColor = (assessment) => `var(--${healthRole(assessment)})`;
 
 // Helper to format power-on hours
 const formatPowerOnHours = (hours) => {

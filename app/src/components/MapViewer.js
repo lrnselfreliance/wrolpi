@@ -9,7 +9,7 @@ import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefau
 import {MAP_VIEWER_URI} from "./Vars";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
-import {mapFlavor} from "../themes/names";
+import {mapFlavor, mapSprite} from "../themes/names";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -69,7 +69,10 @@ function initContourSource(filename) {
 // sources: [{name, url}] where name is used as the MapLibre source ID and url is the pmtiles:// URL.
 // hasTerrain: whether to include hillshade and contour layers.
 // scaleUnit: "metric" or "imperial" — affects contour intervals and labels.
-function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric") {
+// `sprite` is deliberately separate from `flavor`: we ship two sprite sets (light, dark)
+// and the monochrome themes draw a `black` basemap, which has no sprites of its own.
+function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric",
+                    sprite = "light") {
     const styleSources = {};
     const allLayers = [];
 
@@ -182,8 +185,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     "text-size": 10,
                 },
                 paint: {
-                    "text-color": flavor === "dark" ? "rgba(210,180,140,0.9)" : "rgba(150,100,50,0.8)",
-                    "text-halo-color": flavor === "dark" ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)",
+                    "text-color": flavor === "light" ? "rgba(150,100,50,0.8)" : "rgba(210,180,140,0.9)",
+                    "text-halo-color": flavor === "light" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)",
                     "text-halo-width": 1,
                 },
             },
@@ -193,7 +196,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
     return {
         version: 8,
         glyphs: "/map-assets/fonts/{fontstack}/{range}.pbf",
-        sprite: `${window.location.origin}/map-assets/sprites/${flavor}`,
+        sprite: `${window.location.origin}/map-assets/sprites/${sprite}`,
         sources: styleSources,
         layers: allLayers,
     };
@@ -612,7 +615,7 @@ export default function MapViewer() {
             try {
                 map = new maplibregl.Map({
                     container: mapContainer.current,
-                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit),
+                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit, mapSprite(theme)),
                     center: [initialLon, initialLat],
                     zoom: initialZoom,
                     attributionControl: true,
@@ -758,7 +761,8 @@ export default function MapViewer() {
 
         const center = map.getCenter();
         const zoom = map.getZoom();
-        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current, scaleUnit));
+        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current,
+            scaleUnit, mapSprite(theme)));
         map.once("style.load", () => {
             map.setCenter(center);
             map.setZoom(zoom);

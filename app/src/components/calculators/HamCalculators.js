@@ -1,6 +1,5 @@
 import React from "react";
-import {Grid, Header, Table} from "../ui";
-import {ColoredInput} from "../Apps";
+import {ColoredInput, Grid, Header, Table} from "../ui";
 import {roundDigits} from "../Common";
 
 // ---------------------------------------------------------------------------

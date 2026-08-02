@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import layers from 'protomaps-themes-base';
-import {isDarkTheme, mapFlavor, themeNames} from './names';
+import {isDarkTheme, isMonochromeTheme, mapFlavor, mapSprite, themeNames} from './names';
 
 /*
  * The map viewer draws its basemap with protomaps-themes-base, which takes a "flavor".
@@ -41,10 +41,13 @@ describe('the map basemap flavor', () => {
         expect(built.length).toBeGreaterThan(0);
     });
 
-    it.each(themeNames)('maps %s to a flavor we ship sprites for', (theme) => {
-        // The flavor is interpolated into `/map-assets/sprites/<flavor>`, so a name protomaps
-        // accepts is not enough -- `black` and `grayscale` are real flavors with no sprites.
-        expect(spriteFlavors()).toContain(mapFlavor(theme));
+    it.each(themeNames)('gives %s a sprite set we actually ship', (theme) => {
+        /*
+         * The sprite is a SEPARATE style property from the flavor; they only happened to
+         * share a variable, which is what made a `black` basemap look impossible.  We ship
+         * two sets, so this is the narrower constraint and it is checked against disk.
+         */
+        expect(spriteFlavors()).toContain(mapSprite(theme));
     });
 
     it.each(themeNames)('keeps %s on a basemap of its own brightness', (theme) => {
@@ -54,5 +57,47 @@ describe('the map basemap flavor', () => {
          * slab, and the point of night mode is not to put one of those on screen.
          */
         expect(mapFlavor(theme) === 'light').toBe(!isDarkTheme(theme));
+    });
+});
+
+describe('the monochrome themes get an achromatic basemap', () => {
+    /*
+     * The reason night and amber take `black` rather than `dark`, and the thing that would
+     * silently regress if someone "simplified" the mapping to `isDarkTheme ? dark : light`.
+     *
+     * Both media filters are a pure luminance projection -- the same `0.2126 0.7152 0.0722`
+     * row -- so they keep brightness and discard hue.  A basemap that encodes anything in
+     * hue loses it: `dark` marks water and parks with colour, and after filtering those
+     * features sit at whatever brightness their hue happened to carry.  An achromatic
+     * basemap has nothing to lose, so the designer's hierarchy arrives intact.
+     */
+    const chroma = (hex) => {
+        const value = hex.replace('#', '');
+        const [r, g, b] = [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16));
+        return Math.max(r, g, b) - Math.min(r, g, b);
+    };
+
+    /** Every literal hex a flavor paints with. */
+    const paletteOf = (flavor) => layers('src', flavor).flatMap(layer =>
+        ['background-color', 'fill-color', 'line-color']
+            .map(key => layer.paint && layer.paint[key])
+            .filter(value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)));
+
+    themeNames.filter(isMonochromeTheme).forEach((theme) => {
+        it(`paints ${theme} with greys only`, () => {
+            const palette = paletteOf(mapFlavor(theme));
+
+            expect(palette.length).toBeGreaterThan(20);
+            const hued = [...new Set(palette)].filter(hex => chroma(hex) > 0);
+            expect(hued).toEqual([]);
+        });
+    });
+
+    it('is a real constraint: the plain dark flavor is NOT achromatic', () => {
+        // Without this the test above passes on any flavor at all and proves nothing about
+        // the choice -- `black` would look unremarkable rather than deliberate.
+        const hued = [...new Set(paletteOf('dark'))].filter(hex => chroma(hex) > 0);
+
+        expect(hued.length).toBeGreaterThan(0);
     });
 });

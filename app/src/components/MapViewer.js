@@ -9,6 +9,7 @@ import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefau
 import {MAP_VIEWER_URI} from "./Vars";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
+import {mapFlavor} from "../themes/names";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -611,7 +612,7 @@ export default function MapViewer() {
             try {
                 map = new maplibregl.Map({
                     container: mapContainer.current,
-                    style: buildStyle(mapSources, theme, hasTerrain, scaleUnit),
+                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit),
                     center: [initialLon, initialLat],
                     zoom: initialZoom,
                     attributionControl: true,
@@ -757,7 +758,7 @@ export default function MapViewer() {
 
         const center = map.getCenter();
         const zoom = map.getZoom();
-        map.setStyle(buildStyle(activeFilesRef.current, theme, hasTerrainRef.current, scaleUnit));
+        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current, scaleUnit));
         map.once("style.load", () => {
             map.setCenter(center);
             map.setZoom(zoom);

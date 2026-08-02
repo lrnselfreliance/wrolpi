@@ -1,5 +1,5 @@
 import React from 'react';
-import {bestForeground, contrastRatio} from './contrast';
+import {bestForeground, contrastRatio, isMeasurable} from './contrast';
 
 
 /*
@@ -23,8 +23,31 @@ import {bestForeground, contrastRatio} from './contrast';
  * night's "white" is #ff8a8a, a bright red, and amber's is #ffc875.
  *
  * Measuring at runtime rather than shipping a paired `--on-red`/`--on-olive` token for every
- * colour also means the custom YAML themes still ahead of us get this for free: a theme
- * supplies a palette, and the correct foreground for each entry falls out of it.
+ * colour also means a theme only has to supply a palette: the correct foreground for each
+ * entry falls out of it, with nothing extra to declare and nothing to keep in step.
+ *
+ * What is NOT measured, and should be: the warning indicators.  NavBar still picks their
+ * colour from `conflictingColors`, a hardcoded list of navbar names that swaps `yellow`/`red`
+ * for `null`/`black` on the five bars those hues would blend into.  It is the same defect
+ * this replaced -- a name list standing in for a measurement -- and it is worse than the one
+ * fixed here rather than better: `--danger` and `--warning` measure 1.0-1.8:1 against the bar
+ * in EVERY theme, light and dark included, because a red icon on a red bar is a red icon on a
+ * red bar.  It is left alone deliberately, because the fix is not a better colour.  Those
+ * icons have to stay distinguishable from each other AND from the bar's own text, and in a
+ * monochrome theme there is no third brightness to spend, so severity has to stop being a
+ * hue -- a filled badge, or a shape.  That is a redesign of how severity reads, not a
+ * substitution, and it is not this change.
+ *
+ * /theme-sample draws the indicators as they are, taking the measured bar colour, which is
+ * what the bar does when nothing is wrong.  It does not stage a fake overheating Pi to
+ * exhibit a fault nobody has agreed how to fix.
+ *
+ * Two limits on the measuring that IS done here, both of which the custom YAML themes will
+ * meet before anything else does.  A token has to be a colour these measurements can read -- hex or `rgb()`; anything
+ * else falls back to CSS rather than being measured (see navColorsFrom).  And re-measurement
+ * is triggered by `data-theme` changing, which is how a theme is applied today; a future
+ * editor that patches custom properties in place without touching the attribute would leave
+ * the bar on the values it last measured (see useNavColors).
  */
 
 /**
@@ -73,17 +96,28 @@ export function navColorsFrom(read: (name: string) => string, navColor: string):
      */
     const candidates = [read('--btn-text'), read('--black'), read('--white')].filter(Boolean);
 
-    if (!background || candidates.length === 0) {
+    const measurable = candidates.filter(isMeasurable);
+
+    if (!isMeasurable(background) || measurable.length === 0) {
         /*
-         * No stylesheet to read: jsdom, or a very early render.  Fall back to the tokens
-         * themselves so the bar is still painted by CSS and still changes with the theme --
-         * this is the pre-measurement behaviour, and it is only ever wrong about the
-         * foreground.
+         * Nothing readable to measure, so measure nothing and let CSS do its job.
+         *
+         * Two cases reach here.  The ordinary one is that there is no stylesheet yet -- jsdom,
+         * or a very early render -- and the reader returns empty strings.  The other is a
+         * token this cannot parse: a hand-written theme writing `rgb(90 79 168)` or
+         * `color-mix(...)` rather than a hex.  That one used to be silent and worse than
+         * useless: an unparseable colour measured as luminance zero, indistinguishable from
+         * black, so the bar picked its foreground against a colour the theme does not contain
+         * and then froze the wrong hex into an inline style, where CSS could not correct it.
+         *
+         * Falling back to the tokens themselves is the pre-measurement behaviour: the bar is
+         * painted by CSS, follows the theme, and is only ever wrong about the foreground --
+         * which is a great deal better than being confidently wrong about both.
          */
         return {background: `var(--${name})`, color: 'var(--btn-text)', ratio: null};
     }
 
-    const color = bestForeground(background, candidates) as string;
+    const color = bestForeground(background, measurable) as string;
     return {background, color, ratio: contrastRatio(color, background)};
 }
 
@@ -126,6 +160,13 @@ export function navBarStyle(colors: NavColors): React.CSSProperties {
  *
  * The attribute is also stamped by the inline script in index.html before React loads, and
  * that is a change no context can report at all.
+ *
+ * This assumes token VALUES only change when `data-theme` does, which holds for every way a
+ * theme is applied today.  It will not hold for a custom-theme editor that rewrites custom
+ * properties in place: the measured pair is a snapshot of hexes, so the bar would keep the
+ * old one until the theme name or the chosen colour changed.  When that editor exists it
+ * should either re-stamp the attribute or announce the change for this to observe -- there
+ * is no event for "a custom property was assigned" to watch instead.
  */
 export function useNavColors(navColor: string): NavColors {
     const [colors, setColors] = React.useState<NavColors>(

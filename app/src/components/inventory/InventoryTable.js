@@ -235,7 +235,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                         <Table.Cell>
                             <Checkbox checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)}/>
                             {expired && <Icon name='warning sign' label='Expired'
-                                              style={{color: 'var(--red)', marginLeft: '0.4em'}}/>}
+                                              style={{color: 'var(--danger)', marginLeft: '0.4em'}}/>}
                         </Table.Cell>
                         {sortedFields.map(f => <Table.Cell key={f.key}>
                             {editing

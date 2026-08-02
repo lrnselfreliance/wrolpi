@@ -606,12 +606,16 @@ function ServicesSection() {
 
 // Helper to get health status color from SMART assessment
 const getHealthColor = (assessment) => {
-    if (!assessment) return 'var(--muted)';
+    // Roles, not hues: a drive's assessment is a severity and has to rank as one.  All
+    // four branches together -- a helper where PASS and FAIL rank but WARN is an
+    // unranked hue is worse than either choice, and in night `--amber` is byte-identical
+    // to `--yellow` so WARN would stop sitting between them.
+    if (!assessment) return 'var(--neutral)';
     const upper = assessment.toUpperCase();
-    if (upper === 'PASS') return 'var(--green)';
-    if (upper === 'WARN') return 'var(--amber)';
-    if (upper === 'FAIL') return 'var(--red)';
-    return 'var(--muted)';
+    if (upper === 'PASS') return 'var(--success)';
+    if (upper === 'WARN') return 'var(--warning)';
+    if (upper === 'FAIL') return 'var(--danger)';
+    return 'var(--neutral)';
 };
 
 // Helper to format power-on hours
@@ -829,7 +833,9 @@ function MountModal({disk, open, onClose, onMount}) {
                     <p>
                         Found <strong>{entries}</strong> ({formatBytes(shadowed.size_bytes)}) at the mount target.
                     </p>
-                    <p style={{color: 'var(--red)'}}>
+                    {/* A caution about a consequence, not a failure -- the destructive
+                        weight is already carried by the confirm button below. */}
+                    <p style={{color: 'var(--warning)'}}>
                         Those files will continue to consume space on the underlying filesystem
                         (typically the SD card on a Raspberry Pi) and can fill it up.
                     </p>

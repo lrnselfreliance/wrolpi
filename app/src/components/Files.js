@@ -979,10 +979,12 @@ function RefreshStepItem({phase, isActive, isCompleted, isDisabled, description}
     return <div style={{
         display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 160px', padding: '0.5em 0.75em',
         opacity: isDisabled ? 0.5 : 1,
-        borderBottom: isActive ? '2px solid var(--blue)' : '2px solid transparent',
+        borderBottom: isActive ? '2px solid var(--info)' : '2px solid transparent',
     }}>
+        {/* The same three roles Status maps complete/active/pending onto.  Not the Status
+            component itself: these rows carry a per-phase glyph, which is the point of them. */}
         <Icon name={phase.icon} size='large'
-              style={{color: isCompleted ? 'var(--green)' : isActive ? 'var(--blue)' : 'var(--muted)'}}/>
+              style={{color: isCompleted ? 'var(--success)' : isActive ? 'var(--info)' : 'var(--neutral)'}}/>
         <div>
             <div style={{fontWeight: 600, fontSize: 13}}>{phase.title}</div>
             <div style={{fontSize: 12, color: 'var(--muted)'}}>{isActive || isCompleted ? description : ''}</div>
@@ -1033,7 +1035,7 @@ function RefreshProgressBar({status, operation_total, operation_processed, opera
 
     // Show error state
     if (status === 'error' && error) {
-        return <Progress percent={100} color='red' label={`Error: ${error}`}/>;
+        return <Progress percent={100} color='danger' label={`Error: ${error}`}/>;
     }
 
     let label = `${phaseLabel}`;

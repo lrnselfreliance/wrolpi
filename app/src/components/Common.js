@@ -1229,9 +1229,9 @@ export function LoadStatistic({label, value, cores, ...props}) {
     const quarter = cores / 4;
     let color;
     if (cores && value >= (quarter * 3)) {
-        color = 'red';
+        color = 'danger';
     } else if (cores && value >= (quarter * 2)) {
-        color = 'orange';
+        color = 'warning';
     }
     return <Statistic
         label={label}
@@ -1785,7 +1785,9 @@ export function useAPIButton(
     // The result is shown as the icon rather than an animation: the outcome should be
     // legible at a glance, and in night mode a moving element is the last thing wanted.
     const outcomeIcon = showSuccess ? 'check' : showFailure ? 'close' : null;
-    const outcomeColor = showSuccess ? 'green' : showFailure ? 'red' : undefined;
+    // Roles are registered as Mantine colors, so these reach `color` the same way a hue
+    // would.  This is the plainest success/failure in the app: the call worked, or it did not.
+    const outcomeColor = showSuccess ? 'success' : showFailure ? 'danger' : undefined;
     if (outcomeColor) {
         buttonArgs['color'] = outcomeColor;
     }

@@ -244,9 +244,24 @@ export function ThemeSamplePage() {
                         })}>Show a toast</Button>
                     </Row>
                 </div>
+                <div style={{marginTop: 12}}>
+                    <Row>
+                        {['xs', 'sm', 'md', 'lg', 'xl'].map(size => <div key={size}
+                            style={{display: 'flex', gap: '0.4em', alignItems: 'flex-start'}}>
+                            <Button size={size}>{size}</Button>
+                            <IconButton size={size} icon='external' label={`Open (${size})`}/>
+                        </div>)}
+                    </Row>
+                </div>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
                     In night mode Delete drops its fill for a dashed red outline; dashed means
                     destructive or failed, and nothing else uses it.
+                </p>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                    An icon button is exactly as tall as a labelled one at every size, so a
+                    group of them lines up. Mantine's own scale for icon buttons is unrelated
+                    to its scale for buttons — <code>sm</code> is 22px against a button's 36px
+                    — and the two components start from different defaults.
                 </p>
             </Panel>
         </Section>

@@ -71,6 +71,44 @@ html .wrolpi-navbar .mantine-ActionIcon-root:hover {
     color: inherit;
 }
 
+/*
+ * One status indicator's slot.  Laid out rather than nudged: see NavIconWrapper in Nav.js
+ * for the 0.8em top margin this replaces and why it looked correct on half the indicators.
+ */
+.wrolpi-navbar-icon {
+    display: flex;
+    align-items: center;
+    margin-left: 1.5em;
+}
+
+/*
+ * An anchor in the corner hugs its glyph instead of a text line box.
+ *
+ * A line box reserves descender space for text that is not there, which leaves an icon
+ * sitting about 3px above the centre of the box being centred -- the share and search
+ * glyphs, but not the hotspot or theme picker, which are square ActionIcons that centre
+ * their own glyph.  That difference is what made a single top margin look right on some
+ * indicators and wrong on others.
+ */
+.wrolpi-navbar-right a {
+    display: flex;
+    align-items: center;
+}
+
+/*
+ * A link in the corner fills the bar's height, as one outside it does.
+ *
+ * Help and Admin highlighted only a box around their text while Videos and Statistics
+ * highlighted the full height.  Same class and same rules; the difference is the parent.
+ * The bar stretches its children, but the corner is a nested flex container that centres
+ * its own, so a link inside it was sized to its content.  The hover background is painted
+ * on the link box, so this is the hover affordance itself and not just its outline.
+ */
+.wrolpi-navbar-right .wrolpi-navbar-link,
+.wrolpi-navbar-right .wrolpi-navbar-link-button {
+    align-self: stretch;
+}
+
 .channel-edit {
     border-radius: 3px;
     padding: 0.75em;

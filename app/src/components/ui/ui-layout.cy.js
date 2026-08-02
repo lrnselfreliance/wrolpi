@@ -12,6 +12,7 @@ import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
 import {navColorNames} from '../../themes/navColors';
 import {NavBarSample} from '../ThemeSamplePage';
+import {DesktopNav, NavIconWrapper} from '../Nav';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
@@ -2214,6 +2215,190 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
                 // And the one that changed is the one that was unreadable.
                 expect(toRgb(brown), 'brown no longer takes --btn-text')
                     .to.not.equal(toRgb('#0a0000'));
+            });
+        });
+    });
+});
+
+describe('the navigation bar corner', () => {
+    /*
+     * The real <DesktopNav/>, which takes its colours, home link and indicators as props and
+     * so needs none of the polling hooks <NavBar/> wires up.  The indicators are the shapes
+     * the app actually puts there, in the real NavIconWrapper: a bare-icon anchor (share), an
+     * unwrapped anchor (search), and two IconButtons (hotspot, theme picker).  Those three
+     * shapes take their geometry by three different routes, which is the whole problem.
+     */
+    const indicators = <>
+        <NavIconWrapper>
+            {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+            <a href='#' data-testid='share'><Icon name='share' size='large'/></a>
+        </NavIconWrapper>
+        <NavIconWrapper>
+            <IconButton data-testid='hotspot' label='Hotspot' variant='subtle' icon={() =>
+                <IconStack corner={<Icon name='x' size={12}/>} label='Hotspot'>
+                    <Icon name='wifi' size='large'/>
+                </IconStack>}/>
+        </NavIconWrapper>
+        <NavIconWrapper>
+            <IconButton data-testid='theme' icon='sun' label='Theme' variant='subtle'/>
+        </NavIconWrapper>
+    </>;
+
+    const mountBar = (width, theme = 'light') => cy.mountUI(
+        <MemoryRouter><div style={{width}}>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={indicators}
+            />
+        </div></MemoryRouter>,
+        {theme},
+    );
+
+    const centreOf = (rect) => rect.top + rect.height / 2;
+
+    it('centres every indicator on the bar, whatever shape it is', () => {
+        /*
+         * The bug this replaces was a 0.8em top margin on the slot, which the corner centres
+         * along with its content and so half-applied as a ~6px downward shift.  It looked
+         * correct on the anchors and wrong on the two IconButtons, because an anchor's glyph
+         * already sits high inside a line box that reserves descender space.
+         *
+         * Measured against the bar's own centre rather than against each other: three things
+         * can be equally and consistently wrong, and were.
+         */
+        mountBar(1400);
+
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const bar = centreOf($nav[0].getBoundingClientRect());
+            ['share', 'hotspot', 'theme'].forEach((name) => {
+                const glyph = $nav[0].querySelector(`[data-testid="${name}"] svg`);
+                expect(glyph, `${name} has a glyph`).to.not.be.null;
+                expect(centreOf(glyph.getBoundingClientRect()), `${name} vertical centre`)
+                    .to.be.closeTo(bar, 1.5);
+            });
+        });
+    });
+
+    it('gives the right-hand links the same hit area as the left-hand ones', () => {
+        /*
+         * Help and Admin highlighted only a box around their text, while Videos and
+         * Statistics highlighted the full height of the bar.  The corner is a nested flex
+         * container that centres its children, so a link inside it is sized to its content
+         * while a link that is a direct child of the bar is stretched by `align-items:
+         * stretch`.  Same class, same rules, different parent.
+         *
+         * The hover background is painted on the link box, so this IS the hover affordance.
+         */
+        mountBar(1400);
+
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const bar = $nav[0].getBoundingClientRect().height;
+            const links = [...$nav[0].querySelectorAll('.wrolpi-navbar-link')];
+            const corner = [...$nav[0]
+                .querySelectorAll('.wrolpi-navbar-right .wrolpi-navbar-link')];
+
+            // Help and Admin.  If the corner has no links this passes on an empty list.
+            expect(corner.length, 'links in the corner').to.be.at.least(2);
+            expect(links.length, 'links in total').to.be.greaterThan(corner.length);
+
+            corner.forEach((link) => {
+                expect(link.getBoundingClientRect().height, `${link.textContent} hit area`)
+                    .to.be.closeTo(bar, 1);
+            });
+        });
+    });
+
+    it('is a real constraint: the left-hand links already filled the bar', () => {
+        // Without this the case above could pass by the bar having collapsed to the height
+        // of its text, which would be a different bug wearing the same number.
+        mountBar(1400);
+
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const bar = $nav[0].getBoundingClientRect();
+            const first = $nav[0].querySelector('.wrolpi-navbar-link');
+
+            expect(bar.height, 'the bar is taller than a line of text').to.be.greaterThan(40);
+            expect(first.getBoundingClientRect().height, 'a left-hand link fills it')
+                .to.be.closeTo(bar.height, 1);
+        });
+    });
+});
+
+describe('the navigation bar never breaks onto a second line', () => {
+    /*
+     * The bar wraps as a failsafe (`flex-wrap: wrap`) and useOverflowNav is supposed to make
+     * that unreachable by moving links into "More" before they overflow.  At certain widths
+     * it did not, and the bar took two rows.
+     *
+     * The arithmetic was off by the bar's own horizontal padding: `recalculate` measured the
+     * WRAPPER div's offsetWidth and subtracted only the home link and the corner, so it
+     * believed it had ~8px more room than the row actually has.  Any width where the last
+     * link overhangs by less than that got shown and wrapped -- a narrow band, which is why
+     * it appeared only "at certain widths" while resizing.
+     *
+     * Swept rather than spot-checked, because a band that narrow is precisely what a
+     * spot-check steps over.
+     */
+    /*
+     * Hoisted, not written inline into `icons={...}`.  The icon-name audit in ui.test.js
+     * reads every string literal inside such an expression as an icon name, so an inline
+     * `label='Theme' variant='subtle'` fails that test with two names nobody wrote.
+     */
+    const themeIcon = <NavIconWrapper>
+        <IconButton icon='sun' label='Theme' variant='subtle'/>
+    </NavIconWrapper>;
+
+    const mountAt = (width) => cy.mountUI(
+        <MemoryRouter><div style={{width}}>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={themeIcon}
+            />
+        </div></MemoryRouter>,
+    );
+
+    // Wide enough that every link fits, so this is the height of exactly one row.
+    let singleRow;
+
+    before(() => {
+        mountAt(1600);
+        cy.get('.wrolpi-navbar').then(($nav) => {
+            singleRow = $nav[0].getBoundingClientRect().height;
+            expect(singleRow, 'a single row has a height to compare against')
+                .to.be.greaterThan(30);
+        });
+    });
+
+    /*
+     * 6px steps across the range where links start moving into More.  Fine enough to land
+     * inside an 8px band wherever it falls.
+     */
+    const widths = [];
+    for (let width = 1180; width >= 640; width -= 6) widths.push(width);
+
+    it('stays one row at every width from 1180 down to 640', () => {
+        widths.forEach((width) => {
+            mountAt(width);
+            cy.get('.wrolpi-navbar').should(($nav) => {
+                expect($nav[0].getBoundingClientRect().height, `bar height at ${width}px`)
+                    .to.be.at.most(singleRow + 2);
+            });
+        });
+    });
+
+    it('keeps every visible link inside the bar rather than clipping it', () => {
+        // The failure mode a naive "just use nowrap" fix would introduce: no second row,
+        // but Admin hanging off the right edge where nothing can reach it.
+        [1180, 1000, 860, 720, 640].forEach((width) => {
+            mountAt(width);
+            cy.get('.wrolpi-navbar').should(($nav) => {
+                const bar = $nav[0].getBoundingClientRect();
+                [...$nav[0].querySelectorAll('.wrolpi-navbar-link')].forEach((link) => {
+                    expect(link.getBoundingClientRect().right, `${link.textContent} at ${width}px`)
+                        .to.be.at.most(bar.right + 0.5);
+                });
             });
         });
     });

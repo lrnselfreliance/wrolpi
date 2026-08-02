@@ -521,17 +521,14 @@ describe('a progress bar has room for the label inside it', () => {
 
         cy.get('.wrolpi-progress').should(($bar) => {
             const box = $bar[0].getBoundingClientRect();
-            const text = $bar[0].querySelector('.wrolpi-progress-text')
-                .firstChild.getBoundingClientRect
-                ? $bar[0].querySelector('.wrolpi-progress-text').getBoundingClientRect()
-                : null;
             expect(box.height, 'bar height').to.be.at.least(20);
+
             // The line box, measured from the text node itself rather than its stretched
             // flex container, which is inset:0 and therefore always the bar's height.
             const range = document.createRange();
             range.selectNodeContents($bar[0].querySelector('.wrolpi-progress-text'));
-            const line = range.getBoundingClientRect();
-            expect(box.height - line.height, 'air around the label').to.be.at.least(4);
+            expect(box.height - range.getBoundingClientRect().height, 'air around the label')
+                .to.be.at.least(4);
         });
     });
 
@@ -551,10 +548,21 @@ describe('a progress bar has room for the label inside it', () => {
         );
 
         cy.get('.wrolpi-progress-text').should(($text) => {
+            const style = getComputedStyle($text[0]);
+            expect(style.whiteSpace, 'label does not wrap').to.equal('nowrap');
+            expect(style.textOverflow, 'and is cut with an ellipsis, not mid-glyph')
+                .to.equal('ellipsis');
+
             const range = document.createRange();
             range.selectNodeContents($text[0]);
-            const lines = range.getClientRects().length;
-            expect(lines, 'the label occupies one line box').to.equal(1);
+            expect(range.getClientRects().length, 'one line box').to.equal(1);
+            /*
+             * And that one line is genuinely wider than the space it has -- otherwise the
+             * test proves nothing, since a label that fits occupies one line either way.
+             * This is the case that used to wrap and get bisected by the clip.
+             */
+            expect(range.getBoundingClientRect().width, 'the label really is too long')
+                .to.be.greaterThan($text[0].getBoundingClientRect().width);
         });
     });
 
@@ -619,11 +627,15 @@ describe('a progress bar has room for the label inside it', () => {
 
     it('keeps the indeterminate band inside the bar', () => {
         /*
-         * The band slides on `margin-left`, from -35% to 100%.  Those are its real layout
-         * positions -- it genuinely does extend past both edges, and `getBoundingClientRect`
-         * reports that whether or not it is visible.  So the assertion is on the clip, plus
-         * the fact that the band escapes without one: together they show the clip is doing
-         * work rather than being decoration.
+         * The band slides on `margin-left` from -35% to 100%, so it genuinely does extend
+         * past both edges and `getBoundingClientRect` reports that whether or not it is
+         * painted.  The clip is what keeps it out of sight.
+         *
+         * The band is PINNED here rather than sampled mid-animation.  Reading a running
+         * animation made this both flaky and, worse, permanently false for anyone with
+         * Reduce Motion turned on: `prefers-reduced-motion` replaces the slide with
+         * `width: 100%` and no negative margin, so the band never leaves the box and an
+         * assertion that it does could not pass on that machine at all.
          */
         cy.mountUI(bar({indeterminate: true, label: 'Uploading…'}), {theme: 'light'});
 
@@ -631,10 +643,42 @@ describe('a progress bar has room for the label inside it', () => {
             expect(getComputedStyle($bar[0]).overflow, 'the bar clips its contents')
                 .to.equal('hidden');
 
+            const fill = $bar[0].querySelector('.wrolpi-progress-fill');
+            // Where the animation's first keyframe puts it, held still.
+            fill.style.animation = 'none';
+            fill.style.width = '35%';
+            fill.style.marginLeft = '-35%';
+
+            const box = $bar[0].getBoundingClientRect();
+            const band = fill.getBoundingClientRect();
+            expect(band.left, 'the band does leave the box, so the clip is load-bearing')
+                .to.be.lessThan(box.left - 1);
+        });
+    });
+
+    it('does not move the band at all when motion is suppressed', () => {
+        /*
+         * The other branch, and the reason the test above pins rather than samples: with
+         * Reduce Motion the bar fills instead of sliding, because motion was the only signal
+         * it had.  A band that never moves must also never leave the box.
+         */
+        cy.mountUI(bar({indeterminate: true}), {theme: 'light'});
+        cy.get('.wrolpi-progress-fill').should('exist');
+
+        cy.document().then((doc) => {
+            const probe = doc.createElement('style');
+            probe.textContent = `
+                .wrolpi-progress-indeterminate .wrolpi-progress-fill {
+                    animation: none; width: 100%; opacity: 0.5;
+                }`;
+            doc.head.appendChild(probe);
+        });
+
+        cy.get('.wrolpi-progress-indeterminate').should(($bar) => {
             const box = $bar[0].getBoundingClientRect();
             const band = $bar[0].querySelector('.wrolpi-progress-fill').getBoundingClientRect();
-            expect(band.left < box.left - 1 || band.right > box.right + 1,
-                'the band does leave the box, so the clip is load-bearing').to.equal(true);
+            expect(band.left, 'band starts at the bar').to.be.closeTo(box.left, 2);
+            expect(band.right, 'band ends at the bar').to.be.closeTo(box.right, 2);
         });
     });
 });

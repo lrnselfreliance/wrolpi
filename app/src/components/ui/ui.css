@@ -1057,10 +1057,17 @@ html .mantine-Notification-closeButton:hover {
     font-weight: 700;
     color: var(--text);
     font-variant-numeric: tabular-nums;
-    /* A long label must not push the bar wider than the column it was given. */
+    /*
+     * A long label is a real case, not a hypothetical: uploads label with a filename
+     * (Upload.js, FileBrowser.js) and a failed refresh labels with the error string.
+     * Without `nowrap` it wraps to a second line inside a 22px bar and the clip bisects
+     * it; with a hard clip and no ellipsis, `Complete: very-long-archive-name.tar.gz`
+     * ends mid-glyph and reads as broken rather than truncated.
+     */
     padding: 0 6px;
     overflow: hidden;
     white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /*

@@ -51,17 +51,37 @@ export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(th
  * `TypeError: Cannot read properties of undefined (reading 'background')` thrown before the
  * first tile -- which is what /map did in night and amber once those themes existed.
  *
- * Only `light` and `dark` are available: the flavor is also interpolated into
- * `/map-assets/sprites/<flavor>`, and those are the two sprite sets we ship.  protomaps'
- * `black` and `grayscale` would load a style and then fail to find any icons.
+ * The monochrome themes take `black`, which is protomaps' only ACHROMATIC dark flavor, and
+ * that is the whole reason to prefer it.  Both media filters are a pure luminance
+ * projection -- the same `0.2126 0.7152 0.0722` row -- so they keep brightness and throw
+ * hue away.  Filtering `black` is therefore a hue rotation and nothing else: all thirteen
+ * of its greys were authored as a monochrome hierarchy and every one survives.  `dark` has
+ * nineteen colours but four of them are hued (water, parks, up to 25 chroma), and those
+ * distinctions do not survive at all -- the features land at whatever brightness their hue
+ * happened to carry rather than one anybody chose.  `black` is also half the light:
+ * earth L0.007 against dark's L0.014, which is the point of a night-vision theme.
  *
- * Night and amber take `dark` and let the media filter tint the canvas from there.  Handing
- * them `light` would not work even with the filter on: a filter shifts hue, so a white
- * basemap becomes a red one, which is the opposite of what a night-vision theme is for.
+ * `grayscale` is not an option despite the name -- it is a LIGHT theme (earth L0.604), and
+ * a luminance filter turns a light map into a bright red one.
  */
-export type MapFlavor = 'light' | 'dark';
+export type MapFlavor = 'light' | 'dark' | 'black';
 
-export const mapFlavor = (theme: ThemeName): MapFlavor =>
+export const mapFlavor = (theme: ThemeName): MapFlavor => {
+    if (isMonochromeTheme(theme)) return 'black';
+    return isDarkTheme(theme) ? 'dark' : 'light';
+};
+
+/*
+ * The sprite set for a theme, which is NOT the flavor.
+ *
+ * They are separate style properties and only happened to share a variable, which is what
+ * made `black` look impossible: we ship two sprite sets, `light` and `dark`, so a style
+ * naming `/map-assets/sprites/black` would load and then find no icons.  A `black` basemap
+ * with `dark` icons is a perfectly ordinary style.
+ */
+export type MapSprite = 'light' | 'dark';
+
+export const mapSprite = (theme: ThemeName): MapSprite =>
     isDarkTheme(theme) ? 'dark' : 'light';
 
 export const isThemeName = (value: unknown): value is ThemeName =>

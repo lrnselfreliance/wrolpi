@@ -49,7 +49,7 @@ export function InventoryItemsMobile({fields, items}) {
                             {columns.map((f, idx) => <Table.Cell key={f.key}>
                                 {idx === 0 && expired &&
                                     <Icon name='warning sign' label='Expired'
-                                          style={{color: 'var(--red)', marginRight: '0.4em'}}/>}
+                                          style={{color: 'var(--danger)', marginRight: '0.4em'}}/>}
                                 {formatValue(item, f)}
                             </Table.Cell>)}
                         </Table.Row>;

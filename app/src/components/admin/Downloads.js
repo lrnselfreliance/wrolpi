@@ -238,7 +238,7 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         </Modal.Actions>
     </Modal>;
 
-    const errorTrigger = <IconButton icon='exclamation triangle' label='Download error' color='orange'
+    const errorTrigger = <IconButton icon='exclamation triangle' label='Download error' color='danger'
                                      onClick={handleErrorOpen}/>;
 
     const hideEdit = downloader === Downloaders.MapCatalog || downloader === Downloaders.MapExtract;
@@ -453,7 +453,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
 
     if (error && !download.progress) {
         completedAtCell = (
-            <IconButton icon='exclamation triangle' label='Download error' color='red'
+            <IconButton icon='exclamation triangle' label='Download error' color='danger'
                         onClick={() => setErrorModalOpen(true)}/>
         )
         errorModal = <Modal

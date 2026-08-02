@@ -909,7 +909,7 @@ export function FlasherPage() {
                                         </span>
                                         {chipMismatch &&
                                             <span style={{marginLeft: '0.5em'}}>
-                                                <Label color='red' icon='warning sign'>
+                                                <Label color='warning' icon='warning sign'>
                                                     Built for {chipIdName(fileChipId)}, not{' '}
                                                     {chipIdName(deviceChipId)}
                                                 </Label>

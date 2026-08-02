@@ -7,7 +7,7 @@ function WarningIcon({ok}) {
     // null is empty, true is valid, false is invalid.
     const content = ok === true ? 'Valid and can be imported.' : ok === false ? 'Invalid, can be overwritten.' : 'Empty config, can be overwritten.';
     return <Tooltip label={content}>
-        <span style={{color: ok === true ? 'var(--violet)' : ok === false ? 'var(--red)' : 'var(--muted)'}}>
+        <span style={{color: ok === true ? 'var(--success)' : ok === false ? 'var(--danger)' : 'var(--neutral)'}}>
             <Icon name={ok === false ? 'close' : 'check'} label={content}/>
         </span>
     </Tooltip>
@@ -82,7 +82,7 @@ function BackupDateRow({date, previews, previewsLoaded, onSelect}) {
 
     const noChanges = <span style={{color: 'var(--muted)', fontStyle: 'italic'}}>No changes</span>;
     const previewFailed = <Tooltip label='Failed to load preview'>
-        <span style={{color: 'var(--red)'}}><Icon name='warning sign' label='Failed to load preview'/></span>
+        <span style={{color: 'var(--danger)'}}><Icon name='warning sign' label='Failed to load preview'/></span>
     </Tooltip>;
 
     let mergeCell;

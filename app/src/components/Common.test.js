@@ -1,11 +1,11 @@
-import fs from 'fs';
-import path from 'path';
 import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {
-    contrastingColor, contrastRatio, DirectorySearch, SearchResultsInput, TAG_TEXT_DARK, TAG_TEXT_LIGHT,
+    contrastingColor, contrastRatio, DirectorySearch, loadRole, SearchResultsInput,
+    TAG_TEXT_DARK, TAG_TEXT_LIGHT,
 } from './Common';
+import {healthRole} from './admin/ControllerPage';
 
 // Mock debounce to make tests run faster
 jest.mock('lodash/debounce', () => jest.fn(fn => {
@@ -563,45 +563,62 @@ describe('contrastingColor with shorthand hex', () => {
     });
 });
 
-describe('LoadStatistic ranks load by role, not by hue', () => {
+describe('loadRole', () => {
     /*
-     * A source guard, not a render test, and deliberately so: jsdom's CSS parser REJECTS
-     * `color: var(--danger)` as an invalid declaration and drops it, so every inline colour
-     * reads back as the empty string here.  A render test would pass whatever the component
-     * did -- the first version of this asserted `''` for the below-threshold cases and would
-     * have gone on passing with the hues restored.
+     * The branches, tested as branches.  This used to be a source guard scraping the
+     * function body out of Common.js, because the obvious render test cannot work: jsdom
+     * REJECTS `color: var(--danger)` as an invalid declaration and drops it, so every inline
+     * colour reads back as the empty string and the assertions passed for that reason alone.
+     * Pulling the mapping out as a pure function is the honest fix.
      *
-     * What is painted is asserted in ui-layout.cy.js, in a browser, at the thresholds.
+     * Thresholds are halves and three quarters of the core count, so each is asserted either
+     * side of its boundary rather than at one comfortable value.
      */
-    it('names roles rather than hues at both thresholds', () => {
-        const source = fs.readFileSync(path.join(__dirname, 'Common.js'), 'utf8');
-        const helper = source.slice(
-            source.indexOf('export function LoadStatistic'),
-            source.indexOf('export function', source.indexOf('export function LoadStatistic') + 10));
+    it('says nothing about a load below half the cores', () => {
+        expect(loadRole(1.9, 4)).toBeUndefined();
+        expect(loadRole(0, 4)).toBeUndefined();
+    });
 
-        expect(helper).toContain("color = 'danger'");
-        expect(helper).toContain("color = 'warning'");
-        expect(helper.match(/'(red|green|amber|yellow|orange)'/)).toBeNull();
+    it('warns from half the cores', () => {
+        expect(loadRole(2.0, 4)).toBe('warning');
+        expect(loadRole(2.9, 4)).toBe('warning');
+    });
+
+    it('calls it danger from three quarters', () => {
+        expect(loadRole(3.0, 4)).toBe('danger');
+        expect(loadRole(99, 4)).toBe('danger');
+    });
+
+    it('says nothing when the core count is unknown', () => {
+        // Both thresholds are guarded on `cores`.  Without it every load would read as fine,
+        // which is the safe direction, but worth pinning so it stays deliberate.
+        expect(loadRole(12, undefined)).toBeUndefined();
+        expect(loadRole(12, 0)).toBeUndefined();
+    });
+
+    it('never returns a hue', () => {
+        // The regression this exists for: `orange` is byte-identical to `--text` in night,
+        // so a warning load rendered as an ordinary uncoloured number.
+        [loadRole(1, 4), loadRole(2.5, 4), loadRole(4, 4)].filter(Boolean).forEach(role =>
+            expect(role).not.toMatch(/^(red|green|amber|yellow|orange|blue)$/));
     });
 });
 
-describe('a drive\'s SMART assessment is a severity, not a colour', () => {
-    /*
-     * A source guard: `getHealthColor` is module-private, and exporting it only so a test
-     * can reach it would be shaping the code around the test.  What matters is that the
-     * helper stays on the ramp -- all four branches or none, since a helper where PASS and
-     * FAIL rank but WARN is an unranked hue is worse than either choice.
-     */
-    it('maps every branch to a role', () => {
-        const source = fs.readFileSync(
-            path.join(__dirname, 'admin', 'ControllerPage.js'), 'utf8');
-        const helper = source.slice(
-            source.indexOf('const getHealthColor'),
-            source.indexOf('};', source.indexOf('const getHealthColor')));
+describe('healthRole', () => {
+    it('maps every SMART assessment to a severity', () => {
+        expect(healthRole('PASS')).toBe('success');
+        expect(healthRole('WARN')).toBe('warning');
+        expect(healthRole('FAIL')).toBe('danger');
+    });
 
-        expect(helper).toContain("'var(--success)'");
-        expect(helper).toContain("'var(--warning)'");
-        expect(helper).toContain("'var(--danger)'");
-        expect(helper.match(/var\(--(red|green|amber|yellow|orange)\)/)).toBeNull();
+    it('is not case sensitive, because the value comes from smartctl', () => {
+        expect(healthRole('pass')).toBe('success');
+        expect(healthRole('Fail')).toBe('danger');
+    });
+
+    it('treats a missing or unrecognised assessment as unknown, not as healthy', () => {
+        // Reporting an unreadable drive as PASS would be the dangerous direction.
+        [undefined, null, '', 'SOMETHING_ELSE'].forEach(value =>
+            expect(healthRole(value)).toBe('neutral'));
     });
 });

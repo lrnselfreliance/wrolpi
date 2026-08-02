@@ -1530,13 +1530,34 @@ describe('modal sizes', () => {
 
     it('never lets a call site name a size the table does not know', () => {
         /*
-         * A name the table has never heard of is passed straight to Mantine, which ignores
-         * anything it does not recognise and renders the default -- so a typo is a modal that
-         * silently reverts to 440px with no warning anywhere.  Flasher was passing Mantine's
-         * own `sm` directly, which worked but bypassed the naming the audit used.
+         * Two different hazards, and neither announces itself.
+         *
+         * A misspelled SEMANTIC name is not in the table, so it passes through untranslated,
+         * Mantine does not recognise it either, and the modal silently renders at the default
+         * 440px.  A raw MANTINE name -- `sm`, `md` -- is recognised and honoured: it works,
+         * so nothing ever complains, and the call site quietly sits outside the vocabulary
+         * the widths were audited in and outside the table that can retune them.  Flasher and
+         * Confirm were both doing the second.
+         *
+         * The tag is scanned with a paren counter rather than matched with `[^>]*?`, which is
+         * what the first version of this did.  `onClose={() => ...}` contains a `>`, so that
+         * pattern stopped at the arrow and skipped the rest of the tag: it saw 44 of the 56
+         * modals that declare a size, and the twelve it missed included Confirm's `size='sm'`
+         * in this very library -- the one offender it was written to catch.
          */
         const known = new Set(['mini', 'tiny', 'small', 'large', 'fullscreen']);
-        const offenders = [];
+
+        /** The opening tag starting at `start`, honouring braces in prop expressions. */
+        const openingTag = (source, start) => {
+            let depth = 0;
+            for (let i = start; i < source.length; i++) {
+                const character = source[i];
+                if (character === '{' || character === '(') depth += 1;
+                else if (character === '}' || character === ')') depth -= 1;
+                else if (character === '>' && depth === 0) return source.slice(start, i + 1);
+            }
+            return '';
+        };
 
         const walk = (directory) => fs.readdirSync(directory, {withFileTypes: true})
             .flatMap(entry => {
@@ -1547,15 +1568,24 @@ describe('modal sizes', () => {
                 return [[full, fs.readFileSync(full, 'utf8')]];
             });
 
+        const offenders = [];
+        let scanned = 0;
         for (const [file, source] of walk(path.join(__dirname, '..', '..'))) {
-            // Only `<Modal ... size='x'>`; a computed `size={...}` is the caller's business.
-            for (const match of source.matchAll(/<Modal\b[^>]*?\bsize='([^']+)'/g)) {
-                if (!known.has(match[1])) {
-                    offenders.push(`${path.basename(file)}: size='${match[1]}'`);
+            for (const match of source.matchAll(/<Modal\b/g)) {
+                const tag = openingTag(source, match.index);
+                // Quote-agnostic; a computed `size={...}` is the caller's business.
+                const declared = tag.match(/\bsize=["']([^"']+)["']/);
+                if (!declared) continue;
+                scanned += 1;
+                if (!known.has(declared[1])) {
+                    offenders.push(`${path.basename(file)}: size='${declared[1]}'`);
                 }
             }
         }
 
+        // The premise.  A scanner that silently matched nothing would report no offenders
+        // and read exactly like a clean codebase, which is how the first version passed.
+        expect(scanned).toBeGreaterThan(50);
         expect(offenders).toEqual([]);
     });
 });

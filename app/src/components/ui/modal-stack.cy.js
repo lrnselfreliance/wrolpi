@@ -50,8 +50,6 @@ const Nested = ({onParentClose, onChildClose}) => {
     </>
 };
 
-const titles = () => [...Cypress.$('.mantine-Modal-title')].map(el => el.textContent);
-
 const openBoth = () => {
     cy.mountUI(<Nested/>);
     cy.get('[data-testid="open-parent"]').click();
@@ -194,6 +192,64 @@ describe('a single modal', () => {
         pressEscape();
 
         cy.contains('.mantine-Modal-title', 'Parent').should('not.exist');
-        expect(titles()).to.not.include('Parent');
+    });
+});
+
+describe('a parent that disables Escape while it is busy', () => {
+    /*
+     * Three call sites pass `closeOnEscape` of their own: CollectionReorganizeModal and
+     * BatchReorganizeModal disable it while a reorganize runs, Flasher while it writes an
+     * image.  The stack props were set BEFORE the `{...props}` spread, so those call sites
+     * overwrote the stack's decision and re-armed Mantine's window-level listener on a modal
+     * that is not on top.
+     *
+     * The concrete breakage: ConflictResolutionModal opens as a sibling above the reorganize
+     * modal, so as soon as the reorganize finished and `closeOnEscape` went back to true, one
+     * Escape closed both again -- the original bug, in the one place the app really does
+     * stack two modals.
+     *
+     * "Only the top modal answers Escape" and "do not dismiss me while I am busy" are both
+     * true; they compose with AND.
+     */
+    const Busy = ({busy}) => {
+        const [parent, setParent] = React.useState(true);
+        const [child, setChild] = React.useState(true);
+        return <>
+            <Modal open={parent} size='large' closeOnEscape={!busy}
+                   onClose={() => setParent(false)}>
+                <Modal.Header>Reorganize</Modal.Header>
+                <Modal.Content><p>working</p></Modal.Content>
+            </Modal>
+            <Modal open={child} size='small' onClose={() => setChild(false)}>
+                <Modal.Header>Conflicts</Modal.Header>
+                <Modal.Content><p>resolve these</p></Modal.Content>
+            </Modal>
+        </>
+    };
+
+    it('still closes only the child when the parent has re-enabled Escape', () => {
+        cy.mountUI(<Busy busy={false}/>);
+        cy.contains('.mantine-Modal-title', 'Conflicts').should('exist');
+
+        pressEscape();
+
+        cy.contains('.mantine-Modal-title', 'Conflicts').should('not.exist');
+        cy.contains('.mantine-Modal-title', 'Reorganize').should('exist');
+    });
+
+    it('honours the parent\'s own refusal once it is on top again', () => {
+        /*
+         * The other direction, and the reason the two are composed rather than the stack
+         * simply winning: a busy parent must stay put even when nothing is above it.
+         */
+        cy.mountUI(<Busy busy/>);
+        cy.contains('.mantine-Modal-title', 'Conflicts').should('exist');
+
+        pressEscape();
+        cy.contains('.mantine-Modal-title', 'Conflicts').should('not.exist');
+        pressEscape();
+
+        cy.contains('.mantine-Modal-title', 'Reorganize')
+            .should('exist');
     });
 });

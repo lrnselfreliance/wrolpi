@@ -1,10 +1,11 @@
 import React from 'react';
 import {
     ActionInput, Button, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Message, Placeholder, Progress, Statistic, StatisticGroup, Status, TabBar, Table,
+    Message, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
 import {MemoryRouter} from 'react-router';
+import {VideoCard} from '../Videos';
 import {CardPoster, contrastingColor, HelpHeader, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
@@ -1914,5 +1915,108 @@ describe('a button and an icon button are the same height', () => {
         cy.get('button').should(($el) =>
             expect($el[0].getBoundingClientRect().height, 'default icon button height')
                 .to.be.at.least(34));
+    });
+});
+
+describe('corner chrome sits on the poster, not on the band around it', () => {
+    /*
+     * The tag mark and the video duration are pinned to a corner of "the poster".  Once the
+     * poster gained a height cap, the painted image stopped filling the band it sits in: a
+     * portrait cover is 155px wide inside a 233px card, and a vertical video narrower still.
+     * The mark then floats in empty letterbox space nowhere near the image's corner.
+     *
+     * Geometry against a real painted image, so it belongs here.  It has to be checked on a
+     * ratio that is HEIGHT-bound -- on a 16:9 poster the image fills the band and a mark
+     * pinned to either one lands in the same place, which is why this went unnoticed.
+     */
+    const tagged = (width, height) => ({...posterFile(width, height), tags: [{name: 'ham radio'}]});
+
+    [
+        {name: 'a portrait book cover', w: 306, h: 396},
+        {name: 'a vertical video', w: 720, h: 1280},
+        {name: 'a poster smaller than the card', w: 120, h: 90},
+    ].forEach(({name, w, h}) => {
+        it(`pins the tag to the corner of ${name}`, () => {
+            servePoster(w, h);
+            cy.mountUI(narrowCard(<CardPoster file={tagged(w, h)}/>));
+
+            cy.get('.wrolpi-card-poster img')
+                .should(($img) => expect($img[0].naturalWidth, 'poster loaded').to.equal(w))
+                .should(($img) => {
+                    const image = $img[0].getBoundingClientRect();
+                    const band = $img[0].closest('.wrolpi-card-poster').getBoundingClientRect();
+                    // The premise: this ratio really does leave letterbox space to get lost in.
+                    expect(band.width - image.width, `${name} is narrower than its band`)
+                        .to.be.greaterThan(20);
+
+                    const mark = Cypress.$('.wrolpi-card-tag')[0].getBoundingClientRect();
+                    expect(mark.left, 'tag tracks the image, not the band')
+                        .to.be.closeTo(image.left, 2);
+                    expect(mark.top, 'tag sits at the top of the image').to.be.closeTo(image.top, 2);
+                });
+        });
+    });
+
+    it('keeps the tag inside the poster link, so clicking it still navigates', () => {
+        // The mark used to render inside the Link beside the image and was part of the
+        // poster's hit target; a sibling placed before the link is a dead spot on the corner.
+        servePoster(306, 396);
+        cy.mountUI(narrowCard(<CardPoster to='/videos/1' file={tagged(306, 396)}/>));
+
+        cy.get('.wrolpi-card-tag').should(($tag) =>
+            expect($tag[0].closest('a'), 'the tag is inside the link').to.not.be.null);
+    });
+});
+
+describe('a video card pins its duration to the poster', () => {
+    /*
+     * The same defect as the tag mark, on the other corner and reached by a different
+     * route: the duration was pinned to a wrapper around CardPoster rather than to the
+     * poster itself.  Mounted through the real VideoCard, because the wrapper was the
+     * subject and a hand-built poster would not have one.
+     */
+    it('keeps the duration on a vertical video, not out in the band', () => {
+        servePoster(720, 1280);
+        // mountWithRouter, not mountUI: VideoCard reads the sort order from the query
+        // context, which the spartan mount deliberately does not provide.
+        cy.mountWithRouter(<div style={{width: 233}}><VideoCard file={{
+            id: 1, tags: [], length: 95, primary_path: 'videos/short.mp4',
+            title: 'A vertical video', mimetype: 'video/mp4',
+            poster_path: 'videos/poster-720x1280.svg',
+            video: {stem: 'short', channel: null},
+        }}/></div>);
+
+        cy.get('.wrolpi-card-poster img')
+            .should(($img) => expect($img[0].naturalWidth, 'poster loaded').to.equal(720))
+            .should(($img) => {
+                const image = $img[0].getBoundingClientRect();
+                const band = $img[0].closest('.wrolpi-card-poster').getBoundingClientRect();
+                expect(band.width - image.width, 'the poster is narrower than its band')
+                    .to.be.greaterThan(20);
+
+                const badge = Cypress.$('.duration-overlay')[0].getBoundingClientRect();
+                expect(badge.right, 'the duration tracks the image, not the band')
+                    .to.be.closeTo(image.right, 6);
+            });
+    });
+});
+
+describe('the search clear button matches the field it clears', () => {
+    /*
+     * Aligning IconButton with Button changed every icon button in the app, and this is the
+     * one in the library that stands beside an input rather than beside a button.  It is
+     * also the case the remap was built for: `--ai-size-input-*` exists precisely so an
+     * ActionIcon can match an Input, so if this pair is ragged the remap picked the wrong
+     * scale.
+     */
+    it('is exactly as tall as the search field', () => {
+        cy.mountUI(<SearchBox placeholder='Search' clearable value='axe' onChange={() => {}}/>);
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            const input = Cypress.$('input')[0].getBoundingClientRect();
+            const clear = $clear[0].getBoundingClientRect();
+            expect(input.height, 'the field has a height at all').to.be.greaterThan(10);
+            expect(clear.height, 'clear button vs search field').to.be.closeTo(input.height, 0.5);
+        });
     });
 });

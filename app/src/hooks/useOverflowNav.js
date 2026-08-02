@@ -84,7 +84,26 @@ export function useOverflowNav({links, containerRef, homeRef, rightMenuRef, more
         setIsReady(true);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ResizeObserver for ongoing resizes.
+    /*
+     * Recalculate when the container resizes -- and when either of the two fixed blocks
+     * either side of the links does, which is the part that was missing.
+     *
+     * The corner does not keep a constant width.  The ⌘K hint beside the search glyph only
+     * renders once `useKeyboardDetected` has seen a keypress, so it materialises at an
+     * arbitrary later moment and widens the corner by about 30px.  The status indicators do
+     * the same in both directions: the load, memory, temperature and drive warnings appear
+     * and disappear as the machine's state changes, and a Raspberry Pi under load grows two
+     * or three of them.
+     *
+     * Every one of those changes the space the links have, and none of them changes the
+     * container's size -- so with only the container observed, nothing recalculated and the
+     * bar simply wrapped.  That is the other half of "at certain widths": whether the extra
+     * width overflowed depended on how much slack the last-fitted link happened to leave, so
+     * the same viewport wrapped or not depending on whether the user had touched a key.
+     *
+     * This converges rather than oscillating: the More button lives outside the corner, so
+     * the corner's width does not depend on how many links are visible.
+     */
     useLayoutEffect(() => {
         const container = containerRef.current;
         if (!container) return;
@@ -93,8 +112,16 @@ export function useOverflowNav({links, containerRef, homeRef, rightMenuRef, more
             recalculate();
         });
         observer.observe(container);
+        if (rightMenuRef.current) {
+            observer.observe(rightMenuRef.current);
+        }
+        // `homeRef` is a `display: contents` span, which has no box of its own to observe.
+        const homeEl = homeRef.current?.firstElementChild;
+        if (homeEl) {
+            observer.observe(homeEl);
+        }
         return () => observer.disconnect();
-    }, [containerRef, recalculate]);
+    }, [containerRef, homeRef, rightMenuRef, recalculate]);
 
     const visibleLinks = links.slice(0, visibleCount);
     const overflowLinks = links.slice(visibleCount);

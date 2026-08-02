@@ -111,8 +111,18 @@ function DropdownMenuItem({link}) {
  * button that eventually rendered -- the row overflowed by that much and the bar wrapped.
  * Measuring one thing and drawing another is only ever right by coincidence.
  */
-const NavDropdownTrigger = React.forwardRef(({text, ...props}, ref) =>
-    <button type='button' ref={ref} className='wrolpi-navbar-link wrolpi-navbar-link-button'
+const NavDropdownTrigger = React.forwardRef(({text, className, ...props}, ref) =>
+    /*
+     * `className` is pulled out and MERGED, never spread over.  Menu.Target clones its child
+     * and hands it a className of its own, and a `{...props}` spread placed after the
+     * attribute replaces ours with it -- which left the real More button with no class at
+     * all, so it rendered as a bare grey UA button instead of taking the bar's colour, its
+     * padding and its hover.  The hidden placeholder is not cloned by Menu.Target, so it
+     * kept its class and measured wider than the button that actually drew.
+     */
+    <button type='button' ref={ref}
+            className={['wrolpi-navbar-link', 'wrolpi-navbar-link-button', className]
+                .filter(Boolean).join(' ')}
             {...props}>
         {text}
         <Icon name='dropdown' size='small' style={{marginLeft: '0.35em'}}/>

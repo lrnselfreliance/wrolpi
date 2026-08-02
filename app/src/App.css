@@ -79,6 +79,30 @@ html .wrolpi-navbar .mantine-ActionIcon-root:hover {
     display: flex;
     align-items: center;
     margin-left: 1.5em;
+    /* Full bar height, so the anchor inside has somewhere to stretch to. */
+    align-self: stretch;
+}
+
+/*
+ * An icon-only trigger in the corner gets a link's hit area, not its glyph's.
+ *
+ * The share glyph already computed `cursor: pointer` -- it is an `<a href>` -- but the
+ * target was the 24px box the icon occupies, so the pointer appeared only if you found it
+ * exactly, and there was no hover highlight to aim at.  Stretched and padded, it behaves
+ * like Help and Admin beside it.
+ *
+ * `align-self` rather than `align-items: stretch` on the wrapper: the IconButtons in the
+ * corner have an explicit height, and a stretch container places an item it cannot stretch
+ * at the start -- which would push the hotspot and theme glyphs back off centre.
+ */
+.wrolpi-navbar-icon > a {
+    align-self: stretch;
+    padding: 0 0.5em;
+    cursor: pointer;
+}
+
+.wrolpi-navbar-icon > a:hover {
+    background: rgba(0, 0, 0, 0.12);
 }
 
 /*

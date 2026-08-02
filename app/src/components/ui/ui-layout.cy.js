@@ -13,6 +13,7 @@ import {monochromeThemes, themeNames} from '../../themes/names';
 import {navColorNames} from '../../themes/navColors';
 import {NavBarSample} from '../ThemeSamplePage';
 import {DesktopNav, NavIconWrapper} from '../Nav';
+import {ShareButton} from '../Share';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
@@ -2400,6 +2401,334 @@ describe('the navigation bar never breaks onto a second line', () => {
                         .to.be.at.most(bar.right + 0.5);
                 });
             });
+        });
+    });
+});
+
+describe('the navbar overflow menu keeps the bar\'s styling', () => {
+    /*
+     * Mantine's Menu.Target clones its child and hands it a className of its own.  The
+     * trigger spread those cloned props AFTER its own `className` attribute, so the cloned
+     * value replaced ours and the real More button rendered with NO class at all -- a bare
+     * UA button, grey on dark and white on light, while every other item in the bar took the
+     * user's navbar colour.
+     *
+     * The hidden placeholder DesktopNav measures is NOT cloned by Menu.Target, so it kept its
+     * class and stayed the width the styled button would have been.  That is why the width
+     * sweep passed while the visible button was wrong: the two were the same component and
+     * still not the same thing.
+     */
+    const themeIcon = <NavIconWrapper>
+        <IconButton icon='sun' label='Theme' variant='subtle'/>
+    </NavIconWrapper>;
+
+    // Narrow enough that links have to move into More.
+    const mountNarrow = (theme) => cy.mountUI(
+        <MemoryRouter><div style={{width: 700}}>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={themeIcon}
+            />
+        </div></MemoryRouter>,
+        {theme},
+    );
+
+    const moreButton = () => cy.contains('.wrolpi-navbar button', 'More');
+
+    themeNames.forEach((theme) => {
+        it(`draws More in the bar's own colour in ${theme}`, () => {
+            mountNarrow(theme);
+
+            cy.get('.wrolpi-navbar').then(($nav) => {
+                const expected = getComputedStyle($nav[0]).color;
+                moreButton().should(($more) => {
+                    const style = getComputedStyle($more[0]);
+                    expect($more[0].className, 'More carries the bar classes')
+                        .to.contain('wrolpi-navbar-link');
+                    expect(style.color, `More text colour in ${theme}`).to.equal(expected);
+                    // A UA button paints a grey face; the bar's items are transparent.
+                    expect(style.backgroundColor, `More background in ${theme}`)
+                        .to.equal('rgba(0, 0, 0, 0)');
+                });
+            });
+        });
+    });
+
+    it('gives More the same hit area and caret as the placeholder it was measured as', () => {
+        // The measurement contract.  If the drawn button is narrower or shorter than the
+        // space reserved for it, the row overflows and the bar wraps.
+        mountNarrow('light');
+
+        /*
+         * Both measurements inside the retried assertion.  Reading the bar's height in a
+         * plain `.then()` first captures whatever it was at that instant -- including the
+         * transient wrapped state while the corner is still settling -- and then retries the
+         * comparison against that stale number forever.
+         */
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const bar = $nav[0].getBoundingClientRect().height;
+            const more = [...$nav[0].querySelectorAll('button')]
+                .find(button => button.textContent.includes('More'));
+
+            expect(more, 'the bar has a More button at this width').to.not.be.undefined;
+            expect(more.querySelector('svg'), 'More has its dropdown caret').to.not.be.null;
+            expect(more.getBoundingClientRect().height, 'More fills the bar')
+                .to.be.closeTo(bar, 1);
+            expect(getComputedStyle(more).cursor, 'More is clickable').to.equal('pointer');
+        });
+    });
+});
+
+describe('the icon-only triggers in the navbar corner are reachable', () => {
+    /*
+     * The search glyph carried Semantic's `item` class, which has had no rules at all since
+     * Semantic was removed: no pointer cursor, no hover highlight, and a hit area of the
+     * 18px glyph rather than the height of the bar.  The share glyph did compute
+     * `cursor: pointer` -- it is an `<a href>` -- but its target was the 24px box the icon
+     * occupies, so the pointer showed only if you found it exactly.
+     *
+     * Both are icon-only triggers sitting beside Help and Admin, and should behave as those
+     * do.  Measured against a real link in the same bar rather than against a number.
+     */
+    /*
+     * The REAL ShareButton, and the real SearchIconButton that DesktopNav renders for
+     * itself.  The first version of this suite used hand-written anchors carrying the
+     * classes I expected the components to have, so reverting SearchIconButton to Semantic's
+     * `item` left it green -- it was measuring my markup, not the app's.
+     */
+    const corner = <NavIconWrapper><ShareButton/></NavIconWrapper>;
+
+    const triggers = {
+        share: '.wrolpi-navbar-icon a',
+        search: '.wrolpi-navbar [aria-label="Search"]',
+    };
+
+    beforeEach(() => cy.mountUI(
+        <MemoryRouter><div style={{width: 1400}}>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={corner}
+            />
+        </div></MemoryRouter>,
+    ));
+
+    Object.entries(triggers).forEach(([name, selector]) => {
+        it(`gives ${name} a pointer and the bar's full height`, () => {
+            cy.get('.wrolpi-navbar').should(($nav) => {
+                const bar = $nav[0].getBoundingClientRect().height;
+                const trigger = $nav[0].querySelector(selector.replace('.wrolpi-navbar ', ''));
+
+                expect(trigger, `${name} is in the bar`).to.not.be.null;
+                expect(getComputedStyle(trigger).cursor, `${name} cursor`).to.equal('pointer');
+                expect(trigger.getBoundingClientRect().height, `${name} hit area`)
+                    .to.be.closeTo(bar, 1);
+            });
+        });
+
+        it(`highlights ${name} on hover, as a link does`, () => {
+            /*
+             * The highlight is what tells a user the glyph is a control at all, and it is
+             * the half of the complaint that a cursor check does not cover.
+             *
+             * `:hover` cannot be forced -- no event applies it, and getComputedStyle will
+             * never report it -- so the real stylesheets are searched for a hover rule this
+             * element matches that paints a background.  Resolved against the live CSSOM
+             * rather than a file, so it fails if the rule is edited, dropped, or written
+             * with a selector that misses.
+             */
+            cy.get(selector).should(($el) => {
+                const element = $el[0];
+                const painted = [...document.styleSheets].flatMap((sheet) => {
+                    try {
+                        return [...sheet.cssRules];
+                    } catch (e) {
+                        return []; // A cross-origin sheet; none of ours are.
+                    }
+                }).filter(rule => rule.selectorText
+                    && rule.selectorText.includes(':hover')
+                    && rule.style.backgroundColor
+                    && rule.selectorText.split(',').some((selector) => {
+                        const resting = selector.replace(/:hover/g, '').trim();
+                        try {
+                            return resting && element.matches(resting);
+                        } catch (e) {
+                            return false;
+                        }
+                    }));
+
+                expect(painted.map(rule => rule.selectorText), `${name} hover rule`)
+                    .to.not.be.empty;
+            });
+        });
+    });
+});
+
+describe('the navbar recalculates when the corner changes, not only the window', () => {
+    /*
+     * The corner is not a fixed width.  The ⌘K hint beside the search glyph renders only
+     * once `useKeyboardDetected` has seen a keypress, so it appears at an arbitrary later
+     * moment; the load, memory, temperature and drive warnings appear and vanish as the
+     * machine's state changes.  Each one changes the room the links have, and none of them
+     * resizes the container.
+     *
+     * With only the container observed nothing recalculated, and the bar wrapped -- which is
+     * why the same viewport wrapped or not depending on whether the user had touched a key,
+     * and why the width sweep could pass while the real bar was broken.  The sweep measures
+     * a bar whose corner never changes after mount; this one changes it.
+     */
+    const GrowingCorner = () => {
+        // Stands in for the ⌘K hint and for a warning icon arriving: a corner that is one
+        // width when the bar is measured and a wider one a moment later.
+        const [grown, setGrown] = React.useState(false);
+        React.useEffect(() => {
+            const timer = setTimeout(() => setGrown(true), 150);
+            return () => clearTimeout(timer);
+        }, []);
+        return <NavIconWrapper>
+            <span data-testid='corner-filler'
+                  style={{display: 'inline-block', width: grown ? 180 : 20}}/>
+        </NavIconWrapper>;
+    };
+
+    const mountGrowing = (width) => cy.mountUI(
+        <MemoryRouter><div style={{width}}>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={<GrowingCorner/>}
+            />
+        </div></MemoryRouter>,
+    );
+
+    it('gives up links when the corner grows after the bar was measured', () => {
+        mountGrowing(900);
+
+        // The corner has finished growing...
+        cy.get('[data-testid="corner-filler"]').should(($filler) => {
+            expect($filler[0].getBoundingClientRect().width, 'the corner grew').to.equal(180);
+        });
+
+        // ...and the bar is still one row, which it can only be if it recalculated.
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const rows = new Set([...$nav[0].querySelectorAll('.wrolpi-navbar-link')]
+                .map(link => Math.round(link.getBoundingClientRect().top)));
+            expect([...rows], 'every link shares one row').to.have.length(1);
+        });
+    });
+
+    it('takes the links back when the corner shrinks again', () => {
+        /*
+         * The inverse, and the reason to recalculate rather than simply reserve the widest
+         * corner the bar might ever have: a warning icon that clears must give its space
+         * back, or the bar keeps a permanently shortened set of links until the next resize.
+         */
+        mountGrowing(900);
+
+        cy.get('[data-testid="corner-filler"]').should(($filler) => {
+            expect($filler[0].getBoundingClientRect().width).to.equal(180);
+        });
+
+        cy.get('.wrolpi-navbar').then(($nav) => {
+            const shrunken = $nav[0].querySelectorAll('.wrolpi-navbar-link').length;
+
+            // Shrink the corner back, as a cleared warning would.
+            cy.get('[data-testid="corner-filler"]').then(($filler) => {
+                $filler[0].style.width = '20px';
+            });
+
+            cy.get('.wrolpi-navbar').should(($after) => {
+                expect($after[0].querySelectorAll('.wrolpi-navbar-link').length,
+                    'links come back when the corner clears').to.be.greaterThan(shrunken);
+            });
+        });
+    });
+});
+
+describe('the global search modal shows its results', () => {
+    /*
+     * The suggestion list overlays the page everywhere else, and should: a list that reflows
+     * the page underneath while you type is unusable.  Inside the search modal that same rule
+     * failed twice over.  An absolutely positioned list contributes no height, so the modal
+     * panel sized itself to the search box alone -- 114px -- and the panel's own
+     * `overflow: auto` then clipped the list at that edge.  What the user got was a search
+     * box and the first line of the first group, with the page showing through below.
+     *
+     * The real SearchBox, in a panel with the modal's overflow, so the class that carries the
+     * fix comes from the component rather than from markup written here.
+     */
+    const results = {
+        channels: {
+            name: 'Channels',
+            results: Array.from({length: 8}, (unused, index) => ({
+                title: `Channel ${index + 1}`, description: 'A channel of videos',
+            })),
+        },
+        domains: {
+            name: 'Domains',
+            results: Array.from({length: 8}, (unused, index) => ({
+                title: `example${index + 1}.com`, description: 'An archived domain',
+            })),
+        },
+    };
+
+    // The modal panel: Mantine caps its height and scrolls it, which is what did the clipping.
+    const panel = (children) => <div className='fake-modal-content'
+                                     style={{maxHeight: 504, overflow: 'auto', width: 440}}>
+        {children}
+    </div>;
+
+    // The list is a combobox: it opens on typing, as it does for a real user.
+    const openSuggestions = () => cy.get('.wrolpi-searchbox input').type('n');
+
+    it('lays the suggestions out inside the panel rather than over the page', () => {
+        cy.mountUI(panel(<div className='wrolpi-search-modal'>
+            <SearchBox value='chan' results={results} onResultSelect={() => {}}/>
+        </div>));
+        openSuggestions();
+
+        cy.get('.wrolpi-searchbox-results').should(($results) => {
+            expect(getComputedStyle($results[0]).position, 'the list is in flow')
+                .to.equal('static');
+        });
+    });
+
+    it('grows the panel to fit them, so nothing is clipped', () => {
+        cy.mountUI(panel(<div className='wrolpi-search-modal'>
+            <SearchBox value='chan' results={results} onResultSelect={() => {}}/>
+        </div>));
+        openSuggestions();
+
+        cy.get('.fake-modal-content').should(($panel) => {
+            const box = $panel[0].getBoundingClientRect();
+            const list = $panel[0].querySelector('.wrolpi-searchbox-results')
+                .getBoundingClientRect();
+
+            expect(list.height, 'the list has results to show').to.be.greaterThan(100);
+            // The whole list is inside the panel, not spilling past its clipped edge.
+            expect(list.bottom, 'the list ends inside the panel')
+                .to.be.at.most(box.bottom + 0.5);
+            // And the panel actually grew for it, rather than the list having been squashed.
+            expect(box.height, 'the panel grew to hold the list')
+                .to.be.greaterThan(list.height);
+        });
+    });
+
+    it('is a real constraint: outside the modal the list still overlays', () => {
+        /*
+         * The inverse.  If the rule leaked to every searchbox, the file browser and the
+         * videos page would push their content down on every keystroke -- a worse bug than
+         * the one being fixed, and one this suite would otherwise not notice.
+         */
+        cy.mountUI(panel(
+            <SearchBox value='chan' results={results} onResultSelect={() => {}}/>
+        ));
+        openSuggestions();
+
+        cy.get('.wrolpi-searchbox-results').should(($results) => {
+            expect(getComputedStyle($results[0]).position, 'still an overlay elsewhere')
+                .to.equal('absolute');
         });
     });
 });

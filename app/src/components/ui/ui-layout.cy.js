@@ -2745,3 +2745,95 @@ describe('the global search modal shows its results', () => {
         });
     });
 });
+
+describe('a toast does not cover the navigation bar', () => {
+    /*
+     * Toasts are fixed at `top: var(--mantine-spacing-md)` -- 16px -- while the bar occupies
+     * the first 54px of the page, so every toast landed over the bar's right-hand corner:
+     * the search glyph, the hamburger, Help and Admin.  For as long as it was up those
+     * controls could not be clicked, and an error toast is exactly the moment a user reaches
+     * for Admin.
+     *
+     * It surfaced as six e2e failures the day the search glyph was given a proper hit area:
+     * at 18px it sat in the gap beneath the toast, and growing it to the height of the bar
+     * moved it into the overlap.  The toast had been covering that corner all along; there
+     * was simply nothing there to hit.
+     *
+     * Measured as `elementFromPoint`, which is the same question Cypress's actionability
+     * check asks and the one a mouse asks -- a geometry-only comparison would miss a toast
+     * that overlaps but sits behind, and a z-index comparison would miss one that is in
+     * front but elsewhere on the screen.
+     */
+    const themeIcon = <NavIconWrapper>
+        <IconButton icon='sun' label='Theme' variant='subtle'/>
+    </NavIconWrapper>;
+
+    const mountBarWithToast = () => {
+        cy.mountUI(<MemoryRouter>
+            <Notifications position='top-right'/>
+            <DesktopNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={themeIcon}
+            />
+        </MemoryRouter>);
+        cy.then(() => {
+            clearToasts();
+            // The shape CI produces: an error toast, which is the kind that lingers.
+            toast({type: 'error', title: 'Unexpected error', description: 'Something failed.'});
+        });
+        cy.get('.mantine-Notification-root').should('exist');
+    };
+
+    it('leaves the search control clickable while a toast is up', () => {
+        mountBarWithToast();
+
+        cy.get('.wrolpi-navbar [aria-label="Search"]').should(($search) => {
+            const box = $search[0].getBoundingClientRect();
+            const topmost = document.elementFromPoint(
+                box.left + box.width / 2, box.top + box.height / 2);
+
+            expect(topmost, 'something is at the search glyph').to.not.be.null;
+            expect($search[0].contains(topmost) || topmost === $search[0],
+                `search is the topmost element, not ${topmost && topmost.className}`).to.be.true;
+        });
+    });
+
+    it('leaves every control in the corner clickable', () => {
+        // Help and Admin are the ones that matter most: an error toast is when a user goes
+        // looking for the admin pages, and it was sitting on top of the link.
+        mountBarWithToast();
+
+        cy.get('.wrolpi-navbar-right').should(($corner) => {
+            const controls = [...$corner[0].querySelectorAll('a, button')];
+            expect(controls.length, 'there are controls to check').to.be.at.least(3);
+
+            const covered = controls.filter((control) => {
+                const box = control.getBoundingClientRect();
+                const topmost = document.elementFromPoint(
+                    box.left + box.width / 2, box.top + box.height / 2);
+                return !(control.contains(topmost) || topmost === control);
+            }).map(control => control.textContent.trim()
+                || control.getAttribute('aria-label') || '(unlabelled)');
+
+            expect(covered).to.deep.equal([]);
+        });
+    });
+
+    it('starts the toast below the bar rather than beside it', () => {
+        /*
+         * The mechanism, stated separately from the effect.  The two cases above would also
+         * pass if the toast merely happened to be narrow enough to miss the controls at this
+         * viewport, which is how the bar came to be covered at some widths and not others.
+         */
+        mountBarWithToast();
+
+        cy.get('.mantine-Notifications-root').should(($root) => {
+            const toastTop = $root[0].getBoundingClientRect().top;
+            const barBottom = Cypress.$('.wrolpi-navbar')[0].getBoundingClientRect().bottom;
+
+            expect(barBottom, 'the bar has height to clear').to.be.greaterThan(40);
+            expect(toastTop, 'the toast starts below the bar').to.be.at.least(barBottom);
+        });
+    });
+});

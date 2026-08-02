@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     ActionInput, Button, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Message, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
+    Message, Pagination, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
 import {MemoryRouter} from 'react-router';
@@ -2017,6 +2017,57 @@ describe('the search clear button matches the field it clears', () => {
             const clear = $clear[0].getBoundingClientRect();
             expect(input.height, 'the field has a height at all').to.be.greaterThan(10);
             expect(clear.height, 'clear button vs search field').to.be.closeTo(input.height, 0.5);
+        });
+    });
+});
+
+describe('pagination sits in the middle of its container', () => {
+    /*
+     * Three call sites wrap the pager in `<center>` or `text-align: center` and it still sat
+     * hard against the left edge.  Both of those centre INLINE content, and Mantine's
+     * Pagination root is a flex container that fills its parent's width -- so the buttons
+     * were laid out at `flex-start` inside a box that was already the full width, and no
+     * amount of centring outside it could move them.
+     *
+     * Measured as the gap on each side rather than by reading `justify-content`, so the
+     * claim is about where the control actually lands.
+     */
+    it('leaves the same gap either side', () => {
+        cy.mountUI(<div style={{width: 600}}>
+            <Pagination activePage={3} totalPages={12} onPageChange={() => {}}/>
+        </div>);
+
+        cy.get('.wrolpi-pagination').should(($pager) => {
+            const container = $pager[0].getBoundingClientRect();
+            const buttons = [...$pager[0].querySelectorAll('button')]
+                .map(button => button.getBoundingClientRect());
+            expect(buttons.length, 'the pager rendered its controls').to.be.greaterThan(3);
+
+            const left = Math.min(...buttons.map(b => b.left)) - container.left;
+            const right = container.right - Math.max(...buttons.map(b => b.right));
+            // The premise: the container really is wider than the strip, so there is slack
+            // to distribute.  Without this the equality holds trivially at 0 and 0.
+            expect(left + right, 'the container is wider than the strip').to.be.greaterThan(40);
+            expect(left, 'gap left vs gap right').to.be.closeTo(right, 1);
+        });
+    });
+
+    it('does not push its first page off the left edge when space is tight', () => {
+        /*
+         * The risk centring introduces.  Overflow in a `flex-start` row spills to the right,
+         * where it can at least be scrolled to; centred, it spills BOTH ways and the first
+         * page number is unreachable.  240px is narrower than any real layout gives it.
+         */
+        cy.mountUI(<div style={{width: 240}}>
+            <Pagination activePage={6} totalPages={99} onPageChange={() => {}} showFirstAndLast/>
+        </div>);
+
+        cy.get('.wrolpi-pagination').should(($pager) => {
+            const container = $pager[0].getBoundingClientRect();
+            const buttons = [...$pager[0].querySelectorAll('button')]
+                .map(button => button.getBoundingClientRect());
+            expect(Math.min(...buttons.map(b => b.left)), 'nothing hangs off the left')
+                .to.be.at.least(container.left - 0.5);
         });
     });
 });

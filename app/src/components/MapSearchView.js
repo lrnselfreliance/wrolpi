@@ -124,7 +124,7 @@ export function MapSearchView() {
                 <MapPlaceCard key={`${place.name}-${place.lat}-${place.lon}-${i}`} place={place} index={i}/>
             )}
         </CardGroup>
-        <div style={{textAlign: 'center', marginTop: '2em'}}>
+        <div style={{marginTop: '2em'}}>
             <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
         </div>
     </React.Fragment>;

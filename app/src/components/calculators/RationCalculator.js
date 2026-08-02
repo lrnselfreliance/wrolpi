@@ -1,6 +1,5 @@
 import React from "react";
-import {Button, Grid, Header, Table} from "../ui";
-import {ColoredInput} from "../Apps";
+import {Button, ColoredInput, Grid, Header, Table} from "../ui";
 import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 import {formatDuration} from "./WaterCalculator";
 import {findNameKey, planSupplyPurchase} from "../inventory/summarize";

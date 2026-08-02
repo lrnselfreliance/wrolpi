@@ -2134,18 +2134,38 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
             });
         });
 
-        it(`gives its icons the same foreground as its links in ${theme}`, () => {
-            // The actual complaint was about the icons, not the words.  They take `color`
-            // by inheritance, which is a thing a stylesheet can quietly break.
+        it(`gives EVERY icon in the corner the same foreground as its links in ${theme}`, () => {
+            /*
+             * The actual complaint was about the icons, not the words -- and about two of
+             * them specifically, the search glyph and the hamburger, which came out blue on
+             * every bar in every theme while the rest of the bar was correct.
+             *
+             * They inherit nothing.  An anchor takes `a {color: var(--blue)}` from
+             * tokens.css, which outranks the bar's inherited value; a Mantine ActionIcon
+             * paints `--ai-color`, its own themed blue, and Mantine writes that variable
+             * INLINE so no stylesheet variable can reach it.  Three routes to a colour, of
+             * which one worked.
+             *
+             * `querySelectorAll`, and the count asserted, because the version of this test
+             * that shipped in the first pass read `querySelector('...svg')` -- one element,
+             * the first, which was a plain inheriting Icon.  It claimed every icon and
+             * measured the only one that was never broken.
+             */
             barsFor(theme);
 
             navColorNames.forEach((color) => {
                 cy.get(`[data-nav-sample="${color}"]`).should(($sample) => {
                     const link = $sample[0].querySelector('.wrolpi-navbar-link');
-                    const icon = $sample[0].querySelector('.wrolpi-navbar-right svg');
-                    expect(icon, `${theme}/${color} has an icon to measure`).to.not.be.null;
-                    expect(getComputedStyle(icon).color, `${theme}/${color} icon colour`)
-                        .to.equal(getComputedStyle(link).color);
+                    const expected = getComputedStyle(link).color;
+                    const icons = [...$sample[0].querySelectorAll('.wrolpi-navbar-right svg')];
+
+                    // Two bare Icons, one inside an anchor, one inside an ActionIcon.  If
+                    // this drops, the loop below is covering less than it says.
+                    expect(icons.length, `${theme}/${color} icons found`).to.equal(4);
+                    icons.forEach((icon, index) => {
+                        expect(getComputedStyle(icon).color, `${theme}/${color} icon ${index}`)
+                            .to.equal(expected);
+                    });
                 });
             });
         });

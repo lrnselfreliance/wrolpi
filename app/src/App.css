@@ -1,3 +1,8 @@
+:root {
+    /* Shared with the toast offset below, so the two cannot drift apart. */
+    --navbar-height: 3.4em;
+}
+
 /* Nav bar: a hand-rolled flexbox bar (was a Semantic Menu).  The user-chosen background
    and the foreground measured against it are set inline (see themes/navColors); this
    stylesheet only supplies structure and hover affordances. */
@@ -10,8 +15,28 @@
      * is the one link a user needs to reach the settings that fix a broken WROLPi.
      */
     flex-wrap: wrap;
-    min-height: 3.4em;
+    min-height: var(--navbar-height);
     padding: 0 0.25em;
+}
+
+/*
+ * Toasts start below the navigation bar instead of on top of it.
+ *
+ * They are fixed at `top: var(--mantine-spacing-md)` -- 16px -- while the bar occupies the
+ * first 54px of the page, so every toast landed over the bar's right-hand corner: the search
+ * glyph, the hamburger, Help and Admin.  For as long as the toast was up those controls could
+ * not be clicked, and an error toast is exactly when a user reaches for Admin.
+ *
+ * It went unnoticed until the search glyph was given a proper hit area: at 18px it sat in the
+ * gap under the toast, and growing it to the height of the bar moved it into the overlap.
+ * The toast was always covering that corner; there was just nothing there to hit.
+ *
+ * `:where()` gives Mantine's own rule zero specificity, so one class is enough to win, but
+ * the attribute is matched too -- only the top-anchored positions need moving, and a future
+ * switch to `bottom-right` should not silently inherit a top offset.
+ */
+html .mantine-Notifications-root[data-position^='top'] {
+    top: calc(var(--navbar-height) + var(--mantine-spacing-md, 16px));
 }
 
 .wrolpi-navbar-right {

@@ -174,19 +174,30 @@ export function isoDatetimeToString(dt, time = false) {
     return d;
 }
 
-export function CardLink({to, newTab = false, ...props}) {
+/*
+ * Both card links COMPOSE the caller's className rather than being overwritten by it.
+ * Written as `className='...' {...props}`, the spread put the caller's class last and it
+ * replaced the pair outright -- so every archive title, which passes
+ * `card-title-ellipsis`, lost `card-link` and rendered in the link colour instead of the
+ * card's text colour.  The one card type whose classes are set this way, and the one whose
+ * title looked wrong.
+ */
+const cardLinkClass = (className) =>
+    ['no-link-underscore', 'card-link', className].filter(Boolean).join(' ');
+
+export function CardLink({to, newTab = false, className, ...props}) {
     props = newTab === true ? {...props, target: '_blank', rel: 'noopener noreferrer'} : props;
-    return <Link to={to} className="no-link-underscore card-link" {...props}>
+    return <Link to={to} className={cardLinkClass(className)} {...props}>
         {props.children}
     </Link>
 }
 
-export function ExternalCardLink({to, children, ...props}) {
+export function ExternalCardLink({to, children, className, ...props}) {
     return <a
         href={to}
         target='_blank'
         rel='noopener noreferrer'
-        className='no-link-underscore card-link'
+        className={cardLinkClass(className)}
         {...props}
     >
         {children}
@@ -726,7 +737,7 @@ export function findPosterPath(file) {
     }
 }
 
-export function CardPoster({to, file}) {
+export function CardPoster({to, file, overlay}) {
     const navigate = useNavigate();
 
     // Marks a tagged file, pinned to the poster's corner.
@@ -739,16 +750,29 @@ export function CardPoster({to, file}) {
         // FileGroup has a poster (screenshot/thumbnail) file.
         posterPath = `/media/${encodeMediaPath(posterPath)}`;
 
-        // Sized by `.wrolpi-card-poster`: as wide as the card allows, natural ratio.
-        const image = <img alt='poster' src={posterPath}/>;
+        /*
+         * Sized by `.wrolpi-card-poster`: as wide as the card allows, capped in height,
+         * natural ratio.  The corner chrome goes INSIDE the link, beside the image:
+         *
+         *   - the frame shrink-wraps the painted image, so a mark pinned to its corner
+         *     tracks the poster rather than the letterbox space beside it.  A height-capped
+         *     poster is a good deal narrower than its band -- 155px inside a 233px card for
+         *     a book cover, less for a vertical video;
+         *   - and the mark stays part of the poster's hit target, rather than a dead spot
+         *     on the corner of an otherwise clickable image.
+         */
+        const inner = <>
+            {imageLabel}
+            <img alt='poster' src={posterPath}/>
+            {overlay}
+        </>;
 
         return <div className='wrolpi-card-poster'>
-            {imageLabel}
             {to
                 // Link within this App.
-                ? <Link to={to}>{image}</Link>
+                ? <Link to={to} className='wrolpi-card-poster-frame'>{inner}</Link>
                 // Preview the file.
-                : <PreviewLink file={file}>{image}</PreviewLink>}
+                : <PreviewLink file={file} className='wrolpi-card-poster-frame'>{inner}</PreviewLink>}
         </div>
     } else {
         // FileGroup has no poster.

@@ -841,10 +841,14 @@ export function VideoCard({file}) {
         channel_url = `/videos/channel/${channel.id}/video`;
     }
 
-    const media = <div style={{position: 'relative'}}>
-        <CardPoster to={video_url} file={file}/>
-        <Duration totalSeconds={file.length}/>
-    </div>;
+    /*
+     * The duration goes through CardPoster's `overlay` rather than being pinned to a
+     * wrapper around it: the wrapper is the full width of the card, and a vertical video's
+     * poster is only about half that once the height cap applies, so the badge landed well
+     * clear of the frame it belongs to.
+     */
+    const media = <CardPoster to={video_url} file={file}
+                              overlay={<Duration totalSeconds={file.length}/>}/>;
 
     const title = file.title || file.name || video.stem || video.name;
     let titleElm = <Tooltip label={title}>

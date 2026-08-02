@@ -44,7 +44,7 @@ import {
 import {semanticColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
-import {IconMenu2, IconSearch} from '@tabler/icons-react';
+import {IconMenu2} from '@tabler/icons-react';
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -106,10 +106,23 @@ export const NavBarSample = ({color}) => {
             <span className='wrolpi-navbar-link'>Videos</span>
             <span className='wrolpi-navbar-link'>Map</span>
             <div className='wrolpi-navbar-right' style={{gap: '0.5em', paddingRight: '0.5em'}}>
+                {/*
+                  * All three shapes the real bar puts in this corner, because they take
+                  * their colour by three different routes and only one of them was ever
+                  * right.  A bare Icon inherits.  An anchor does NOT -- `a {color:
+                  * var(--blue)}` in tokens.css outranks the inherited value, which is what
+                  * made the search icon blue on every bar in every theme.  And a Mantine
+                  * ActionIcon paints its own themed colour, which is what made the
+                  * hamburger blue.  The first version of this sample used an IconButton for
+                  * the search icon too, so it showed the second fault twice and hid the
+                  * first entirely.
+                  */}
                 <Icon name='warning sign' size='large' label='Drive health warning'/>
                 <Icon name='hdd' size='large' label='Drive temperature warning'/>
-                <Icon name='plug' size='large' label='API is not responding'/>
-                <IconButton icon={IconSearch} label='Search' variant='subtle'/>
+                {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+                <a className='item' role='button' tabIndex={0} aria-label='Search'>
+                    <Icon name='search' size='large'/>
+                </a>
                 <IconButton icon={IconMenu2} label='Menu' variant='subtle'/>
             </div>
         </nav>

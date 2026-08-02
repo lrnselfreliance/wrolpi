@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    ActionInput, Button, Card, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
+    ActionInput, Button, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
     Message, Placeholder, Progress, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
@@ -1861,5 +1861,58 @@ describe('a card keeps its meta with the title and its actions at the foot', () 
             expect(tall.getBoundingClientRect().bottom, 'both action rows sit on the same line')
                 .to.be.closeTo(short.getBoundingClientRect().bottom, 1);
         });
+    });
+});
+
+describe('a button and an icon button are the same height', () => {
+    /*
+     * Mantine gives ActionIcon a size scale of its own that is nothing like Button's --
+     * `sm` is 22px against a button's 36px -- and defaults it to `md` where Button defaults
+     * to `sm`.  So the Details/Open pair on an archive card came out 36px beside 28px, and
+     * every other toolbar that mixes the two was ragged in the same way.
+     *
+     * Mantine already ships the aligned scale as `--ai-size-input-*`, for an ActionIcon
+     * sitting beside an Input; those five values are identical to `--button-height-*`.  The
+     * fix points one at the other, so this holds for a size we have never used as well as
+     * the ones we have.
+     *
+     * Heights, so it belongs here: jsdom returns zero for both and the comparison would
+     * pass on any pair of numbers at all.
+     */
+    const sizes = [undefined, 'xs', 'sm', 'md', 'lg', 'xl'];
+
+    sizes.forEach((size) => {
+        it(`matches at size ${size || '(default)'}`, () => {
+            cy.mountUI(<div style={{display: 'flex', gap: '0.5em', alignItems: 'flex-start'}}>
+                <Button size={size} icon='file alternate'>Details</Button>
+                <IconButton size={size} icon='external' label='Open original URL'/>
+            </div>);
+
+            cy.get('button').should(($buttons) => {
+                expect($buttons.length).to.equal(2);
+                const [button, iconButton] = [...$buttons].map(el => el.getBoundingClientRect());
+                // A zero-height pair would satisfy the equality below without meaning anything.
+                expect(button.height, 'the button has a height at all').to.be.greaterThan(10);
+                expect(iconButton.height, `icon button at size ${size || '(default)'}`)
+                    .to.be.closeTo(button.height, 0.5);
+                // Square, which is the whole point of an icon button.
+                expect(iconButton.width, 'the icon button stays square')
+                    .to.be.closeTo(iconButton.height, 0.5);
+            });
+        });
+    });
+
+    it('grows the icon button rather than shrinking the button', () => {
+        /*
+         * Both could be made equal by cutting the labelled button down to 28px, which would
+         * be the wrong fix -- a 28px target is below the 44px-ish guidance already stretched
+         * by having buttons this small, and every OTHER button on the page would still be 36.
+         * Pinned so a future "make them match" cannot resolve the other way.
+         */
+        cy.mountUI(<IconButton icon='external' label='Open original URL'/>);
+
+        cy.get('button').should(($el) =>
+            expect($el[0].getBoundingClientRect().height, 'default icon button height')
+                .to.be.at.least(34));
     });
 });

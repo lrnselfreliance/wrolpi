@@ -102,15 +102,30 @@ function DropdownMenuItem({link}) {
     </Menu.Item>
 }
 
+/*
+ * The trigger for a navbar dropdown.
+ *
+ * Shared with the hidden placeholder DesktopNav measures on its first render, and that is
+ * the point of extracting it.  The placeholder used to be a plain `<button>More</button>`
+ * with no caret, so the space reserved for the overflow menu was about 21px short of the
+ * button that eventually rendered -- the row overflowed by that much and the bar wrapped.
+ * Measuring one thing and drawing another is only ever right by coincidence.
+ */
+const NavDropdownTrigger = React.forwardRef(({text, ...props}, ref) =>
+    <button type='button' ref={ref} className='wrolpi-navbar-link wrolpi-navbar-link-button'
+            {...props}>
+        {text}
+        <Icon name='dropdown' size='small' style={{marginLeft: '0.35em'}}/>
+    </button>
+);
+NavDropdownTrigger.displayName = 'NavDropdownTrigger';
+
 function DropdownLinks({link}) {
     // A labelled dropdown trigger: the desktop "More" overflow, or any nested
     // link group handed to MenuLink.
     return <Menu position='bottom-end' withinPortal>
         <Menu.Target>
-            <button type='button' className='wrolpi-navbar-link wrolpi-navbar-link-button'>
-                {link.text}
-                <Icon name='dropdown' size='small' style={{marginLeft: '0.35em'}}/>
-            </button>
+            <NavDropdownTrigger text={link.text}/>
         </Menu.Target>
         <Menu.Dropdown>
             {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}
@@ -130,9 +145,23 @@ function MobileMenu({links}) {
     </Menu>
 }
 
-function NavIconWrapper({children}) {
+/*
+ * One status indicator's slot in the right-hand corner.
+ *
+ * This used to carry `marginTop: 0.8em`, a nudge left over from Semantic's menu.  The corner
+ * centres its children, and a top margin is part of the margin box being centred, so the
+ * nudge pushed every indicator down by half of it -- about 6px.
+ *
+ * That read as an error on some and not others, which is why it survived: the bare-icon
+ * anchors (share, search) sit high inside their line box because it reserves descender space
+ * for text that is not there, so the nudge happened to cancel out.  An IconButton is a square
+ * ActionIcon that centres its glyph exactly, so for the hotspot and the theme picker the
+ * nudge was 6px of pure error.  Laying the slot out as a flex box centres both shapes on
+ * their real glyph box and needs no nudge at all.
+ */
+export function NavIconWrapper({children}) {
     if (children) {
-        return <div style={{marginTop: '0.8em', marginLeft: '1.5em'}}>{children}</div>
+        return <div className='wrolpi-navbar-icon'>{children}</div>
     } else {
         // Do not use navbar space if children is empty.
         return <React.Fragment/>
@@ -383,7 +412,7 @@ export function NavBar() {
     </>
 }
 
-function DesktopNav({navColors, homeLink, icons}) {
+export function DesktopNav({navColors, homeLink, icons}) {
     const containerRef = React.useRef(null);
     const homeRef = React.useRef(null);
     const rightMenuRef = React.useRef(null);
@@ -410,7 +439,7 @@ function DesktopNav({navColors, homeLink, icons}) {
                     </span>
                 ))}
                 {!isReady && <span ref={moreRef} style={{visibility: 'hidden', flexShrink: 0}}>
-                    <button type='button' className='wrolpi-navbar-link wrolpi-navbar-link-button'>More</button>
+                    <NavDropdownTrigger text='More'/>
                 </span>}
                 {isReady && overflowLinks.length > 0 &&
                     <DropdownLinks link={{text: 'More', key: 'more', links: overflowLinks}}/>}

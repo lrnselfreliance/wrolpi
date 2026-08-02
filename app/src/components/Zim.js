@@ -223,9 +223,9 @@ const ZimAccordionItem = ({value, active, data, searchStr, activeTags}) => {
         }
     }
 
-    const paginator = <center style={{marginTop: '2em'}}>
+    const paginator = <div style={{marginTop: '2em'}}>
         <Paginator activePage={pages.activePage} totalPages={pages.totalPages} onPageChange={pages.setPage}/>
-    </center>;
+    </div>;
 
     const label = <Label color={estimate > 0 ? 'violet' : undefined}>{normalizeEstimate(estimate)}</Label>;
 

@@ -190,6 +190,28 @@ html[data-theme="amber"] .wrolpi-theme-option-active {
 
 /* ------------------------------------------------------------ Pagination */
 
+/*
+ * The pager is centred here rather than by whoever renders it.  Three call sites wrapped it
+ * in `<center>` or `text-align: center` and it still sat hard against the left edge.
+ *
+ * Mantine builds a Pagination as a BLOCK root -- full width, so those wrappers had nothing
+ * to centre -- holding a flex Group that carries the controls and lays them out at
+ * `flex-start`.  `justify-content` on the root therefore does nothing at all; it has to
+ * reach the Group.
+ *
+ * Setting `--group-justify` on the root does not work either: Group defaults that prop and
+ * writes the variable INLINE on its own element, where an inherited value cannot reach it.
+ * The property itself is fair game, though -- Mantine only ever reads the variable from a
+ * hashed class -- so this rule at (0,2,0) is what actually lands.
+ *
+ * The Group already wraps by default (`--group-wrap` falls back to `wrap`), which matters
+ * once the row is centred: centred overflow spills off BOTH edges, and the first page would
+ * be unreachable rather than merely off-screen to the right.
+ */
+.wrolpi-pagination .mantine-Group-root {
+    justify-content: center;
+}
+
 .wrolpi-pagination button {
     background: var(--panel);
     color: var(--text);

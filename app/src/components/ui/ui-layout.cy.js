@@ -1530,10 +1530,13 @@ describe('an icon stack carries the surface it was placed on', () => {
 
     it('follows a filled button when it is disabled', () => {
         /*
-         * The file browser's New Folder button is disabled in WROL mode, and Mantine swaps a
-         * disabled button's fill for --mantine-color-disabled.  A disc pinned to `--blue`
-         * then becomes a blue chip on a grey surface -- the same defect as the original
-         * hole, inverted.  The disc has to follow the button, not the button's enabled fill.
+         * The file browser's New Folder button is disabled in WROL mode.  The disc has to
+         * follow the button into that state, whatever the state happens to look like -- and
+         * it has now looked like two different things.  Mantine used to repaint a disabled
+         * button with `--mantine-color-disabled`, so a disc pinned to `--blue` became a blue
+         * chip on a grey surface; disabled buttons keep their own fill now, so the disc must
+         * be blue again.  This caught the disc still pinned to the old grey the moment that
+         * changed, which is exactly what it is for.
          */
         cy.mountUI(
             <Button color='blue' disabled>
@@ -2834,6 +2837,112 @@ describe('a toast does not cover the navigation bar', () => {
 
             expect(barBottom, 'the bar has height to clear').to.be.greaterThan(40);
             expect(toastTop, 'the toast starts below the bar').to.be.at.least(barBottom);
+        });
+    });
+});
+
+describe('a disabled button keeps its own colour', () => {
+    /*
+     * Mantine repaints a disabled button flat grey -- background, text and border all
+     * replaced with `--mantine-color-disabled`.  Semantic kept the colour and dropped the
+     * whole control to `opacity: 0.45`, so a disabled Delete was still visibly the red one.
+     *
+     * The file browser is where this bites.  Its footer is eight buttons, six of which are
+     * disabled until something is selected, so the toolbar a user meets on arriving at /files
+     * is an undifferentiated grey row -- Delete, Rename, Move, Ignore and Tag all identical.
+     * Colour is how those are told apart at a glance, and disabling them threw it away.
+     *
+     * Opacity is the better signal anyway: it says "not available" without also saying "no
+     * longer the delete button".
+     *
+     * Mantine leaves `--button-bg` intact on a disabled button -- it overrides the painted
+     * `background` rather than the variable -- so the colour the call site asked for is still
+     * there to be read back.
+     */
+    const pairs = [
+        {color: 'red', label: 'Delete'},
+        {color: 'yellow', label: 'Rename'},
+        {color: 'teal', label: 'Move'},
+        {color: 'violet', label: 'Tag'},
+        {color: 'grey', label: 'Ignore'},
+    ];
+
+    const mountPairs = (theme) => cy.mountUI(<div>
+        {pairs.map(({color, label}) => <span key={color}>
+            <Button color={color} data-testid={`on-${color}`}>{label}</Button>
+            <Button color={color} disabled data-testid={`off-${color}`}>{label}</Button>
+        </span>)}
+    </div>, {theme});
+
+    themeNames.forEach((theme) => {
+        it(`keeps every colour recognisable while disabled in ${theme}`, () => {
+            mountPairs(theme);
+
+            cy.get('[data-testid^="off-"]').should(($disabled) => {
+                expect($disabled, 'a disabled button per colour').to.have.length(pairs.length);
+
+                pairs.forEach(({color}) => {
+                    const on = Cypress.$(`[data-testid="on-${color}"]`)[0];
+                    const off = Cypress.$(`[data-testid="off-${color}"]`)[0];
+
+                    expect(getComputedStyle(off).backgroundColor, `${theme}/${color} fill`)
+                        .to.equal(getComputedStyle(on).backgroundColor);
+                });
+            });
+        });
+
+        it(`still marks them as unavailable in ${theme}`, () => {
+            // Keeping the colour must not cost the affordance: a disabled button that looks
+            // identical to an enabled one is a worse bug than a grey one.
+            mountPairs(theme);
+
+            cy.get('[data-testid="off-red"]').should(($off) => {
+                const disabled = parseFloat(getComputedStyle($off[0]).opacity);
+                const enabled = parseFloat(
+                    getComputedStyle(Cypress.$('[data-testid="on-red"]')[0]).opacity);
+
+                expect(enabled, `${theme} enabled is solid`).to.equal(1);
+                expect(disabled, `${theme} disabled is faded`).to.be.lessThan(0.7);
+                expect(disabled, `${theme} disabled is still legible`).to.be.greaterThan(0.25);
+            });
+        });
+    });
+
+    it('tells two disabled buttons of different colours apart', () => {
+        /*
+         * The claim stated as the user meets it, and the inverse of the bug: five grey blobs
+         * were five EQUAL greys.  Comparing each against its enabled twin above would still
+         * pass if every pair were grey, so this compares them against each other.
+         */
+        mountPairs('light');
+
+        cy.get('[data-testid^="off-"]').should(($disabled) => {
+            const fills = [...$disabled].map(button => getComputedStyle(button).backgroundColor);
+
+            expect(new Set(fills).size, `five colours, distinct fills: ${fills.join(' ')}`)
+                .to.equal(pairs.length);
+        });
+    });
+
+    it('does the same for icon-only buttons', () => {
+        // The file browser's row actions are IconButtons, and they disable the same way.
+        cy.mountUI(<div>
+            {/* Filled, so there is a colour to lose.  IconButton defaults to Mantine's
+                `default` variant, which is a white face, and comparing white with white
+                would prove nothing. */}
+            <IconButton icon='trash' label='Delete' color='red' variant='filled'
+                        data-testid='icon-on'/>
+            <IconButton icon='trash' label='Delete' color='red' variant='filled' disabled
+                        data-testid='icon-off'/>
+        </div>);
+
+        cy.get('[data-testid="icon-off"]').should(($off) => {
+            const on = Cypress.$('[data-testid="icon-on"]')[0];
+
+            expect(getComputedStyle($off[0]).backgroundColor, 'icon button keeps its fill')
+                .to.equal(getComputedStyle(on).backgroundColor);
+            expect(parseFloat(getComputedStyle($off[0]).opacity), 'and is faded')
+                .to.be.lessThan(0.7);
         });
     });
 });

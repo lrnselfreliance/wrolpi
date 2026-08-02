@@ -3044,3 +3044,200 @@ describe('a disabled button keeps its own colour', () => {
         });
     });
 });
+
+describe('a button with an icon and no label centres the icon', () => {
+    /*
+     * Mantine's `leftSection` carries a `margin-inline-end` to hold the icon off the label.
+     * With no label that margin is pure offset, and the glyph sits about 8px left of the
+     * button's centre.
+     *
+     * The Settings config table is where it showed: Import and Save are icon-only Buttons and
+     * looked visibly off, while Restore in the same row looked right -- Restore is an
+     * IconButton, which centres a lone glyph by construction.  Measured on the running app at
+     * -8px before the fix.
+     */
+    it('puts the glyph in the middle when there is nothing else in the button', () => {
+        cy.mountUI(<Button icon='upload' aria-label='Import' data-testid='icon-only'/>);
+
+        cy.get('[data-testid="icon-only"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+            const glyph = $button[0].querySelector('svg').getBoundingClientRect();
+            const offset = (glyph.left + glyph.width / 2) - (box.left + box.width / 2);
+
+            expect(box.width, 'the button has width to be off-centre in')
+                .to.be.greaterThan(glyph.width + 8);
+            expect(offset, 'glyph centre vs button centre').to.be.closeTo(0, 1);
+        });
+    });
+
+    it('treats a null label as no label, which is how the file browser renders', () => {
+        /*
+         * The footer passes `{label('Delete')}`, and that is null whenever the bar is too
+         * narrow for words -- so those buttons are icon-only at exactly the widths where the
+         * offset is most visible.  `React.Children.toArray` drops nulls; a plain truthiness
+         * check on `children` would not.
+         */
+        cy.mountUI(<Button icon='trash' aria-label='Delete' data-testid='null-label'>
+            {null}
+        </Button>);
+
+        cy.get('[data-testid="null-label"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+            const glyph = $button[0].querySelector('svg').getBoundingClientRect();
+
+            expect((glyph.left + glyph.width / 2) - (box.left + box.width / 2),
+                'glyph centre vs button centre').to.be.closeTo(0, 1);
+        });
+    });
+
+    it('is a real constraint: a labelled button keeps its icon on the left', () => {
+        // The inverse.  Centring the glyph must not apply when there IS a label, or every
+        // labelled button in the app loses its leading icon's position.
+        cy.mountUI(<Button icon='trash' data-testid='labelled'>Delete</Button>);
+
+        cy.get('[data-testid="labelled"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+            const glyph = $button[0].querySelector('svg').getBoundingClientRect();
+
+            expect((glyph.left + glyph.width / 2) - (box.left + box.width / 2),
+                'the icon leads the label').to.be.lessThan(-4);
+            expect($button[0].textContent, 'and the label is still there').to.contain('Delete');
+        });
+    });
+
+    it('centres a trailing-only icon too', () => {
+        // `rightSection` has the mirror-image margin.
+        cy.mountUI(<Button iconAfter='upload' aria-label='Send' data-testid='after-only'/>);
+
+        cy.get('[data-testid="after-only"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+            const glyph = $button[0].querySelector('svg').getBoundingClientRect();
+
+            expect((glyph.left + glyph.width / 2) - (box.left + box.width / 2))
+                .to.be.closeTo(0, 1);
+        });
+    });
+});
+
+describe('the file browser footer is a row of buttons, not a slab', () => {
+    /*
+     * The footer was a plain block, so its buttons -- inline-block elements with no whitespace
+     * between them, since JSX drops whitespace-only lines -- sat flush against each other in
+     * one unbroken bar.  Every other group of buttons in the app is a Mantine `Group`, which
+     * is a flex row with a gap; this one is hand-rolled and never got one.
+     *
+     * The class carries the layout, so the class is what is mounted.  FileBrowser itself
+     * needs the file API, drag selection and a router, none of which decides the spacing.
+     */
+    it('leaves a gap between adjacent buttons', () => {
+        cy.mountUI(<div className='sticky-footer'>
+            <Button color='red' data-testid='a'>Delete</Button>
+            <Button color='yellow' data-testid='b'>Rename</Button>
+            <Button color='teal' data-testid='c'>Move</Button>
+        </div>);
+
+        cy.get('.sticky-footer').should(($footer) => {
+            const boxes = ['a', 'b', 'c']
+                .map(id => $footer[0].querySelector(`[data-testid="${id}"]`).getBoundingClientRect());
+
+            expect(boxes[1].left - boxes[0].right, 'gap between the first two')
+                .to.be.greaterThan(2);
+            expect(boxes[2].left - boxes[1].right, 'gap between the next two')
+                .to.be.greaterThan(2);
+        });
+    });
+
+    it('keeps them on one line and vertically aligned', () => {
+        // A flex row is only right if it behaves like one: the buttons share a baseline and
+        // do not stack while there is room for them.
+        cy.mountUI(<div className='sticky-footer'>
+            <Button data-testid='a'>Delete</Button>
+            <Button data-testid='b'>Rename</Button>
+        </div>);
+
+        cy.get('.sticky-footer').should(($footer) => {
+            const a = $footer[0].querySelector('[data-testid="a"]').getBoundingClientRect();
+            const b = $footer[0].querySelector('[data-testid="b"]').getBoundingClientRect();
+
+            expect(a.top, 'same row').to.be.closeTo(b.top, 1);
+        });
+    });
+});
+
+describe('the search field\'s clear button is attached to it', () => {
+    /*
+     * The control is a bordered box with `padding: 0 8px`, so the clear button sat 9px short
+     * of the right edge and 2px short of the full height -- a glyph dropped inside the input
+     * rather than a control of its own.
+     *
+     * Semantic rendered it as an action button welded to the field.  Measured on the QA Pi,
+     * which still runs Semantic: zero gap from the input, zero to the outer edge, and the
+     * full height of the field.
+     */
+    const mountField = () => cy.mountUI(<div style={{width: 420}}>
+        <SearchBox value='wind turbine' clearable onChange={() => {}}/>
+    </div>);
+
+    it('meets the right-hand edge of the field', () => {
+        mountField();
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            const control = Cypress.$('.wrolpi-searchbox-control')[0].getBoundingClientRect();
+            const clear = $clear[0].getBoundingClientRect();
+
+            expect(control.right - clear.right, 'gap to the field edge').to.be.closeTo(0, 1.5);
+        });
+    });
+
+    it('fills the height of the field', () => {
+        /*
+         * Half the reason it read as "inside": a 36px control floating in a 38px box.
+         *
+         * Measured against the control's CONTENT box, not its border box.  The field's own
+         * 1px border is the only thing left above and below the button, and the button
+         * should sit inside it rather than paint over it -- `clientHeight` is that box, and
+         * comparing against `getBoundingClientRect().height` would be demanding the button
+         * cover the field's border, which is a different and wrong design.
+         */
+        mountField();
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            const control = Cypress.$('.wrolpi-searchbox-control')[0];
+            const border = parseFloat(getComputedStyle(control).borderTopWidth);
+
+            expect(border, 'the field has a border to sit inside').to.be.greaterThan(0);
+            expect($clear[0].getBoundingClientRect().height, 'clear button height')
+                .to.be.closeTo(control.clientHeight, 1);
+        });
+    });
+
+    it('is divided from the text rather than merged into it', () => {
+        // Attached is not the same as indistinguishable: without a rule between them the
+        // glyph reads as part of the input again, just further right.
+        mountField();
+
+        cy.get('.wrolpi-searchbox-clear').should(($clear) => {
+            const style = getComputedStyle($clear[0]);
+
+            expect(parseFloat(style.borderLeftWidth), 'a divider on its left')
+                .to.be.greaterThan(0);
+            expect(style.borderLeftStyle).to.not.equal('none');
+        });
+    });
+
+    it('is a real constraint: the field itself is still padded', () => {
+        /*
+         * The negative margins are aimed at one child.  If the control's padding had simply
+         * been removed instead, the search icon and the text would sit against the border
+         * too -- so this checks the thing that must NOT have moved.
+         */
+        mountField();
+
+        cy.get('.wrolpi-searchbox-icon').should(($icon) => {
+            const control = Cypress.$('.wrolpi-searchbox-control')[0].getBoundingClientRect();
+
+            expect($icon[0].getBoundingClientRect().left - control.left, 'icon is inset')
+                .to.be.greaterThan(4);
+        });
+    });
+});

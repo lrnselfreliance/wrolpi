@@ -196,7 +196,7 @@ export function ThemeSamplePage() {
             <Header as='h5' style={{marginTop: 24}}>Coloured readings, as Status draws them</Header>
             <StatisticGroup>
                 <Statistic value='0.4' label='1 Min. Load'/>
-                <Statistic value='2.6' label='5 Min. Load' color='orange'/>
+                <Statistic value='2.6' label='5 Min. Load' color='warning'/>
                 <Statistic value='4.1' label='15 Min. Load' color='danger'/>
                 <Statistic value='48' label='Temp C°'/>
             </StatisticGroup>

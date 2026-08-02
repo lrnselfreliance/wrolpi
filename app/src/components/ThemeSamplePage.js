@@ -43,6 +43,8 @@ import {
 } from './ui';
 import {semanticColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
+import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
+import {IconMenu2, IconSearch} from '@tabler/icons-react';
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -76,6 +78,54 @@ const Row = ({children}) => <div style={{display: 'flex', gap: 10, flexWrap: 'wr
     {children}
 </div>;
 
+/*
+ * One navigation bar, in one of the twelve colours a user can pick for it.
+ *
+ * The bar is the only surface in the app whose background the USER chooses, and every theme
+ * resolves those twelve names to twelve of its own colours -- forty-eight backgrounds that
+ * the same links and status icons have to stay legible on.  They did not: the bar drew every
+ * one of them in `--btn-text`, which is near-black in three of the four themes, and night's
+ * `--brown` is #451212.  That glyph was 1.33:1 against the bar behind it.
+ *
+ * These are the real `.wrolpi-navbar` chrome and the real `navBarStyle`, not a mock-up, so a
+ * sample cannot show a bar the app does not draw.  The measured ratio is printed beside each
+ * one because ten of the forty-eight still sit under 4.5:1 and no foreground will lift them
+ * -- a monochrome theme resolves all twelve names onto one ramp, and a mid-tone of a hue
+ * cannot carry text of that same hue.  Fixing those means changing the palette, which is a
+ * decision to make while looking at them.
+ */
+const AA_CONTRAST = 4.5;
+
+export const NavBarSample = ({color}) => {
+    const colors = useNavColors(color);
+    const short = colors.ratio !== null && colors.ratio < AA_CONTRAST;
+
+    return <div data-nav-sample={color} style={{marginBottom: 8}}>
+        <nav className='wrolpi-navbar' style={{...navBarStyle(colors), minHeight: '2.8em'}}>
+            <span className='wrolpi-navbar-link'><i>WROLPi</i>&nbsp;<Icon name='lock'/></span>
+            <span className='wrolpi-navbar-link'>Videos</span>
+            <span className='wrolpi-navbar-link'>Map</span>
+            <div className='wrolpi-navbar-right' style={{gap: '0.5em', paddingRight: '0.5em'}}>
+                <Icon name='warning sign' size='large' label='Drive health warning'/>
+                <Icon name='hdd' size='large' label='Drive temperature warning'/>
+                <Icon name='plug' size='large' label='API is not responding'/>
+                <IconButton icon={IconSearch} label='Search' variant='subtle'/>
+                <IconButton icon={IconMenu2} label='Menu' variant='subtle'/>
+            </div>
+        </nav>
+        <div style={{
+            fontSize: 11, color: short ? 'var(--danger)' : 'var(--muted)',
+            padding: '3px 2px 0', display: 'flex', gap: 8,
+        }}>
+            <strong style={{fontWeight: 600}}>{color}</strong>
+            <span data-nav-sample-ratio={color}>
+                {colors.ratio === null ? '—' : `${colors.ratio.toFixed(2)}:1`}
+            </span>
+            {short && <span>below 4.5:1 — the palette has no better option</span>}
+        </div>
+    </div>
+};
+
 // Numbers the stacked toasts so it is obvious which press produced which, and that a second
 // press adds a toast rather than replacing the first.  Module scope, so it survives re-renders.
 let toastCounter = 0;
@@ -106,6 +156,20 @@ export function ThemeSamplePage() {
                     The same picker the Settings page uses. The navigation bar has a compact
                     version; both read the same list of themes.
                 </p>
+            </Panel>
+        </Section>
+
+        <Section label='Navigation bars'>
+            <Panel>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 0}}>
+                    Every colour the navigation bar can be set to (Settings &rarr; navbar
+                    colour), in the <strong>{theme}</strong> theme. The text and icons are not
+                    a fixed colour: each bar is measured, and drawn in whichever of this
+                    theme's own colours reads best on it. The ratio under each bar is that
+                    measurement — anything under 4.5:1 is called out, and means the palette
+                    itself has no colour that reads on that background.
+                </p>
+                {navColorNames.map(color => <NavBarSample key={color} color={color}/>)}
             </Panel>
         </Section>
 

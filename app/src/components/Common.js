@@ -1674,7 +1674,7 @@ export function SortButton({sorts = []}) {
     }
 
     return <>
-        <Modal closeIcon
+        <Modal size='small' closeIcon
                open={open}
                onClose={() => setOpen(false)}
         >

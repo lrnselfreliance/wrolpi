@@ -125,7 +125,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
         : 0;
 
     return (
-        <Modal closeIcon open={open} onClose={handleClose} size="small">
+        <Modal closeIcon open={open} onClose={handleClose} size='large'>
             <Modal.Header>Bulk Tag Files</Modal.Header>
             <Modal.Content>
                 {state === 'loading' && (

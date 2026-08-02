@@ -64,7 +64,7 @@ function DownloadProgressModal({progress, url}) {
         <Button size='small' onClick={() => setOpen(true)} style={{marginLeft: '0.5em'}}>
             {buttonLabel}
         </Button>
-        <Modal closeIcon open={open} onClose={() => setOpen(false)} size='small'>
+        <Modal closeIcon open={open} onClose={() => setOpen(false)} size='fullscreen'>
             <Modal.Header>Download Progress</Modal.Header>
             <Modal.Content>
                 <Progress
@@ -224,7 +224,7 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         (text) => <Link to={location}>{text}</Link> :
         (text) => <a href={url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
-    const errorModal = <Modal
+    const errorModal = <Modal size='fullscreen'
         closeIcon
         onClose={handleErrorClose}
         open={errorModalOpen}
@@ -308,7 +308,7 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         />;
     }
 
-    const editModal = <Modal closeIcon
+    const editModal = <Modal size='large' closeIcon
                              open={editModalOpen}
                              onClose={handleEditClose}
     >
@@ -456,7 +456,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
             <IconButton icon='exclamation triangle' label='Download error' color='danger'
                         onClick={() => setErrorModalOpen(true)}/>
         )
-        errorModal = <Modal
+        errorModal = <Modal size='fullscreen'
             closeIcon
             open={errorModalOpen}
             onClose={() => setErrorModalOpen(false)}
@@ -470,7 +470,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
 
     if (downloader === Downloaders.Video) {
         editModal = (
-            <Modal
+            <Modal size='large'
                 closeIcon
                 open={editModalOpen}
                 onClose={handleEditClose}
@@ -500,7 +500,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
         );
     } else if (downloader === Downloaders.Archive) {
         editModal = (
-            <Modal
+            <Modal size='large'
                 closeIcon
                 open={editModalOpen}
                 onClose={handleEditClose}

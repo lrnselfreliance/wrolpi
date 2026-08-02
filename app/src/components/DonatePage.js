@@ -18,7 +18,7 @@ function CoinQRButton({qrCodeValue, header, buttonColor}) {
     return <>
         <IconButton icon='qrcode' label={`Show ${header} QR code`} color={buttonColor}
                     onClick={() => setOpen(true)}/>
-        <Modal closeIcon
+        <Modal size='small' closeIcon
                open={open}
                onClose={() => setOpen(false)}
                onOpen={() => setOpen(true)}

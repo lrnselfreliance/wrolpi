@@ -743,6 +743,30 @@ html[data-theme="night"] .wrolpi-tag::before {
     margin: 0 0 10px;
 }
 
+/*
+ * A heading opens a section, so it needs more air above it than below — it belongs to
+ * what follows, not to what came before.  With no top margin at all a heading sat flush
+ * against the panel above it, which read as part of that panel rather than as the start
+ * of the next thing (visible on /more/statistics, where "Tags" touched the panel above).
+ *
+ * `* +` rather than a blanket margin: a heading that opens a Panel or a page is already
+ * where it should be, and pushing it down would just dent the top of its own container.
+ */
+* + .wrolpi-header {
+    margin-top: 22px;
+}
+
+/*
+ * Trailing content keeps the heading's baseline but not its size: a help button rendered
+ * at heading scale is a 26px glyph next to a 17px word.
+ */
+.wrolpi-header-after {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 400;
+}
+
 .wrolpi-header-dividing {
     border-bottom: 1px solid var(--border);
     padding-bottom: 6px;

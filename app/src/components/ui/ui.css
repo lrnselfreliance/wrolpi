@@ -54,7 +54,7 @@
 /*
  * A stack inside a button is the one case the call site should not have to describe,
  * because the surface changes underneath it: Mantine paints a filled button from
- * `--button-bg` but a disabled one from `--mantine-color-disabled`, whatever its variant.
+ * `--button-bg`, and the disc has to follow it into whatever state the button is in.
  * The file browser's New Folder button is disabled in WROL mode, so a disc pinned to the
  * enabled fill would be a blue chip on a grey button -- the original hole, inverted.
  *
@@ -70,10 +70,13 @@
     background: var(--button-bg, var(--icon-stack-bg, var(--bg)));
 }
 
-.mantine-Button-root:disabled .wrolpi-icon-stack-corner,
-.mantine-Button-root[data-disabled] .wrolpi-icon-stack-corner {
-    background: var(--mantine-color-disabled);
-}
+/*
+ * There is deliberately no `:disabled` override here any more.  There used to be one pinning
+ * the disc to `--mantine-color-disabled`, because Mantine repainted a disabled button grey
+ * and a disc left on `--blue` became a blue chip on a grey surface.  Disabled buttons now
+ * keep their own fill (see the disabled-button rule further down), so `--button-bg` is
+ * correct in both states and the rule above covers them.
+ */
 
 /* ---------------------------------------------------------------- Buttons */
 /*
@@ -1454,4 +1457,40 @@ html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
 /* Wide tables scroll inside their own container; the page never scrolls sideways. */
 .wrolpi-table-scroll {
     overflow-x: auto;
+}
+
+/*
+ * A disabled button keeps its own colour.
+ *
+ * Mantine repaints one flat grey -- background, text and border all replaced with
+ * `--mantine-color-disabled`.  Semantic kept the colour and dropped the whole control to
+ * `opacity: 0.45`, and that is the better signal: it says "not available" without also
+ * saying "no longer the delete button".
+ *
+ * The file browser is where the difference shows.  Its footer is eight buttons, six of them
+ * disabled until something is selected, so the toolbar a user meets on arriving at /files was
+ * an undifferentiated grey row -- Delete, Rename, Move, Ignore and Tag all the same pixel.
+ * Colour is how those are told apart at a glance.
+ *
+ * Mantine leaves the variables alone and overrides only the painted properties, so the colour
+ * the call site asked for is still in `--button-bg` and can simply be reinstated.  `--button-bd`
+ * is a whole border shorthand, not a colour, so it is set with `border`.
+ *
+ * The `html` prefix beats Mantine's own `.m_hash:disabled` at (0,2,0) without needing
+ * `!important`.
+ */
+html .mantine-Button-root:disabled,
+html .mantine-Button-root[data-disabled] {
+    background: var(--button-bg);
+    color: var(--button-color);
+    border: var(--button-bd);
+    opacity: 0.45;
+}
+
+html .mantine-ActionIcon-root:disabled,
+html .mantine-ActionIcon-root[data-disabled] {
+    background: var(--ai-bg);
+    color: var(--ai-color);
+    border: var(--ai-bd);
+    opacity: 0.45;
 }

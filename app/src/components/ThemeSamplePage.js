@@ -120,7 +120,7 @@ export const NavBarSample = ({color}) => {
                 <Icon name='warning sign' size='large' label='Drive health warning'/>
                 <Icon name='hdd' size='large' label='Drive temperature warning'/>
                 {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-                <a className='item' role='button' tabIndex={0} aria-label='Search'>
+                <a className='wrolpi-navbar-link' role='button' tabIndex={0} aria-label='Search'>
                     <Icon name='search' size='large'/>
                 </a>
                 <IconButton icon={IconMenu2} label='Menu' variant='subtle'/>

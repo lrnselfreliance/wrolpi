@@ -83,6 +83,16 @@ function SearchModal({open, onClose}) {
     return (
         <Modal open={open} onClose={onClose} centered={false} title='Search'>
             <Modal.Content>
+                {/*
+                  * `wrolpi-search-modal` makes the suggestion list part of the panel rather
+                  * than an overlay on the page; see ui.css.  Everywhere else the list floats
+                  * over the page, which is right -- results that reflow the page while you
+                  * type are unusable.  Inside a modal it is wrong twice over: an absolutely
+                  * positioned list adds no height, so the panel stayed 114px tall, and the
+                  * panel's own `overflow: auto` then clipped the list at the panel's edge.
+                  * The modal showed a search box and the first word of the first result.
+                  */}
+                <div className='wrolpi-search-modal'>
                 <SearchResultsInput
                     clearable
                     searchStr={searchStr}
@@ -97,6 +107,7 @@ function SearchModal({open, onClose}) {
                     inputRef={inputRef}
                     autoFocus
                 />
+                </div>
             </Modal.Content>
         </Modal>
     );

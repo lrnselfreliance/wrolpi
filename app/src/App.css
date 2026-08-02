@@ -1,6 +1,6 @@
-/* Nav bar: a hand-rolled flexbox bar (was a Semantic Menu).  The user-chosen
-   background color and the `--btn-text` foreground are set inline per theme;
-   this stylesheet only supplies structure and hover affordances. */
+/* Nav bar: a hand-rolled flexbox bar (was a Semantic Menu).  The user-chosen background
+   and the foreground measured against it are set inline (see themes/navColors); this
+   stylesheet only supplies structure and hover affordances. */
 .wrolpi-navbar {
     display: flex;
     align-items: stretch;

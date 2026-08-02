@@ -29,6 +29,7 @@ import {
 import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {themeChoices} from "../themes/names";
+import {contrastRatio as measureContrast} from "../themes/contrast";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads, unlockCookies} from "../api";
@@ -1575,52 +1576,28 @@ export const toLocaleString = (num, locale = 'en-US') => {
     return num.toLocaleString(locale);
 }
 
-/**
- * WCAG relative luminance: sRGB channels linearised first, then Rec. 709 weighted.
+/*
+ * The WCAG primitives now live in themes/contrast, so the theme code can measure a colour
+ * without importing this module -- Common.js pulls in half the component library, and
+ * `themes/` importing it is how an import cycle starts.  Forwarded because a good many call
+ * sites and tests already take `contrastRatio` from here.
  *
- * The linearisation is the part that matters.  Weighting the gamma-encoded bytes directly --
- * which is what this did before -- is a rough approximation that misjudges mid-tone blues and
- * purples badly enough to pick the wrong text colour for them.
- */
-function relativeLuminance(color) {
-    const rgb = (typeof color === 'string') ? hexToRGBArray(color) : color;
-    if (!rgb) {
-        return 0;
-    }
-    const linear = rgb.map(value => {
-        const channel = value / 255;
-        return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
-    });
-    return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
-}
-
-/** WCAG contrast ratio between two colours, from 1:1 (identical) to 21:1 (black on white). */
-export function contrastRatio(a, b) {
-    const luminances = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
-    return (luminances[0] + 0.05) / (luminances[1] + 0.05);
-}
-
-/**
- * A hex colour as [r, g, b], accepting both `#rrggbb` and the shorthand `#rgb`.
+ * It is forwarded by a function that delegates rather than by `export {contrastRatio}`, and
+ * that is load-bearing.  A bare re-export compiles to a getter that dereferences the imported
+ * module, and six specs mock this module with `{...jest.requireActual('./Common')}` -- a
+ * spread invokes every getter, and those spreads run re-entrantly while Common.js is still
+ * evaluating (Common -> customHooks -> Common, both mocked that way).  The getter fires
+ * before the import binding is assigned, throws `Cannot read properties of undefined`, and
+ * takes the whole suite with it.  A function is read by the spread but not called, so it
+ * dereferences nothing until evaluation has finished.
  *
- * The shorthand matters because tag colours are not only chosen in the colour picker: they
- * live in the database and in a config file, and a config is something a user edits by hand
+ * The hex parser accepting the `#rgb` shorthand matters and is not incidental: tag colours
+ * are not only chosen in the colour picker, they live in a config file a user edits by hand
  * -- configs are the source of truth in WROLPi.  Rejecting `#fff` left the luminance at zero,
  * so a near-white tag was treated as black and handed light text.
  */
-function hexToRGBArray(color) {
-    let hex = (typeof color === 'string' ? color : '').replace(/^#/, '');
-    if (hex.length === 3) {
-        // #abc means #aabbcc, not #0a0b0c.
-        hex = hex.split('').map(digit => digit + digit).join('');
-    }
-    if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
-        console.error('Invalid hex color: ' + color);
-        return;
-    }
-    let rgb = [];
-    for (let i = 0; i <= 2; i++) rgb[i] = parseInt(hex.substr(i * 2, 2), 16);
-    return rgb;
+export function contrastRatio(a, b) {
+    return measureContrast(a, b);
 }
 
 export const TAG_TEXT_DARK = '#000000';

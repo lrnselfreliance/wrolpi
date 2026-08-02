@@ -756,13 +756,28 @@ html[data-theme="night"] .wrolpi-tag::before {
     margin-top: 22px;
 }
 
+/* The heading and its trailing control share one row. */
+.wrolpi-header-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /*
- * Trailing content keeps the heading's baseline but not its size: a help button rendered
- * at heading scale is a 26px glyph next to a 17px word.
+ * Trailing content keeps the heading's row but not its size: a help button rendered at
+ * heading scale is a 26px glyph next to a 17px word.
+ *
+ * `flex-shrink: 0` states the intent -- a control is not the thing that should give way,
+ * a long title should wrap instead.  Declared, but NOT covered by a test: with the row's
+ * only other item being a heading, the heading's automatic minimum size absorbs the
+ * pressure and no width could be found where removing this changes what is painted.  It
+ * is here for the day the slot holds something beside a heading that can shrink, not
+ * because a case exists today.
  */
 .wrolpi-header-after {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     font-size: 13px;
     font-weight: 400;
 }

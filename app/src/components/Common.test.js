@@ -623,7 +623,7 @@ describe('healthRole', () => {
     });
 });
 
-describe('a heading with a help icon keeps the icon on its own line', () => {
+describe('a heading keeps its help icon on the same row as the text', () => {
     /*
      * `HelpHeader` and `InfoHeader` put their icon in a sibling `<span>` beside a `<label>`,
      * held on one line by `.inline-header h1..h5 {display: inline-block}` in App.css.  That
@@ -635,20 +635,36 @@ describe('a heading with a help icon keeps the icon on its own line', () => {
      * jsdom can judge; that the two actually share a line is asserted in ui-layout.cy.js,
      * since jsdom has no layout at all.
      */
-    it('renders the help control inside the heading element', () => {
-        render(<HelpHeader headerSize='h3' headerContent='Root CA Certificate'
-                           helpPath='/system/certificates/'/>);
+    it("renders the help control in the heading's row", () => {
+        const {container} = render(
+            <HelpHeader headerSize='h3' headerContent='Root CA Certificate'
+                        helpPath='/system/certificates/'/>);
 
-        const heading = screen.getByRole('heading', {name: /Root CA Certificate/});
-        expect(heading).toContainElement(screen.getByRole('button', {name: 'Help'}));
+        expect(container.querySelector('.wrolpi-header-row'))
+            .toContainElement(screen.getByRole('button', {name: 'Help'}));
+        // And not inside the heading itself, which would put it in the accessible name.
+        expect(screen.getByRole('heading')).toHaveAccessibleName('Root CA Certificate');
     });
 
-    it('renders the info popup inside the heading element', () => {
-        render(<InfoHeader headerSize='h4' headerContent='Video Resolutions'
-                           popupContent='Highest available is tried first.'/>);
+    it("renders the info popup in the heading's row", () => {
+        const {container} = render(
+            <InfoHeader headerSize='h4' headerContent='Video Resolutions'
+                        popupContent='Highest available is tried first.'/>);
 
-        const heading = screen.getByRole('heading', {name: /Video Resolutions/});
-        expect(heading.querySelector('svg')).not.toBeNull();
+        expect(container.querySelector('.wrolpi-header-after svg')).not.toBeNull();
+    });
+
+    it('renders no label at all when there is no field to name', () => {
+        /*
+         * Several call sites pass an InfoHeader as the `label` prop of InputForm/ToggleForm,
+         * which wraps it in a `<label>` of its own.  An unconditional label here nested one
+         * inside another -- invalid HTML, and it makes clicking the text ambiguous.
+         */
+        const {container} = render(
+            <InfoHeader headerSize='h5' headerContent='Video File Format' popupContent='...'/>);
+
+        expect(container.querySelector('label')).toBeNull();
+        expect(screen.getByRole('heading', {name: /Video File Format/})).toBeInTheDocument();
     });
 
     it('keeps the label association, which is what `for_` is for', () => {

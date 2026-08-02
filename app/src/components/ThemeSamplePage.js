@@ -5,6 +5,7 @@ import {
     Button,
     Card,
     CardGroup,
+    ColoredInput,
     Confirm,
     Header,
     Icon,
@@ -572,6 +573,16 @@ export function ThemeSamplePage() {
                         action={<Button role='cancel' icon='copy'>Copy</Button>}
                     />
                 </div>
+                <div style={{marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 10}}>
+                    <ColoredInput label='ft' color='blue' defaultValue='33'/>
+                    <ColoredInput label='Ω' color='red' defaultValue='50'/>
+                    <ColoredInput label='gal' color='green' labelPosition='right' defaultValue='275'/>
+                </div>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0}}>
+                    ColoredInput welds a Label to one edge of a field — the calculators' unit
+                    markers. In night and amber the Label is an outline rather than a fill, so
+                    the marker reads without a block of colour.
+                </p>
                 <div style={{marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10}}>
                     <Checkbox label='Download comments' checked={comments}
                               onChange={e => setComments(e.currentTarget.checked)}/>

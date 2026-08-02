@@ -1,6 +1,5 @@
 import React from "react";
-import {Button, ButtonGroup, Grid, Group, Header, IconButton, NumberInput, Panel, Table} from "../ui";
-import {ColoredInput} from "../Apps";
+import {Button, ButtonGroup, ColoredInput, Grid, Group, Header, IconButton, NumberInput, Panel, Table} from "../ui";
 import {InfoPopup, roundDigits, Toggle, useLocalStorage} from "../Common";
 import {Media} from "../../contexts/contexts";
 import {IconSettings, IconSettings2} from "@tabler/icons-react";

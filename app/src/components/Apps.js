@@ -9,7 +9,7 @@ import {
     toLocaleString,
     useTitle
 } from "./Common";
-import {Header, Label, Loading, Panel, Statistic, StatisticGroup, TextInput} from "./ui";
+import {Header, Loading, Panel, Statistic, StatisticGroup} from "./ui";
 import {useStatistics} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
@@ -106,18 +106,4 @@ export function MoreRoute(props) {
             <Route path='statistics' exact element={<StatisticsPage/>}/>
         </Routes>
     </PageContainer>
-}
-
-/**
- * A text input with a colored tag attached to its leading (or trailing) edge.
- * Replaces Semantic's `<Input label={<Label color={...}/>} labelPosition=.../>`.
- */
-export function ColoredInput({name, value, label, color, labelPosition = 'left', fluid, style, ...props}) {
-    const labelNode = label ? <Label color={color || 'grey'}>{label}</Label> : null;
-
-    return <div style={{display: 'flex', alignItems: 'stretch', gap: 6, width: fluid ? '100%' : undefined, ...style}}>
-        {labelNode && labelPosition === 'left' && labelNode}
-        <TextInput name={name} value={value} style={{flex: fluid ? 1 : undefined}} {...props}/>
-        {labelNode && labelPosition !== 'left' && labelNode}
-    </div>
 }

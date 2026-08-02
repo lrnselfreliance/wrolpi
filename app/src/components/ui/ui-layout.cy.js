@@ -2892,35 +2892,133 @@ describe('a disabled button keeps its own colour', () => {
         });
 
         it(`still marks them as unavailable in ${theme}`, () => {
-            // Keeping the colour must not cost the affordance: a disabled button that looks
-            // identical to an enabled one is a worse bug than a grey one.
+            /*
+             * Keeping the colour must not cost the affordance: a disabled button that looks
+             * identical to an enabled one is a worse bug than a grey one.
+             *
+             * Against `--disabled-opacity` rather than a band.  A band tolerates an
+             * accidentally different fade, or an opacity leaking in from somewhere else, and
+             * still reports success -- and the fade is an authored value, so it can be read.
+             */
             mountPairs(theme);
 
             cy.get('[data-testid="off-red"]').should(($off) => {
+                const authored = parseFloat(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--disabled-opacity'));
                 const disabled = parseFloat(getComputedStyle($off[0]).opacity);
                 const enabled = parseFloat(
                     getComputedStyle(Cypress.$('[data-testid="on-red"]')[0]).opacity);
 
+                expect(authored, 'the token resolved').to.be.within(0.1, 0.9);
                 expect(enabled, `${theme} enabled is solid`).to.equal(1);
-                expect(disabled, `${theme} disabled is faded`).to.be.lessThan(0.7);
-                expect(disabled, `${theme} disabled is still legible`).to.be.greaterThan(0.25);
+                expect(disabled, `${theme} disabled matches the token`).to.equal(authored);
             });
         });
     });
 
-    it('tells two disabled buttons of different colours apart', () => {
+    themeNames.forEach((theme) => {
+        it(`tells two disabled buttons of different colours apart in ${theme}`, () => {
+            /*
+             * The claim stated as the user meets it, and the inverse of the bug: five grey
+             * blobs were five EQUAL greys.  Comparing each against its enabled twin above
+             * would still pass if every pair were grey, so this compares them to each other.
+             *
+             * Every theme, not just light.  Night and amber are where it is both most
+             * valuable and most fragile: one hue means the five differ only in brightness,
+             * so if any theme is going to collapse them back together it is those two.
+             */
+            mountPairs(theme);
+
+            cy.get('[data-testid^="off-"]').should(($disabled) => {
+                const fills = [...$disabled]
+                    .map(button => getComputedStyle(button).backgroundColor);
+
+                expect(new Set(fills).size,
+                    `${theme}: five colours, distinct fills: ${fills.join(' ')}`)
+                    .to.equal(pairs.length);
+            });
+        });
+    });
+
+    it('does not fade a button that is merely busy', () => {
         /*
-         * The claim stated as the user meets it, and the inverse of the bug: five grey blobs
-         * were five EQUAL greys.  Comparing each against its enabled twin above would still
-         * pass if every pair were grey, so this compares them against each other.
+         * Mantine renders a loading button as `disabled={disabled || loading}`, so every busy
+         * control in the app is `:disabled` -- an APIButton mid-request, refresh, the
+         * flasher's connect.  Mantine's own grey repaint excludes `[data-loading]` for
+         * exactly this reason, and the first version of this rule did not, so "working..."
+         * faded to 0.45 and read as unavailable rather than active.
          */
-        mountPairs('light');
+        cy.mountUI(<div>
+            <Button color='blue' loading data-testid='busy'>Saving</Button>
+            <Button color='blue' disabled data-testid='off'>Save</Button>
+            <IconButton icon='trash' label='Deleting' color='red' variant='filled' loading
+                        data-testid='busy-icon'/>
+        </div>);
 
-        cy.get('[data-testid^="off-"]').should(($disabled) => {
-            const fills = [...$disabled].map(button => getComputedStyle(button).backgroundColor);
+        cy.get('[data-testid="busy"]').should(($busy) => {
+            expect(parseFloat(getComputedStyle($busy[0]).opacity), 'a busy button is solid')
+                .to.equal(1);
+            // Paired with the disabled one, so this cannot pass by nothing fading at all.
+            expect(parseFloat(getComputedStyle(Cypress.$('[data-testid="off"]')[0]).opacity),
+                'while a disabled one beside it still fades').to.be.lessThan(1);
+            expect(parseFloat(getComputedStyle(Cypress.$('[data-testid="busy-icon"]')[0]).opacity),
+                'and the same for an icon button').to.equal(1);
+        });
+    });
 
-            expect(new Set(fills).size, `five colours, distinct fills: ${fills.join(' ')}`)
-                .to.equal(pairs.length);
+    it('keeps night\'s dashed danger treatment when disabled', () => {
+        /*
+         * Night has no second hue, so danger is a dashed border on a transparent fill rather
+         * than a red one.  The general disabled rule repaints from `--button-bg` -- the
+         * filled red Mantine leaves in the variable -- and at equal specificity it won on
+         * source order, turning the file browser's disabled Delete into a solid red chip in
+         * the one theme where that is not what danger means.
+         */
+        cy.mountUI(<div>
+            <Button role='danger' disabled data-testid='danger-off'>Delete</Button>
+        </div>, {theme: 'night'});
+
+        cy.get('[data-testid="danger-off"]').should(($button) => {
+            const style = getComputedStyle($button[0]);
+
+            expect(style.backgroundColor, 'no fill').to.equal('rgba(0, 0, 0, 0)');
+            expect(style.borderStyle, 'still dashed').to.equal('dashed');
+            expect(toRgb(style.borderTopColor), 'in the danger colour')
+                .to.equal(toRgb(style.getPropertyValue('--danger') || '#ff5757'));
+            expect(parseFloat(style.opacity), 'and still faded').to.be.lessThan(1);
+        });
+    });
+
+    it('is a real constraint: light DOES fill a disabled danger button', () => {
+        // Without this the case above would also pass on a rule that stripped the fill from
+        // every disabled danger button in every theme, which would break the other three.
+        cy.mountUI(<div>
+            <Button role='danger' disabled data-testid='danger-off'>Delete</Button>
+        </div>, {theme: 'light'});
+
+        cy.get('[data-testid="danger-off"]').should(($button) => {
+            expect(getComputedStyle($button[0]).backgroundColor, 'light danger is filled')
+                .to.not.equal('rgba(0, 0, 0, 0)');
+        });
+    });
+
+    it('restores text and border on variants that carry no fill', () => {
+        /*
+         * `default` and `outline` buttons say what they are with their text and border, not
+         * their background, so a background-only check would pass on them while they were
+         * still painted Mantine's disabled grey.
+         */
+        cy.mountUI(<div>
+            <Button variant='outline' color='red' data-testid='outline-on'>Delete</Button>
+            <Button variant='outline' color='red' disabled data-testid='outline-off'>Delete</Button>
+        </div>);
+
+        cy.get('[data-testid="outline-off"]').should(($off) => {
+            const on = getComputedStyle(Cypress.$('[data-testid="outline-on"]')[0]);
+            const off = getComputedStyle($off[0]);
+
+            expect(off.color, 'text colour survives').to.equal(on.color);
+            expect(off.borderTopColor, 'border colour survives').to.equal(on.borderTopColor);
         });
     });
 

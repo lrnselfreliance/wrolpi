@@ -1224,15 +1224,24 @@ export function FileIcon({file, disabled = true, size = 48, ...props}) {
     />
 }
 
-export function LoadStatistic({label, value, cores, ...props}) {
-    // Load is a warning above half the cores, and a problem above three quarters.
+/**
+ * The severity of a load average: a warning above half the cores, a problem above three
+ * quarters, and nothing to say below that or when the core count is unknown.
+ *
+ * Exported and pure so the branches can be tested as branches.  Reading the colour back off
+ * a rendered Statistic cannot do it -- jsdom rejects `color: var(--danger)` as an invalid
+ * declaration and drops it, so every value comes back as the empty string.
+ */
+export const loadRole = (value, cores) => {
+    if (!cores) return undefined;
     const quarter = cores / 4;
-    let color;
-    if (cores && value >= (quarter * 3)) {
-        color = 'danger';
-    } else if (cores && value >= (quarter * 2)) {
-        color = 'warning';
-    }
+    if (value >= quarter * 3) return 'danger';
+    if (value >= quarter * 2) return 'warning';
+    return undefined;
+};
+
+export function LoadStatistic({label, value, cores, ...props}) {
+    const color = loadRole(value, cores);
     return <Statistic
         label={label}
         value={value ? parseFloat(value).toFixed(1) : '?'}

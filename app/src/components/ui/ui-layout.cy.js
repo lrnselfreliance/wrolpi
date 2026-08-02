@@ -4,7 +4,7 @@ import {
     Message, Placeholder, Statistic, StatisticGroup, Status, TabBar, Table, tabClassName,
     TextInput,
 } from './index';
-import {contrastingColor, LoadStatistic} from '../Common';
+import {contrastingColor, HelpHeader, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
@@ -398,8 +398,41 @@ describe('a heading keeps its trailing control on its own line', () => {
      * there, and containment alone (which the jest tests assert) does not prove two boxes
      * share a line.
      */
+    /*
+     * The REAL wrapper, not a plain Button in an `after` slot.  A hand-built fixture would
+     * miss the thing most likely to be wrong: `HelpModal` and `InfoPopup` carry their own
+     * `iconStyle` default of `margin: 0.5em`, which was there to separate a free-floating
+     * sibling and adds to the row's gap on every side once it is inside the row.
+     */
     themeNames.forEach((theme) => {
-        it(`sits the control beside the text in ${theme}`, () => {
+        it(`sits a real help control beside the text in ${theme}`, () => {
+            cy.mountUI(
+                <HelpHeader headerSize='h3' headerContent='Root CA Certificate'
+                            helpPath='/system/certificates/'/>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-header-after').should(($after) => {
+                const control = $after[0].getBoundingClientRect();
+                const text = $after[0].previousElementSibling.getBoundingClientRect();
+                expect(control.top, 'control starts above the text baseline')
+                    .to.be.lessThan(text.bottom);
+                expect(text.top, 'text starts above the control baseline')
+                    .to.be.lessThan(control.bottom);
+                expect(control.left, 'control is after the text').to.be.at.least(text.right);
+                /*
+                 * Measured to the BUTTON, not to `.wrolpi-header-after`.  That wrapper is a
+                 * flex container, so a margin on the button sits inside it and the wrapper's
+                 * own rect does not move -- measuring the wrapper cannot see the margin at
+                 * all, which is how this assertion first passed with it restored.
+                 */
+                const button = $after[0].querySelector('button').getBoundingClientRect();
+                expect(button.left - text.right, 'the row gap alone, no icon margin on top')
+                    .to.be.at.most(12);
+            });
+        });
+
+        it(`sits an arbitrary control beside the text in ${theme}`, () => {
             cy.mountUI(
                 <Header as='h3' after={<Button role='cancel' size='xs'>Help</Button>}>
                     Root CA Certificate

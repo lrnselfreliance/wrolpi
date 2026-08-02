@@ -28,11 +28,14 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
      */
     color?: string;
     /**
-     * Trailing content on the heading's own line — a help button, a count, a small
-     * control.  It goes inside the heading's flex row, which is the only place it can
-     * sit beside the text: the wrapper is a block, so a sibling placed after it wraps
-     * to the next line.  That is exactly what happened to every help icon in the app
-     * when these headings stopped being a bare `<h3>`.
+     * Trailing content on the heading's row — a help button, a count, a small control.
+     *
+     * It is a SIBLING of the heading element inside a flex row, not a child of it: a
+     * control inside an `<h3>` becomes part of the heading's accessible name, so screen
+     * reader heading navigation announces "Root CA Certificate Help".  The row is what
+     * keeps the two on one line; a sibling placed after the block wrapper wraps instead,
+     * which is what happened to every help icon in the app when these headings stopped
+     * being a bare `<h3>`.
      */
     after?: React.ReactNode;
 }
@@ -48,19 +51,39 @@ export function Header({
     as = 'h3', icon, subheader, dividing, color, after, className, style, children, ...props
 }: HeaderProps) {
     const Tag = as;
-    return <div className={['wrolpi-header', dividing ? 'wrolpi-header-dividing' : '', className]
-        .filter(Boolean).join(' ')}>
-        <Tag
-            className={`wrolpi-header-text wrolpi-header-${as}`}
-            style={color ? {color: `var(--${color})`, ...style} : style}
-            {...props}
-        >
-            {icon && (typeof icon === 'string'
-                ? <Icon name={icon} size='medium'/>
-                : <Icon component={icon} size='medium'/>)}
-            <span>{children}</span>
-            {after && <span className='wrolpi-header-after'>{after}</span>}
-        </Tag>
+    const heading = <Tag
+        className={`wrolpi-header-text wrolpi-header-${as}`}
+        style={color ? {color: `var(--${color})`} : undefined}
+        {...props}
+    >
+        {icon && (typeof icon === 'string'
+            ? <Icon name={icon} size='medium'/>
+            : <Icon component={icon} size='medium'/>)}
+        <span>{children}</span>
+    </Tag>;
+
+    /*
+     * `style` lands on the WRAPPER, because every layout use of it is about the header as a
+     * block -- `marginBottom` on Status's "Drive Bandwidth", `marginTop` on the extension
+     * page's steps.  On the inner heading those set a margin inside the wrapper and depended
+     * on margin collapse to have any effect at all, which stops the moment the wrapper gains
+     * padding or a border.  Text properties passed this way still reach the heading: `color`
+     * and `text-align` inherit.  A `color` PROP stays on the heading, since that is about the
+     * text rather than the box.
+     */
+    return <div
+        className={['wrolpi-header', dividing ? 'wrolpi-header-dividing' : '', className]
+            .filter(Boolean).join(' ')}
+        style={style}
+    >
+        {/* The row exists only when there is something to sit beside; without it the
+            markup for the other 46 call sites is unchanged. */}
+        {after
+            ? <div className='wrolpi-header-row'>
+                {heading}
+                <span className='wrolpi-header-after'>{after}</span>
+            </div>
+            : heading}
         {subheader && <div className='wrolpi-header-sub'>{subheader}</div>}
     </div>
 }

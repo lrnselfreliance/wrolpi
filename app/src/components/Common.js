@@ -820,11 +820,24 @@ export function InfoHeader({
      * The label stays, now inside the heading, because `for_` associates the text with a
      * field on three of these call sites.
      */
+    /*
+     * A `<label>` ONLY when `for_` names a field.  Several call sites pass an InfoHeader as
+     * the `label` prop of InputForm/ToggleForm, which wraps whatever it is given in a
+     * `<label>` of its own -- an unconditional label here nests one inside another, which is
+     * invalid HTML and confuses what clicking the text does.  That predates this change; it
+     * is fixed here rather than carried forward.
+     *
+     * `margin: 0` on the icon because the row's `gap` does the spacing now.  The 0.5em
+     * default was there to separate a free-floating sibling, and inside the row it adds to
+     * the gap on every side.
+     */
     return <Header as={headerSize} {...props} after={
         <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}
-                   {...popupProps}/>
+                   iconStyle={{margin: 0}} {...popupProps}/>
     }>
-        <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+        {for_
+            ? <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+            : <>{headerContent} {required && <RequiredAsterisk/>}</>}
     </Header>
 }
 
@@ -864,12 +877,15 @@ export function HelpHeader({
                                 required = false,
                                 ...props
                             }) {
-    // See the note in InfoHeader: the icon belongs in the heading's row, not beside it.
+    // See the notes in InfoHeader: the control belongs in the heading's row, a label only
+    // when it names a field, and the row's gap is the spacing.
     return <Header as={headerSize} {...props} after={
         <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle}
-                   {...helpModalProps}/>
+                   iconStyle={{margin: 0}} {...helpModalProps}/>
     }>
-        <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+        {for_
+            ? <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+            : <>{headerContent} {required && <RequiredAsterisk/>}</>}
     </Header>
 }
 

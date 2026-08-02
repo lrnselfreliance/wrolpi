@@ -367,6 +367,22 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
     border-top: none;
 }
 
+/*
+ * Inside the global search modal the suggestions ARE the panel's content, so they sit in
+ * flow instead of floating over the page.
+ *
+ * Overlaying is right everywhere else -- a list that reflows the page while you type is
+ * unusable -- but in a modal it fails twice.  An absolutely positioned list contributes no
+ * height, so the panel sized itself to the search box alone (114px), and the panel's own
+ * `overflow: auto` then clipped the list at that edge: the modal showed an input and the
+ * first line of the first group.  In flow, the panel grows to fit and its own max-height
+ * does the scrolling.
+ */
+.wrolpi-search-modal .wrolpi-searchbox-results {
+    position: static;
+    max-height: min(50vh, 420px);
+}
+
 .wrolpi-searchbox-group-name {
     padding: 6px 10px;
     font-size: 11px;

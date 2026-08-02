@@ -513,11 +513,18 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
 }
 
 export function SearchIconButton() {
-    // A single button which opens the search modal via keyboard shortcuts context.
+    /*
+     * A single button which opens the search modal via keyboard shortcuts context.
+     *
+     * `wrolpi-navbar-link`, not Semantic's leftover `item`, which carried no rules at all
+     * once Semantic was removed: no pointer cursor, no hover highlight, and a hit area of
+     * whatever the 18px glyph occupied rather than the height of the bar.  It is the same
+     * kind of thing as Help and Admin and now has the same affordance.
+     */
     const {openSearchModal} = React.useContext(KeyboardShortcutsContext);
 
     return (
-        <a className='item' style={{paddingRight: '0.7em'}} onClick={openSearchModal}
+        <a className='wrolpi-navbar-link' onClick={openSearchModal}
            role='button' tabIndex={0} aria-label='Search'
            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && openSearchModal()}>
             <Icon name='search'/>

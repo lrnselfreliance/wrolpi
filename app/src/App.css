@@ -82,8 +82,14 @@ pre.wrap-text {
     text-decoration: none !important;
 }
 
+/*
+ * A card's title and its author/channel/domain line are links, but they are the card's
+ * text -- they take the body colour rather than the link colour, so a grid of cards reads
+ * as titles and not as a wall of blue.  This was a literal `black` until the themes
+ * arrived, which left every title at about 1.1:1 on the dark, night and amber panels.
+ */
 .card-link {
-    color: black;
+    color: var(--text);
 }
 
 .center-me {

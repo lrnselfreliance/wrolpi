@@ -426,22 +426,22 @@ export function ArchiveCard({file}) {
         </div>
     </>;
 
-    return <Card media={media} title={titleElm} meta={meta}
-                 color={mimetypeColor(file.mimetype, file.primary_path)}>
-        <div style={{display: 'flex', gap: '0.5em', marginTop: '0.5em'}}>
-            <Link to={`/archives/${file.id}`}>
-                <Button icon='file alternate'>Details</Button>
-            </Link>
-            <IconButton
-                icon='external'
-                label='Open original URL'
-                component='a'
-                href={file.url}
-                target='_blank'
-                rel='noopener noreferrer'
-            />
-        </div>
-    </Card>
+    const actions = <div style={{display: 'flex', gap: '0.5em'}}>
+        <Link to={`/archives/${file.id}`}>
+            <Button icon='file alternate'>Details</Button>
+        </Link>
+        <IconButton
+            icon='external'
+            label='Open original URL'
+            component='a'
+            href={file.url}
+            target='_blank'
+            rel='noopener noreferrer'
+        />
+    </div>;
+
+    return <Card media={media} title={titleElm} meta={meta} actions={actions}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}/>
 }
 
 // Domain table column configuration

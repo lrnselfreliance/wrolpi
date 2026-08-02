@@ -197,7 +197,7 @@ export function ThemeSamplePage() {
             <StatisticGroup>
                 <Statistic value='0.4' label='1 Min. Load'/>
                 <Statistic value='2.6' label='5 Min. Load' color='orange'/>
-                <Statistic value='4.1' label='15 Min. Load' color='red'/>
+                <Statistic value='4.1' label='15 Min. Load' color='danger'/>
                 <Statistic value='48' label='Temp C°'/>
             </StatisticGroup>
         </Section>
@@ -700,7 +700,7 @@ export function ThemeSamplePage() {
 
         <Section label='Danger zone'>
             <Panel danger>
-                <h2 style={{color: 'var(--red)', fontSize: 14, margin: '0 0 4px'}}>Danger zone</h2>
+                <h2 style={{color: 'var(--danger)', fontSize: 14, margin: '0 0 4px'}}>Danger zone</h2>
                 <p style={{color: 'var(--muted)', fontSize: 13, margin: '0 0 12px'}}>
                     These actions are destructive and cannot be undone.
                 </p>

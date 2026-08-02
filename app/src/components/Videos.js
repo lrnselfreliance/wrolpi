@@ -614,13 +614,16 @@ function CookiesSettingsSection() {
         fetchStatus();
     };
 
-    // Status is encoded by color like any other status label; no filled "success/warning"
-    // words map directly to a token, so the wrapper picks the token color explicitly.
+    // The two states that mean something take roles; the two that are just "nothing to
+    // report" stay --muted, which is dimmer than --neutral in night and amber and so keeps
+    // the least important states at the bottom.
     const getStatusLabel = () => {
         if (loading) return <span style={{color: 'var(--muted)'}}>Loading...</span>;
         if (!status.cookies_exist) return <span style={{color: 'var(--muted)'}}>No cookies stored</span>;
-        if (status.cookies_unlocked) return <span style={{color: 'var(--green)'}}>Unlocked</span>;
-        return <span style={{color: 'var(--amber)'}}>Locked</span>;
+        if (status.cookies_unlocked) return <span style={{color: 'var(--success)'}}>Unlocked</span>;
+        // Locked is not an error the user made, but cookie-requiring downloads fail until
+        // somebody enters the password after a reboot -- that is attention, not failure.
+        return <span style={{color: 'var(--warning)'}}>Locked</span>;
     };
 
     return <Panel>

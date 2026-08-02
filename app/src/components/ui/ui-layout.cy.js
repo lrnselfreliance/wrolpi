@@ -333,6 +333,56 @@ describe('semantic roles read as severity in every theme', () => {
     });
 });
 
+describe('a load reading ranks itself in the monochrome themes', () => {
+    /*
+     * LoadStatistic is the Status page's CPU load, and the clearest payoff of the roles
+     * outside the library: it used to be `orange` above half the cores and `red` above three
+     * quarters, and in night `--orange` is byte-identical to `--text`, so a machine under
+     * load rendered its warning as an ordinary uncoloured number.
+     *
+     * Only a browser can see this.  jsdom rejects `color: var(--warning)` as invalid and
+     * drops it, so the inline colour reads back empty whatever the component did.
+     */
+    monochromeThemes.forEach((theme) => {
+        it(`separates fine, warning and danger loads in ${theme}`, () => {
+            cy.mountUI(
+                <Panel>
+                    <Statistic value='1.9' label='fine' cores={4} color={undefined}/>
+                    <Statistic value='2.6' label='warning' color='warning'/>
+                    <Statistic value='4.1' label='danger' color='danger'/>
+                </Panel>,
+                {theme},
+            );
+
+            cy.get('.wrolpi-statistic-value').should(($values) => {
+                const [fine, warning, danger] = [...$values]
+                    .map(el => toRgb(getComputedStyle(el).color));
+                const panel = toRgb(getComputedStyle(
+                    Cypress.$('.wrolpi-panel')[0]).backgroundColor);
+
+                expect(new Set([fine, warning, danger]).size, 'three distinct readings').to.equal(3);
+                expect(contrast(danger, panel), 'danger is louder than warning')
+                    .to.be.greaterThan(contrast(warning, panel));
+                expect(contrast(danger, panel), 'danger is louder than a plain reading')
+                    .to.be.greaterThan(contrast(fine, panel));
+
+                /*
+                 * NOT asserted: that warning outranks a plain reading.  It does not, and that
+                 * is a live question rather than an oversight -- an uncoloured value inherits
+                 * `--text`, which in night is 4.98:1 against 4.91:1 for `--warning`.  So a
+                 * machine under load is marginally QUIETER than one that is fine.
+                 *
+                 * Lifting warning above text is a palette change, not a call-site one: on a
+                 * dark panel the only way up is lightness, and night's danger would desaturate
+                 * from #ff3e3e to about #ff5d5d -- trading the theme's "red only" character
+                 * for loudness.  Worth a deliberate decision, so it is flagged rather than
+                 * quietly made here.
+                 */
+            });
+        });
+    });
+});
+
 describe('a table header is a surface, not just bold text', () => {
     themeNames.forEach((theme) => {
         it(`separates the header from every body row in ${theme}`, () => {

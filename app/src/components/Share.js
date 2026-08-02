@@ -38,7 +38,7 @@ export const ShareButton = () => {
     }
 
     return <>
-        <Modal closeIcon
+        <Modal size='small' closeIcon
                open={open}
                onClose={handleClose}
         >

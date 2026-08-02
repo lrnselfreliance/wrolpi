@@ -110,7 +110,7 @@ export const OutdatedZimsMessage = ({onClick}) => {
         <p></p>
 
         <Button role='danger' onClick={() => setOpen(true)}>Delete</Button>
-        <Modal open={open}
+        <Modal size='small' open={open}
                onClose={onClose}
                title='Delete'
         >
@@ -165,7 +165,7 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
             {tagIcon}
         </Header>
         <HeadlineText headline={headline}/>
-        <Modal open={open}
+        <Modal size='large' open={open}
                onClose={() => setOpen(false)}>
             <div className='preview-fit'>
                 <ZimViewer src={url} style={{

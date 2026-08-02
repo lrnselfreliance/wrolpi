@@ -309,7 +309,7 @@ export function ChannelEditPage() {
                     New Download
                 </Button>
             </Group>
-            <Modal open={downloadModalOpen} onClose={() => setDownloadModalOpen(false)}>
+            <Modal size='small' open={downloadModalOpen} onClose={() => setDownloadModalOpen(false)}>
                 <Modal.Content>
                     <Header as='h2'>New Channel Download</Header>
                     <ChannelDownloadForm

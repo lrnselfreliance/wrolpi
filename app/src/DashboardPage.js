@@ -251,7 +251,7 @@ export function Getters() {
 
     let getterModal;
     if (selectedGetter === 'downloads') {
-        getterModal = <Modal closeIcon
+        getterModal = <Modal size='large' closeIcon
                              open={true}
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}
@@ -266,7 +266,7 @@ export function Getters() {
             </Modal.Content>
         </Modal>;
     } else if (selectedGetter === 'upload') {
-        getterModal = <Modal closeIcon
+        getterModal = <Modal size='large' closeIcon
                              open={true}
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}

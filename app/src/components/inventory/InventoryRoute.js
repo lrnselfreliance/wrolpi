@@ -36,7 +36,7 @@ function NewInventoryModal({open, onClose, onCreate}) {
         }
     };
 
-    return <Modal open={open} onClose={onClose} closeIcon>
+    return <Modal size='small' open={open} onClose={onClose} closeIcon>
         <Modal.Header>New Inventory</Modal.Header>
         <Modal.Content>
             <TextInput autoFocus label='Name' value={name} onChange={e => setName(e.currentTarget.value)}

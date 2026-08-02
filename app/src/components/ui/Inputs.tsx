@@ -9,6 +9,7 @@ import {
     Textarea as MTextarea,
     TextInput as MTextInput,
 } from '@mantine/core';
+import {Label, LabelProps} from './Feedback';
 
 /*
  * Form controls.
@@ -164,6 +165,55 @@ export const ActionInput = forwardRef<HTMLInputElement, ActionInputProps>((
     </div>
 });
 ActionInput.displayName = 'ActionInput';
+
+export interface ColoredInputProps
+    extends Omit<React.ComponentProps<typeof MTextInput>, 'color' | 'style'> {
+    /** Shown as a Label beside the field.  Omit it and this is a plain TextInput. */
+    label?: React.ReactNode;
+    /*
+     * Applied to the ROW, not the field — every call site uses it for width or margins
+     * around the pair.  Narrowed from Mantine's own `style`, which is a union that also
+     * accepts a function and an array and so cannot be spread into an object literal.
+     */
+    style?: React.CSSProperties;
+    /*
+     * A token colour name for the label, and the SAME union Label accepts rather than a
+     * loose `string`: the point of the union is that a theme must have a token by that
+     * name, and widening it here would let a call site name a colour that resolves to
+     * nothing in every theme.
+     */
+    color?: LabelProps['color'];
+    labelPosition?: 'left' | 'right';
+    /** Fill the row rather than sizing to content. */
+    fluid?: boolean;
+}
+
+/**
+ * A text field with a Label welded to one side — the calculators' unit markers ("ft", "Ω",
+ * "gal"), which is where all ten of them get their shape.
+ *
+ * It lives here rather than beside the calculators because it used to live in `Apps.js`,
+ * the module that ROUTES to the calculators.  Five calculators imported it, so
+ * `Calculators.js` -> a calculator -> `Apps.js` -> `Calculators.js` was a cycle around the
+ * hub, and `useCalculators` is a `const`: webpack compiles that to a getter that throws
+ * rather than returning undefined when read too early.  The dashboard threw on arrival for
+ * a whole editing session.  Nothing in `components/ui` imports from `components/`, so a
+ * control kept here cannot close a loop like that again.
+ */
+export function ColoredInput({
+    name, value, label, color, labelPosition = 'left', fluid, style, ...props
+}: ColoredInputProps) {
+    const labelNode = label ? <Label color={color || 'grey'}>{label}</Label> : null;
+
+    return <div style={{
+        display: 'flex', alignItems: 'stretch', gap: 6,
+        width: fluid ? '100%' : undefined, ...style,
+    }}>
+        {labelNode && labelPosition === 'left' && labelNode}
+        <MTextInput name={name} value={value} style={{flex: fluid ? 1 : undefined}} {...props}/>
+        {labelNode && labelPosition !== 'left' && labelNode}
+    </div>
+}
 
 export {
     MTextInput as TextInput,

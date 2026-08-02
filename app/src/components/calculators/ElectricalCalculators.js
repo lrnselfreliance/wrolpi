@@ -1,7 +1,6 @@
 import {InfoPopup, roundDigits, Toggle, useLocalStorage, useLocalStorageInt} from "../Common";
 import React, {useState} from "react";
-import {Grid, Header, Message, Panel, Select, Stack, Table} from "../ui";
-import {ColoredInput} from "../Apps";
+import {ColoredInput, Grid, Header, Message, Panel, Select, Stack, Table} from "../ui";
 import {Media} from "../../contexts/contexts";
 
 const initialState = {

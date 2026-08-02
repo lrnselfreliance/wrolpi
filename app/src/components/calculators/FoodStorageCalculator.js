@@ -1,6 +1,5 @@
 import React from "react";
-import {Grid, Header, Panel, Table, TextInput, Toggle} from "../ui";
-import {ColoredInput} from "../Apps";
+import {ColoredInput, Grid, Header, Panel, Table, TextInput, Toggle} from "../ui";
 import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 
 // Generic food-storage planner: given a household, estimate how much of each food category to store for a chosen

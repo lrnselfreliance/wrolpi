@@ -15,7 +15,7 @@ import {
     deleteMapFile, deleteMapPin, fetchMapSubscriptions, getMapFiles, getMapPins,
     mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, updateMapPin
 } from "../api";
-import {Button, Divider, Header, Icon, Modal, Table, TextInput} from "./ui";
+import {Button, Divider, Group, Header, Icon, Modal, Table, TextInput} from "./ui";
 import {SortableTable} from "./SortableTable";
 import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -229,19 +229,23 @@ function MapCatalogRow({item, subscribedRegions, fetchData}) {
         <Table.Cell>{name}</Table.Cell>
         <Table.Cell>{humanFileSize(size_estimate)}</Table.Cell>
         <Table.Cell>
-            {bbox && <Button
-                size='xs'
-                icon='eye'
-                onClick={() => setPreviewOpen(true)}
-            />}
-            <Button
-                role={isSubscribed ? 'danger' : undefined}
-                color={isSubscribed ? undefined : 'violet'}
-                size='xs'
-                onClick={handleButton}
-            >
-                {isSubscribed ? 'Unsubscribe' : 'Subscribe'}
-            </Button>
+            {/* See PinEditRow: a Group so the preview and subscribe controls line up and are
+                spaced, rather than sitting on baselines they do not share. */}
+            <Group gap='xs' wrap='nowrap'>
+                {bbox && <Button
+                    size='xs'
+                    icon='eye'
+                    onClick={() => setPreviewOpen(true)}
+                />}
+                <Button
+                    role={isSubscribed ? 'danger' : undefined}
+                    color={isSubscribed ? undefined : 'violet'}
+                    size='xs'
+                    onClick={handleButton}
+                >
+                    {isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+                </Button>
+            </Group>
         </Table.Cell>
         {previewOpen && <RegionPreviewModal
             bbox={bbox}
@@ -450,8 +454,13 @@ function PinEditRow({pin, onSave, onCancel}) {
         <Table.Cell>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</Table.Cell>
         <Media greaterThan='mobile'><Table.Cell>{pin.created}</Table.Cell></Media>
         <Table.Cell>
-            <Button size='xs' role='save' onClick={() => label.trim() && onSave(pin.id, label.trim(), color)}>Save</Button>
-            <Button size='xs' role='cancel' onClick={onCancel}>Cancel</Button>
+            {/* A Group, not bare siblings: inline-block controls align on text baselines they
+                do not share, and JSX leaves no whitespace between them to space them out. */}
+            <Group gap='xs' wrap='nowrap'>
+                <Button size='xs' role='save'
+                        onClick={() => label.trim() && onSave(pin.id, label.trim(), color)}>Save</Button>
+                <Button size='xs' role='cancel' onClick={onCancel}>Cancel</Button>
+            </Group>
         </Table.Cell>
     </Table.Row>;
 }
@@ -524,21 +533,24 @@ function MapPins() {
             </Table.Cell>
             <Table.Cell>{pin.created}</Table.Cell>
             <Table.Cell>
-                <Button size='xs' icon='edit' onClick={() => setEditingId(pin.id)}/>
-                <AddToPlaylistButton
-                    size='xs'
-                    icon='list'
-                    content=''
-                    url={{url: `/map?lat=${pin.lat}&lon=${pin.lon}&z=14`, title: pin.label}}
-                />
-                <APIButton
-                    size='xs'
-                    role='danger'
-                    icon='trash'
-                    confirmContent='Delete this pin?'
-                    confirmButton='Delete'
-                    onClick={() => handleDelete(pin.id)}
-                />
+                {/* See PinEditRow: a Group so the three controls line up and are spaced. */}
+                <Group gap='xs' wrap='nowrap'>
+                    <Button size='xs' icon='edit' onClick={() => setEditingId(pin.id)}/>
+                    <AddToPlaylistButton
+                        size='xs'
+                        icon='list'
+                        content=''
+                        url={{url: `/map?lat=${pin.lat}&lon=${pin.lon}&z=14`, title: pin.label}}
+                    />
+                    <APIButton
+                        size='xs'
+                        role='danger'
+                        icon='trash'
+                        confirmContent='Delete this pin?'
+                        confirmButton='Delete'
+                        onClick={() => handleDelete(pin.id)}
+                    />
+                </Group>
             </Table.Cell>
         </Table.Row>;
     };

@@ -1565,3 +1565,20 @@ html[data-theme="night"] .wrolpi-button-danger[data-disabled]:not([data-loading]
     color: var(--danger);
     border: 1.5px dashed var(--danger);
 }
+
+/*
+ * A button whose only content is an icon is square, like the ActionIcon it sits beside.
+ *
+ * A Button is as wide as its content plus its horizontal padding; an ActionIcon is square by
+ * construction.  So a row mixing the two at one nominal size came out at different widths --
+ * the map's pin actions are edit (Button), add-to-playlist (IconButton) and delete (Button),
+ * and measured 46, 30 and 46 wide.  Their heights already agree, because ActionIcon's scale
+ * was remapped onto Button's; this is the other axis of the same alignment.
+ *
+ * `--button-height` is Mantine's own per-size height, so the two stay in step through every
+ * size without a table here to keep current.
+ */
+html .mantine-Button-root[data-icon-only] {
+    width: var(--button-height);
+    padding: 0;
+}

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     ActionInput, Button, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
-    Message, Pagination, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
+    Group, Message, Pagination, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
 import {MemoryRouter} from 'react-router';
@@ -13,6 +13,7 @@ import {monochromeThemes, themeNames} from '../../themes/names';
 import {navColorNames} from '../../themes/navColors';
 import {NavBarSample} from '../ThemeSamplePage';
 import {DesktopNav, NavIconWrapper} from '../Nav';
+import {APIButton} from '../Common';
 import {ShareButton} from '../Share';
 
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
@@ -3355,6 +3356,181 @@ describe('the search field\'s clear button is attached to it', () => {
 
             expect($icon[0].getBoundingClientRect().left - control.left, 'icon is inset')
                 .to.be.greaterThan(4);
+        });
+    });
+});
+
+describe('icon-only action buttons in a row are one size', () => {
+    /*
+     * The map's pin table gives every row three actions: edit, add-to-playlist and delete,
+     * all asking for `size='xs'`.  They rendered 46x30, 30x30 and 54x36 -- three different
+     * sizes, for three different reasons.
+     *
+     * Two of those are structural.  `AddToPlaylistButton` renders an IconButton when it has no
+     * label, and an ActionIcon is square by construction, while a Button is as wide as its
+     * content plus its horizontal padding.  Their heights already agree, because ActionIcon's
+     * size scale was remapped onto Button's; width was never aligned.
+     *
+     * The third is a plain bug: `useAPIButton` never put `size` into the props it hands to
+     * Button, so every APIButton in the app rendered at Mantine's default regardless of what
+     * its call site asked for.  Seventeen call sites pass a size, from `xs` here to `huge` on
+     * Settings.
+     */
+    const sizes = ['xs', 'sm', 'md', 'lg'];
+
+    sizes.forEach((size) => {
+        it(`gives an icon-only Button and an IconButton the same box at ${size}`, () => {
+            cy.mountUI(<div>
+                <Button size={size} icon='edit' aria-label='Edit' data-testid='plain'/>
+                <IconButton size={size} icon='list' label='Add' data-testid='action'/>
+            </div>);
+
+            cy.get('[data-testid="action"]').should(($action) => {
+                const button = Cypress.$('[data-testid="plain"]')[0].getBoundingClientRect();
+                const icon = $action[0].getBoundingClientRect();
+
+                expect(button.height, `${size} heights`).to.be.closeTo(icon.height, 1);
+                expect(button.width, `${size} widths`).to.be.closeTo(icon.width, 1);
+            });
+        });
+    });
+
+    it('makes an icon-only button square, not merely equal to its neighbour', () => {
+        // Stated separately: two buttons could agree with each other and both be wrong.  A
+        // lone glyph in a control belongs in a square one.
+        cy.mountUI(<Button size='xs' icon='edit' aria-label='Edit' data-testid='plain'/>);
+
+        cy.get('[data-testid="plain"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+
+            expect(box.width, 'square').to.be.closeTo(box.height, 1);
+        });
+    });
+
+    it('is a real constraint: a labelled button is still as wide as its label', () => {
+        // The inverse.  Squaring must apply only to the icon-only case, or every labelled
+        // button in the app collapses to a square and clips its text.
+        cy.mountUI(<Button size='xs' icon='edit' data-testid='labelled'>Edit this pin</Button>);
+
+        cy.get('[data-testid="labelled"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+
+            expect(box.width, 'wider than it is tall').to.be.greaterThan(box.height * 2);
+        });
+    });
+});
+
+describe('APIButton honours the size its call site asks for', () => {
+    /*
+     * `useAPIButton` assembled the props it hands to Button and left `size` out, so it was
+     * dropped at every call site -- seventeen of them, from the map pins' `xs` to Settings'
+     * `huge`.  The map's delete pin came out 36px tall beside two 30px siblings.
+     */
+    it('renders a small APIButton smaller than a large one', () => {
+        cy.mountUI(<div>
+            <APIButton size='xs' icon='trash' onClick={() => {}} data-testid='small'/>
+            <APIButton size='lg' icon='trash' onClick={() => {}} data-testid='large'/>
+        </div>);
+
+        cy.get('[data-testid="large"]').should(($large) => {
+            const small = Cypress.$('[data-testid="small"]')[0].getBoundingClientRect();
+
+            expect(small.height, 'xs is shorter than lg')
+                .to.be.lessThan($large[0].getBoundingClientRect().height - 4);
+        });
+    });
+
+    it('matches a plain Button given the same size', () => {
+        // The claim that matters at the call site: an APIButton and a Button asking for the
+        // same size are the same control.
+        cy.mountUI(<div>
+            <APIButton size='xs' icon='trash' onClick={() => {}} data-testid='api'/>
+            <Button size='xs' icon='trash' aria-label='Delete' data-testid='plain'/>
+        </div>);
+
+        cy.get('[data-testid="api"]').should(($api) => {
+            const plain = Cypress.$('[data-testid="plain"]')[0].getBoundingClientRect();
+            const api = $api[0].getBoundingClientRect();
+
+            expect(api.height, 'heights').to.be.closeTo(plain.height, 1);
+            expect(api.width, 'widths').to.be.closeTo(plain.width, 1);
+        });
+    });
+
+    it('is a real constraint: an APIButton with no size keeps the default it had', () => {
+        /*
+         * `useAPIButton` declared `size = 'medium'` as a parameter default while never using
+         * it.  Passing that through would have fixed the bug by breaking everything else --
+         * every APIButton that names no size would have grown from Mantine's `sm` to `md`.
+         */
+        cy.mountUI(<div>
+            <APIButton icon='trash' onClick={() => {}} data-testid='default'/>
+            <Button icon='trash' aria-label='Delete' data-testid='plain'/>
+        </div>);
+
+        cy.get('[data-testid="default"]').should(($api) => {
+            const plain = Cypress.$('[data-testid="plain"]')[0].getBoundingClientRect();
+
+            expect($api[0].getBoundingClientRect().height, 'unchanged default')
+                .to.be.closeTo(plain.height, 1);
+        });
+    });
+});
+
+describe('a row of icon controls sits level and spaced', () => {
+    /*
+     * The map's pin actions are three icon controls in one table cell: edit (Button),
+     * add-to-playlist (IconButton) and delete (APIButton).  They were laid out as bare
+     * siblings, so they were inline-block boxes aligned on their BASELINES -- and a Button's
+     * baseline is not an ActionIcon's, so the middle one sat 4.3px higher than the other two.
+     * They also touched, because JSX leaves no whitespace between elements.
+     *
+     * Both are what `Group` is for, which is how every other row of buttons in the app is
+     * built.  Measured on the running app at tops 258.6 / 254.2 / 258.6 before the fix.
+     */
+    const controls = <>
+        <Button size='xs' icon='edit' aria-label='Edit' data-testid='edit'/>
+        <IconButton size='xs' icon='list' label='Add to Playlist' data-testid='add'/>
+        <APIButton size='xs' icon='trash' onClick={() => {}} data-testid='delete'/>
+    </>;
+
+    const tops = (root) => ['edit', 'add', 'delete']
+        .map(id => root.querySelector(`[data-testid="${id}"]`).getBoundingClientRect().top);
+
+    it('is misaligned without a Group, which is why one is needed', () => {
+        /*
+         * The premise for the case below, and the thing a reader will not believe otherwise:
+         * three controls of identical height still do not line up when they are laid out
+         * inline, because they are aligned on text baselines they do not share.
+         */
+        cy.mountUI(<div data-testid='bare'>{controls}</div>);
+
+        cy.get('[data-testid="bare"]').should(($bare) => {
+            const spread = Math.max(...tops($bare[0])) - Math.min(...tops($bare[0]));
+
+            expect(spread, 'bare siblings do not line up').to.be.greaterThan(1);
+        });
+    });
+
+    it('lines them up when wrapped in a Group', () => {
+        cy.mountUI(<Group gap='xs' data-testid='grouped'>{controls}</Group>);
+
+        cy.get('[data-testid="grouped"]').should(($group) => {
+            const spread = Math.max(...tops($group[0])) - Math.min(...tops($group[0]));
+
+            expect(spread, 'all three share a top edge').to.be.lessThan(1);
+        });
+    });
+
+    it('leaves a gap between them', () => {
+        cy.mountUI(<Group gap='xs' data-testid='grouped'>{controls}</Group>);
+
+        cy.get('[data-testid="grouped"]').should(($group) => {
+            const boxes = ['edit', 'add', 'delete']
+                .map(id => $group[0].querySelector(`[data-testid="${id}"]`).getBoundingClientRect());
+
+            expect(boxes[1].left - boxes[0].right, 'first gap').to.be.greaterThan(2);
+            expect(boxes[2].left - boxes[1].right, 'second gap').to.be.greaterThan(2);
         });
     });
 });

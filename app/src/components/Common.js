@@ -1709,7 +1709,19 @@ export function normalizeEstimate(estimate) {
 
 export function useAPIButton(
     color = 'violet',
-    size = 'medium',
+    /*
+     * Undefined, not 'medium'.  `size` was never put into `buttonArgs` below, so every
+     * APIButton in the app rendered at Mantine's default no matter what its call site asked
+     * for -- seventeen of them pass a size, from `xs` on the map's pin actions to `huge` on
+     * Settings, and all seventeen were ignored.  The map's pin row is where it showed: three
+     * buttons meant to be `xs`, one of them 36px tall next to two 30px ones.
+     *
+     * Defaulting to 'medium' and passing that through would have fixed the bug by breaking
+     * everything else -- every APIButton that names no size would have grown from `sm` to
+     * `md`.  Undefined lets Button's own default stand, so only the call sites that asked for
+     * something see a change.
+     */
+    size,
     floated,
     onClick,
     disabled,
@@ -1795,7 +1807,7 @@ export function useAPIButton(
     // `color` was a Semantic color name; a role carries the meaning instead, and a
     // caller that really wants a color can still pass one through `props`.
     const buttonArgs = {
-        onClick: localOnClick, disabled, loading, type,
+        onClick: localOnClick, disabled, loading, type, size,
         ...props,
     };
     if (id) {

@@ -727,8 +727,6 @@ export function findPosterPath(file) {
 }
 
 export function CardPoster({to, file}) {
-    // Used to center posters in CardIcon.
-    const style = {display: 'flex', justifyContent: 'center'};
     const navigate = useNavigate();
 
     // Marks a tagged file, pinned to the poster's corner.
@@ -741,25 +739,17 @@ export function CardPoster({to, file}) {
         // FileGroup has a poster (screenshot/thumbnail) file.
         posterPath = `/media/${encodeMediaPath(posterPath)}`;
 
-        const image = <>
-            {/* Replicate <Image label/> but with maxHeight applied to image */}
-            {imageLabel}
-            <img alt='poster' src={posterPath} style={{maxHeight: '163px', maxWidth: '290px', width: 'auto'}}/>
-        </>;
+        // Sized by `.wrolpi-card-poster`: as wide as the card allows, natural ratio.
+        const image = <img alt='poster' src={posterPath}/>;
 
-        if (to) {
-            // Link within this App.
-            return <Link to={to} style={style}>
-                {image}
-            </Link>
-        } else {
-            // Preview the file.
-            return <div style={style}>
-                <PreviewLink file={file}>
-                    {image}
-                </PreviewLink>
-            </div>
-        }
+        return <div className='wrolpi-card-poster'>
+            {imageLabel}
+            {to
+                // Link within this App.
+                ? <Link to={to}>{image}</Link>
+                // Preview the file.
+                : <PreviewLink file={file}>{image}</PreviewLink>}
+        </div>
     } else {
         // FileGroup has no poster.
         if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {

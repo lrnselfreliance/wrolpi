@@ -54,6 +54,15 @@ import {contrastingColor} from './Common';
  * already happened more than once.
  */
 
+/*
+ * A stand-in poster of exact intrinsic dimensions, so the poster caps can be seen against
+ * the ratios that actually break them -- a real library has all five and the gallery has
+ * no media of its own.
+ */
+const samplePoster = (width, height) => `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'>` +
+    `<rect width='100%' height='100%' fill='%23808080'/></svg>`)}`;
+
 const Section = ({label, children}) => <section style={{marginBottom: 34}}>
     <p style={{
         fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
@@ -714,6 +723,57 @@ export function ThemeSamplePage() {
                     }}><Icon name={icon} size={34}/></div>}
                 />)}
             </CardGroup>
+
+            <Header as='h4'>Posters</Header>
+            <CardGroup>
+                {[
+                    ['16:9 video thumbnail', 1280, 720],
+                    ['4:3 screenshot', 800, 600],
+                    ['square thumbnail', 600, 600],
+                    ['portrait book cover', 306, 396],
+                    ['smaller than the card', 120, 90],
+                ].map(([label, w, h]) => <Card
+                    key={label}
+                    title={label}
+                    meta={`${w}×${h}`}
+                    color='blue'
+                    media={<div className='wrolpi-card-poster'>
+                        <img alt='' src={samplePoster(w, h)}/>
+                    </div>}
+                />)}
+            </CardGroup>
+            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+                A poster is capped on both axes — the card's width, and{' '}
+                <code>--card-poster-max-height</code> — and keeps its own ratio whichever
+                cap bites. Capping the width alone let a square thumbnail stand as tall as
+                the card is wide. A poster smaller than the card is left at its own size
+                rather than upscaled.
+            </p>
+
+            <Header as='h4'>Meta, body and actions</Header>
+            <CardGroup>
+                {[
+                    ['Rainwater Harvesting And Filtration For A Small Off-Grid Homestead',
+                        'engineering775.com · 2025-01-30', true],
+                    ['Solar Basics', 'wiki.example.org · 2024-08-02', true],
+                    ['Field Notes.pdf', 'docs/ · 2023-06-14', false],
+                ].map(([title, meta, withActions]) => <Card
+                    key={title}
+                    title={<a href='#cards' className='no-link-underscore card-link'>{title}</a>}
+                    meta={meta}
+                    color='blue'
+                    actions={withActions ? <div style={{display: 'flex', gap: '0.5em'}}>
+                        <Button icon='file alternate'>Details</Button>
+                        <IconButton icon='external' label='Open original URL'/>
+                    </div> : undefined}
+                />)}
+            </CardGroup>
+            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+                Titles are links but take the body colour, not the link colour — a grid of
+                results should read as titles. The meta line sits directly under the title;
+                actions are pushed to the foot, so a row lines its buttons up however many
+                lines each title took. A card with no actions simply ends.
+            </p>
             <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
                 The bottom edge carries the file type's colour, so a grid of results is
                 scannable by kind before any title is read. It comes from a token, so night

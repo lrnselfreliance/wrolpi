@@ -149,8 +149,19 @@ export interface CardProps {
     /** Image or poster area above the body. */
     media?: React.ReactNode;
     title?: React.ReactNode;
+    /**
+     * The card's secondary line -- author, channel, domain, date.  It sits directly under
+     * the title rather than at the foot of the card: a grid stretches every card to the
+     * tallest in its row, so a foot-anchored meta line strands the date a long way from
+     * the title it belongs to.
+     */
     meta?: React.ReactNode;
     children?: React.ReactNode;
+    /**
+     * Controls, rendered last and pushed to the card's foot so that a row of cards lines
+     * its buttons up regardless of how many lines each title took.
+     */
+    actions?: React.ReactNode;
     onClick?: React.MouseEventHandler<HTMLDivElement>;
     /**
      * A token colour name, drawn as an accent along the card's top edge.  File cards use
@@ -162,7 +173,7 @@ export interface CardProps {
     className?: string;
 }
 
-export function Card({media, title, meta, children, onClick, color, className}: CardProps) {
+export function Card({media, title, meta, children, actions, onClick, color, className}: CardProps) {
     return <MCard
         withBorder
         padding={0}
@@ -183,8 +194,11 @@ export function Card({media, title, meta, children, onClick, color, className}: 
         {media && <div style={{borderBottom: '1px solid var(--border)'}}>{media}</div>}
         <div style={{padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1}}>
             {title && <div style={{fontSize: 13, fontWeight: 600, lineHeight: 1.35}}>{title}</div>}
+            {meta && <div className='wrolpi-card-meta' style={{fontSize: 12, color: 'var(--muted)'}}>{meta}</div>}
             {children}
-            {meta && <div style={{fontSize: 12, color: 'var(--muted)', marginTop: 'auto'}}>{meta}</div>}
+            {actions && <div className='wrolpi-card-actions' style={{marginTop: 'auto', paddingTop: 8}}>
+                {actions}
+            </div>}
         </div>
     </MCard>
 }

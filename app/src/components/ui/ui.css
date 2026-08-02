@@ -1117,6 +1117,34 @@ html[data-theme="amber"] .wrolpi-progress-fill {
  * poster area agree in every theme.
  */
 
+/*
+ * A poster is bounded by the card and keeps whatever ratio the source image has.  It used
+ * to carry a fixed 290x163 box, which is wider than a card in a default grid (~233px at
+ * desktop widths), so `overflow: hidden` on the card cropped the sides off and the poster
+ * read as the wrong aspect ratio.
+ *
+ * Both caps are needed.  Bounding the width alone lets a square thumbnail stand as tall as
+ * the card is wide, and a portrait book cover taller still, so the media band dwarfs the
+ * title it belongs to.  `width` and `height` stay `auto` so the pair behaves as "contain":
+ * whichever cap bites first, the other axis comes down with it and the ratio survives.
+ */
+:root {
+    --card-poster-max-height: 200px;
+}
+
+.wrolpi-card-poster {
+    position: relative;
+}
+
+.wrolpi-card-poster img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: var(--card-poster-max-height);
+    margin: 0 auto;
+}
+
 .wrolpi-card-icon {
     position: relative;
     display: flex;

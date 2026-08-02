@@ -2,7 +2,8 @@ import React from 'react';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {
-    contrastingColor, contrastRatio, DirectorySearch, HelpHeader, InfoHeader, loadRole,
+    CardLink, contrastingColor, contrastRatio, DirectorySearch, ExternalCardLink, HelpHeader,
+    InfoHeader, loadRole,
     SearchResultsInput, TAG_TEXT_DARK, TAG_TEXT_LIGHT,
 } from './Common';
 import {healthRole} from './admin/ControllerPage';
@@ -682,5 +683,27 @@ describe('a heading keeps its help icon on the same row as the text', () => {
         const {container} = render(<HelpHeader headerContent='Root CA Certificate' helpPath='/x/'/>);
 
         expect(container.querySelector('.inline-header')).toBeNull();
+    });
+});
+
+describe('card links', () => {
+    /*
+     * `.card-link` is what makes a card's title read as the card's text rather than as a
+     * link, so a title that misses it is the one thing on the card in the wrong colour.
+     * Both helpers set the class and then spread the caller's props over it, so any call
+     * site passing a className of its own -- which is every archive title, via
+     * `card-title-ellipsis` -- silently replaced the class instead of adding to it.
+     */
+    it.each([
+        ['CardLink', <CardLink to='/archives/1' className='card-title-ellipsis'>Title</CardLink>],
+        ['ExternalCardLink',
+            <ExternalCardLink to='http://x/a.html' className='card-title-ellipsis'>Title</ExternalCardLink>],
+    ])('%s keeps its own classes when the call site adds one', (_name, element) => {
+        render(element);
+
+        const link = screen.getByText('Title');
+        expect(link).toHaveClass('card-link');
+        expect(link).toHaveClass('no-link-underscore');
+        expect(link).toHaveClass('card-title-ellipsis');
     });
 });

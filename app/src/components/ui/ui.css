@@ -1154,8 +1154,27 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     --card-poster-max-height: 200px;
 }
 
+/*
+ * The band is the full width of the card and centres the poster in it.  The frame inside
+ * shrink-wraps the painted image, and is what corner chrome -- the tagged mark, a video's
+ * duration -- is positioned against.  Pinning that chrome to the BAND puts it in the
+ * letterbox space beside a height-capped poster: 39px adrift on a book cover, 60px on a
+ * vertical video.
+ *
+ * The frame's own width falls out of the caps below.  Its intrinsic contribution is the
+ * image's natural width already reduced by `max-height`, so a portrait cover contributes
+ * 155px and gets 155px; a 16:9 poster contributes 1280px and is flex-shrunk to the band,
+ * at which point `max-width: 100%` resolves against a width that is finally definite.
+ */
 .wrolpi-card-poster {
+    display: flex;
+    justify-content: center;
+}
+
+.wrolpi-card-poster-frame {
     position: relative;
+    display: block;
+    min-width: 0;
 }
 
 .wrolpi-card-poster img {
@@ -1164,7 +1183,6 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     height: auto;
     max-width: 100%;
     max-height: var(--card-poster-max-height);
-    margin: 0 auto;
 }
 
 .wrolpi-card-icon {

@@ -101,9 +101,16 @@ export interface IconButtonProps extends Omit<ActionIconProps, 'children'> {
     component?: any;
 }
 
-/** A square, icon-only button. */
+/**
+ * A square, icon-only button, exactly as tall as a labelled `Button` beside it.
+ *
+ * The height needs BOTH halves of the fix.  ui.css aligns ActionIcon's size scale with
+ * Button's, and this default aligns the starting point: Mantine defaults ActionIcon to `md`
+ * where it defaults Button to `sm`, so leaving it alone would trade a 28-vs-36 mismatch for
+ * a 42-vs-36 one.
+ */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>((
-    {role, icon, label, className, ...props}, ref
+    {role, icon, label, className, size = 'sm', ...props}, ref
 ) => {
     const fromRole = role ? roleProps[role] : undefined;
     return <ActionIcon
@@ -116,7 +123,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>((
         variant={props.variant ?? fromRole?.variant ?? 'default'}
         className={[fromRole?.className, className].filter(Boolean).join(' ') || undefined}
         {...props}
-        size={resolveSize(props.size)}
+        size={resolveSize(size)}
     >
         {renderIcon(icon)}
     </ActionIcon>

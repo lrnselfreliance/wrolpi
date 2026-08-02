@@ -1,10 +1,11 @@
 import React from 'react';
 import {
-    ActionInput, Button, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
+    ActionInput, Button, Card, Header, Icon, IconStack, Loading, MultiSelect, Panel, PathInput,
     Message, Placeholder, Progress, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
-import {contrastingColor, HelpHeader, LoadStatistic} from '../Common';
+import {MemoryRouter} from 'react-router';
+import {CardPoster, contrastingColor, HelpHeader, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
 import {monochromeThemes, themeNames} from '../../themes/names';
@@ -1670,5 +1671,195 @@ describe('media filtering', () => {
 
         cy.get('img').should(($img) =>
             expect(getComputedStyle($img[0]).filter).to.equal('none'));
+    });
+});
+
+/*
+ * A poster of exact intrinsic dimensions.  It has to come over the wire rather than as a
+ * data: URI, because CardPoster rewrites whatever it is given into `/media/<path>` -- so
+ * the bytes are served by an intercept and the component builds its own URL, which is the
+ * URL the app actually requests.
+ */
+const posterFile = (width, height) => ({
+    id: 1,
+    tags: [],
+    poster_path: `videos/poster-${width}x${height}.svg`,
+    primary_path: 'videos/one.mp4',
+});
+
+const servePoster = (width, height) => cy.intercept(
+    'GET', `**/media/videos/poster-${width}x${height}.svg`,
+    {
+        headers: {'content-type': 'image/svg+xml'},
+        body: `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'>` +
+            `<rect width='100%' height='100%' fill='#888'/></svg>`,
+    },
+);
+
+/* A card as narrow as the default grid makes them, which is where the cropping showed. */
+const narrowCard = (children) =>
+    <MemoryRouter><div style={{width: 233}}>{children}</div></MemoryRouter>;
+
+/*
+ * The height cap, read from the stylesheet rather than repeated here, so the two cannot
+ * drift.  Deleting the declaration makes this NaN and every comparison against it fails,
+ * which is the point -- and the bound below keeps "read whatever the CSS says" from being
+ * a test that any value at all satisfies.
+ */
+const cardPosterCap = () => {
+    const value = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue('--card-poster-max-height'));
+    expect(value, 'a poster cap is declared, and is small enough to be a cap')
+        .to.be.within(80, 240);
+    return value;
+};
+
+describe('a card poster is bounded by the card, and keeps its ratio', () => {
+    /*
+     * The poster carried a fixed 290x163 box.  A card in the default grid is about 233px
+     * wide and Mantine's Card sets `overflow: hidden`, so the browser painted the middle
+     * 233px of a 290px image: the ratio was right in the layout tree and wrong on screen.
+     * None of that is visible to jsdom, which lays nothing out.
+     *
+     * The cap that replaced it is on the WIDTH, so a square or portrait source grows as
+     * tall as it likes -- a 1:1 thumbnail became a 233px-tall band above a two-line title.
+     * Hence a height cap as well.  Both caps have to preserve the ratio, which is the part
+     * worth testing: `max-width` and `max-height` together only "contain" an image while
+     * its own width and height stay `auto`.
+     */
+    const cases = [
+        {name: 'a 16:9 video thumbnail', w: 1280, h: 720},
+        {name: 'a square thumbnail', w: 600, h: 600},
+        {name: 'a portrait book cover', w: 306, h: 396},
+        {name: 'a poster smaller than the card', w: 120, h: 90},
+    ];
+
+    cases.forEach(({name, w, h}) => {
+        it(`fits ${name} inside the card without distorting it`, () => {
+            servePoster(w, h);
+            cy.mountUI(narrowCard(<CardPoster file={posterFile(w, h)}/>));
+
+            cy.get('.wrolpi-card-poster img')
+                // The intrinsic size has to have arrived, or every ratio below is 0/0.
+                .should(($img) => expect($img[0].naturalWidth, 'poster loaded').to.equal(w))
+                .should(($img) => {
+                    const img = $img[0];
+                    const box = img.getBoundingClientRect();
+                    const card = img.closest('.wrolpi-card-poster').getBoundingClientRect();
+
+                    expect(box.width, 'poster stays within the card').to.be.at.most(card.width + 0.5);
+                    expect(box.height, 'poster is capped in height').to.be.at.most(cardPosterCap() + 0.5);
+                    // Never upscaled: a small poster is left at its own size.
+                    expect(box.width, 'poster is not stretched past its own size').to.be.at.most(w + 0.5);
+                    expect(box.width / box.height, `${name} keeps its ratio`)
+                        .to.be.closeTo(w / h, 0.01);
+                });
+        });
+    });
+
+    it('shrinks a tall poster by its width rather than squashing it', () => {
+        /*
+         * The failure mode a ratio check alone would miss: a height cap applied while the
+         * width is pinned crops or squashes instead of containing.  A 600x600 source in a
+         * 233px card is width-bound at 233 if the cap is loose and height-bound if it is
+         * tight -- either way the OTHER axis must have moved with it.
+         */
+        servePoster(600, 600);
+        cy.mountUI(narrowCard(<CardPoster file={posterFile(600, 600)}/>));
+
+        cy.get('.wrolpi-card-poster img')
+            .should(($img) => expect($img[0].naturalWidth).to.equal(600))
+            .should(($img) => {
+                const box = $img[0].getBoundingClientRect();
+                expect(box.height, 'the cap actually bit').to.be.at.most(cardPosterCap() + 0.5);
+                expect(box.width, 'and the width came down with it')
+                    .to.be.closeTo(box.height, 0.5);
+            });
+    });
+});
+
+describe('a card reads as titles, not as a wall of links', () => {
+    /*
+     * A card's title and its author/channel/domain line are links, and they carried a
+     * literal `color: black` from before the themes existed.  On the dark, night and amber
+     * panels that is about 1.1:1 -- the titles were there, and invisible.  The date beside
+     * them was fine, because it takes `--muted` from the card body, which is what made the
+     * bug look like a card-title bug rather than a link bug.
+     *
+     * jsdom cannot see this: `.card-link` now resolves a custom property, and jsdom drops
+     * `color: var(--text)` as an invalid declaration.
+     */
+    themeNames.forEach((theme) => {
+        it(`keeps a card title legible in ${theme}`, () => {
+            cy.mountUI(<MemoryRouter>
+                <Card title={<a href='/videos/1' className='no-link-underscore card-link'>
+                    How To Sharpen An Axe
+                </a>} meta='Wranglerstar'/>
+            </MemoryRouter>, {theme});
+
+            cy.get('.card-link').should(($link) => {
+                const panel = toRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--panel'));
+                const title = toRgb(getComputedStyle($link[0]).color);
+                expect(contrast(title, panel), `card title on the panel in ${theme}`)
+                    .to.be.greaterThan(4.5);
+            });
+        });
+    });
+});
+
+describe('a card keeps its meta with the title and its actions at the foot', () => {
+    /*
+     * A grid stretches every card to the tallest in its row.  The meta line used to carry
+     * `margin-top: auto`, so on /docs a PDF with no author had its date shoved 55px below
+     * the title it belongs to, at the bottom of a card that was tall only because of its
+     * neighbour.  Actions are the thing that wants the foot -- a row of cards should line
+     * its buttons up however many lines each title took.
+     *
+     * Real layout, because `margin-top: auto` in a flex column is resolved by the layout
+     * engine and jsdom has none.  The DOM ORDER half of this is in ui.test.js.
+     */
+    const row = <div style={{display: 'flex', alignItems: 'stretch', width: 520}}>
+        {[
+            'A title long enough to wrap onto three separate lines inside a narrow card',
+            'Short',
+        ].map((title, index) => <div key={index} style={{width: 240, display: 'flex'}}>
+            <Card title={title} meta='example.com · 2025-01-30'
+                  actions={<Button>Details</Button>}/>
+        </div>)}
+    </div>;
+
+    it('leaves no gap between the title and the meta line', () => {
+        cy.mountUI(row);
+
+        cy.get('.wrolpi-card-meta').should(($metas) => {
+            expect($metas.length).to.equal(2);
+            const gaps = [...$metas].map((meta) => {
+                const title = meta.previousElementSibling;
+                return meta.getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+            });
+            // The card body's own 4px gap, and nothing else.
+            gaps.forEach((gap, index) => expect(gap, `card ${index} title-to-meta`).to.be.at.most(6));
+            // Both cards really were stretched to the same height, or nothing was pushed.
+            const heights = [...Cypress.$('.mantine-Card-root')]
+                .map(card => Math.round(card.getBoundingClientRect().height));
+            expect(new Set(heights).size, 'the row stretched both cards equally').to.equal(1);
+        });
+    });
+
+    it('lines the actions up at the foot however tall the title got', () => {
+        cy.mountUI(row);
+
+        cy.get('.wrolpi-card-actions').should(($actions) => {
+            expect($actions.length).to.equal(2);
+            const [tall, short] = [...$actions];
+            // The premise: the two titles really are different heights.
+            const titleHeights = [...Cypress.$('.mantine-Card-root')].map(card =>
+                Math.round(card.lastElementChild.firstElementChild.getBoundingClientRect().height));
+            expect(new Set(titleHeights).size, 'the two titles differ in height').to.equal(2);
+
+            expect(tall.getBoundingClientRect().bottom, 'both action rows sit on the same line')
+                .to.be.closeTo(short.getBoundingClientRect().bottom, 1);
+        });
     });
 });

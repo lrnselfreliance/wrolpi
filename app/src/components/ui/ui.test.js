@@ -894,6 +894,37 @@ describe('Card', () => {
 
         expect(container.firstChild.style.borderBottom).toBe('');
     });
+
+    it('puts the meta line under the title and the actions last', () => {
+        /*
+         * Order is the half of the fix jsdom can judge.  An Archive card renders its domain
+         * and date as `meta` and its Details/Open buttons as `actions`; before `actions`
+         * existed the buttons were children and the meta was foot-anchored, so every archive
+         * card read buttons-then-domain.  Which slot lands where is what this asserts; that
+         * the foot anchoring actually resolves is in ui-layout.cy.js, since `margin-top:
+         * auto` needs a layout engine.
+         */
+        renderUI(<Card title='Rainwater Harvesting'
+                       meta='engineering775.com'
+                       actions={<button type='button'>Details</button>}>
+            <span>body</span>
+        </Card>);
+
+        const body = screen.getByText('Rainwater Harvesting').parentElement;
+        expect([...body.children].map(child => child.textContent)).toEqual([
+            'Rainwater Harvesting', 'engineering775.com', 'body', 'Details',
+        ]);
+        expect(body.querySelector('.wrolpi-card-actions')).toHaveStyle({marginTop: 'auto'});
+        expect(body.querySelector('.wrolpi-card-meta').style.marginTop).toBe('');
+    });
+
+    it('renders no actions row when a card has no actions', () => {
+        // Otherwise every card in a grid pays for an empty foot, and the spacing below the
+        // meta line differs between a card with buttons and one without.
+        const {container} = renderUI(<Card title='Plain' meta='docs/'/>);
+
+        expect(container.querySelector('.wrolpi-card-actions')).toBeNull();
+    });
 });
 
 describe('CardGroup', () => {

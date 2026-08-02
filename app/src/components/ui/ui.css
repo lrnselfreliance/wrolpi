@@ -102,6 +102,28 @@ html[data-theme="night"] .wrolpi-button-danger:hover:not(:disabled) {
 
 /* The icon inside inherits currentColor, so it follows without another rule. */
 
+/*
+ * An icon button is the same height as a labelled one, so a group of them lines up.
+ *
+ * Mantine gives ActionIcon a size scale unrelated to Button's -- `sm` is 22px against a
+ * button's 36px -- which left the Details/Open pair on every archive card ragged, and any
+ * other toolbar that mixes the two.  It already ships the aligned scale as
+ * `--ai-size-input-*`, for an ActionIcon standing beside an Input; those five values are
+ * identical to `--button-height-*`.  Pointing one at the other fixes every size at once,
+ * including ones no call site uses yet.
+ *
+ * The `html` prefix is load-bearing.  Mantine declares this scale on ActionIcon's own
+ * hashed class, which has the same specificity as `.mantine-ActionIcon-root` and would win
+ * on source order.
+ */
+html .mantine-ActionIcon-root {
+    --ai-size-xs: var(--ai-size-input-xs);
+    --ai-size-sm: var(--ai-size-input-sm);
+    --ai-size-md: var(--ai-size-input-md);
+    --ai-size-lg: var(--ai-size-input-lg);
+    --ai-size-xl: var(--ai-size-input-xl);
+}
+
 /* ----------------------------------------------------------- Theme picker */
 
 .wrolpi-theme-picker {

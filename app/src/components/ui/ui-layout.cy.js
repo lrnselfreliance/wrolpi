@@ -2199,8 +2199,13 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
          * The inverse.  Every case above would pass on the old fixed foreground in the two
          * themes where `--btn-text` happens to be the right end of the palette, so without
          * this the suite could go green on a revert.  Night is where the difference is
-         * largest: `--brown` takes `--white` (#ff8a8a) and `--red` keeps `--btn-text`, so
-         * the bar's foreground is demonstrably not one value.
+         * largest: `--brown` takes `--white` and `--red` keeps `--btn-text`, so the bar's
+         * foreground is demonstrably not one value.
+         *
+         * `--btn-text` is READ from the theme rather than written out as a hex.  The unit
+         * tests parse tokens.css precisely so a palette edit cannot leave a stale claim
+         * behind, and a literal here would be the one place that rule was broken -- it would
+         * either go stale or quietly stop testing anything if night's token moved.
          */
         cy.mountUI(<div>
             <NavBarSample color='brown'/>
@@ -2211,11 +2216,19 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
             cy.get('[data-nav-sample="red"] .wrolpi-navbar-link').then(($red) => {
                 const brown = getComputedStyle($brown[0]).color;
                 const red = getComputedStyle($red[0]).color;
+                const btnText = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--btn-text');
+
+                // The premise: the token resolved.  `toRgb` throws on an unresolved value
+                // rather than letting the comparison below pass by comparing nothing.
+                expect(toRgb(btnText), 'night --btn-text resolved').to.match(/^rgb/);
                 expect(brown, 'brown and red bars take different foregrounds')
                     .to.not.equal(red);
                 // And the one that changed is the one that was unreadable.
                 expect(toRgb(brown), 'brown no longer takes --btn-text')
-                    .to.not.equal(toRgb('#0a0000'));
+                    .to.not.equal(toRgb(btnText));
+                // While red, which was always legible, still does.
+                expect(toRgb(red), 'red still takes --btn-text').to.equal(toRgb(btnText));
             });
         });
     });

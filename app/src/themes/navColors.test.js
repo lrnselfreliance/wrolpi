@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import {contrastRatio} from './contrast';
+import {contrastRatio, isMeasurable} from './contrast';
 import {defaultNavColor, navColorNames, navColorsFrom} from './navColors';
 import {themeNames} from './names';
 import {semanticUIColorMap} from '../components/Vars';
@@ -150,11 +150,11 @@ describe('the navbar foreground', () => {
 
 describe('what measurement cannot fix', () => {
     /*
-     * Eleven of the forty-eight combinations still sit under 4.5:1, and no choice of
+     * Ten of the forty-eight combinations still sit under 4.5:1, and no choice of
      * foreground will lift them, because the shortfall is in the BACKGROUND.
      *
      * A monochrome theme resolves all twelve colour names onto one red (or amber) ramp, and
-     * seven of night's land in the middle of it -- #b03030 is 2.91:1 from night's darkest red
+     * six of night's land in the middle of it -- #b03030 is 3.27:1 from night's darkest red
      * and 2.52:1 from its brightest, so the best available option is the one this picks and
      * it is still short.  There is no foreground in a one-hue palette that reads on a
      * mid-tone of that same hue; the fix, if the residue matters, is to the palette.
@@ -240,5 +240,87 @@ describe('when the tokens cannot be read', () => {
         const read = readerFor('light');
         expect(navColorsFrom(read, 'chartreuse').background)
             .toEqual(paletteOf('light')[`--${defaultNavColor}`]);
+    });
+});
+
+describe('a token this cannot measure', () => {
+    /*
+     * Every token in tokens.css is a hex, so this is about the custom YAML themes ahead of
+     * us -- the first place a palette will be written by hand, and the first place something
+     * other than a hex will appear.
+     *
+     * The failure it guards was silent and worse than doing nothing.  An unparseable colour
+     * measured as luminance zero, indistinguishable from black, so the bar chose its
+     * foreground against a colour the theme does not contain and then froze the wrong hex
+     * into an inline style, where CSS could no longer correct it.  Falling back leaves the
+     * bar painted by CSS: wrong about the foreground at worst, rather than about both.
+     */
+    const hexPalette = () => paletteOf('light');
+
+    /** The light palette with one token rewritten into some other notation. */
+    const readerWith = (overrides) => {
+        const palette = {...hexPalette(), ...overrides};
+        return (token) => palette[token] || '';
+    };
+
+    it('measures rgb() as readily as hex, since both are colours', () => {
+        // `--violet` is #5c4fa8 in light.  The same colour, written the other way, must
+        // produce the same answer rather than falling back.
+        const asHex = navColorsFrom(readerFor('light'), 'violet');
+        const asRgb = navColorsFrom(readerWith({'--violet': 'rgb(92, 79, 168)'}), 'violet');
+
+        expect(asRgb.color).toEqual(asHex.color);
+        expect(asRgb.ratio).toBeCloseTo(asHex.ratio, 4);
+    });
+
+    it('handles the modern space-separated form too', () => {
+        const asHex = navColorsFrom(readerFor('light'), 'violet');
+        const asRgb = navColorsFrom(readerWith({'--violet': 'rgb(92 79 168 / 1)'}), 'violet');
+
+        expect(asRgb.ratio).toBeCloseTo(asHex.ratio, 4);
+    });
+
+    it('falls back rather than measuring a background it cannot read', () => {
+        // `color-mix` is the shape a hand-written theme is most likely to reach for, and
+        // resolving it needs a browser.
+        const colors = navColorsFrom(
+            readerWith({'--olive': 'color-mix(in srgb, #6f7a24 60%, white)'}), 'olive');
+
+        expect(colors).toEqual({
+            background: 'var(--olive)', color: 'var(--btn-text)', ratio: null,
+        });
+    });
+
+    it('falls back when no candidate foreground can be read', () => {
+        const colors = navColorsFrom(readerWith({
+            '--btn-text': 'hsl(0 0% 100%)', '--black': 'rebeccapurple', '--white': 'hsl(0 0% 0%)',
+        }), 'violet');
+
+        expect(colors.ratio).toBeNull();
+    });
+
+    it('still measures when only SOME candidates are unreadable', () => {
+        /*
+         * The narrow case, and the reason the unreadable ones are filtered out rather than
+         * the whole measurement abandoned.  A theme that writes one token oddly should not
+         * lose the measurement for the other two.
+         */
+        const colors = navColorsFrom(
+            readerWith({'--white': 'oklch(0.9 0.1 20)'}), 'violet');
+
+        expect(colors.ratio).not.toBeNull();
+        expect([hexPalette()['--btn-text'], hexPalette()['--black']]).toContain(colors.color);
+    });
+
+    it('is a real constraint: an unreadable colour is NOT treated as black', () => {
+        /*
+         * Without this the fallback could be removed and every case above would still pass
+         * on `relativeLuminance` returning zero -- which is precisely the bug, because zero
+         * is a legitimate luminance and nothing downstream could tell the two apart.
+         */
+        expect(contrastRatio('color-mix(in srgb, red, blue)', '#ffffff'))
+            .toBeCloseTo(contrastRatio('#000000', '#ffffff'), 4);
+        expect(isMeasurable('color-mix(in srgb, red, blue)')).toBe(false);
+        expect(isMeasurable('#000000')).toBe(true);
     });
 });

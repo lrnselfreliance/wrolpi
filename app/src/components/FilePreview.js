@@ -420,7 +420,7 @@ export function FilePreviewProvider({children}) {
         setErrorModalOpen(false);
     }
 
-    const errorModal = <Modal open={errorModalOpen}
+    const errorModal = <Modal size='large' open={errorModalOpen}
                               onClose={handleErrorModalClose}
     >
         <Modal.Header>Unknown File</Modal.Header>

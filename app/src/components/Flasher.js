@@ -943,7 +943,7 @@ export function FlasherPage() {
                 </>}
             </Panel>
 
-            <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} size='sm'>
+            <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} size='tiny'>
                 <Modal.Header>Save firmware configuration</Modal.Header>
                 <Modal.Content>
                     <TextInput

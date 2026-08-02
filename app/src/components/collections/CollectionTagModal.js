@@ -98,7 +98,7 @@ export function CollectionTagModal({
     const saveButtonText = hasDirectory && moveToTagDirectory ? 'Move' : 'Save';
 
     return (
-        <Modal
+        <Modal size='large'
             open={open}
             onClose={handleClose}
             closeIcon

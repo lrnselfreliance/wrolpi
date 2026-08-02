@@ -975,12 +975,35 @@ html .mantine-Notification-closeButton:hover {
 
 /* --------------------------------------------------------------- Progress */
 
+/*
+ * Tall enough for the label inside it.  At 16px a 14px line box left half a pixel of air
+ * above and below the text, which on the Status page is 44 bars of cramped 11px bold --
+ * legible only if you already knew what it said.
+ *
+ * `overflow: hidden` is what keeps the indeterminate band inside the bar.  Without it the
+ * band slides from `margin-left: -35%` to `100%` in full view, so the animation ran from
+ * outside the left edge to outside the right one, painting over whatever sat beside it.
+ */
 .wrolpi-progress {
     position: relative;
-    height: 16px;
+    height: 22px;
     min-width: 120px;
+    overflow: hidden;
     background: var(--bg);
     border: 1px solid var(--border);
+}
+
+/*
+ * Bars stacked directly on top of each other need a gap; bars that a container already
+ * spaces do not.  On the Status page the CPU and RAM bars are bare siblings in a Panel and
+ * were touching, while the drive-bandwidth bars each sit alone in a Grid column and get
+ * their spacing from the Grid.
+ *
+ * `* +` distinguishes those two cases by itself: it fires only when a bar actually follows
+ * something, so an only-child bar in a column is untouched.
+ */
+* + .wrolpi-progress {
+    margin-top: 8px;
 }
 
 .wrolpi-progress-fill {
@@ -1029,15 +1052,29 @@ html .mantine-Notification-closeButton:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    /* 12px rather than 11: these labels carry units and device names, not just a number. */
+    font-size: 12px;
     font-weight: 700;
     color: var(--text);
     font-variant-numeric: tabular-nums;
+    /* A long label must not push the bar wider than the column it was given. */
+    padding: 0 6px;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 /*
  * The percent text sits on both the filled and empty halves of the bar, so the
  * fill has to stay light enough in light mode for dark text to read over it.
+ *
+ * MEASURED, and only light actually clears it.  The label against the fill is
+ * 5.49:1 in light (the brightness filter below is what buys that) but 2.35 in
+ * dark, 2.48 in night and 2.74 in amber; against the empty track it is 5.2-15:1
+ * everywhere.  Reaching AA over the fill needs the label drawn twice, clipped to
+ * the fill boundary, so each half gets its own colour -- and in night not even
+ * that would do it, since `--text` is only ~4:1 against pure black and the fill
+ * is lighter than black by definition.  Left as it is, deliberately, rather than
+ * asserted at a threshold chosen to pass.
  */
 html[data-theme="light"] .wrolpi-progress {
     background: var(--panel);

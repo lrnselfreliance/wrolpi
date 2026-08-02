@@ -292,7 +292,7 @@ const ViewerMessage = () => {
     </HandPointMessage>
 }
 
-const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {
+export const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {
     const {name, languages, size} = item;
     const subscription = name in subscriptions ? subscriptions[name] : null;
     const subscriptionLanguage = subscription ? subscription['language'] : 'en';
@@ -328,8 +328,24 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
         }
     }
 
+    /*
+     * The code itself when the API's table has no name for it.
+     *
+     * `iso_639_codes` covers 639-1 and 639-2; the Kiwix catalog also carries 639-3 codes and
+     * locale variants -- `ami`, `ary`, `arz`, `be-tarask` -- and 89 of the codes in the
+     * catalog on a live WROLPi are absent from its 672-entry table.  Each of those produced
+     * `label: undefined`, and a `searchable` Mantine Select calls `option.label.toLowerCase()`
+     * while building its dropdown on mount, before anyone opens it.  One unnamed language
+     * anywhere in the catalog therefore took the whole /zim/manage page down.
+     *
+     * The code rather than a blank: a user choosing which language to subscribe to has to be
+     * able to tell one unnamed language from another, and the code is all we know.
+     *
+     * `iso_639_codes` is also null on first render -- ManageZim initialises it that way and
+     * fills it from the API -- so it is read defensively too.
+     */
     const languageOptions = languages.map(i => {
-        return {value: i, label: iso_639_codes[i]}
+        return {value: i, label: (iso_639_codes && iso_639_codes[i]) || i}
     });
     const languageDropdown = <Select
         searchable

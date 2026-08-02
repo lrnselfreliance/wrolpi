@@ -235,6 +235,7 @@ function MapCatalogRow({item, subscribedRegions, fetchData}) {
                 {bbox && <Button
                     size='xs'
                     icon='eye'
+                    aria-label={`Preview ${name}`}
                     onClick={() => setPreviewOpen(true)}
                 />}
                 <Button
@@ -535,7 +536,8 @@ function MapPins() {
             <Table.Cell>
                 {/* See PinEditRow: a Group so the three controls line up and are spaced. */}
                 <Group gap='xs' wrap='nowrap'>
-                    <Button size='xs' icon='edit' onClick={() => setEditingId(pin.id)}/>
+                    <Button size='xs' icon='edit' aria-label={`Edit ${pin.label}`}
+                            onClick={() => setEditingId(pin.id)}/>
                     <AddToPlaylistButton
                         size='xs'
                         icon='list'
@@ -546,6 +548,7 @@ function MapPins() {
                         size='xs'
                         role='danger'
                         icon='trash'
+                        aria-label={`Delete ${pin.label}`}
                         confirmContent='Delete this pin?'
                         confirmButton='Delete'
                         onClick={() => handleDelete(pin.id)}
@@ -581,6 +584,7 @@ function MapPins() {
                     size='xs'
                     role='danger'
                     icon='trash'
+                    aria-label={`Delete ${pin.label}`}
                     confirmContent='Delete this pin?'
                     confirmButton='Delete'
                     onClick={() => handleDelete(pin.id)}

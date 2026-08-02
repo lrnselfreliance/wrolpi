@@ -3457,6 +3457,65 @@ describe('APIButton honours the size its call site asks for', () => {
         });
     });
 
+    it('honours the Semantic size names the call sites actually use', () => {
+        /*
+         * The seventeen call sites that were being ignored do not say `xs` and `lg` -- they say
+         * `small`, `big`, `large` and `huge`, which `resolveSize` translates.  Testing only the
+         * Mantine names would leave the translation step untested on the exact spellings that
+         * were broken.  `small` maps to `sm`, which is what the accidental default already was,
+         * which is why most detail pages do not move.
+         */
+        cy.mountUI(<div>
+            <APIButton size='small' icon='trash' onClick={() => {}} data-testid='small'/>
+            <APIButton size='big' icon='trash' onClick={() => {}} data-testid='big'/>
+            <APIButton size='huge' icon='trash' onClick={() => {}} data-testid='huge'/>
+        </div>);
+
+        cy.get('[data-testid="huge"]').should(($huge) => {
+            const height = (id) =>
+                Cypress.$(`[data-testid="${id}"]`)[0].getBoundingClientRect().height;
+
+            expect(height('small'), 'small is the old default').to.be.closeTo(36, 1);
+            expect(height('big'), 'big is taller than small').to.be.greaterThan(height('small'));
+            expect($huge[0].getBoundingClientRect().height, 'huge is taller than big')
+                .to.be.greaterThan(height('big'));
+        });
+    });
+
+    it('stays square while it is loading', () => {
+        /*
+         * A loading button swaps its glyph for a spinner sized from the button's height, and
+         * the square rule fixes the width to that height -- so a spinner that did not fit
+         * would either be clipped or stretch the box.  Both Button and APIButton, since
+         * APIButton is what actually spends time loading.
+         */
+        cy.mountUI(<div>
+            <Button size='xs' icon='trash' aria-label='Delete' loading data-testid='busy'/>
+            <APIButton size='xs' icon='trash' loading onClick={() => {}} data-testid='busy-api'/>
+        </div>);
+
+        cy.get('[data-testid="busy-api"]').should(() => {
+            ['busy', 'busy-api'].forEach((id) => {
+                const box = Cypress.$(`[data-testid="${id}"]`)[0].getBoundingClientRect();
+
+                expect(box.height, `${id} has a height`).to.be.greaterThan(20);
+                expect(box.width, `${id} is still square`).to.be.closeTo(box.height, 1);
+            });
+        });
+    });
+
+    it('squares an iconAfter-only button too', () => {
+        // The square rule keys off the same `data-icon-only` marker as the centring, and
+        // `iconAfter` alone is one of the cases that sets it.
+        cy.mountUI(<Button size='xs' iconAfter='upload' aria-label='Send' data-testid='after'/>);
+
+        cy.get('[data-testid="after"]').should(($button) => {
+            const box = $button[0].getBoundingClientRect();
+
+            expect(box.width, 'square').to.be.closeTo(box.height, 1);
+        });
+    });
+
     it('is a real constraint: an APIButton with no size keeps the default it had', () => {
         /*
          * `useAPIButton` declared `size = 'medium'` as a parameter default while never using

@@ -71,8 +71,88 @@ describe('the map pin action cells', () => {
              * message argument -- that is chai, and passing one throws rather than annotating.
              * A rename of the marker would otherwise turn this into a test of nothing.
              */
-            expect({marker, found: cell !== undefined, grouped: !!cell?.includes('<Group')})
-                .toEqual({marker, found: true, grouped: true});
+            /*
+             * The Group must CONTAIN the cell's controls, not merely appear in it.  Asserting
+             * that `<Group` is present anywhere would pass on an empty one left beside the
+             * bare siblings it was supposed to wrap.
+             */
+            const between = (text, open, close) => {
+                const from = text.indexOf(open);
+                if (from === -1) return '';
+                const to = text.indexOf(close, from);
+                // An unclosed Group would otherwise swallow the rest of the cell, which is how
+                // the first version of this let an EMPTY Group pass with the controls left
+                // outside it.
+                return to === -1 ? '' : text.slice(from, to);
+            };
+            const inGroup = cell === undefined ? '' : between(cell, '<Group', '</Group>');
+            const controls = (text) =>
+                (text.match(/<(?:API)?Button\b|<IconButton\b|<AddToPlaylistButton\b/g) || []).length;
+
+            expect({
+                marker,
+                found: cell !== undefined,
+                grouped: !!cell?.includes('<Group'),
+                // Every control the cell has is inside the Group, none left outside it.
+                controlsInsideGroup: cell === undefined ? 0 : controls(inGroup),
+                controlsInCell: cell === undefined ? -1 : controls(cell),
+            }).toEqual({
+                marker, found: true, grouped: true,
+                controlsInsideGroup: cell === undefined ? 0 : controls(cell),
+                controlsInCell: cell === undefined ? -1 : controls(cell),
+            });
         });
+    });
+});
+
+describe('the map\'s icon-only controls have accessible names', () => {
+    /*
+     * An icon-only Button carries no text, so without `aria-label` it reaches assistive tech
+     * as an unnamed button.  `IconButton` requires a label by construction and
+     * AddToPlaylistButton supplies one; the plain Button and APIButton used for edit, delete
+     * and the catalog preview did not, and this change rewrote all three rows.
+     *
+     * In the source, for the same reason as the Group guard: these rows are built inside the
+     * module and fetched from the API.
+     */
+    const openingTag = (text, at) => {
+        let depth = 0;
+        for (let i = at; i < text.length; i++) {
+            const c = text[i];
+            if (c === '{' || c === '(') depth += 1;
+            else if (c === '}' || c === ')') depth -= 1;
+            else if (c === '>' && depth === 0) return {tag: text.slice(at, i + 1), end: i};
+        }
+        return {tag: '', end: at};
+    };
+
+    /** Every `<Button>`/`<APIButton>` in the file whose only content is an icon. */
+    const iconOnlyControls = () => {
+        const found = [];
+        for (const match of source.matchAll(/<(?:API)?Button\b/g)) {
+            const {tag, end} = openingTag(source, match.index);
+            if (!/\bicon=/.test(tag)) continue;
+            // Self-closing, or immediately followed by another tag rather than by a label.
+            const following = source.slice(end + 1, end + 40).trim();
+            if (!(tag.endsWith('/>') || following.startsWith('<') || following.startsWith('}'))) {
+                continue;
+            }
+            found.push({line: source.slice(0, match.index).split('\n').length, tag});
+        }
+        return found;
+    };
+
+    it('finds the icon-only controls at all', () => {
+        // The premise.  A scanner that matched nothing would report no offenders and read
+        // exactly like a file that was already correct.
+        expect(iconOnlyControls().length).toBeGreaterThan(2);
+    });
+
+    it('names every one of them', () => {
+        const unnamed = iconOnlyControls()
+            .filter(({tag}) => !/aria-label/.test(tag))
+            .map(({line, tag}) => `line ${line}: ${tag.split('\n')[0].trim()}`);
+
+        expect(unnamed).toEqual([]);
     });
 });

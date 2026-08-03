@@ -242,8 +242,48 @@ html[data-theme="amber"] {
  * None of it belonged to Semantic; it belongs here, expressed in tokens.
  */
 
+/* ------------------------------------------------------------------------- */
+/* Interface scale                                                            */
+/* ------------------------------------------------------------------------- */
+/*
+ * How large the interface is, overall.
+ *
+ * Measured against the pre-migration Semantic build at 1280px, the drift was not one
+ * number: its headings were h1 28 / h2 24 / h3 18 / h4 15 / h5 14 against our
+ * 26 / 21 / 17 / 14 / 13, and its video card a fixed 290px with an 18px title against
+ * our 238px with a 13px one -- while our BODY text and chrome went the other way,
+ * a 16px base against Semantic's 14 and 42px buttons against 36.  No per-component
+ * nudge reproduces what a user comparing the two sees, which is the whole page.
+ *
+ * Ten percent is not a fudge factor: our heading scale times 1.1 is
+ * 28.6 / 23.1 / 18.7 / 15.4 / 14.3, which is Semantic's scale to within a pixel at
+ * every step.
+ *
+ * The lever is the root font-size, and everything that should grow with it is written
+ * in `rem`.  That is Mantine's own mechanism -- its size declarations are
+ * `calc(Xrem * var(--mantine-scale))`, and `theme.scale` exists to CANCEL a customised
+ * root font-size, so it must stay at 1 here.
+ *
+ * A percentage rather than a px value, so a user who has set a larger default font in
+ * their browser keeps it, scaled, instead of having it silently overridden.
+ *
+ * `zoom: 1.1` on the root was tried first and rejected.  It is one line and it works,
+ * but it scales at paint time: every 1px hairline becomes 1.1px and softens on a 1x
+ * display, and viewport units do not shrink to compensate, so `100vh` paints 110% of
+ * the screen -- a 95vw modal overflowed sideways and the CBZ viewer's fullscreen
+ * overflowed downwards.  Rem scales real lengths, leaves borders crisp and leaves
+ * viewport units alone.
+ *
+ * Borders, outlines and shadows are deliberately NOT in rem.  A hairline is a hairline
+ * at any text size; ui-scale.test.js enforces both halves of that.
+ */
+:root {
+    --ui-scale: 1.1;
+}
+
 html {
     box-sizing: border-box;
+    font-size: calc(100% * var(--ui-scale));
 }
 
 *,

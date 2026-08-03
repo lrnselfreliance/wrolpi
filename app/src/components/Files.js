@@ -987,8 +987,8 @@ function RefreshStepItem({phase, isActive, isCompleted, isDisabled, description}
         <Icon name={phase.icon} size='large'
               style={{color: isCompleted ? 'var(--success)' : isActive ? 'var(--info)' : 'var(--neutral)'}}/>
         <div>
-            <div style={{fontWeight: 600, fontSize: 13}}>{phase.title}</div>
-            <div style={{fontSize: 12, color: 'var(--muted)'}}>{isActive || isCompleted ? description : ''}</div>
+            <div style={{fontWeight: 600, fontSize: '0.8125rem'}}>{phase.title}</div>
+            <div style={{fontSize: '0.75rem', color: 'var(--muted)'}}>{isActive || isCompleted ? description : ''}</div>
         </div>
     </div>
 }

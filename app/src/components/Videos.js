@@ -475,7 +475,7 @@ export function VideosSettingsPage() {
                             value={configForm.formData.sleep_requests ?? 0.75}
                             onChange={(value) => configForm.setValue('sleep_requests', parseFloat(value) || 0)}
                             placeholder='0.75'
-                            rightSection={<span style={{fontSize: 12, color: 'var(--muted)'}}>sec</span>}
+                            rightSection={<span style={{fontSize: '0.75rem', color: 'var(--muted)'}}>sec</span>}
                             rightSectionWidth={36}
                         />
                     </div>

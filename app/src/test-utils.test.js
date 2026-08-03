@@ -8,7 +8,7 @@ import {amberTheme, darkTheme, lightTheme, nightTheme} from './themes/names';
  *
  * Both of these cover mistakes it shipped with.  `mockModule` had no caller at all, so its
  * documented usage was never once executed and could not have worked; and the theme option
- * moved ThemeContext without moving Mantine's colour scheme, so asking for night produced a
+ * moved ThemeContext without moving Mantine's color scheme, so asking for night produced a
  * tree that reported night and rendered light -- a state production never reaches, which is
  * the one thing a test harness must not invent.
  */
@@ -18,7 +18,7 @@ const ThemeProbe = () => {
     return <div data-testid='probe'>{`${theme}:${isDark}`}</div>;
 };
 
-describe('render keeps the theme and the colour scheme together', () => {
+describe('render keeps the theme and the color scheme together', () => {
     // The dark-background themes, which is what Mantine has to be told about.  night and amber
     // are the interesting ones: neither is ever chosen by prefers-color-scheme, so nothing else
     // would put Mantine's own components on a dark scheme for them.

@@ -24,7 +24,7 @@ const hexToRgb = (hex) => {
 };
 
 /*
- * Normalise a colour to rgb(), and REFUSE anything that is neither a hex nor already
+ * Normalise a color to rgb(), and REFUSE anything that is neither a hex nor already
  * rgb().  Strictness is the point: feeding an unresolved `var(--blue)` to a luminance
  * calculation yields NaN, and `expect(NaN).to.not.equal(x)` passes -- a test that cannot
  * fail.  Better to blow up naming the value than to quietly measure nothing.
@@ -38,7 +38,7 @@ const toRgb = (value) => {
     const trimmed = String(value).trim();
     if (/^rgba?\(/.test(trimmed)) return trimmed;
     if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return hexToRgb(trimmed);
-    throw new Error(`Not a resolved colour: "${trimmed}"`);
+    throw new Error(`Not a resolved color: "${trimmed}"`);
 };
 
 /*
@@ -173,8 +173,8 @@ describe('ActionInput', () => {
 });
 
 /* WCAG contrast between two rgb() strings, for judging how loud a border is. */
-const luminance = (colour) => {
-    const [r, g, b] = (colour.match(/[\d.]+/g) || []).map(Number);
+const luminance = (color) => {
+    const [r, g, b] = (color.match(/[\d.]+/g) || []).map(Number);
     const channel = (v) => {
         const s = v / 255;
         return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
@@ -216,28 +216,28 @@ describe('semantic roles read as severity in every theme', () => {
      */
     const ROLES = ['neutral', 'info', 'success', 'warning', 'danger'];
 
-    const roleColours = () => {
+    const roleColors = () => {
         const root = getComputedStyle(document.documentElement);
         const panel = toRgb(root.getPropertyValue('--panel'));
         return {
             panel,
             text: toRgb(root.getPropertyValue('--text')),
-            roles: ROLES.map(role => ({role, colour: toRgb(root.getPropertyValue(`--${role}`))})),
+            roles: ROLES.map(role => ({role, color: toRgb(root.getPropertyValue(`--${role}`))})),
         };
     };
 
     themeNames.forEach((theme) => {
-        it(`gives every role a colour of its own in ${theme}`, () => {
+        it(`gives every role a color of its own in ${theme}`, () => {
             // True everywhere.  Two roles resolving to the same value is the original bug.
             cy.mountUI(<Panel>roles</Panel>, {theme});
 
             cy.get('.wrolpi-panel').should(() => {
-                const {roles} = roleColours();
-                const colours = roles.map(r => r.colour);
-                colours.forEach((colour, index) => {
-                    expect(colour, `${roles[index].role} resolved`).to.match(/^rgb\(/);
+                const {roles} = roleColors();
+                const colors = roles.map(r => r.color);
+                colors.forEach((color, index) => {
+                    expect(color, `${roles[index].role} resolved`).to.match(/^rgb\(/);
                 });
-                expect(new Set(colours).size, `five distinct roles, got ${colours.join(' ')}`)
+                expect(new Set(colors).size, `five distinct roles, got ${colors.join(' ')}`)
                     .to.equal(5);
             });
         });
@@ -246,24 +246,24 @@ describe('semantic roles read as severity in every theme', () => {
             cy.mountUI(<Panel>roles</Panel>, {theme});
 
             cy.get('.wrolpi-panel').should(() => {
-                const {panel, roles} = roleColours();
-                roles.forEach(({role, colour}) => {
+                const {panel, roles} = roleColors();
+                roles.forEach(({role, color}) => {
                     /*
                      * 3:1 is the floor for anything that is not body text.  `neutral` is
                      * allowed to sit at the bottom of the ramp -- for `pending` and disabled,
                      * being dim IS the signal -- but it still has to be visible at all.
                      */
-                    expect(contrast(colour, panel), `${role} against the panel`)
+                    expect(contrast(color, panel), `${role} against the panel`)
                         .to.be.at.least(role === 'neutral' ? 2.5 : 3);
                 });
             });
         });
 
 
-        it(`gives each Status kind a colour of its own in ${theme}`, () => {
+        it(`gives each Status kind a color of its own in ${theme}`, () => {
             /*
              * The end of the chain, through a real component: four states, four distinct
-             * painted colours.  In night these used to need three hand-written
+             * painted colors.  In night these used to need three hand-written
              * `html[data-theme="night"]` overrides; the roles replaced all of them.
              */
             cy.mountUI(
@@ -278,8 +278,8 @@ describe('semantic roles read as severity in every theme', () => {
 
             cy.get('.wrolpi-status').should(($all) => {
                 expect($all.length).to.equal(4);
-                const colours = [...$all].map(el => getComputedStyle(el).color);
-                expect(new Set(colours).size, `four distinct colours, got ${colours.join(' ')}`)
+                const colors = [...$all].map(el => getComputedStyle(el).color);
+                expect(new Set(colors).size, `four distinct colors, got ${colors.join(' ')}`)
                     .to.equal(4);
             });
         });
@@ -296,8 +296,8 @@ describe('semantic roles read as severity in every theme', () => {
             cy.mountUI(<Panel>roles</Panel>, {theme});
 
             cy.get('.wrolpi-panel').should(() => {
-                const {panel, roles} = roleColours();
-                const ratios = roles.map(({role, colour}) => ({role, ratio: contrast(colour, panel)}));
+                const {panel, roles} = roleColors();
+                const ratios = roles.map(({role, color}) => ({role, ratio: contrast(color, panel)}));
                 ratios.slice(1).forEach((entry, index) => {
                     expect(entry.ratio, `${entry.role} is louder than ${ratios[index].role}`)
                         .to.be.greaterThan(ratios[index].ratio);
@@ -307,21 +307,21 @@ describe('semantic roles read as severity in every theme', () => {
 
         it(`makes warning and danger louder than ordinary text in ${theme}`, () => {
             /*
-             * Only here.  A light theme's text is near-black at ~14:1 and no warning colour
+             * Only here.  A light theme's text is near-black at ~14:1 and no warning color
              * will ever match it -- there, hue is what marks a reading as flagged.  On a
              * single hue the roles and the text come off the same ramp, so anything meaning
              * "look at this" has to outrank the prose or it does not read as flagged at all.
              *
-             * This is the assertion the Status page needed: an uncoloured load reading
+             * This is the assertion the Status page needed: an uncolored load reading
              * inherits `--text`, and warning used to sit just below it.
              */
             cy.mountUI(<Panel>roles</Panel>, {theme});
 
             cy.get('.wrolpi-panel').should(() => {
-                const {panel, text, roles} = roleColours();
+                const {panel, text, roles} = roleColors();
                 const prose = contrast(text, panel);
                 ['warning', 'danger'].forEach((name) => {
-                    const role = roles.find(r => r.role === name).colour;
+                    const role = roles.find(r => r.role === name).color;
                     expect(contrast(role, panel), `${name} against --text on the panel`)
                         .to.be.greaterThan(prose);
                 });
@@ -329,7 +329,7 @@ describe('semantic roles read as severity in every theme', () => {
         });
     });
 
-    it('does not leave failure to colour alone', () => {
+    it('does not leave failure to color alone', () => {
         // Brightness is the first thing lost on a dim screen, and it is all night has.
         cy.mountUI(
             <Panel>
@@ -356,10 +356,10 @@ describe('a load reading ranks itself in the monochrome themes', () => {
      *
      * This is the Status page's CPU load, and the clearest payoff of the roles outside the
      * library: `orange` above half the cores was byte-identical to `--text` in night, so a
-     * machine under load rendered its warning as an ordinary uncoloured number.
+     * machine under load rendered its warning as an ordinary uncolored number.
      *
      * Only a browser can see it.  jsdom rejects `color: var(--warning)` as invalid and drops
-     * it, so the inline colour reads back empty whatever the component did.
+     * it, so the inline color reads back empty whatever the component did.
      */
     monochromeThemes.forEach((theme) => {
         it(`separates fine, warning and danger loads in ${theme}`, () => {
@@ -615,7 +615,7 @@ describe('a progress bar has room for the label inside it', () => {
              * The label spans the whole bar, so it sits on the fill AND on the track.  This
              * asserts the track half only, and that is deliberate: over the FILL it measures
              * 5.49 in light but 2.35 / 2.48 / 2.74 in dark, night and amber -- below any
-             * legibility floor.  Fixing that needs a per-half text colour, which is a design
+             * legibility floor.  Fixing that needs a per-half text color, which is a design
              * decision rather than a bug fix, so it is reported rather than quietly asserted
              * at a threshold low enough to pass.  See the note in ui.css.
              */
@@ -696,7 +696,7 @@ describe('a table header is a surface, not just bold text', () => {
              * Mantine gives thead no background, so the header painted whatever was behind
              * the table -- which is exactly what an unstriped body row paints.  Against a
              * striped body the header read as one more stripe, and weight was the only
-             * thing telling them apart.  None of this is visible to jsdom: the colours are
+             * thing telling them apart.  None of this is visible to jsdom: the colors are
              * tokens, and "what is behind an unstriped row" is a question about painting.
              */
             cy.mountUI(sampleTable, {theme});
@@ -713,7 +713,7 @@ describe('a table header is a surface, not just bold text', () => {
                      * An unstriped row paints nothing, so what shows through is the page.
                      * That is `--bg`, taken from the token -- NOT
                      * getComputedStyle(documentElement).backgroundColor, which is
-                     * `rgba(0, 0, 0, 0)` because `body` carries the page colour and the root
+                     * `rgba(0, 0, 0, 0)` because `body` carries the page color and the root
                      * element carries none.  Comparing an opaque header against that string
                      * can never fail, which is how this passed before it was fixed.
                      */
@@ -884,7 +884,7 @@ describe('a file row lines its icon up with its name', () => {
 describe('StatisticGroup separates its statistics with nothing but space', () => {
     /*
      * The group has no frame, no rules between cells and no surface of its own: the
-     * statistics sit on whatever they were dropped onto and take its colour.  That leaves
+     * statistics sit on whatever they were dropped onto and take its color.  That leaves
      * the gap as the only thing keeping them apart, and `auto-fit` decides how many rows
      * there are at paint time -- so whether they actually stay apart is a question only a
      * browser can answer.  jsdom has no tracks, no rows and no widths.
@@ -966,11 +966,11 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
         });
     });
 
-    it('takes no colour of its own, so it sits on the surface it is given', () => {
+    it('takes no color of its own, so it sits on the surface it is given', () => {
         /*
          * This is the point of having no chrome: dropped on the page it reads as page, dropped
          * in a Panel it reads as panel.  A background on the group or a cell -- which is how
-         * this was built first, to carry hairlines -- would show as a patch of the wrong colour
+         * this was built first, to carry hairlines -- would show as a patch of the wrong color
          * on every surface but the one it was picked for.
          */
         cy.mountUI(<div style={{background: 'rgb(1, 2, 3)', padding: 10}}>{sixStatistics}</div>);
@@ -1049,7 +1049,7 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
     themeNames.forEach((theme) => {
         it(`reads its value and label from ${theme}'s tokens`, () => {
             // The contrast between value and label is all that structures a statistic now that
-            // there is no cell around it, so both colours have to resolve in every theme.
+            // there is no cell around it, so both colors have to resolve in every theme.
             cy.mountUI(inNarrowColumn(sixStatistics), {theme});
 
             cy.get('.wrolpi-statistic-value').first().then(($value) => {
@@ -1057,8 +1057,8 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
 
                 cy.get('.wrolpi-statistic-label').first().should(($label) => {
                     const label = getComputedStyle($label[0]).color;
-                    expect(value, 'value colour resolved').to.match(/^rgba?\(/);
-                    expect(label, 'label colour resolved').to.match(/^rgba?\(/);
+                    expect(value, 'value color resolved').to.match(/^rgba?\(/);
+                    expect(label, 'label color resolved').to.match(/^rgba?\(/);
                     // The label is the muted token and the value is body text; if either fell
                     // back the two would come out the same and the statistic would flatten.
                     expect(label, 'label is distinct from the value').to.not.equal(value);
@@ -1068,24 +1068,24 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
     });
 });
 
-describe('a tag is legible in every theme, whatever colour the user picked', () => {
+describe('a tag is legible in every theme, whatever color the user picked', () => {
     /*
-     * Tag colours are the user's, stored per tag -- the only thing in the app painted with a
+     * Tag colors are the user's, stored per tag -- the only thing in the app painted with a
      * value no theme chose.  Tags.js calculates black or light text against that fill, and
      * night discards the fill entirely (a filled tag would be a bright patch) while amber
      * replaces it with its own.  Whether the text still reads afterwards is a question about
-     * resolved colour against a real painted surface, so it can only be asked here.
+     * resolved color against a real painted surface, so it can only be asked here.
      */
 
     // The extremes of the black-or-light decision, plus a mid tone.
-    const TAG_COLOURS = [
+    const TAG_COLORS = [
         ['Reference', '#f2f2f2'],   // near-white: text is calculated black
         ['Archived', '#1b1c1d'],    // near-black: text is calculated light
         ['Water', '#2185d0'],
     ];
 
     const tags = <div>
-        {TAG_COLOURS.map(([name, color]) => <span
+        {TAG_COLORS.map(([name, color]) => <span
             key={name}
             className='wrolpi-label wrolpi-tag'
             data-tag={name}
@@ -1094,7 +1094,7 @@ describe('a tag is legible in every theme, whatever colour the user picked', () 
     </div>;
 
     themeNames.forEach((theme) => {
-        TAG_COLOURS.forEach(([name]) => {
+        TAG_COLORS.forEach(([name]) => {
             it(`reads ${name} against its real surface in ${theme}`, () => {
                 cy.mountUI(tags, {theme});
 
@@ -1111,7 +1111,7 @@ describe('a tag is legible in every theme, whatever colour the user picked', () 
 
     it('detects the unreadable tag this started as, so the check has teeth', () => {
         /*
-         * The original defect, reproduced deliberately: the calculated text colour written to
+         * The original defect, reproduced deliberately: the calculated text color written to
          * `color` inline, which no stylesheet rule can outrank.  In night the tag becomes a
          * transparent outline over a near-black page, so the black text calculated for a
          * near-white fill is painted onto near-black.
@@ -1295,7 +1295,7 @@ describe('a toast is readable in every theme', () => {
      * near-black in dark, night and amber.  The title measured about 1.1:1 against the toast's
      * own surface: present, and invisible.
      *
-     * Only a browser can catch that.  jsdom resolves no `var()`, so the title's colour there is
+     * Only a browser can catch that.  jsdom resolves no `var()`, so the title's color there is
      * the literal string `var(--mantine-color-white)` and every contrast check passes.
      */
 
@@ -1332,7 +1332,7 @@ describe('a toast is readable in every theme', () => {
             /*
              * The end of the chain, measured rather than inferred.  The jest tests assert the
              * Mantine variable NAME on the style attribute, which would still pass if someone
-             * put four hue names back -- four distinct strings that resolve to two colours here.
+             * put four hue names back -- four distinct strings that resolve to two colors here.
              * This reads what is painted.
              */
             cy.mountUI(<>
@@ -1353,21 +1353,21 @@ describe('a toast is readable in every theme', () => {
 
             cy.get('[class*="mantine-Notification-root"]').should('have.length', 4);
             cy.get('[class*="mantine-Notification-root"]').should(($toasts) => {
-                const colours = [...$toasts].map(t =>
+                const colors = [...$toasts].map(t =>
                     getComputedStyle(t).getPropertyValue('--notification-color').trim());
-                expect(new Set(colours).size, `four distinct kinds, got ${colours.join(' ')}`)
+                expect(new Set(colors).size, `four distinct kinds, got ${colors.join(' ')}`)
                     .to.equal(4);
 
                 /*
                  * Distinctness alone does not catch the regression this is for.  Reverting to
                  * hue names gives four distinct values in night too -- blue, green, yellow and
-                 * red are not the same colour there.  What they are is cramped and badly
+                 * red are not the same color there.  What they are is cramped and badly
                  * ranked, with `--blue` at 2.29:1 against the toast surface: present, and
                  * invisible.  So the floor is the assertion that has teeth.
                  */
                 const surface = toRgb(getComputedStyle($toasts[0]).backgroundColor);
-                colours.forEach((colour, index) => {
-                    expect(contrast(toRgb(colour), surface), `toast ${index} against its surface`)
+                colors.forEach((color, index) => {
+                    expect(contrast(toRgb(color), surface), `toast ${index} against its surface`)
                         .to.be.at.least(3);
                 });
             });
@@ -1386,9 +1386,9 @@ describe('a toast is readable in every theme', () => {
 
             cy.get('.wrolpi-message').should(($all) => {
                 expect($all.length).to.equal(4);
-                const colours = [...$all].map(m =>
+                const colors = [...$all].map(m =>
                     getComputedStyle(m).getPropertyValue('--message-color').trim());
-                expect(new Set(colours).size, `four distinct kinds, got ${colours.join(' ')}`)
+                expect(new Set(colors).size, `four distinct kinds, got ${colors.join(' ')}`)
                     .to.equal(4);
             });
         });
@@ -1397,7 +1397,7 @@ describe('a toast is readable in every theme', () => {
     it('keeps the title more prominent than the message', () => {
         /*
          * Night and amber drop the description's muting, because `--muted` on a panel is 2.0:1
-         * in night.  Weight has to carry the hierarchy once colour cannot.
+         * in night.  Weight has to carry the hierarchy once color cannot.
          */
         showToast('night');
 
@@ -1423,7 +1423,7 @@ describe('a toast is readable in every theme', () => {
 });
 
 /*
- * The colour a box actually shows, looking through the layers in the order given.
+ * The color a box actually shows, looking through the layers in the order given.
  *
  * The order is the caller's business, because "the background" is ambiguous once
  * pseudo-elements are involved and picking wrong makes a test vacuous rather than wrong.
@@ -1436,9 +1436,9 @@ describe('a toast is readable in every theme', () => {
  */
 const paintedBackground = (el, order = [null, '::before', '::after']) => {
     for (const pseudo of order) {
-        const colour = getComputedStyle(el, pseudo).backgroundColor;
-        if (colour && !/^rgba\(.*,\s*0(\.0+)?\)$/.test(colour) && colour !== 'transparent') {
-            return colour;
+        const color = getComputedStyle(el, pseudo).backgroundColor;
+        if (color && !/^rgba\(.*,\s*0(\.0+)?\)$/.test(color) && color !== 'transparent') {
+            return color;
         }
     }
     return null;
@@ -1449,7 +1449,7 @@ describe('a loading placeholder is visible on the surface it covers', () => {
         it(`separates the skeleton from the panel in ${theme}`, () => {
             /*
              * `--head` and `--border` are what the bars come out as, and neither was chosen
-             * with a panel behind it in mind.  If they land on the panel's own colour there
+             * with a panel behind it in mind.  If they land on the panel's own color there
              * is no placeholder at all, only an empty box, and jsdom cannot see that.
              */
             cy.mountUI(<Panel><Placeholder lines={3}/></Panel>, {theme});
@@ -1479,7 +1479,7 @@ describe('a loading placeholder is visible on the surface it covers', () => {
 
 describe('a spinner is visible in every theme', () => {
     themeNames.forEach((theme) => {
-        it(`resolves the loader colour in ${theme}`, () => {
+        it(`resolves the loader color in ${theme}`, () => {
             // `color='var(--blue)'` reaches Mantine as a string it does not understand and
             // passes straight through to CSS.  If the token were misspelled the property
             // would resolve to nothing and the spinner would paint in currentColor -- or,
@@ -1557,7 +1557,7 @@ describe('an icon stack carries the surface it was placed on', () => {
 
     it('takes the surface from an ancestor, which is how the nav bar sets it', () => {
         /*
-         * The nav bar's colour is a user setting written inline on the <nav>, so the stack
+         * The nav bar's color is a user setting written inline on the <nav>, so the stack
          * inside it cannot name a token.  It sets --icon-stack-bg on the bar itself and lets
          * it inherit -- and this is the test for that, because setting the property on the
          * stack (as the file browser does) would pass even if inheritance were broken.
@@ -1627,11 +1627,11 @@ describe('theme tokens actually resolve', () => {
              * panel.  jsdom cannot catch that; it does not resolve var() at all.
              */
             cy.get('.wrolpi-path-input-control input').should(($input) => {
-                const colour = getComputedStyle($input[0]).color;
-                expect(colour, 'input text colour resolved').to.match(/^rgba?\(/);
+                const color = getComputedStyle($input[0]).color;
+                expect(color, 'input text color resolved').to.match(/^rgba?\(/);
                 // Only an rgba() alpha of zero is invisible.  Matching a trailing ", 0)"
                 // loosely would flag amber's opaque rgb(255, 149, 0) for its blue channel.
-                expect(colour, 'input text is not transparent')
+                expect(color, 'input text is not transparent')
                     .not.to.match(/^rgba\(.*,\s*0(\.0+)?\)$/);
             });
 
@@ -2080,10 +2080,10 @@ describe('pagination sits in the middle of its container', () => {
     });
 });
 
-describe('the navigation bar is legible on every colour a user can pick', () => {
+describe('the navigation bar is legible on every color a user can pick', () => {
     /*
      * The bar's background is the one surface the USER chooses, by hue name, and each theme
-     * resolves those twelve names to twelve of its own colours.  Forty-eight backgrounds; the
+     * resolves those twelve names to twelve of its own colors.  Forty-eight backgrounds; the
      * links and status icons have to read on all of them.  They did not -- every one was
      * drawn in `--btn-text`, near-black in three of the four themes, against backgrounds like
      * night's `--brown` (#451212).  That glyph was 1.33:1 against the bar behind it.
@@ -2096,7 +2096,7 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
      *
      * `NavBarSample` is the gallery's bar rather than <NavBar/> itself, which needs the
      * settings, status and worker contexts and a dozen polling hooks.  Both build their style
-     * with the same `navBarStyle(useNavColors(colour))` call, and navColors.test.js has a
+     * with the same `navBarStyle(useNavColors(color))` call, and navColors.test.js has a
      * source guard holding NavBar to that.
      */
     const barsFor = (theme) => {
@@ -2106,14 +2106,14 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
     };
 
     themeNames.forEach((theme) => {
-        it(`paints a resolved background for all twelve colours in ${theme}`, () => {
+        it(`paints a resolved background for all twelve colors in ${theme}`, () => {
             barsFor(theme);
 
             navColorNames.forEach((color) => {
                 cy.get(`[data-nav-sample="${color}"] .wrolpi-navbar`).should(($nav) => {
                     const background = getComputedStyle($nav[0]).backgroundColor;
                     // An unresolved token paints nothing at all, and a transparent bar over
-                    // the page would read as "the colour just looks wrong" rather than as a
+                    // the page would read as "the color just looks wrong" rather than as a
                     // broken style.
                     expect(background, `${theme}/${color} bar background`)
                         .to.not.equal('rgba(0, 0, 0, 0)');
@@ -2121,7 +2121,7 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
             });
         });
 
-        it(`clears 3:1 on every colour in ${theme}`, () => {
+        it(`clears 3:1 on every color in ${theme}`, () => {
             /*
              * 3:1 is the WCAG floor for graphical objects, which is what these icons are.
              * Twelve of the forty-eight combinations were below it before measurement.
@@ -2149,7 +2149,7 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
              * They inherit nothing.  An anchor takes `a {color: var(--blue)}` from
              * tokens.css, which outranks the bar's inherited value; a Mantine ActionIcon
              * paints `--ai-color`, its own themed blue, and Mantine writes that variable
-             * INLINE so no stylesheet variable can reach it.  Three routes to a colour, of
+             * INLINE so no stylesheet variable can reach it.  Three routes to a color, of
              * which one worked.
              *
              * `querySelectorAll`, and the count asserted, because the version of this test
@@ -2240,7 +2240,7 @@ describe('the navigation bar is legible on every colour a user can pick', () => 
 
 describe('the navigation bar corner', () => {
     /*
-     * The real <DesktopNav/>, which takes its colours, home link and indicators as props and
+     * The real <DesktopNav/>, which takes its colors, home link and indicators as props and
      * so needs none of the polling hooks <NavBar/> wires up.  The indicators are the shapes
      * the app actually puts there, in the real NavIconWrapper: a bare-icon anchor (share), an
      * unwrapped anchor (search), and two IconButtons (hotspot, theme picker).  Those three
@@ -2428,7 +2428,7 @@ describe('the navbar overflow menu keeps the bar\'s styling', () => {
      * trigger spread those cloned props AFTER its own `className` attribute, so the cloned
      * value replaced ours and the real More button rendered with NO class at all -- a bare
      * UA button, grey on dark and white on light, while every other item in the bar took the
-     * user's navbar colour.
+     * user's navbar color.
      *
      * The hidden placeholder DesktopNav measures is NOT cloned by Menu.Target, so it kept its
      * class and stayed the width the styled button would have been.  That is why the width
@@ -2454,7 +2454,7 @@ describe('the navbar overflow menu keeps the bar\'s styling', () => {
     const moreButton = () => cy.contains('.wrolpi-navbar button', 'More');
 
     themeNames.forEach((theme) => {
-        it(`draws More in the bar's own colour in ${theme}`, () => {
+        it(`draws More in the bar's own color in ${theme}`, () => {
             mountNarrow(theme);
 
             cy.get('.wrolpi-navbar').then(($nav) => {
@@ -2463,7 +2463,7 @@ describe('the navbar overflow menu keeps the bar\'s styling', () => {
                     const style = getComputedStyle($more[0]);
                     expect($more[0].className, 'More carries the bar classes')
                         .to.contain('wrolpi-navbar-link');
-                    expect(style.color, `More text colour in ${theme}`).to.equal(expected);
+                    expect(style.color, `More text color in ${theme}`).to.equal(expected);
                     // A UA button paints a grey face; the bar's items are transparent.
                     expect(style.backgroundColor, `More background in ${theme}`)
                         .to.equal('rgba(0, 0, 0, 0)');
@@ -2842,22 +2842,22 @@ describe('a toast does not cover the navigation bar', () => {
     });
 });
 
-describe('a disabled button keeps its own colour', () => {
+describe('a disabled button keeps its own color', () => {
     /*
      * Mantine repaints a disabled button flat grey -- background, text and border all
-     * replaced with `--mantine-color-disabled`.  Semantic kept the colour and dropped the
+     * replaced with `--mantine-color-disabled`.  Semantic kept the color and dropped the
      * whole control to `opacity: 0.45`, so a disabled Delete was still visibly the red one.
      *
      * The file browser is where this bites.  Its footer is eight buttons, six of which are
      * disabled until something is selected, so the toolbar a user meets on arriving at /files
      * is an undifferentiated grey row -- Delete, Rename, Move, Ignore and Tag all identical.
-     * Colour is how those are told apart at a glance, and disabling them threw it away.
+     * Color is how those are told apart at a glance, and disabling them threw it away.
      *
      * Opacity is the better signal anyway: it says "not available" without also saying "no
      * longer the delete button".
      *
      * Mantine leaves `--button-bg` intact on a disabled button -- it overrides the painted
-     * `background` rather than the variable -- so the colour the call site asked for is still
+     * `background` rather than the variable -- so the color the call site asked for is still
      * there to be read back.
      */
     const pairs = [
@@ -2876,11 +2876,11 @@ describe('a disabled button keeps its own colour', () => {
     </div>, {theme});
 
     themeNames.forEach((theme) => {
-        it(`keeps every colour recognisable while disabled in ${theme}`, () => {
+        it(`keeps every color recognisable while disabled in ${theme}`, () => {
             mountPairs(theme);
 
             cy.get('[data-testid^="off-"]').should(($disabled) => {
-                expect($disabled, 'a disabled button per colour').to.have.length(pairs.length);
+                expect($disabled, 'a disabled button per color').to.have.length(pairs.length);
 
                 pairs.forEach(({color}) => {
                     const on = Cypress.$(`[data-testid="on-${color}"]`)[0];
@@ -2894,7 +2894,7 @@ describe('a disabled button keeps its own colour', () => {
 
         it(`still marks them as unavailable in ${theme}`, () => {
             /*
-             * Keeping the colour must not cost the affordance: a disabled button that looks
+             * Keeping the color must not cost the affordance: a disabled button that looks
              * identical to an enabled one is a worse bug than a grey one.
              *
              * Against `--disabled-opacity` rather than a band.  A band tolerates an
@@ -2918,7 +2918,7 @@ describe('a disabled button keeps its own colour', () => {
     });
 
     themeNames.forEach((theme) => {
-        it(`tells two disabled buttons of different colours apart in ${theme}`, () => {
+        it(`tells two disabled buttons of different colors apart in ${theme}`, () => {
             /*
              * The claim stated as the user meets it, and the inverse of the bug: five grey
              * blobs were five EQUAL greys.  Comparing each against its enabled twin above
@@ -2935,7 +2935,7 @@ describe('a disabled button keeps its own colour', () => {
                     .map(button => getComputedStyle(button).backgroundColor);
 
                 expect(new Set(fills).size,
-                    `${theme}: five colours, distinct fills: ${fills.join(' ')}`)
+                    `${theme}: five colors, distinct fills: ${fills.join(' ')}`)
                     .to.equal(pairs.length);
             });
         });
@@ -2984,7 +2984,7 @@ describe('a disabled button keeps its own colour', () => {
 
             expect(style.backgroundColor, 'no fill').to.equal('rgba(0, 0, 0, 0)');
             expect(style.borderStyle, 'still dashed').to.equal('dashed');
-            expect(toRgb(style.borderTopColor), 'in the danger colour')
+            expect(toRgb(style.borderTopColor), 'in the danger color')
                 .to.equal(toRgb(style.getPropertyValue('--danger') || '#ff5757'));
             expect(parseFloat(style.opacity), 'and still faded').to.be.lessThan(1);
         });
@@ -3018,15 +3018,15 @@ describe('a disabled button keeps its own colour', () => {
             const on = getComputedStyle(Cypress.$('[data-testid="outline-on"]')[0]);
             const off = getComputedStyle($off[0]);
 
-            expect(off.color, 'text colour survives').to.equal(on.color);
-            expect(off.borderTopColor, 'border colour survives').to.equal(on.borderTopColor);
+            expect(off.color, 'text color survives').to.equal(on.color);
+            expect(off.borderTopColor, 'border color survives').to.equal(on.borderTopColor);
         });
     });
 
     it('does the same for icon-only buttons', () => {
         // The file browser's row actions are IconButtons, and they disable the same way.
         cy.mountUI(<div>
-            {/* Filled, so there is a colour to lose.  IconButton defaults to Mantine's
+            {/* Filled, so there is a color to lose.  IconButton defaults to Mantine's
                 `default` variant, which is a white face, and comparing white with white
                 would prove nothing. */}
             <IconButton icon='trash' label='Delete' color='red' variant='filled'
@@ -3332,7 +3332,7 @@ describe('the search field\'s clear button is attached to it', () => {
     });
 
     it('has square corners, so nothing shows through at the field edge', () => {
-        // A rounded ActionIcon stretched flush to a square field leaves panel-coloured wedges
+        // A rounded ActionIcon stretched flush to a square field leaves panel-colored wedges
         // at the corners.  Nothing sets this here: the theme zeroes every radius, and this
         // records that the weld depends on it.
         mountField();

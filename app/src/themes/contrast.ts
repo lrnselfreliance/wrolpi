@@ -8,7 +8,7 @@
  * its existing callers are unaffected.
  */
 
-/** A hex colour as [r, g, b], accepting `#rgb`, `#rrggbb`, and `#rrggbbaa`. */
+/** A hex color as [r, g, b], accepting `#rgb`, `#rrggbb`, and `#rrggbbaa`. */
 export function hexToRGBArray(color: string): number[] | undefined {
     let hex = (typeof color === 'string' ? color : '').trim().replace(/^#/, '');
     if (hex.length === 3 || hex.length === 4) {
@@ -24,19 +24,19 @@ export function hexToRGBArray(color: string): number[] | undefined {
 }
 
 /**
- * Any colour these measurements can actually read, as [r, g, b] — or undefined.
+ * Any color these measurements can actually read, as [r, g, b] — or undefined.
  *
  * Undefined matters as much as the value.  `relativeLuminance` used to return 0 for
  * everything it could not parse, which is indistinguishable from black: a token written as
  * `rgb(90, 79, 168)` measured as pure black, so the "best" foreground was chosen against a
- * colour the theme does not contain, and the wrong one was frozen into the bar's inline
+ * color the theme does not contain, and the wrong one was frozen into the bar's inline
  * style.  A caller that cannot tell "unreadable" from "black" cannot fall back, and the
  * custom YAML themes ahead of us are exactly where a non-hex token will first appear.
  *
  * Alpha is deliberately dropped rather than rejected: WCAG contrast is defined on composited
- * colour, and what a translucent value composites over is not knowable here.  Every token in
+ * color, and what a translucent value composites over is not knowable here.  Every token in
  * tokens.css is opaque, so this only arises for a hand-written theme, where measuring the
- * colour itself is a better answer than refusing.
+ * color itself is a better answer than refusing.
  */
 export function parseColor(color: string): number[] | undefined {
     const value = (typeof color === 'string' ? color : '').trim();
@@ -58,7 +58,7 @@ export function parseColor(color: string): number[] | undefined {
         return channels.map(channel => Math.min(255, Math.max(0, channel)));
     }
 
-    // A named colour, `hsl()`, `color-mix()`, or an unresolved `var()`.  Not measurable
+    // A named color, `hsl()`, `color-mix()`, or an unresolved `var()`.  Not measurable
     // here, and saying so is the point.
     return undefined;
 }
@@ -68,7 +68,7 @@ export function parseColor(color: string): number[] | undefined {
  *
  * The linearisation is the part that matters.  Weighting the gamma-encoded bytes directly
  * is a rough approximation that misjudges mid-tone blues and purples badly enough to pick
- * the wrong text colour for them.
+ * the wrong text color for them.
  */
 export function relativeLuminance(color: string | number[]): number {
     const rgb = (typeof color === 'string') ? parseColor(color) : color;
@@ -85,13 +85,13 @@ export function relativeLuminance(color: string | number[]): number {
     return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
 }
 
-/** WCAG contrast ratio between two colours, from 1:1 (identical) to 21:1 (black on white). */
+/** WCAG contrast ratio between two colors, from 1:1 (identical) to 21:1 (black on white). */
 export function contrastRatio(a: string | number[], b: string | number[]): number {
     const luminances = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
     return (luminances[0] + 0.05) / (luminances[1] + 0.05);
 }
 
-/** Whether a colour can be measured at all, as distinct from measuring as black. */
+/** Whether a color can be measured at all, as distinct from measuring as black. */
 export const isMeasurable = (color: string): boolean => parseColor(color) !== undefined;
 
 /**
@@ -100,7 +100,7 @@ export const isMeasurable = (color: string): boolean => parseColor(color) !== un
  * Measures every option rather than comparing a brightness figure to a threshold.  A
  * threshold picks the worse of two options for every mid-tone -- which is the whole
  * defect this exists to avoid -- and a mid-tone is exactly what a user picks when they
- * choose a navbar colour.
+ * choose a navbar color.
  *
  * Ties go to the earlier candidate, so a caller can order them by preference.
  */

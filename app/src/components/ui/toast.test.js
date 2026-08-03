@@ -135,7 +135,7 @@ describe('toast', () => {
             .toMatch(/--notification-color:\s*var\(--mantine-color-danger-/);
     });
 
-    it('gives each type a colour of its own', async () => {
+    it('gives each type a color of its own', async () => {
         /*
          * Four types that must not collapse into one in light and dark.  Night and amber are
          * the deliberate exception -- they have no second hue to spend -- but that is decided
@@ -143,16 +143,16 @@ describe('toast', () => {
          */
         withToasts();
 
-        const colours = new Set();
+        const colors = new Set();
         for (const type of ['info', 'success', 'warning', 'error']) {
             showToast({type, title: `A ${type}`});
         }
         await waitFor(() => expect(visibleToasts()).toHaveLength(4));
         for (const notification of visibleToasts()) {
-            colours.add((notification.getAttribute('style') || '').match(/--notification-color:[^;]*/)?.[0]);
+            colors.add((notification.getAttribute('style') || '').match(/--notification-color:[^;]*/)?.[0]);
         }
 
-        expect(colours.size).toBe(4);
+        expect(colors.size).toBe(4);
     });
 
     it('defaults to info when given no type', async () => {

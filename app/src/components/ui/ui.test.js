@@ -383,7 +383,7 @@ describe('Header', () => {
         expect(container.querySelector('h3').style.marginBottom).toBe('');
     });
 
-    it('still colours the heading text from the colour prop', () => {
+    it('still colors the heading text from the color prop', () => {
         const {container} = renderUI(<Header as='h4' color='danger'>2 items to remove</Header>);
 
         expect(container.querySelector('h4')).toHaveStyle({color: 'var(--danger)'});
@@ -619,10 +619,10 @@ describe('Progress', () => {
         expect(bar).toHaveTextContent('62%');
     });
 
-    it('keeps its percent text readable on every bar colour', () => {
+    it('keeps its percent text readable on every bar color', () => {
         /*
          * Ported from Theme.test.js, which asserted Semantic's `inverted-progress-text`
-         * class across all fourteen colours and both modes.  That class is gone; the
+         * class across all fourteen colors and both modes.  That class is gone; the
          * mechanism now is that the text always takes `--text` while light mode lightens
          * the fill beneath it, because the text sits across both the filled and unfilled
          * halves of the bar.
@@ -701,9 +701,9 @@ describe('Label as a tag', () => {
         expect(container.querySelector('.wrolpi-tag')).toBeInTheDocument();
     });
 
-    it('leaves the text colour to the stylesheet', () => {
-        // Every label routes its text colour through `--label-text` so that night and amber,
-        // which replace the fill with their own, can replace the text colour with it.  An
+    it('leaves the text color to the stylesheet', () => {
+        // Every label routes its text color through `--label-text` so that night and amber,
+        // which replace the fill with their own, can replace the text color with it.  An
         // inline `color` could not be overridden by either.
         const {container} = renderUI(<Label tag color='blue'>Water</Label>);
 
@@ -742,18 +742,18 @@ describe('the library names severity by role, never by hue', () => {
     });
 });
 
-describe('nothing paints a label\'s text with an inline colour', () => {
+describe('nothing paints a label\'s text with an inline color', () => {
     /*
      * A source guard, because this defect appeared at three separate call sites and fixing the
      * first one did not fix the others.
      *
-     * A label's text colour has to travel through `--label-text`.  An inline `color` is a
+     * A label's text color has to travel through `--label-text`.  An inline `color` is a
      * declaration no stylesheet rule can outrank, so night -- which turns a label into an
      * outline over a near-black page -- keeps whatever was calculated for the fill it just
      * discarded.  A bright fill leaves black text on near-black: the tag reads as an empty
      * outline, and nothing fails.
      *
-     * The three were the tag chip, the tag edit preview (the very preview of the colour being
+     * The three were the tag chip, the tag edit preview (the very preview of the color being
      * chosen), and the Flasher's chip badges.  The stylesheet comment explaining the night and
      * amber override already named the Flasher, and it was still missed.
      */
@@ -881,7 +881,7 @@ describe('Table', () => {
 
 describe('Card', () => {
     it('draws a mimetype accent from a token, not a hex', () => {
-        // File cards carry the mimetype's colour on their top edge so a grid of results is
+        // File cards carry the mimetype's color on their top edge so a grid of results is
         // scannable by kind.  Semantic did this with `<Card color='violet'>`; two migrated
         // files had dropped the accent because our Card had no equivalent.
         const {container} = renderUI(<Card title='Water Storage.pdf' color='red'/>);
@@ -889,7 +889,7 @@ describe('Card', () => {
         expect(container.firstChild).toHaveStyle({borderBottom: '3px solid var(--red)'});
     });
 
-    it('has no accent when no colour is given', () => {
+    it('has no accent when no color is given', () => {
         const {container} = renderUI(<Card title='Plain'/>);
 
         expect(container.firstChild.style.borderBottom).toBe('');
@@ -959,7 +959,7 @@ describe('Statistic', () => {
         expect(screen.getByText('Free space')).toBeInTheDocument();
     });
 
-    it('colours the value from a token, not a hex', () => {
+    it('colors the value from a token, not a hex', () => {
         // Status turns load, temperature and IO wait red or orange.  A hex here would not
         // remap in night mode, putting a green or orange pixel on a red-only screen.
         const {container} = renderUI(<Statistic value='3.9' label='1 Min. Load' color='red'/>);
@@ -967,7 +967,7 @@ describe('Statistic', () => {
         expect(container.querySelector('.wrolpi-statistic-value')).toHaveStyle({color: 'var(--red)'});
     });
 
-    it('leaves the value in body text when no colour is given', () => {
+    it('leaves the value in body text when no color is given', () => {
         const {container} = renderUI(<Statistic value='0.4' label='1 Min. Load'/>);
 
         expect(container.querySelector('.wrolpi-statistic-value').style.color).toBe('');
@@ -1019,7 +1019,7 @@ describe('StatisticGroup', () => {
 
     it('draws no chrome of its own, in markup or in style', () => {
         // The group is spacing only: the statistics sit on whatever surface they were dropped
-        // onto and take its colour.  An inline border or background here would override the
+        // onto and take its color.  An inline border or background here would override the
         // stylesheet and could not be themed, so nothing may set one.
         const {container} = renderUI(<StatisticGroup>
             <Statistic value='1,432' label='Videos'/>
@@ -1143,8 +1143,8 @@ describe('Loader', () => {
         expect(screen.getByLabelText('Fetching channels')).toBeInTheDocument();
     });
 
-    it('takes its colour from a token rather than a fixed value', () => {
-        // A hex here would be one colour in all four themes, and a blue one in night mode.
+    it('takes its color from a token rather than a fixed value', () => {
+        // A hex here would be one color in all four themes, and a blue one in night mode.
         const {container} = renderUI(<Loader/>);
 
         expect(container.querySelector('.mantine-Loader-root').style.getPropertyValue('--loader-color'))

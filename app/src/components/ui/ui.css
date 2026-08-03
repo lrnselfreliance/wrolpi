@@ -61,7 +61,7 @@
  * Only `filled` gets the first rule: an outline or subtle button sets `--button-bg` to
  * `transparent`, and there the surface behind the button is still the right answer.
  * `:not([data-variant])` is that same case -- Mantine omits the attribute entirely when a
- * call site names a colour but no variant, which is how every filled button here is
+ * call site names a color but no variant, which is how every filled button here is
  * written, and keying on the attribute alone matched none of them.  `--button-bg` itself
  * is absent when a button names neither, hence the fallback chain.
  */
@@ -377,7 +377,7 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
  * claims to set -- true today only because the field happens to be the taller of the two.
  *
  * The corner radius needs no rule: the theme zeroes every `--mantine-radius-*`, so there are
- * no rounded corners to leave panel-coloured wedges against the square field.
+ * no rounded corners to leave panel-colored wedges against the square field.
  */
 html .wrolpi-searchbox-clear {
     align-self: stretch;
@@ -723,7 +723,7 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
      * `--label-text` is set per-tag by Tags.js, which calculates black or light text against
      * the user's chosen fill.  The fallback covers every label whose fill is a theme token.
      * It is a variable rather than an inline `color` so that a theme which discards the fill
-     * can also discard the text colour calculated for it.
+     * can also discard the text color calculated for it.
      */
     color: var(--label-text, var(--btn-text));
     border: 1px solid transparent;
@@ -733,7 +733,7 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 /*
  * A tag is a label with a physical shape: a pointed left edge and an eyelet, like a tag
  * tied to a garment.  The point is a square rotated 45 degrees behind the left edge -- its
- * right half sits under the body in the same colour and merges, leaving the left half
+ * right half sits under the body in the same color and merges, leaving the left half
  * showing as the point.  At 20px a side its diagonal is 28px, which is the body's height,
  * so the two edges of the point meet the body exactly at its corners.
  *
@@ -799,7 +799,7 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 
 /*
  * White and black labels would vanish into the surface they sit on.  They set the text
- * colour through `--label-text` rather than `color` for the same reason the per-tag colour
+ * color through `--label-text` rather than `color` for the same reason the per-tag color
  * does: setting `color` here outranked the base rule, so amber -- which replaces every fill
  * with its own and has no `color` rule of its own -- was left painting `--white` on `--text`,
  * light orange on orange.
@@ -937,20 +937,20 @@ html[data-theme="night"] .wrolpi-tag::before {
 
 /*
  * Night and amber are single-hue by definition, and a call site may legitimately want
- * many distinguishable colours — the Flasher's chip-family badges set `--label-color`
- * inline from a twelve-colour palette that no four tokens can express.
+ * many distinguishable colors — the Flasher's chip-family badges set `--label-color`
+ * inline from a twelve-color palette that no four tokens can express.
  *
- * In those themes the palette is overridden back to the theme's own text colour, so a
+ * In those themes the palette is overridden back to the theme's own text color, so a
  * label cannot put a green or blue pixel on a night-adapted screen.  `!important` is
  * required because the palette arrives as an inline custom property, which a normal
- * rule cannot outrank.  The labels stop being distinguishable by colour, which is the
+ * rule cannot outrank.  The labels stop being distinguishable by color, which is the
  * correct trade: the theme's whole purpose is that no other hue reaches the eye.
  */
 html[data-theme="night"] .wrolpi-label,
 html[data-theme="amber"] .wrolpi-label {
     --label-color: var(--text) !important;
     /*
-     * The per-tag text colour goes with the fill it was calculated against.  Tags.js works
+     * The per-tag text color goes with the fill it was calculated against.  Tags.js works
      * out black-or-light from the user's chosen hex, and once that hex is discarded the
      * answer is not just useless but wrong: amber was painting `#dddddd` on `#ff9500`, about
      * 1.9:1 and a neutral grey in a theme whose whole point is that nothing else is.  Night,
@@ -964,7 +964,7 @@ html[data-theme="amber"] .wrolpi-label {
 
 /* ----------------------------------------------------------------- Toasts */
 /*
- * Notifications take their colours from our tokens rather than from Mantine's colour scheme.
+ * Notifications take their colors from our tokens rather than from Mantine's color scheme.
  *
  * Mantine paints a dark-scheme notification title with `--mantine-color-white`, and the
  * bridge aliases that to `--btn-text` -- deliberately, because it is the text drawn on a
@@ -1180,7 +1180,7 @@ html .mantine-Notification-closeButton:hover {
  * 5.49:1 in light (the brightness filter below is what buys that) but 2.35 in
  * dark, 2.48 in night and 2.74 in amber; against the empty track it is 5.2-15:1
  * everywhere.  Reaching AA over the fill needs the label drawn twice, clipped to
- * the fill boundary, so each half gets its own colour -- and in night not even
+ * the fill boundary, so each half gets its own color -- and in night not even
  * that would do it, since `--text` is only ~4:1 against pure black and the fill
  * is lighter than black by definition.  Left as it is, deliberately, rather than
  * asserted at a threshold chosen to pass.
@@ -1314,12 +1314,12 @@ html[data-theme="amber"] .wrolpi-card-tag {
 /*
  * The group is spacing and nothing else: no frame, no rules between cells, and
  * no surface of its own, so the statistics sit on whatever they are dropped onto
- * -- the page in one place, a Panel in another -- and pick up its colour.
+ * -- the page in one place, a Panel in another -- and pick up its color.
  *
  * That also settles a question this went round twice on.  Ruling the cells needs
  * a technique that survives wrapping, because `auto-fit` decides the number of
  * rows at paint time: a `border-right` per cell rules columns but not rows, and
- * a border-coloured background behind a 1px gap rules both but paints every
+ * a border-colored background behind a 1px gap rules both but paints every
  * track no cell landed in.  With no rules at all, neither problem exists.
  *
  * The gap is wider across than down.  Two statistics side by side have nothing
@@ -1378,7 +1378,7 @@ html[data-theme="amber"] .wrolpi-card-tag {
 
 /* ---------------------------------------------------------------- Status */
 /*
- * One rule for four states in four themes.  The colour is the role the component
+ * One rule for four states in four themes.  The color is the role the component
  * chose, and the role already knows what it looks like here -- which is what
  * replaced the three `html[data-theme="night"]` overrides that used to live below.
  */
@@ -1392,7 +1392,7 @@ html[data-theme="amber"] .wrolpi-card-tag {
 }
 
 /*
- * Failure is not left to colour alone.  Night and amber distinguish the roles by
+ * Failure is not left to color alone.  Night and amber distinguish the roles by
  * brightness, and brightness is the first thing lost on a dim screen or to a user
  * who cannot separate these hues, so the loudest state also carries weight.
  */
@@ -1502,21 +1502,21 @@ html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
 }
 
 /*
- * A disabled button keeps its own colour.
+ * A disabled button keeps its own color.
  *
  * Mantine repaints one flat grey -- background, text and border all replaced with
- * `--mantine-color-disabled`.  Semantic kept the colour and dropped the whole control to
+ * `--mantine-color-disabled`.  Semantic kept the color and dropped the whole control to
  * `opacity: 0.45`, and that is the better signal: it says "not available" without also
  * saying "no longer the delete button".
  *
  * The file browser is where the difference shows.  Its footer is eight buttons, six of them
  * disabled until something is selected, so the toolbar a user meets on arriving at /files was
  * an undifferentiated grey row -- Delete, Rename, Move, Ignore and Tag all the same pixel.
- * Colour is how those are told apart at a glance.
+ * Color is how those are told apart at a glance.
  *
- * Mantine leaves the variables alone and overrides only the painted properties, so the colour
+ * Mantine leaves the variables alone and overrides only the painted properties, so the color
  * the call site asked for is still in `--button-bg` and can simply be reinstated.  `--button-bd`
- * is a whole border shorthand, not a colour, so it is set with `border`.
+ * is a whole border shorthand, not a color, so it is set with `border`.
  *
  * `:not([data-loading])` mirrors Mantine, and is not decoration.  Mantine renders a loading
  * button as `disabled={disabled || loading}`, so every busy control in the app is `:disabled`

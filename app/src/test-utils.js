@@ -129,7 +129,7 @@ export function renderWithProviders(
     if (route) window.history.pushState({}, '', route);
 
     /*
-     * The theme decides the colour scheme, rather than the two being set independently.
+     * The theme decides the color scheme, rather than the two being set independently.
      *
      * `inverted` used to drive Mantine's scheme on its own, so asking for night or amber
      * through the theme option produced a tree that reported a dark theme while Mantine

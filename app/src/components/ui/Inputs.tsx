@@ -177,9 +177,9 @@ export interface ColoredInputProps
      */
     style?: React.CSSProperties;
     /*
-     * A token colour name for the label, and the SAME union Label accepts rather than a
+     * A token color name for the label, and the SAME union Label accepts rather than a
      * loose `string`: the point of the union is that a theme must have a token by that
-     * name, and widening it here would let a call site name a colour that resolves to
+     * name, and widening it here would let a call site name a color that resolves to
      * nothing in every theme.
      */
     color?: LabelProps['color'];

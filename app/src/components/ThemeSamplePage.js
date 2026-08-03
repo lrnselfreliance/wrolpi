@@ -79,10 +79,10 @@ const Row = ({children}) => <div style={{display: 'flex', gap: 10, flexWrap: 'wr
 </div>;
 
 /*
- * One navigation bar, in one of the twelve colours a user can pick for it.
+ * One navigation bar, in one of the twelve colors a user can pick for it.
  *
  * The bar is the only surface in the app whose background the USER chooses, and every theme
- * resolves those twelve names to twelve of its own colours -- forty-eight backgrounds that
+ * resolves those twelve names to twelve of its own colors -- forty-eight backgrounds that
  * the same links and status icons have to stay legible on.  They did not: the bar drew every
  * one of them in `--btn-text`, which is near-black in three of the four themes, and night's
  * `--brown` is #451212.  That glyph was 1.33:1 against the bar behind it.
@@ -108,11 +108,11 @@ export const NavBarSample = ({color}) => {
             <div className='wrolpi-navbar-right' style={{gap: '0.5em', paddingRight: '0.5em'}}>
                 {/*
                   * All three shapes the real bar puts in this corner, because they take
-                  * their colour by three different routes and only one of them was ever
+                  * their color by three different routes and only one of them was ever
                   * right.  A bare Icon inherits.  An anchor does NOT -- `a {color:
                   * var(--blue)}` in tokens.css outranks the inherited value, which is what
                   * made the search icon blue on every bar in every theme.  And a Mantine
-                  * ActionIcon paints its own themed colour, which is what made the
+                  * ActionIcon paints its own themed color, which is what made the
                   * hamburger blue.  The first version of this sample used an IconButton for
                   * the search icon too, so it showed the second fault twice and hid the
                   * first entirely.
@@ -175,12 +175,12 @@ export function ThemeSamplePage() {
         <Section label='Navigation bars'>
             <Panel>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 0}}>
-                    Every colour the navigation bar can be set to (Settings &rarr; navbar
-                    colour), in the <strong>{theme}</strong> theme. The text and icons are not
-                    a fixed colour: each bar is measured, and drawn in whichever of this
-                    theme's own colours reads best on it. The ratio under each bar is that
+                    Every color the navigation bar can be set to (Settings &rarr; navbar
+                    color), in the <strong>{theme}</strong> theme. The text and icons are not
+                    a fixed color: each bar is measured, and drawn in whichever of this
+                    theme's own colors reads best on it. The ratio under each bar is that
                     measurement — anything under 4.5:1 is called out, and means the palette
-                    itself has no colour that reads on that background.
+                    itself has no color that reads on that background.
                 </p>
                 {navColorNames.map(color => <NavBarSample key={color} color={color}/>)}
             </Panel>
@@ -284,11 +284,11 @@ export function ThemeSamplePage() {
                 <Statistic value={0} label='Downloading'/>
             </StatisticGroup>
 
-            {/* Status colours a reading that carries meaning.  Check these in night and amber,
+            {/* Status colors a reading that carries meaning.  Check these in night and amber,
                 where there is no hue to spend and the value has to read some other way. */}
             {/* The group above ends in a label, and a heading has no margin of its own, so
                 without this the two run together. */}
-            <Header as='h5' style={{marginTop: 24}}>Coloured readings, as Status draws them</Header>
+            <Header as='h5' style={{marginTop: 24}}>Colored readings, as Status draws them</Header>
             <StatisticGroup>
                 <Statistic value='0.4' label='1 Min. Load'/>
                 <Statistic value='2.6' label='5 Min. Load' color='warning'/>
@@ -417,7 +417,7 @@ export function ThemeSamplePage() {
                 <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
                     Top right, five at a time, five seconds each unless the caller says
                     otherwise. Check each type in all four themes: night has no second hue to
-                    spend, so info, success, warning and error cannot be told apart by colour
+                    spend, so info, success, warning and error cannot be told apart by color
                     there.
                 </p>
             </Panel>
@@ -454,7 +454,7 @@ export function ThemeSamplePage() {
                 </div>
                 <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
                     Components ask for a <em>meaning</em> — <code>danger</code> — not a hue.
-                    Light and dark spend a colour on each. Night and amber have only one hue,
+                    Light and dark spend a color on each. Night and amber have only one hue,
                     so a role is a step on a brightness ramp instead; that is why an error and
                     an info toast used to be the same pixel there. Severity climbs in the order
                     shown for those two themes, and both <code>warning</code> and{' '}
@@ -658,7 +658,7 @@ export function ThemeSamplePage() {
                 <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0}}>
                     ColoredInput welds a Label to one edge of a field — the calculators' unit
                     markers. In night and amber the Label is an outline rather than a fill, so
-                    the marker reads without a block of colour.
+                    the marker reads without a block of color.
                 </p>
                 <div style={{marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10}}>
                     <Checkbox label='Download comments' checked={comments}
@@ -735,11 +735,11 @@ export function ThemeSamplePage() {
         <Section label='Tags'>
             <Panel>
                 {/*
-                  * Tag colours are the user's, stored per tag, so these are raw hex values --
+                  * Tag colors are the user's, stored per tag, so these are raw hex values --
                   * the only place in the app that paints with something no theme chose.  That
                   * is exactly why they belong here: the gallery had label swatches in theme
-                  * colours and no user-coloured tag, so nobody saw that night was calculating
-                  * the text colour against a fill it had already thrown away.
+                  * colors and no user-colored tag, so nobody saw that night was calculating
+                  * the text color against a fill it had already thrown away.
                   *
                   * Deliberately spans the range: near-white and near-black fills, where the
                   * black-or-light text decision flips, plus enough tags to wrap a row.
@@ -758,7 +758,7 @@ export function ThemeSamplePage() {
                 </Row>
                 <p style={{marginTop: 14, fontSize: 13, color: 'var(--muted)'}}>
                     Every tag must be readable in all four themes. In night and amber the
-                    user's colour is discarded, so all tags look alike — that is the same
+                    user's color is discarded, so all tags look alike — that is the same
                     trade the labels above make, and it is deliberate.
                 </p>
             </Panel>
@@ -872,13 +872,13 @@ export function ThemeSamplePage() {
                 />)}
             </CardGroup>
             <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
-                Titles are links but take the body colour, not the link colour — a grid of
+                Titles are links but take the body color, not the link color — a grid of
                 results should read as titles. The meta line sits directly under the title;
                 actions are pushed to the foot, so a row lines its buttons up however many
                 lines each title took. A card with no actions simply ends.
             </p>
             <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
-                The bottom edge carries the file type's colour, so a grid of results is
+                The bottom edge carries the file type's color, so a grid of results is
                 scannable by kind before any title is read. It comes from a token, so night
                 and amber render the accent in their own single hue rather than four.
             </p>

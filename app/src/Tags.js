@@ -117,7 +117,7 @@ export function useTags() {
                 {...props} // onClick passed here.
                 className={className}
                 /*
-                 * The contrasting text colour goes in a custom property, not in `color`.  As
+                 * The contrasting text color goes in a custom property, not in `color`.  As
                  * `color` it was an inline declaration, which no stylesheet rule can outrank --
                  * so night, where a tag becomes an outline over a near-black page, still got
                  * the black text calculated for a bright tag's fill.  The tag was legible only
@@ -340,7 +340,7 @@ function EditTagsModal() {
                       * `--label-text`, not `color`, for the same reason as the chip itself:
                       * inline `color` cannot be overridden, so in night this preview showed
                       * black text on a transparent outline over a near-black page.  It is the
-                      * preview of the colour being chosen, so being honest about how the tag
+                      * preview of the color being chosen, so being honest about how the tag
                       * will actually look matters here more than anywhere.
                       */}
                     <span

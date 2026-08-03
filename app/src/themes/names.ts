@@ -27,7 +27,7 @@ export const explicitOnlyThemes: ThemeName[] = [nightTheme, amberTheme];
 /*
  * Themes built on a single hue, which is the constraint the semantic roles exist for.
  *
- * These have no second colour to spend, so a role cannot be a hue there -- it has to be
+ * These have no second color to spend, so a role cannot be a hue there -- it has to be
  * a step on a brightness ramp, and `--orange` being byte-identical to `--text` in night
  * is what that costs when it is ignored.  Light and dark have hues and are free to use
  * them, so severity does NOT read as brightness there and must not be asserted to.
@@ -56,7 +56,7 @@ export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(th
  * projection -- the same `0.2126 0.7152 0.0722` row -- so they keep brightness and throw
  * hue away.  Filtering `black` is therefore a hue rotation and nothing else: all thirteen
  * of its greys were authored as a monochrome hierarchy and every one survives.  `dark` has
- * nineteen colours but four of them are hued (water, parks, up to 25 chroma), and those
+ * nineteen colors but four of them are hued (water, parks, up to 25 chroma), and those
  * distinctions do not survive at all -- the features land at whatever brightness their hue
  * happened to carry rather than one anybody chose.  `black` is also half the light:
  * earth L0.007 against dark's L0.014, which is the point of a night-vision theme.

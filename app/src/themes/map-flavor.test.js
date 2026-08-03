@@ -67,7 +67,7 @@ describe('the monochrome themes get an achromatic basemap', () => {
      *
      * Both media filters are a pure luminance projection -- the same `0.2126 0.7152 0.0722`
      * row -- so they keep brightness and discard hue.  A basemap that encodes anything in
-     * hue loses it: `dark` marks water and parks with colour, and after filtering those
+     * hue loses it: `dark` marks water and parks with color, and after filtering those
      * features sit at whatever brightness their hue happened to carry.  An achromatic
      * basemap has nothing to lose, so the designer's hierarchy arrives intact.
      */

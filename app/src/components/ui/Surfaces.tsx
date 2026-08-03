@@ -22,7 +22,7 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
     /** Hairline rule underneath, separating the section from what follows. */
     dividing?: boolean;
     /**
-     * A token colour name (`green`, `red`, ...) for a heading that carries meaning —
+     * A token color name (`green`, `red`, ...) for a heading that carries meaning —
      * "3 items to add" against "2 items to remove".  Call sites kept reaching for an
      * inline style to do this, which is how a hex ends up in the markup.
      */
@@ -112,7 +112,7 @@ export interface StatisticProps extends Omit<React.HTMLAttributes<HTMLDivElement
     /** The number.  Rendered as given, so `0` shows as a zero rather than nothing. */
     value: React.ReactNode;
     label: React.ReactNode;
-    /** A token colour name, for a reading that carries meaning: load, temperature, IO wait. */
+    /** A token color name, for a reading that carries meaning: load, temperature, IO wait. */
     color?: string;
 }
 
@@ -164,8 +164,8 @@ export interface CardProps {
     actions?: React.ReactNode;
     onClick?: React.MouseEventHandler<HTMLDivElement>;
     /**
-     * A token colour name, drawn as an accent along the card's top edge.  File cards use
-     * it to carry the mimetype's colour, so a grid of results is scannable by kind before
+     * A token color name, drawn as an accent along the card's top edge.  File cards use
+     * it to carry the mimetype's color, so a grid of results is scannable by kind before
      * any text is read.  It remaps per theme, so night gets a red accent rather than a
      * dozen hues.
      */

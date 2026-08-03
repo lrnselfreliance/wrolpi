@@ -20,7 +20,7 @@ import '../../src/themes/fonts.css';
 import '../../src/themes/tokens.css';
 import '@mantine/core/styles.css';
 // App.js loads this too.  Without it a Notification renders unstyled here, so a toast had no
-// surface and no title colour of Mantine's -- and its contrast test could not fail.
+// surface and no title color of Mantine's -- and its contrast test could not fail.
 import '@mantine/notifications/styles.css';
 /*
  * App.js loads this as well.  Rules for things outside the component library live here --

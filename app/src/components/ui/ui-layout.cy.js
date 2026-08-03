@@ -16,6 +16,20 @@ import {DesktopNav, NavIconWrapper} from '../Nav';
 import {APIButton} from '../Common';
 import {ShareButton} from '../Share';
 
+/*
+ * The interface scale, so a test can express a length the way the stylesheet does.
+ *
+ * A hardcoded px expectation is a hidden assertion that the scale is 1.  Three tests here
+ * carried one -- a container width, a poster cap and a button height -- and all three failed
+ * when it became 1.1, in names that said nothing about size.
+ */
+const uiScale = () => {
+    const value = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue('--ui-scale'));
+    expect(value, 'the interface scale is declared').to.be.within(0.5, 3);
+    return value;
+};
+
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
     const value = hex.replace('#', '');
@@ -891,7 +905,14 @@ describe('StatisticGroup separates its statistics with nothing but space', () =>
      */
 
     // Narrow enough that six statistics cannot fit on one row at a 150px minimum.
-    const inNarrowColumn = (children) => <div style={{width: 340}}>{children}</div>;
+    /*
+     * "Narrow" has to mean narrow RELATIVE TO THE TYPE, or the width stops meaning anything
+     * when the interface scale changes.  At a fixed 340px this held two 150px statistic
+     * tracks; the scale took the track to 165px and 340px became a single column, so a test
+     * about the gap between columns had no second column to measure.
+     */
+    const inNarrowColumn = (children) =>
+        <div style={{width: `${Math.round(340 * uiScale())}px`}}>{children}</div>;
 
     const sixStatistics = <StatisticGroup>
         <Statistic value='1,432' label='Videos'/>
@@ -1710,16 +1731,36 @@ const narrowCard = (children) =>
     <MemoryRouter><div style={{width: 233}}>{children}</div></MemoryRouter>;
 
 /*
+ * A card as wide as the grid makes it when it drops to ONE column -- a phone, or any window
+ * under about 456px of content width.  Every case below used the narrow card, which is why
+ * the wide card's own failure went unseen for the whole migration: a 16:9 poster held to a
+ * 220px height is 391px wide, so a 451px card centred it with 30px of empty panel on either
+ * side.  The height cap was doing its job for a book cover and letterboxing a video sideways.
+ */
+const wideCard = (children) =>
+    <MemoryRouter><div style={{width: 451}}>{children}</div></MemoryRouter>;
+
+/*
  * The height cap, read from the stylesheet rather than repeated here, so the two cannot
  * drift.  Deleting the declaration makes this NaN and every comparison against it fails,
  * which is the point -- and the bound below keeps "read whatever the CSS says" from being
  * a test that any value at all satisfies.
  */
 const cardPosterCap = () => {
-    const value = parseFloat(getComputedStyle(document.documentElement)
-        .getPropertyValue('--card-poster-max-height'));
+    /*
+     * Resolved through the root font-size, because the cap is declared in rem so the
+     * interface scale reaches it.  `parseFloat('12.5rem')` is 12.5, which sailed through as a
+     * number and then failed the bound below -- five tests here broke that way when the scale
+     * landed, and none of them mention the cap in their names.
+     */
+    const root = getComputedStyle(document.documentElement);
+    const declared = root.getPropertyValue('--card-poster-max-height').trim();
+    expect(declared, 'the cap is declared in rem, so it scales with the interface')
+        .to.match(/^[\d.]+rem$/);
+
+    const value = parseFloat(declared) * parseFloat(root.fontSize);
     expect(value, 'a poster cap is declared, and is small enough to be a cap')
-        .to.be.within(80, 240);
+        .to.be.within(80, 300);
     return value;
 };
 
@@ -1783,6 +1824,62 @@ describe('a card poster is bounded by the card, and keeps its ratio', () => {
                 expect(box.height, 'the cap actually bit').to.be.at.most(cardPosterCap() + 0.5);
                 expect(box.width, 'and the width came down with it')
                     .to.be.closeTo(box.height, 0.5);
+            });
+    });
+
+    it('lets a landscape poster fill a one-column card instead of letterboxing it', () => {
+        /*
+         * The cap is a fixed height, so it stops scaling with the card: past 391px of card
+         * width a 16:9 poster can no longer reach the edges and `justify-content: center`
+         * splits the remainder into two margins.  On a phone -- one column, card the full
+         * width of the screen -- that is every video thumbnail in the library.
+         *
+         * A source wider than the card is the case that matters.  1280px of intrinsic width
+         * is available, so nothing here is upscaling: the poster is simply allowed to use
+         * the width it has.
+         */
+        servePoster(1280, 720);
+        cy.mountUI(wideCard(<CardPoster file={posterFile(1280, 720)}/>));
+
+        cy.get('.wrolpi-card-poster img')
+            .should(($img) => expect($img[0].naturalWidth, 'poster loaded').to.equal(1280))
+            .should(($img) => {
+                const img = $img[0];
+                const box = img.getBoundingClientRect();
+                const band = img.closest('.wrolpi-card-poster').getBoundingClientRect();
+
+                expect(band.width - box.width, 'no empty panel beside the poster')
+                    .to.be.at.most(1);
+                expect(box.width / box.height, 'and it still keeps its ratio')
+                    .to.be.closeTo(1280 / 720, 0.01);
+            });
+    });
+
+    it('still keeps a portrait cover to a band on a one-column card', () => {
+        /*
+         * The other half, and the reason the cap exists at all: freed of it entirely, a
+         * 306x396 book cover in a 451px card would stand 451px tall above a two-line title,
+         * so the media dwarfs the thing it belongs to.
+         *
+         * The bound is stated as a fraction of the CARD rather than a pixel count, because
+         * that is the actual rule -- the poster may be as tall as a 16:9 slice of this card
+         * and no taller.  A portrait cover therefore grows with the card, which it should,
+         * while never ceasing to be a band.
+         */
+        servePoster(306, 396);
+        cy.mountUI(wideCard(<CardPoster file={posterFile(306, 396)}/>));
+
+        cy.get('.wrolpi-card-poster img')
+            .should(($img) => expect($img[0].naturalWidth, 'poster loaded').to.equal(306))
+            .should(($img) => {
+                const img = $img[0];
+                const box = img.getBoundingClientRect();
+                const band = img.closest('.wrolpi-card-poster').getBoundingClientRect();
+
+                expect(box.height / band.width, 'the cover stays a band, not a column')
+                    .to.be.at.most(0.58);
+                expect(box.width / box.height, 'and keeps its ratio')
+                    .to.be.closeTo(306 / 396, 0.01);
             });
     });
 });
@@ -3469,13 +3566,21 @@ describe('APIButton honours the size its call site asks for', () => {
             <APIButton size='small' icon='trash' onClick={() => {}} data-testid='small'/>
             <APIButton size='big' icon='trash' onClick={() => {}} data-testid='big'/>
             <APIButton size='huge' icon='trash' onClick={() => {}} data-testid='huge'/>
+            {/* The reference: what `small` is claimed to translate INTO. */}
+            <APIButton size='sm' icon='trash' onClick={() => {}} data-testid='reference-sm'/>
         </div>);
 
         cy.get('[data-testid="huge"]').should(($huge) => {
             const height = (id) =>
                 Cypress.$(`[data-testid="${id}"]`)[0].getBoundingClientRect().height;
 
-            expect(height('small'), 'small is the old default').to.be.closeTo(36, 1);
+            /*
+             * Measured against a real `sm` button rather than against 36px.  The literal was a
+             * hidden assertion that the interface scale is 1, and it broke at 1.1 -- while the
+             * claim it is making, that `small` resolves to `sm`, was never about a pixel count.
+             */
+            expect(height('small'), "small resolves to Mantine's sm")
+                .to.be.closeTo(height('reference-sm'), 0.5);
             expect(height('big'), 'big is taller than small').to.be.greaterThan(height('small'));
             expect($huge[0].getBoundingClientRect().height, 'huge is taller than big')
                 .to.be.greaterThan(height('big'));

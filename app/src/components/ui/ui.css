@@ -1291,6 +1291,12 @@ html[data-theme="amber"] .wrolpi-progress-fill {
 .wrolpi-card-poster {
     display: flex;
     justify-content: center;
+    /*
+     * The band is the query container for the cap below, so the cap can be a fraction of the
+     * card's own width.  Containment is safe here: the band's width comes from the card, never
+     * from the image inside it, and it has no fixed-position descendants.
+     */
+    container-type: inline-size;
 }
 
 /*
@@ -1346,7 +1352,24 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     width: auto;
     height: auto;
     max-width: 100%;
-    max-height: var(--card-poster-max-height);
+    /*
+     * The cap grows with the card, so a landscape poster can reach the card's edges.
+     *
+     * A fixed height stops scaling: held to 220px, a 16:9 thumbnail is 391px wide, so any card
+     * wider than that centred it with empty panel on both sides.  That is every video card at
+     * one column -- a phone, or any window under about 456px of content -- which is where the
+     * whole library is browsed on a phone.  The cases below all used a 233px card, so it went
+     * unseen for the entire migration.
+     *
+     * `56.25cqw` is nine sixteenths of the band: exactly the height of a 16:9 image that fills
+     * the width, and the same number states the rule for every other ratio -- a poster may be
+     * as tall as a 16:9 slice of this card and no taller.  So a book cover still reads as a
+     * band rather than a column, and now grows with the card instead of stopping at 220px.
+     *
+     * `max()`, not `min()`: on a narrow card the fraction is the smaller value and the floor
+     * has to win, or the cap would tighten as cards got smaller and crop a portrait cover.
+     */
+    max-height: max(var(--card-poster-max-height), 56.25cqw);
 }
 
 .wrolpi-card-icon {

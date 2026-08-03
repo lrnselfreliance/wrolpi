@@ -192,11 +192,12 @@ export function Card({media, title, meta, children, actions, onClick, color, cla
         }}
     >
         {media && <div style={{borderBottom: '1px solid var(--border)'}}>{media}</div>}
-        <div style={{padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1}}>
-            {title && <div style={{fontSize: 13, fontWeight: 600, lineHeight: 1.35}}>{title}</div>}
-            {meta && <div className='wrolpi-card-meta' style={{fontSize: 12, color: 'var(--muted)'}}>{meta}</div>}
+        {/* Sizes live in ui.css, in rem: inline px would sit outside the interface scale. */}
+        <div className='wrolpi-card-body'>
+            {title && <div className='wrolpi-card-title'>{title}</div>}
+            {meta && <div className='wrolpi-card-meta'>{meta}</div>}
             {children}
-            {actions && <div className='wrolpi-card-actions' style={{marginTop: 'auto', paddingTop: 8}}>
+            {actions && <div className='wrolpi-card-actions'>
                 {actions}
             </div>}
         </div>
@@ -216,9 +217,15 @@ export function CardGroup({children, minWidth = 200, className, style, ...props}
     return <div
         className={['wrolpi-card-group', className].filter(Boolean).join(' ')}
         style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
-            gap: 14,
+            /*
+             * Converted to rem so a column grows with the interface scale.  As px it did not,
+             * and a 430px phone fitted two 200px cards where the pre-migration build fitted
+             * one 290px card -- the narrowest card in the app, on the smallest screen.
+             *
+             * The prop stays a px number: seven call sites pass one, and a caller thinking in
+             * px is thinking about the unscaled design.
+             */
+            gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth / 16}rem, 1fr))`,
             ...style,
         }}
         {...props}

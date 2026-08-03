@@ -273,7 +273,7 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         maxHeight: "calc(100vh - 120px)",
         overflowY: "auto",
         minWidth: iconOnly ? 0 : 200,
-        fontSize: 13,
+        fontSize: '0.8125rem',
     };
 
     const headerStyle = iconOnly
@@ -337,7 +337,7 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
         padding: 16, minWidth: 250,
     }}>
         <div style={{fontWeight: 600, marginBottom: 8}}>Add Pin</div>
-        <div style={{fontSize: 12, color: "var(--muted)", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
+        <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
         <TextInput
             placeholder="Label"
             value={label}
@@ -496,7 +496,7 @@ function MapSearch({map}) {
             onKeyDown={handleKeyDown}
             style={{
                 width: "100%", padding: "8px 12px", border: "1px solid var(--border)",
-                fontSize: 14, background: "var(--panel)", color: "var(--text)",
+                fontSize: '0.875rem', background: "var(--panel)", color: "var(--text)",
             }}
         />
         {showResults && results.length > 0 && <div style={{
@@ -511,7 +511,7 @@ function MapSearch({map}) {
                 style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)"}}
             >
                 <div style={{fontWeight: 500}}>{r.name}</div>
-                {resultSubtext(r) && <div style={{fontSize: 11, color: "var(--muted)"}}>{resultSubtext(r)}</div>}
+                {resultSubtext(r) && <div style={{fontSize: '0.6875rem', color: "var(--muted)"}}>{resultSubtext(r)}</div>}
             </div>)}
         </div>}
     </div>;
@@ -936,11 +936,11 @@ export default function MapViewer() {
                 borderRadius: 6,
                 boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
                 padding: "4px 0",
-                fontSize: 13,
+                fontSize: '0.8125rem',
                 minWidth: 180,
             }}
         >
-            <div style={{padding: "6px 12px", color: "#666", fontSize: 12, borderBottom: "1px solid #eee"}}>
+            <div style={{padding: "6px 12px", color: "#666", fontSize: '0.75rem', borderBottom: "1px solid #eee"}}>
                 {(() => {
                     const map = mapRef.current;
                     const zoom = map ? map.getZoom() : 10;

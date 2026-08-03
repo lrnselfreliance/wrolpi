@@ -68,7 +68,7 @@ const samplePoster = (width, height) => `data:image/svg+xml,${encodeURIComponent
 
 const Section = ({label, children}) => <section style={{marginBottom: 34}}>
     <p style={{
-        fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
+        fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
         color: 'var(--muted)', margin: '0 0 10px',
     }}>{label}</p>
     {children}
@@ -127,7 +127,7 @@ export const NavBarSample = ({color}) => {
             </div>
         </nav>
         <div style={{
-            fontSize: 11, color: short ? 'var(--danger)' : 'var(--muted)',
+            fontSize: '0.6875rem', color: short ? 'var(--danger)' : 'var(--muted)',
             padding: '3px 2px 0', display: 'flex', gap: 8,
         }}>
             <strong style={{fontWeight: 600}}>{color}</strong>
@@ -157,8 +157,8 @@ export function ThemeSamplePage() {
     const [page, setPage] = useState(3);
 
     return <div style={{maxWidth: 1060, margin: '0 auto', padding: '20px 16px 60px', color: 'var(--text)'}}>
-        <h1 style={{fontSize: 21, fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
-        <p style={{color: 'var(--muted)', fontSize: 13, marginTop: 0}}>
+        <h1 style={{fontSize: '1.3125rem', fontWeight: 600, margin: '8px 0 4px'}}>Component gallery</h1>
+        <p style={{color: 'var(--muted)', fontSize: '0.8125rem', marginTop: 0}}>
             Every component in the WROLPi interface library, rendered in the <strong>{theme}</strong> theme.
             Switch themes here or from the navigation bar.
         </p>
@@ -166,7 +166,7 @@ export function ThemeSamplePage() {
         <Section label='Theme picker'>
             <Panel>
                 <ThemePicker/>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
                     The same picker the Settings page uses. The navigation bar has a compact
                     version; both read the same list of themes.
                 </p>
@@ -175,7 +175,7 @@ export function ThemeSamplePage() {
 
         <Section label='Navigation bars'>
             <Panel>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 0}}>
                     Every color the navigation bar can be set to (Settings &rarr; navbar
                     color), in the <strong>{theme}</strong> theme. The text and icons are not
                     a fixed color: each bar is measured, and drawn in whichever of this
@@ -199,7 +199,7 @@ export function ThemeSamplePage() {
                         */}
                         <img src='/icon.svg' alt='The WROLPi logo, filtered like any other media'
                              width={104} height={104}/>
-                        <p style={{fontSize: 11, color: 'var(--muted)', margin: '4px 0 0'}}>
+                        <p style={{fontSize: '0.6875rem', color: 'var(--muted)', margin: '4px 0 0'}}>
                             Filtered
                         </p>
                     </div>
@@ -214,11 +214,11 @@ export function ThemeSamplePage() {
                                    alt='The WROLPi logo, unfiltered' width={104} height={104}/>
                             : <Button role='cancel' icon='eye' style={{width: 104, height: 104}}
                                       onClick={() => setRealColors(true)}>Show</Button>}
-                        <p style={{fontSize: 11, color: 'var(--muted)', margin: '4px 0 0'}}>
+                        <p style={{fontSize: '0.6875rem', color: 'var(--muted)', margin: '4px 0 0'}}>
                             Real colors
                         </p>
                     </div>
-                    <p style={{fontSize: 12, color: 'var(--muted)', margin: 0, maxWidth: 430}}>
+                    <p style={{fontSize: '0.75rem', color: 'var(--muted)', margin: 0, maxWidth: 430}}>
                         Images, video, PDFs, embedded pages, and the map canvas cannot read theme
                         tokens, so a monochrome theme remaps them with an SVG color matrix instead.
                         Night filters to red unless you turn it off; amber tints to match only if
@@ -237,7 +237,7 @@ export function ThemeSamplePage() {
                 */}
                 <div style={{marginTop: 14}}>
                     <MediaFilterToggle/>
-                    <p style={{fontSize: 12, color: 'var(--muted)', margin: '8px 0 0'}}>
+                    <p style={{fontSize: '0.75rem', color: 'var(--muted)', margin: '8px 0 0'}}>
                         <code>MediaFilterToggle</code>, the control the theme picker ends with.
                         It is per theme — turning it off for night leaves amber's alone — and it
                         renders nothing for a theme that offers no filter, so light and dark
@@ -262,7 +262,7 @@ export function ThemeSamplePage() {
                 <Header as='h3' after={<Icon name='question' size='small'/>}>
                     With a help icon beside it
                 </Header>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     The level picks the size, so the type scale stays a scale: call sites
                     choose a heading level for the document outline, never a font size.
                 </p>
@@ -332,11 +332,11 @@ export function ThemeSamplePage() {
                         </div>)}
                     </Row>
                 </div>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     In night mode Delete drops its fill for a dashed red outline; dashed means
                     destructive or failed, and nothing else uses it.
                 </p>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     An icon button is exactly as tall as a labelled one at every size, so a
                     group of them lines up. Mantine's own scale for icon buttons is unrelated
                     to its scale for buttons — <code>sm</code> is 22px against a button's 36px
@@ -415,7 +415,7 @@ export function ThemeSamplePage() {
                     <Button role='danger' onClick={() => clearToasts()}>Clear all</Button>
                 </Row>
 
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     Top right, five at a time, five seconds each unless the caller says
                     otherwise. Check each type in all four themes: night has no second hue to
                     spend, so info, success, warning and error cannot be told apart by color
@@ -447,13 +447,13 @@ export function ThemeSamplePage() {
                         <div style={{
                             height: 34, background: `var(--${role})`, marginBottom: 6,
                         }}/>
-                        <div style={{fontSize: 13, fontWeight: 600, color: `var(--${role})`}}>
+                        <div style={{fontSize: '0.8125rem', fontWeight: 600, color: `var(--${role})`}}>
                             {role}
                         </div>
-                        <div style={{fontSize: 11, color: 'var(--muted)'}}>{meaning}</div>
+                        <div style={{fontSize: '0.6875rem', color: 'var(--muted)'}}>{meaning}</div>
                     </div>)}
                 </div>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
                     Components ask for a <em>meaning</em> — <code>danger</code> — not a hue.
                     Light and dark spend a color on each. Night and amber have only one hue,
                     so a role is a step on a brightness ramp instead; that is why an error and
@@ -473,7 +473,7 @@ export function ThemeSamplePage() {
                     <Status kind='pending'>pending</Status>
                     <Status kind='failed'>failed</Status>
                 </div>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 12, marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 12, marginBottom: 0}}>
                     Four states drawn from four roles. Failure also carries weight, because
                     brightness is the first thing lost on a dim screen and it is all night has.
                 </p>
@@ -521,7 +521,7 @@ export function ThemeSamplePage() {
                     <Progress percent={80} color='warning' label='Disk 80% full'/>
                     <Progress percent={100} color='danger' label='Error: HTTP 403'/>
                 </div>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 14, marginBottom: 0}}>
                     A bar is 22px so its label has room; at 16px the text filled the bar edge to
                     edge. Check the mid-range ones — 37% and 62% are where the label crosses the
                     boundary between fill and track, which is the case that has to work.
@@ -656,7 +656,7 @@ export function ThemeSamplePage() {
                     <ColoredInput label='Ω' color='red' defaultValue='50'/>
                     <ColoredInput label='gal' color='green' labelPosition='right' defaultValue='275'/>
                 </div>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 8, marginBottom: 0}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 8, marginBottom: 0}}>
                     ColoredInput welds a Label to one edge of a field — the calculators' unit
                     markers. In night and amber the Label is an outline rather than a fill, so
                     the marker reads without a block of color.
@@ -695,7 +695,7 @@ export function ThemeSamplePage() {
                     clearable
                     placeholder='Search directory names…'
                 />
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
                     Focus the field to see grouped suggestions. Arrow keys move, Enter takes the
                     highlighted one or submits what you typed, Escape closes the list without
                     clearing the text.
@@ -714,7 +714,7 @@ export function ThemeSamplePage() {
                     >{tab}</button>)}
                 </TabBar>
                 <Pagination activePage={page} totalPages={12} onPageChange={setPage} showFirstAndLast/>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 12}}>
                     Night and amber mark the current page with a heavier border rather than a
                     filled block, which would be a bright surface. The tab bar takes rendered
                     children, so routing stays with the caller.
@@ -757,7 +757,7 @@ export function ThemeSamplePage() {
                         style={{'--label-color': color, '--label-text': contrastingColor(color)}}
                     >{name}</span>)}
                 </Row>
-                <p style={{marginTop: 14, fontSize: 13, color: 'var(--muted)'}}>
+                <p style={{marginTop: 14, fontSize: '0.8125rem', color: 'var(--muted)'}}>
                     Every tag must be readable in all four themes. In night and amber the
                     user's color is discarded, so all tags look alike — that is the same
                     trade the labels above make, and it is deliberate.
@@ -775,7 +775,7 @@ export function ThemeSamplePage() {
                     <Row>
                         <Loader/>
                         <Icon name='circle notch' loading/>
-                        <span style={{fontSize: 12, color: 'var(--muted)'}}>
+                        <span style={{fontSize: '0.75rem', color: 'var(--muted)'}}>
                             Icons inherit currentColor, so they follow every theme.
                         </span>
                     </Row>
@@ -798,7 +798,7 @@ export function ThemeSamplePage() {
                                    style={{'--icon-stack-bg': 'var(--panel)'}}>
                             <Icon name='download' size='large'/>
                         </IconStack>
-                        <span style={{fontSize: 12, color: 'var(--muted)', maxWidth: 400}}>
+                        <span style={{fontSize: '0.75rem', color: 'var(--muted)', maxWidth: 400}}>
                             <code>IconStack</code> composes two glyphs into one symbol. The corner
                             glyph paints the surface behind itself so the two sets of strokes do not
                             cross, which means it has to be told what that surface is:{' '}
@@ -846,7 +846,7 @@ export function ThemeSamplePage() {
                     </div>}
                 />)}
             </CardGroup>
-            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+            <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 10}}>
                 A poster is capped on both axes — the card's width, and{' '}
                 <code>--card-poster-max-height</code> — and keeps its own ratio whichever
                 cap bites. Capping the width alone let a square thumbnail stand as tall as
@@ -872,13 +872,13 @@ export function ThemeSamplePage() {
                     </div> : undefined}
                 />)}
             </CardGroup>
-            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+            <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 10}}>
                 Titles are links but take the body color, not the link color — a grid of
                 results should read as titles. The meta line sits directly under the title;
                 actions are pushed to the foot, so a row lines its buttons up however many
                 lines each title took. A card with no actions simply ends.
             </p>
-            <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
+            <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 10}}>
                 The bottom edge carries the file type's color, so a grid of results is
                 scannable by kind before any title is read. It comes from a token, so night
                 and amber render the accent in their own single hue rather than four.
@@ -897,7 +897,7 @@ export function ThemeSamplePage() {
                 <Row>
                     <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
                 </Row>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
                     Semantic's compound shape is kept — Modal.Header, Modal.Content,
                     Modal.Actions — so the 34 call sites written against it migrate by import.
                 </p>
@@ -919,8 +919,8 @@ export function ThemeSamplePage() {
 
         <Section label='Danger zone'>
             <Panel danger>
-                <h2 style={{color: 'var(--danger)', fontSize: 14, margin: '0 0 4px'}}>Danger zone</h2>
-                <p style={{color: 'var(--muted)', fontSize: 13, margin: '0 0 12px'}}>
+                <h2 style={{color: 'var(--danger)', fontSize: '0.875rem', margin: '0 0 4px'}}>Danger zone</h2>
+                <p style={{color: 'var(--muted)', fontSize: '0.8125rem', margin: '0 0 12px'}}>
                     These actions are destructive and cannot be undone.
                 </p>
                 <Row>
@@ -934,7 +934,7 @@ export function ThemeSamplePage() {
                         Delete tagged files
                     </Button>
                 </Row>
-                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
                     A confirmation is 380px wide, which suits a question. One that has to show
                     what it is about takes a size, in the same vocabulary as Modal.
                 </p>

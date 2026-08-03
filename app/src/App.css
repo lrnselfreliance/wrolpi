@@ -63,7 +63,7 @@ html .mantine-Notifications-root[data-position^='top'] {
 
 .wrolpi-navbar-link:hover,
 .wrolpi-navbar-link-button:hover {
-    /* A translucent black works on every navbar colour, light or dark. */
+    /* A translucent black works on every navbar color, light or dark. */
     background: rgba(0, 0, 0, 0.12);
 }
 
@@ -76,7 +76,7 @@ html .mantine-Notifications-root[data-position^='top'] {
  *   - An anchor takes `a {color: var(--blue)}` from tokens.css, which outranks an inherited
  *     value however the bar sets it.  The search glyph is an anchor, and so is every status
  *     icon that links to /admin -- those only looked right because they carry an inline
- *     colour of their own, which still wins here and is meant to.
+ *     color of their own, which still wins here and is meant to.
  *   - A Mantine ActionIcon paints `--ai-color`, its own themed blue.  The hamburger and the
  *     theme toggle are ActionIcons.  The variable is no use as a hook: Mantine writes it
  *     INLINE on the element, so a stylesheet declaring it loses every time (the same trap
@@ -200,7 +200,7 @@ pre.wrap-text {
 
 /*
  * A card's title and its author/channel/domain line are links, but they are the card's
- * text -- they take the body colour rather than the link colour, so a grid of cards reads
+ * text -- they take the body color rather than the link color, so a grid of cards reads
  * as titles and not as a wall of blue.  This was a literal `black` until the themes
  * arrived, which left every title at about 1.1:1 on the dark, night and amber panels.
  */

@@ -20,7 +20,7 @@ const tokenColor = (token: string): MantineColorsTuple =>
     Array(10).fill(`var(--${token})`) as unknown as MantineColorsTuple;
 
 /**
- * The semantic roles.  A component asks for what a colour MEANS; the theme decides
+ * The semantic roles.  A component asks for what a color MEANS; the theme decides
  * how that looks.  Registered as Mantine colors too, so `color='danger'` works on any
  * Mantine component the same way `color='red'` does.  See the note in tokens.css --
  * in night and amber these are brightnesses, not hues.

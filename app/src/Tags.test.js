@@ -11,7 +11,7 @@ import {useTags} from './Tags';
  * Everything else in the suite takes `NameToTagLabel` from `tagsContextFixture`, which stubs
  * it as a function returning the name -- so nothing exercised the component that actually
  * paints a tag.  That is how a tag came to be unreadable in night mode without a single test
- * noticing: the colours are decided here, in the one place in the app that paints with a
+ * noticing: the colors are decided here, in the one place in the app that paints with a
  * value no theme chose.
  */
 
@@ -42,12 +42,12 @@ const renderTag = (name, tags) => render(
 const tagOf = (name) => screen.getByText(name);
 
 /*
- * Wait for the fetched colours to arrive.  Before they do, `NameToTagLabel` falls back to a
+ * Wait for the fetched colors to arrive.  Before they do, `NameToTagLabel` falls back to a
  * plain `<Label tag>` -- which also carries `wrolpi-tag`, so waiting on the class alone
  * passes against the fallback and asserts nothing about the real chip.  Wait for the user's
- * colour instead.
+ * color instead.
  */
-const awaitColoured = async (name, color) => {
+const awaitColored = async (name, color) => {
     await waitFor(() =>
         expect(tagOf(name).style.getPropertyValue('--label-color')).toBe(color));
     return tagOf(name);
@@ -59,7 +59,7 @@ describe('a tag chip', () => {
             tags: [
                 {id: 1, name: 'Water', color: BRIGHT},
                 {id: 2, name: 'Archived', color: DARK},
-                {id: 3, name: 'Uncoloured', color: null},
+                {id: 3, name: 'Uncolored', color: null},
             ],
         });
         getRecentTags.mockResolvedValue({tags: []});
@@ -68,12 +68,12 @@ describe('a tag chip', () => {
     it('carries the tag shape, not just the chip shape', async () => {
         renderTag('Water');
 
-        const tag = await awaitColoured('Water', BRIGHT);
+        const tag = await awaitColored('Water', BRIGHT);
         expect(tag).toHaveClass('wrolpi-tag');
         expect(tag).toHaveClass('wrolpi-label');
     });
 
-    it('puts the calculated text colour in a variable, never in `color`', async () => {
+    it('puts the calculated text color in a variable, never in `color`', async () => {
         /*
          * This is the whole defect.  As an inline `color` declaration nothing in a stylesheet
          * could outrank it, so night -- which turns a tag into an outline over a near-black
@@ -82,7 +82,7 @@ describe('a tag chip', () => {
          */
         renderTag('Water');
 
-        const tag = await awaitColoured('Water', BRIGHT);
+        const tag = await awaitColored('Water', BRIGHT);
         expect(tag.style.getPropertyValue('--label-text')).toBe('#000000');
         expect(tag.style.color).toBe('');
     });
@@ -90,23 +90,23 @@ describe('a tag chip', () => {
     it('calculates light text for a dark tag', async () => {
         renderTag('Archived');
 
-        const tag = await awaitColoured('Archived', DARK);
+        const tag = await awaitColored('Archived', DARK);
         const text = tag.style.getPropertyValue('--label-text');
         // Non-empty first: an absent variable would satisfy "not black" for free.
         expect(text).toBeTruthy();
         expect(text).not.toBe('#000000');
     });
 
-    it('falls back to a default colour rather than leaving the fill unset', async () => {
-        renderTag('Uncoloured');
+    it('falls back to a default color rather than leaving the fill unset', async () => {
+        renderTag('Uncolored');
 
-        // The tag exists with no colour of its own, so the default stands in.
+        // The tag exists with no color of its own, so the default stands in.
         await waitFor(() =>
-            expect(tagOf('Uncoloured').style.getPropertyValue('--label-color')).toBeTruthy());
+            expect(tagOf('Uncolored').style.getPropertyValue('--label-color')).toBeTruthy());
     });
 
     it('still shows the name before any tags have been fetched', async () => {
-        // The colours are not known yet; the word matters more than the colour.
+        // The colors are not known yet; the word matters more than the color.
         getTags.mockResolvedValue({tags: []});
         renderTag('Water');
 

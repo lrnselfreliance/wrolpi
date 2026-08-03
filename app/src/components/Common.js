@@ -179,8 +179,8 @@ export function isoDatetimeToString(dt, time = false) {
  * Both card links COMPOSE the caller's className rather than being overwritten by it.
  * Written as `className='...' {...props}`, the spread put the caller's class last and it
  * replaced the pair outright -- so every archive title, which passes
- * `card-title-ellipsis`, lost `card-link` and rendered in the link colour instead of the
- * card's text colour.  The one card type whose classes are set this way, and the one whose
+ * `card-title-ellipsis`, lost `card-link` and rendered in the link color instead of the
+ * card's text color.  The one card type whose classes are set this way, and the one whose
  * title looked wrong.
  */
 const cardLinkClass = (className) =>
@@ -1266,7 +1266,7 @@ export function FileIcon({file, disabled = true, size = 48, ...props}) {
  * The severity of a load average: a warning above half the cores, a problem above three
  * quarters, and nothing to say below that or when the core count is unknown.
  *
- * Exported and pure so the branches can be tested as branches.  Reading the colour back off
+ * Exported and pure so the branches can be tested as branches.  Reading the color back off
  * a rendered Statistic cannot do it -- jsdom rejects `color: var(--danger)` as an invalid
  * declaration and drops it, so every value comes back as the empty string.
  */
@@ -1577,7 +1577,7 @@ export const toLocaleString = (num, locale = 'en-US') => {
 }
 
 /*
- * The WCAG primitives now live in themes/contrast, so the theme code can measure a colour
+ * The WCAG primitives now live in themes/contrast, so the theme code can measure a color
  * without importing this module -- Common.js pulls in half the component library, and
  * `themes/` importing it is how an import cycle starts.  Forwarded because a good many call
  * sites and tests already take `contrastRatio` from here.
@@ -1591,8 +1591,8 @@ export const toLocaleString = (num, locale = 'en-US') => {
  * takes the whole suite with it.  A function is read by the spread but not called, so it
  * dereferences nothing until evaluation has finished.
  *
- * The hex parser accepting the `#rgb` shorthand matters and is not incidental: tag colours
- * are not only chosen in the colour picker, they live in a config file a user edits by hand
+ * The hex parser accepting the `#rgb` shorthand matters and is not incidental: tag colors
+ * are not only chosen in the color picker, they live in a config file a user edits by hand
  * -- configs are the source of truth in WROLPi.  Rejecting `#fff` left the luminance at zero,
  * so a near-white tag was treated as black and handed light text.
  */
@@ -1604,7 +1604,7 @@ export const TAG_TEXT_DARK = '#000000';
 export const TAG_TEXT_LIGHT = '#dddddd';
 
 /**
- * Dark or light text, whichever a user's chosen tag colour actually reads better against.
+ * Dark or light text, whichever a user's chosen tag color actually reads better against.
  *
  * Measures both instead of comparing a brightness figure to a threshold.  The threshold
  * version put light text on Semantic's blue (`#2185d0`) at 2.9:1 when dark text on the same

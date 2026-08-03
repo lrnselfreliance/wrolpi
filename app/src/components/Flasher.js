@@ -835,7 +835,7 @@ export function FlasherPage() {
                         <Icon name='save'/>
                         <div>
                             <div style={{fontWeight: 600}}>{configuration.name}</div>
-                            <div style={{fontSize: 12, opacity: 0.8}}>
+                            <div style={{fontSize: '0.75rem', opacity: 0.8}}>
                                 {(configuration.files || []).length} file(s)
                                 {configuration.erase_all ? ' — erases flash' : ''}
                             </div>
@@ -968,7 +968,7 @@ export function FlasherPage() {
                 <Header as='h3'>2. Connect</Header>
                 <Stack gap={12} style={{maxWidth: 320}}>
                     <div>
-                        <div style={{marginBottom: 4, fontSize: 13, fontWeight: 500}}>Baud rate</div>
+                        <div style={{marginBottom: 4, fontSize: '0.8125rem', fontWeight: 500}}>Baud rate</div>
                         <Select
                             data={BAUD_OPTIONS.map(o => ({value: String(o.value), label: o.text}))}
                             value={String(baudrate)}

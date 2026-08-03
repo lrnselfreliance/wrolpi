@@ -577,7 +577,7 @@ function MapPins() {
                 <a href="#" onClick={(e) => {e.preventDefault(); handleNavigate(pin);}}>
                     {pin.label}
                 </a>
-                <div style={{fontSize: 11, color: 'var(--muted)'}}>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</div>
+                <div style={{fontSize: '0.6875rem', color: 'var(--muted)'}}>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</div>
             </Table.Cell>
             <Table.Cell>
                 <APIButton

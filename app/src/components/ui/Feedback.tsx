@@ -211,20 +211,20 @@ export interface LoadingProps {
  * used with their own wrapper div.
  */
 export function Loading({children, size = 'sm', padding = '2em'}: LoadingProps) {
-    return <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding,
-    }}>
+    // `padding` is the caller's, so it stays inline; the rest is in ui.css so it scales.
+    return <div className='wrolpi-loading' style={{padding}}>
         <Loader size={size} label={typeof children === 'string' ? children : undefined}/>
-        {children && <div style={{fontSize: 13, color: 'var(--muted)'}}>{children}</div>}
+        {children && <div className='wrolpi-loading-caption'>{children}</div>}
     </div>
 }
 
 /** Placeholder for content that has not arrived.  Replaces Semantic's Placeholder. */
 export function Placeholder({lines = 3, height = 12}: {lines?: number; height?: number}) {
-    return <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+    return <div className='wrolpi-placeholder'>
         {Array.from({length: lines}, (_, index) => <Skeleton
             key={index}
-            height={height}
+            // In rem so a placeholder line matches the height of the text it stands in for.
+            height={`${height / 16}rem`}
             // A ragged last line reads as text rather than a block.
             width={index === lines - 1 ? '60%' : '100%'}
             radius={0}

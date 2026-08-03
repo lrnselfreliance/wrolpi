@@ -487,7 +487,7 @@ describe('SearchResultsInput', () => {
 
 describe('contrastingColor', () => {
     /*
-     * This decides the text colour on every tag, against a fill the user picked, so it is the
+     * This decides the text color on every tag, against a fill the user picked, so it is the
      * one place in the app where legibility is computed rather than designed.
      */
 
@@ -504,27 +504,27 @@ describe('contrastingColor', () => {
         expect(chosen).toBe(TAG_TEXT_DARK);
     });
 
-    it('never picks the worse option, for any colour', () => {
+    it('never picks the worse option, for any color', () => {
         // The property, rather than a list of examples: whatever it returns must be at least as
         // legible as the alternative would have been.
-        const colours = [
+        const colors = [
             '#000000', '#ffffff', '#f2f2f2', '#1b1c1d', '#2185d0', '#21ba45', '#db2828',
             '#fbbd08', '#6435c9', '#a5673f', '#00b5ad', '#e03997', '#b5cc18', '#767676',
             '#808080', '#7f7f7f',
         ];
 
-        for (const colour of colours) {
-            const chosen = contrastingColor(colour);
+        for (const color of colors) {
+            const chosen = contrastingColor(color);
             const rejected = chosen === TAG_TEXT_DARK ? TAG_TEXT_LIGHT : TAG_TEXT_DARK;
-            expect(contrastRatio(chosen, colour))
-                .toBeGreaterThanOrEqual(contrastRatio(rejected, colour));
+            expect(contrastRatio(chosen, color))
+                .toBeGreaterThanOrEqual(contrastRatio(rejected, color));
         }
     });
 
-    it('returns one of the two text colours and nothing else', () => {
+    it('returns one of the two text colors and nothing else', () => {
         // It is written into `--label-text`; anything undefined leaves the tag unstyled.
-        for (const colour of ['#000000', '#ffffff', '#2185d0']) {
-            expect([TAG_TEXT_DARK, TAG_TEXT_LIGHT]).toContain(contrastingColor(colour));
+        for (const color of ['#000000', '#ffffff', '#2185d0']) {
+            expect([TAG_TEXT_DARK, TAG_TEXT_LIGHT]).toContain(contrastingColor(color));
         }
     });
 
@@ -537,13 +537,13 @@ describe('contrastingColor', () => {
 
 describe('contrastingColor with shorthand hex', () => {
     /*
-     * Tag colours reach the UI from the database, and a tags config is a file a user can edit
+     * Tag colors reach the UI from the database, and a tags config is a file a user can edit
      * by hand -- configs are the source of truth in WROLPi -- so a perfectly valid `#fff` can
      * arrive here.  `hexToRGBArray` used to reject anything but six digits, which left the
      * luminance at zero: a near-white tag was treated as black and given light text.
      */
 
-    it('reads a three-digit hex as the colour it is', () => {
+    it('reads a three-digit hex as the color it is', () => {
         expect(contrastRatio('#000000', '#fff')).toBeCloseTo(21, 1);
         expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(contrastRatio('#000000', '#fff'), 5);
     });
@@ -556,7 +556,7 @@ describe('contrastingColor with shorthand hex', () => {
         expect(contrastingColor('#000')).toBe(TAG_TEXT_LIGHT);
     });
 
-    it('agrees with the six-digit form of the same colour', () => {
+    it('agrees with the six-digit form of the same color', () => {
         for (const [short, long] of [['#fff', '#ffffff'], ['#000', '#000000'],
                                      ['#f00', '#ff0000'], ['#1b2', '#11bb22']]) {
             expect(contrastingColor(short)).toBe(contrastingColor(long));
@@ -569,7 +569,7 @@ describe('loadRole', () => {
      * The branches, tested as branches.  This used to be a source guard scraping the
      * function body out of Common.js, because the obvious render test cannot work: jsdom
      * REJECTS `color: var(--danger)` as an invalid declaration and drops it, so every inline
-     * colour reads back as the empty string and the assertions passed for that reason alone.
+     * color reads back as the empty string and the assertions passed for that reason alone.
      * Pulling the mapping out as a pure function is the honest fix.
      *
      * Thresholds are halves and three quarters of the core count, so each is asserted either
@@ -599,7 +599,7 @@ describe('loadRole', () => {
 
     it('never returns a hue', () => {
         // The regression this exists for: `orange` is byte-identical to `--text` in night,
-        // so a warning load rendered as an ordinary uncoloured number.
+        // so a warning load rendered as an ordinary uncolored number.
         [loadRole(1, 4), loadRole(2.5, 4), loadRole(4, 4)].filter(Boolean).forEach(role =>
             expect(role).not.toMatch(/^(red|green|amber|yellow|orange|blue)$/));
     });
@@ -689,7 +689,7 @@ describe('a heading keeps its help icon on the same row as the text', () => {
 describe('card links', () => {
     /*
      * `.card-link` is what makes a card's title read as the card's text rather than as a
-     * link, so a title that misses it is the one thing on the card in the wrong colour.
+     * link, so a title that misses it is the one thing on the card in the wrong color.
      * Both helpers set the class and then spread the caller's props over it, so any call
      * site passing a className of its own -- which is every archive title, via
      * `card-title-ellipsis` -- silently replaced the class instead of adding to it.

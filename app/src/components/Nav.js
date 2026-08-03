@@ -116,7 +116,7 @@ const NavDropdownTrigger = React.forwardRef(({text, className, ...props}, ref) =
      * `className` is pulled out and MERGED, never spread over.  Menu.Target clones its child
      * and hands it a className of its own, and a `{...props}` spread placed after the
      * attribute replaces ours with it -- which left the real More button with no class at
-     * all, so it rendered as a bare grey UA button instead of taking the bar's colour, its
+     * all, so it rendered as a bare grey UA button instead of taking the bar's color, its
      * padding and its hover.  The hidden placeholder is not cloned by Menu.Target, so it
      * kept its class and measured wider than the button that actually drew.
      */
@@ -205,7 +205,7 @@ export function NavBar() {
     const navColor = useNavColorSetting();
     /*
      * The bar's foreground is measured against the background the theme resolved for the
-     * user's colour, not taken from a single token.  See themes/navColors.
+     * user's color, not taken from a single token.  See themes/navColors.
      */
     const navColors = useNavColors(navColor);
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
@@ -241,9 +241,9 @@ export function NavBar() {
     if (memoryPercent > 80) {
         const color = memoryPercent > 90 ? highWarningColor : lowWarningColor;
         {/*
-          The colour goes on the Icon, as it does for every other indicator.  It used to
+          The color goes on the Icon, as it does for every other indicator.  It used to
           be passed to `Link`, which ignores it, so the memory warning never actually
-          changed colour -- 81% and 95% looked identical.
+          changed color -- 81% and 95% looked identical.
         */}
         const icon = <Link to='/admin/status'>
             <Icon name='microchip' size='large' label='Memory usage warning'

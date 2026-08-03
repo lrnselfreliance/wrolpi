@@ -8,7 +8,7 @@ import {semanticUIColorMap} from '../components/Vars';
 /*
  * The navbar foreground, measured against the palette that actually ships.
  *
- * The bar's background is the one colour a user picks by name, so there are twelve of them
+ * The bar's background is the one color a user picks by name, so there are twelve of them
  * per theme and forty-eight in total -- too many to eyeball, and the reason the bar drew
  * near-black text on night's #451212 for as long as it did.  The tokens are parsed out of
  * tokens.css rather than restated here: a list restated here is a list that agrees with
@@ -51,17 +51,17 @@ describe('the navbar palette', () => {
         });
     });
 
-    it('offers exactly the colours the favicon has an icon for', () => {
+    it('offers exactly the colors the favicon has an icon for', () => {
         /*
-         * `semanticUIColorMap` supplies the fixed hexes for `/favicon-<colour>.svg` and the
+         * `semanticUIColorMap` supplies the fixed hexes for `/favicon-<color>.svg` and the
          * `theme-color` meta tag -- a file on disk and OS chrome, neither of which can take a
-         * token.  A colour offered here with no icon there falls back to violet, so the bar
+         * token.  A color offered here with no icon there falls back to violet, so the bar
          * and the browser tab would disagree.
          */
         expect([...navColorNames].sort()).toEqual(Object.keys(semanticUIColorMap).sort());
     });
 
-    it('defaults to a colour it offers', () => {
+    it('defaults to a color it offers', () => {
         expect(navColorNames).toContain(defaultNavColor);
     });
 });
@@ -71,7 +71,7 @@ describe('the navbar foreground', () => {
     const candidatesOf = (palette) =>
         [palette['--btn-text'], palette['--black'], palette['--white']];
 
-    it('takes a colour the theme itself supplies, never a literal black or white', () => {
+    it('takes a color the theme itself supplies, never a literal black or white', () => {
         /*
          * A literal white pixel in night mode undoes the user's dark adaptation, which is the
          * one thing that theme exists to prevent.  Night's "white" is #ff8a8a and its "black"
@@ -88,7 +88,7 @@ describe('the navbar foreground', () => {
 
     it('picks the best of them, every time', () => {
         // The invariant.  A brightness threshold picks the worse option for every mid-tone,
-        // and a mid-tone is exactly what a navbar colour is.
+        // and a mid-tone is exactly what a navbar color is.
         everyCombination().forEach(({theme, navColor, background, color, palette}) => {
             const chosenRatio = contrastRatio(color, background);
             const rejected = candidatesOf(palette)
@@ -126,7 +126,7 @@ describe('the navbar foreground', () => {
         /*
          * 3:1 is the WCAG floor for large text and for graphical objects, which is what the
          * bar's icons are.  Twelve combinations were below it -- night's brown at 1.33:1 was
-         * a glyph the same colour as the bar behind it.
+         * a glyph the same color as the bar behind it.
          */
         const failing = everyCombination()
             .filter(({ratio}) => ratio < 3)
@@ -153,7 +153,7 @@ describe('what measurement cannot fix', () => {
      * Ten of the forty-eight combinations still sit under 4.5:1, and no choice of
      * foreground will lift them, because the shortfall is in the BACKGROUND.
      *
-     * A monochrome theme resolves all twelve colour names onto one red (or amber) ramp, and
+     * A monochrome theme resolves all twelve color names onto one red (or amber) ramp, and
      * six of night's land in the middle of it -- #b03030 is 3.27:1 from night's darkest red
      * and 2.52:1 from its brightest, so the best available option is the one this picks and
      * it is still short.  There is no foreground in a one-hue palette that reads on a
@@ -230,13 +230,13 @@ describe('when the tokens cannot be read', () => {
         });
     });
 
-    it('falls back for an unknown colour too', () => {
+    it('falls back for an unknown color too', () => {
         // `nav_color` comes from a config file, which a user edits by hand.
         expect(navColorsFrom(() => '', 'chartreuse').background)
             .toEqual(`var(--${defaultNavColor})`);
     });
 
-    it('resolves an unknown colour to the default when tokens ARE readable', () => {
+    it('resolves an unknown color to the default when tokens ARE readable', () => {
         const read = readerFor('light');
         expect(navColorsFrom(read, 'chartreuse').background)
             .toEqual(paletteOf('light')[`--${defaultNavColor}`]);
@@ -249,9 +249,9 @@ describe('a token this cannot measure', () => {
      * us -- the first place a palette will be written by hand, and the first place something
      * other than a hex will appear.
      *
-     * The failure it guards was silent and worse than doing nothing.  An unparseable colour
+     * The failure it guards was silent and worse than doing nothing.  An unparseable color
      * measured as luminance zero, indistinguishable from black, so the bar chose its
-     * foreground against a colour the theme does not contain and then froze the wrong hex
+     * foreground against a color the theme does not contain and then froze the wrong hex
      * into an inline style, where CSS could no longer correct it.  Falling back leaves the
      * bar painted by CSS: wrong about the foreground at worst, rather than about both.
      */
@@ -263,8 +263,8 @@ describe('a token this cannot measure', () => {
         return (token) => palette[token] || '';
     };
 
-    it('measures rgb() as readily as hex, since both are colours', () => {
-        // `--violet` is #5c4fa8 in light.  The same colour, written the other way, must
+    it('measures rgb() as readily as hex, since both are colors', () => {
+        // `--violet` is #5c4fa8 in light.  The same color, written the other way, must
         // produce the same answer rather than falling back.
         const asHex = navColorsFrom(readerFor('light'), 'violet');
         const asRgb = navColorsFrom(readerWith({'--violet': 'rgb(92, 79, 168)'}), 'violet');
@@ -312,7 +312,7 @@ describe('a token this cannot measure', () => {
         expect([hexPalette()['--btn-text'], hexPalette()['--black']]).toContain(colors.color);
     });
 
-    it('is a real constraint: an unreadable colour is NOT treated as black', () => {
+    it('is a real constraint: an unreadable color is NOT treated as black', () => {
         /*
          * Without this the fallback could be removed and every case above would still pass
          * on `relativeLuminance` returning zero -- which is precisely the bug, because zero

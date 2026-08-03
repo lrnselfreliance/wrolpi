@@ -643,7 +643,8 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
         setValue(pathName(path));
     }, [path]);
 
-    return <Modal
+    // Audited: unchanged at `small` (440px), written down so the default cannot move it.
+    return <Modal size='small'
                   open={open}
                   onClose={onClose}
     >
@@ -710,7 +711,7 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
         {destination ? fileCell(destination + '/' + pathName(i)) : fileCell(pathName(i))}
     </Table.Row>);
 
-    return <Modal
+    return <Modal size='large'
                   onClose={onClose}
                   open={open}
     >
@@ -775,7 +776,8 @@ export function IgnoreDirectoryModal({open, onClose, onSubmit, directory, ignore
                                onClick={handleIgnore}
     >{ignored ? 'Un-ignore' : 'Ignore'}</Button>;
 
-    return <Modal open={open} onClose={onClose}>
+    // Audited: `small` (440px), which is the width it already had.
+    return <Modal size='small' open={open} onClose={onClose}>
         <Modal.Header>{header}</Modal.Header>
         <Modal.Content>
             {content}
@@ -812,7 +814,7 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
         }
     }
 
-    return <Modal open={open} onClose={onClose}>
+    return <Modal size='large' open={open} onClose={onClose}>
         <Modal.Header>Make Directory</Modal.Header>
         <Modal.Content>
             <form onSubmit={handleSubmit}>

@@ -398,7 +398,8 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
 
     if (filters && filters.length > 0) {
         return <>
-            <Modal open={open} onClose={() => setOpen(false)} closeIcon>
+            {/* Audited: unchanged at `small` (440px), recorded so the default cannot move it. */}
+            <Modal size='small' open={open} onClose={() => setOpen(false)} closeIcon>
                 {modalHeader || <Modal.Header>Filter</Modal.Header>}
                 <Modal.Content>
                     <Stack gap='xs'>

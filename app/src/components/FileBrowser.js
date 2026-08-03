@@ -711,6 +711,11 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
         {destination ? fileCell(destination + '/' + pathName(i)) : fileCell(pathName(i))}
     </Table.Row>);
 
+    /*
+     * Audited: `large` (620px).  This dialog holds a DirectorySearch and a two-column
+     * Source/Destination table of every path being moved, which is the densest content
+     * of the five FileBrowser modals.
+     */
     return <Modal size='large'
                   onClose={onClose}
                   open={open}
@@ -814,6 +819,18 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
         }
     }
 
+    /*
+     * Audited: `large` (620px), deliberately wider than RenameModal's `small` even though
+     * the form is the same shape -- one field and a button.  The difference is the path
+     * above it: rename shows a RELATIVE path, this shows the absolute one including the
+     * media directory, and a bare `<pre>` is `white-space: pre`, so it scrolls rather
+     * than wraps.  Measured in the browser: 440px holds 42 characters and 620px holds
+     * 61.  `/media/wrolpi/videos/Practical Engineering/Season 2024/` is 55, so an
+     * ordinary channel-and-season path scrolls out of sight at 440 and fits at 620.
+     *
+     * Written out because it reads like an inconsistency next to rename, and the next
+     * person to notice that should see the measurement before narrowing it back.
+     */
     return <Modal size='large' open={open} onClose={onClose}>
         <Modal.Header>Make Directory</Modal.Header>
         <Modal.Content>

@@ -211,7 +211,7 @@ export function clampNonNegative(value) {
 function SwatchInput({hex, label, value, onChange, name, min, step}) {
     return <Group gap={0} wrap='nowrap' align='stretch' style={{marginBottom: '0.25em'}}>
         <span style={{
-            display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 13, fontWeight: 500,
+            display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: '0.8125rem', fontWeight: 500,
             whiteSpace: 'nowrap', background: hex, color: textColorFor(hex), border: `1px solid ${hex}`,
         }}>{label}</span>
         <NumberInput name={name} value={value} onChange={onChange} min={min} step={step}

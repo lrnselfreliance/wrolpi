@@ -903,6 +903,12 @@ describe('Card', () => {
          * card read buttons-then-domain.  Which slot lands where is what this asserts; that
          * the foot anchoring actually resolves is in ui-layout.cy.js, since `margin-top:
          * auto` needs a layout engine.
+         *
+         * That division is why there is no `margin-top: auto` assertion here any more.  There
+         * was one, reading the inline style, and it broke when the card's sizes moved into
+         * ui.css so the interface scale could reach them -- jsdom applies no stylesheet.  It
+         * was asserting where the declaration was written rather than what it did, and the
+         * cypress test above measures the actual foot alignment either way.
          */
         renderUI(<Card title='Rainwater Harvesting'
                        meta='engineering775.com'
@@ -914,8 +920,8 @@ describe('Card', () => {
         expect([...body.children].map(child => child.textContent)).toEqual([
             'Rainwater Harvesting', 'engineering775.com', 'body', 'Details',
         ]);
-        expect(body.querySelector('.wrolpi-card-actions')).toHaveStyle({marginTop: 'auto'});
-        expect(body.querySelector('.wrolpi-card-meta').style.marginTop).toBe('');
+        expect(body.querySelector('.wrolpi-card-actions')).not.toBeNull();
+        expect(body.querySelector('.wrolpi-card-meta')).not.toBeNull();
     });
 
     it('renders no actions row when a card has no actions', () => {
@@ -940,14 +946,20 @@ describe('CardGroup', () => {
         expect(screen.getByText('Three')).toBeInTheDocument();
     });
 
-    it('lays cards out on a track no narrower than minWidth', () => {
-        // The default suits file results; a group of wide cards raises it.  If the value were
-        // dropped the grid would fall back to one column, which is how a card wall becomes a
-        // list on a desktop.
+    it('lays cards out on a track no narrower than minWidth, in rem so it scales', () => {
+        /*
+         * The default suits file results; a group of wide cards raises it.  If the value were
+         * dropped the grid would fall back to one column, which is how a card wall becomes a
+         * list on a desktop.
+         *
+         * The px the caller names is converted to rem, which is the whole reason a phone shows
+         * one card per row again: as px, the track ignored the interface scale, and a 430px
+         * screen fitted two 200px cards where the pre-migration build fitted one 290px card.
+         */
         const {container} = renderUI(<CardGroup minWidth={320}><Card title='One'/></CardGroup>);
 
         expect(container.querySelector('.wrolpi-card-group'))
-            .toHaveStyle({gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))'});
+            .toHaveStyle({gridTemplateColumns: 'repeat(auto-fill, minmax(20rem, 1fr))'});
     });
 });
 

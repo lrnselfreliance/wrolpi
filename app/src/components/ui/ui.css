@@ -131,17 +131,17 @@ html .mantine-ActionIcon-root {
 
 .wrolpi-theme-picker {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(14.375rem, 1fr));
+    gap: 0.625rem;
 }
 
 .wrolpi-theme-option {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 0.25rem;
     align-items: flex-start;
     text-align: left;
-    padding: 10px 12px;
+    padding: 0.625rem 0.75rem;
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
@@ -157,7 +157,7 @@ html .mantine-ActionIcon-root {
    selection survives in monochrome themes. */
 .wrolpi-theme-option-active {
     border: 2px solid var(--blue);
-    padding: 9px 11px;
+    padding: 0.5625rem 0.6875rem;
 }
 
 html[data-theme="night"] .wrolpi-theme-option-active,
@@ -173,21 +173,21 @@ html[data-theme="amber"] .wrolpi-theme-option-active {
 .wrolpi-theme-option-name {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: 0.4375rem;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .wrolpi-theme-option-description {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
     line-height: 1.4;
 }
 
 /* Separated from the theme grid: it configures the chosen theme, it is not a choice. */
 .wrolpi-media-filter-setting {
-    margin-top: 14px;
-    padding-top: 12px;
+    margin-top: 0.875rem;
+    padding-top: 0.75rem;
     border-top: 1px solid var(--border);
 }
 
@@ -247,9 +247,9 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: 0.75rem;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 14px;
+    margin-bottom: 0.875rem;
 }
 
 .wrolpi-tabs-links {
@@ -258,15 +258,15 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
 }
 
 .wrolpi-tabs-right {
-    padding-bottom: 6px;
+    padding-bottom: 0.375rem;
 }
 
 .wrolpi-tab {
     display: inline-block;
-    padding: 8px 14px;
+    padding: 0.5rem 0.875rem;
     color: var(--muted);
     text-decoration: none;
-    font-size: 13px;
+    font-size: 0.8125rem;
     /*
      * A tab is a NavLink in the app's nav bars but a <button> on Inventory and in the
      * gallery, and a button carries the UA's own `buttonface` background -- rgb(239,239,239).
@@ -313,7 +313,7 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
      * stay in lockstep: changing the padding alone would have pushed the clear button past
      * the border, and changing the gap alone would have re-inset it.
      */
-    --searchbox-inset: 8px;
+    --searchbox-inset: 0.5rem;
     gap: var(--searchbox-inset);
     background: var(--panel);
     border: 1px solid var(--border);
@@ -337,13 +337,13 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
 .wrolpi-searchbox-input {
     flex: 1;
     min-width: 0;
-    padding: 8px 0;
+    padding: 0.5rem 0;
     background: none;
     border: none;
     outline: none;
     color: var(--text);
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .wrolpi-searchbox-input::placeholder {
@@ -402,7 +402,7 @@ html .wrolpi-searchbox-clear {
      * domains together run past 320px, and the last group was being clipped -- but
      * still capped so a long list cannot cover the page.
      */
-    max-height: min(60vh, 480px);
+    max-height: min(60vh, 30rem);
     overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -422,12 +422,12 @@ html .wrolpi-searchbox-clear {
  */
 .wrolpi-search-modal .wrolpi-searchbox-results {
     position: static;
-    max-height: min(50vh, 420px);
+    max-height: min(50vh, 26.25rem);
 }
 
 .wrolpi-searchbox-group-name {
-    padding: 6px 10px;
-    font-size: 11px;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -436,7 +436,7 @@ html .wrolpi-searchbox-clear {
 }
 
 .wrolpi-searchbox-result {
-    padding: 7px 10px;
+    padding: 0.4375rem 0.625rem;
     cursor: pointer;
     border-top: 1px solid var(--border);
 }
@@ -446,19 +446,19 @@ html .wrolpi-searchbox-clear {
 }
 
 .wrolpi-searchbox-result-title {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text);
     overflow-wrap: anywhere;
 }
 
 .wrolpi-searchbox-result-description {
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--muted);
 }
 
 .wrolpi-searchbox-empty {
-    padding: 10px;
-    font-size: 12px;
+    padding: 0.625rem;
+    font-size: 0.75rem;
     color: var(--muted);
 }
 
@@ -472,19 +472,27 @@ html .wrolpi-searchbox-clear {
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 0.625rem;
     /* Bleed back out through the modal body's own padding so the rule spans the
        full width; -1 * whatever Mantine padded the body with. */
-    margin: 18px calc(var(--mantine-spacing-md) * -1) calc(var(--mantine-spacing-md) * -1);
-    padding: 12px var(--mantine-spacing-md);
+    margin: 1.125rem calc(var(--mantine-spacing-md) * -1) calc(var(--mantine-spacing-md) * -1);
+    padding: 0.75rem var(--mantine-spacing-md);
     border-top: 1px solid var(--border);
+}
+
+/* A confirmation's buttons: under the question, no separating rule.  See Confirm. */
+.wrolpi-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.625rem;
+    margin-top: 1.125rem;
 }
 
 /* A stack of form rows, replacing Semantic's `ui stackable grid` in edit forms. */
 .wrolpi-form-rows {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 0.875rem;
 }
 
 /* ------------------------------------------------------------- Form fields */
@@ -509,12 +517,12 @@ html .wrolpi-searchbox-clear {
 
 .wrolpi-form-field input {
     width: 100%;
-    padding: 7px 9px;
+    padding: 0.4375rem 0.5625rem;
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .wrolpi-form-field input::placeholder {
@@ -552,8 +560,8 @@ html[data-theme="amber"] .wrolpi-form-field input:focus {
 .wrolpi-path-input-label {
     display: block;
     font-weight: 600;
-    font-size: 13px;
-    margin-bottom: 4px;
+    font-size: 0.8125rem;
+    margin-bottom: 0.25rem;
 }
 
 .wrolpi-path-input-control {
@@ -598,11 +606,11 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     max-width: 50%;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 0 6px 0 9px;
+    padding: 0 0.375rem 0 0.5625rem;
     background: var(--head);
     border-right: 1px solid var(--border);
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
     white-space: nowrap;
     user-select: none;
 }
@@ -610,13 +618,13 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 .wrolpi-path-input-control input {
     flex: 1;
     min-width: 0;
-    padding: 7px 9px;
+    padding: 0.4375rem 0.5625rem;
     background: none;
     border: none;
     outline: none;
     color: var(--text);
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .wrolpi-path-input-control input::placeholder {
@@ -628,15 +636,15 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 }
 
 .wrolpi-path-input-description {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
-    margin-top: 3px;
+    margin-top: 0.1875rem;
 }
 
 .wrolpi-path-input-error {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--danger);
-    margin-top: 3px;
+    margin-top: 0.1875rem;
 }
 
 /* ---------------------------------------------------------- Action inputs */
@@ -662,6 +670,37 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 
 .wrolpi-action-input > :not(.mantine-TextInput-root) {
     flex: none;
+}
+
+/* A colored label beside an input, unlike ActionInput's shared outline: they stay two
+   controls, so the gap between them is real and scales with the type. */
+.wrolpi-colored-input {
+    display: flex;
+    align-items: stretch;
+    gap: 0.375rem;
+}
+
+/* ------------------------------------------------- Loading & placeholders */
+/*
+ * A centered loader with a caption, and the skeleton stack that stands in for text.
+ * Both were inline px in Feedback.tsx, which put them outside the interface scale.
+ */
+.wrolpi-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.wrolpi-loading-caption {
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.wrolpi-placeholder {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 /* --------------------------------------------------------------- Switches */
@@ -713,9 +752,9 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 .wrolpi-label {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 5px 10px;
-    font-size: 12.5px;
+    gap: 0.25rem;
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.78125rem;
     font-weight: 500;
     line-height: 1.3;
     background: var(--label-color);
@@ -747,16 +786,16 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
      * Room for the point, which is drawn outside the body: half its diagonal (14.1px) plus
      * the 1px it is nudged left, rounded up.
      */
-    margin-left: 16px;
+    margin-left: 1rem;
     /* Tags wrap, and a wrapped row was sitting on the row above it. */
-    margin-bottom: 5px;
+    margin-bottom: 0.3125rem;
     /*
      * The point is centred on the left edge, so its inner half covers the body's first 10px
      * -- and a positioned pseudo-element paints above the parent's text, not behind it, so
      * without this the first letter is hidden under the point.  Semantic's tag label carried
      * the same asymmetry (`padding-left: 1.5em`) for the same reason.
      */
-    padding-left: 13px;
+    padding-left: 0.8125rem;
 }
 
 .wrolpi-tag::before {
@@ -764,8 +803,8 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     position: absolute;
     top: 50%;
     right: 100%;
-    width: 20px;
-    height: 20px;
+    width: 1.25rem;
+    height: 1.25rem;
     /*
      * Nudged 1px left of where `right: 100%` puts it.  That property positions against the
      * containing block's *padding* box, and the body carries a 1px border, so a square centred
@@ -788,8 +827,8 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     position: absolute;
     top: 50%;
     left: -7px;
-    width: 5px;
-    height: 5px;
+    width: 0.3125rem;
+    height: 0.3125rem;
     margin-top: -2.5px;
     border-radius: 50%;
     background: currentColor;
@@ -842,7 +881,7 @@ html[data-theme="night"] .wrolpi-tag::before {
 /* ---------------------------------------------------------------- Headers */
 
 .wrolpi-header {
-    margin: 0 0 10px;
+    margin: 0 0 0.625rem;
 }
 
 /*
@@ -855,14 +894,14 @@ html[data-theme="night"] .wrolpi-tag::before {
  * where it should be, and pushing it down would just dent the top of its own container.
  */
 * + .wrolpi-header {
-    margin-top: 22px;
+    margin-top: 1.375rem;
 }
 
 /* The heading and its trailing control share one row. */
 .wrolpi-header-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 /*
@@ -880,19 +919,19 @@ html[data-theme="night"] .wrolpi-tag::before {
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 400;
 }
 
 .wrolpi-header-dividing {
     border-bottom: 1px solid var(--border);
-    padding-bottom: 6px;
+    padding-bottom: 0.375rem;
 }
 
 .wrolpi-header-text {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0.5rem;
     margin: 0;
     /*
      * Stated explicitly because semantic.min.css sets `h1,h2,h3,h4,h5 { font-family:
@@ -909,30 +948,30 @@ html[data-theme="night"] .wrolpi-tag::before {
 
 /* The scale lives here so no call site invents a size of its own. */
 .wrolpi-header-h1 {
-    font-size: 26px;
+    font-size: 1.625rem;
 }
 
 .wrolpi-header-h2 {
-    font-size: 21px;
+    font-size: 1.3125rem;
 }
 
 .wrolpi-header-h3 {
-    font-size: 17px;
+    font-size: 1.0625rem;
 }
 
 .wrolpi-header-h4 {
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .wrolpi-header-h5 {
-    font-size: 13px;
+    font-size: 0.8125rem;
     letter-spacing: 0.02em;
 }
 
 .wrolpi-header-sub {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
-    margin-top: 3px;
+    margin-top: 0.1875rem;
 }
 
 /*
@@ -1015,12 +1054,12 @@ html .mantine-Notification-closeButton:hover {
 .wrolpi-message {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 0.625rem;
     border: 1px solid var(--border);
     border-left: 3px solid var(--message-color, var(--border));
     background: var(--panel);
-    padding: 10px 14px;
-    font-size: 13px;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
 }
 
 .wrolpi-message-content {
@@ -1044,7 +1083,7 @@ html .mantine-Notification-closeButton:hover {
     display: flex;
     /* Widen the tap target past the glyph without moving it. */
     margin: -6px -6px -6px 0;
-    padding: 6px;
+    padding: 0.375rem;
 }
 
 .wrolpi-message-dismiss:hover {
@@ -1058,7 +1097,7 @@ html .mantine-Notification-closeButton:hover {
 
 .wrolpi-message-title {
     font-weight: 600;
-    margin-bottom: 2px;
+    margin-bottom: 0.125rem;
 }
 
 .wrolpi-message-body {
@@ -1088,8 +1127,8 @@ html .mantine-Notification-closeButton:hover {
  */
 .wrolpi-progress {
     position: relative;
-    height: 22px;
-    min-width: 120px;
+    height: 1.375rem;
+    min-width: 7.5rem;
     overflow: hidden;
     background: var(--bg);
     border: 1px solid var(--border);
@@ -1105,7 +1144,7 @@ html .mantine-Notification-closeButton:hover {
  * something, so an only-child bar in a column is untouched.
  */
 * + .wrolpi-progress {
-    margin-top: 8px;
+    margin-top: 0.5rem;
 }
 
 .wrolpi-progress-fill {
@@ -1155,7 +1194,7 @@ html .mantine-Notification-closeButton:hover {
     align-items: center;
     justify-content: center;
     /* 12px rather than 11: these labels carry units and device names, not just a number. */
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 700;
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -1166,7 +1205,7 @@ html .mantine-Notification-closeButton:hover {
      * it; with a hard clip and no ellipsis, `Complete: very-long-archive-name.tar.gz`
      * ends mid-glyph and reads as broken rather than truncated.
      */
-    padding: 0 6px;
+    padding: 0 0.375rem;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1204,7 +1243,7 @@ html[data-theme="amber"] .wrolpi-progress-fill {
 .wrolpi-panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    padding: 14px 16px;
+    padding: 0.875rem 1rem;
 }
 
 /* Danger zones are dashed in every theme; it doubles as a colorblind-safe cue. */
@@ -1231,7 +1270,7 @@ html[data-theme="amber"] .wrolpi-progress-fill {
  * whichever cap bites first, the other axis comes down with it and the ratio survives.
  */
 :root {
-    --card-poster-max-height: 200px;
+    --card-poster-max-height: 12.5rem;
     /* How far a disabled control fades.  Semantic used 0.45 and it reads correctly against
        every theme's panel; the tests read this rather than repeating the number. */
     --disabled-opacity: 0.45;
@@ -1254,6 +1293,48 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     justify-content: center;
 }
 
+/*
+ * The card's text block.
+ *
+ * These lived as inline px in Card's JSX, which put them outside the interface scale --
+ * `fontSize: 13` is 13px whatever the root font-size is, so a card's title would have
+ * stayed put while the prose around it grew.  Rules now, for the same reason every other
+ * size is one: a single place to retune, and ui-scale.test.js can see them.
+ */
+.wrolpi-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    padding: 0.625rem 0.75rem 0.75rem;
+}
+
+.wrolpi-card-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.wrolpi-card-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+/* The foot: `auto` pushes the actions down so a row of cards lines its buttons up
+   however tall the titles above them got.  ui-layout.cy.js measures that. */
+.wrolpi-card-actions {
+    margin-top: auto;
+    padding-top: 0.5rem;
+}
+
+/* A grid of cards.  The track width is the caller's `minWidth`, converted to rem in
+   CardGroup so a column scales with the type -- which is what returns a phone to one
+   card per row, as the pre-migration build had it. */
+.wrolpi-card-group {
+    display: grid;
+    gap: 0.875rem;
+}
+
 .wrolpi-card-poster-frame {
     position: relative;
     display: block;
@@ -1273,7 +1354,7 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 120px;
+    min-height: 7.5rem;
     background: var(--head);
 }
 
@@ -1282,7 +1363,7 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     top: 0;
     left: 0;
     display: flex;
-    padding: 3px 4px;
+    padding: 0.1875rem 0.25rem;
     background: var(--green);
     color: var(--btn-text);
 }
@@ -1308,7 +1389,7 @@ html[data-theme="amber"] .wrolpi-card-tag {
 .wrolpi-statistic {
     display: inline-block;
     vertical-align: top;
-    margin: 0 26px 10px 0;
+    margin: 0 1.625rem 0.625rem 0;
 }
 
 /*
@@ -1328,8 +1409,8 @@ html[data-theme="amber"] .wrolpi-card-tag {
  */
 .wrolpi-statistic-group {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 18px 30px;
+    grid-template-columns: repeat(auto-fit, minmax(9.375rem, 1fr));
+    gap: 1.125rem 1.875rem;
 }
 
 /*
@@ -1341,7 +1422,7 @@ html[data-theme="amber"] .wrolpi-card-tag {
  * while leaving the bottom where it was, so the whole panel read as lopsided.
  */
 * + .wrolpi-statistic-group {
-    margin-top: 18px;
+    margin-top: 1.125rem;
 }
 
 /*
@@ -1362,18 +1443,18 @@ html[data-theme="amber"] .wrolpi-card-tag {
 }
 
 .wrolpi-statistic-value {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.15;
 }
 
 .wrolpi-statistic-label {
-    font-size: 11px;
+    font-size: 0.6875rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-top: 2px;
+    margin-top: 0.125rem;
 }
 
 /* ---------------------------------------------------------------- Status */
@@ -1383,11 +1464,11 @@ html[data-theme="amber"] .wrolpi-card-tag {
  * replaced the three `html[data-theme="night"]` overrides that used to live below.
  */
 .wrolpi-status {
-    font-size: 12.5px;
+    font-size: 0.78125rem;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 0.3125rem;
     color: var(--status-color);
 }
 
@@ -1451,7 +1532,7 @@ html .mantine-Table-table[data-with-table-border] {
 .wrolpi-th-sort {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 0.3125rem;
     background: none;
     border: none;
     padding: 0;

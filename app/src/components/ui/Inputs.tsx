@@ -205,8 +205,7 @@ export function ColoredInput({
 }: ColoredInputProps) {
     const labelNode = label ? <Label color={color || 'grey'}>{label}</Label> : null;
 
-    return <div style={{
-        display: 'flex', alignItems: 'stretch', gap: 6,
+    return <div className='wrolpi-colored-input' style={{
         width: fluid ? '100%' : undefined, ...style,
     }}>
         {labelNode && labelPosition === 'left' && labelNode}

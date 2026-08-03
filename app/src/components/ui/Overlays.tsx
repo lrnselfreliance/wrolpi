@@ -233,7 +233,9 @@ export function Confirm({
      */
     return <Modal opened={open} onClose={() => onCancel?.()} title={title} size={size}>
         {children}
-        <div style={{display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18}}>
+        {/* Its own class rather than `.wrolpi-modal-actions`: a confirmation's buttons sit
+            under its question with no hairline, where a Modal's are a separated footer. */}
+        <div className='wrolpi-confirm-actions'>
             <Button role='cancel' onClick={onCancel}>{cancelLabel}</Button>
             <Button role={destructive ? 'danger' : 'save'} loading={loading} onClick={onConfirm}>
                 {confirmLabel}

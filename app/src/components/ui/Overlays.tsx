@@ -198,6 +198,11 @@ export interface ConfirmProps {
     /** Style the confirming button as destructive. */
     destructive?: boolean;
     loading?: boolean;
+    /**
+     * Same vocabulary as `Modal`, forwarded to it.  Defaults to `tiny`; widen it only when
+     * the confirmation shows something other than a question.
+     */
+    size?: string | number;
     onConfirm?: () => void;
     onCancel?: () => void;
 }
@@ -210,12 +215,23 @@ export function Confirm({
     cancelLabel = 'Cancel',
     destructive,
     loading,
+    size = 'tiny',
     onConfirm,
     onCancel,
 }: ConfirmProps) {
-    // `tiny`, not Mantine's raw `sm`.  Same 380px, but the audited vocabulary -- and the
-    // guard in ui.test.js exists to keep raw Mantine names out of call sites.
-    return <Modal opened={open} onClose={() => onCancel?.()} title={title} size='tiny'>
+    /*
+     * `tiny`, not Mantine's raw `sm`.  Same 380px, but the audited vocabulary -- and the
+     * guard in ui.test.js exists to keep raw Mantine names out of call sites.
+     *
+     * Default rather than fixed.  It was fixed, which made every confirmation in the app
+     * 380px whatever it held.  Eight of the nine call sites ask a one-line question, and so
+     * does every confirmation `useAPIButton` puts behind a `confirmContent` -- around thirty
+     * of them, all prose, which is why APIButton does not forward a size.  The ninth is
+     * TaggedDeleteConfirmModal, which lists file paths in a two-column table and had no way
+     * to say so.  The default stays narrow because a confirmation wider than its question
+     * reads as a bigger decision than it is.
+     */
+    return <Modal opened={open} onClose={() => onCancel?.()} title={title} size={size}>
         {children}
         <div style={{display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18}}>
             <Button role='cancel' onClick={onCancel}>{cancelLabel}</Button>

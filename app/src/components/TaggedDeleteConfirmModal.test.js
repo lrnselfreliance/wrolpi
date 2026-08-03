@@ -1,6 +1,7 @@
 import React from 'react';
 import {screen, fireEvent} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
+import {Confirm} from './ui';
 import {TaggedDeleteConfirmModal} from './TaggedDeleteConfirmModal';
 
 describe('TaggedDeleteConfirmModal', () => {
@@ -77,6 +78,37 @@ describe('TaggedDeleteConfirmModal', () => {
             />
         );
         expect(screen.getAllByText(/Tagged Files Will Be Deleted/i).length).toBeGreaterThan(0);
+    });
+
+    it('is wider than a one-sentence confirmation, because it lists paths in a table', () => {
+        /*
+         * Every Confirm in the app was 380px, because Confirm hardcoded `size='tiny'` and
+         * accepted no size.  380px is right for the eleven that ask a one-line question and
+         * wrong for this one: two columns of file paths, and a path is long.  The table
+         * scrolls horizontally inside the modal rather than overflowing it, so the width
+         * decides how much of a path is readable without dragging.
+         */
+        /*
+         * Both in one render, and every modal root read: a modal is portalled to
+         * `document.body`, so two separate renders both land there and reading only the first
+         * root reports one modal's size twice.
+         *
+         * Paired with a plain confirmation so this cannot pass by Confirm having become wide
+         * for everyone -- the point is that this one asked and the rest did not.
+         */
+        const {baseElement} = renderWithProviders(<>
+            <TaggedDeleteConfirmModal
+                open={true}
+                taggedFileGroups={sampleGroups}
+                onConfirm={jest.fn()}
+                onCancel={jest.fn()}
+            />
+            <Confirm open title='Delete?'/>
+        </>);
+
+        const sizes = [...baseElement.querySelectorAll('.mantine-Modal-root')]
+            .map(root => (root.getAttribute('style') ?? '').match(/--modal-size:\s*([^;]+)/)?.[1]);
+        expect(sizes).toEqual(['var(--modal-size-lg)', 'var(--modal-size-sm)']);
     });
 
     it('falls back to name when primary_path is missing', () => {

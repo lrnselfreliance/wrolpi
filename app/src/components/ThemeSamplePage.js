@@ -146,6 +146,7 @@ let toastCounter = 0;
 export function ThemeSamplePage() {
     const {theme} = useContext(ThemeContext);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [wideConfirmOpen, setWideConfirmOpen] = useState(false);
     const [comments, setComments] = useState(true);
     const [hotspot, setHotspot] = useState(true);
     const [dismissed, setDismissed] = useState(false);
@@ -929,7 +930,14 @@ export function ThemeSamplePage() {
                     <Button role='danger' icon='trash' onClick={() => setConfirmOpen(true)}>
                         Wipe download history
                     </Button>
+                    <Button role='danger' icon='trash' onClick={() => setWideConfirmOpen(true)}>
+                        Delete tagged files
+                    </Button>
                 </Row>
+                <p style={{fontSize: 12, color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
+                    A confirmation is 380px wide, which suits a question. One that has to show
+                    what it is about takes a size, in the same vocabulary as Modal.
+                </p>
             </Panel>
         </Section>
 
@@ -947,6 +955,36 @@ export function ThemeSamplePage() {
             <p style={{color: 'var(--muted)', marginBottom: 0}}>
                 videos/Wranglerstar/ (312 files) will not be deleted.
             </p>
+        </Confirm>
+
+        <Confirm
+            open={wideConfirmOpen}
+            size='large'
+            destructive
+            title={<><Icon name='warning sign'/> Tagged files will be deleted</>}
+            confirmLabel='Delete'
+            onConfirm={() => setWideConfirmOpen(false)}
+            onCancel={() => setWideConfirmOpen(false)}
+        >
+            <p style={{marginTop: 0}}>The following tagged files will be deleted:</p>
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>File</Table.HeaderCell>
+                        <Table.HeaderCell>Tags</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell>videos/Practical Engineering/Season 2024/Spillways.mp4</Table.Cell>
+                        <Table.Cell>favorite, water</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>archives/en.wikipedia.org/Sluice_gate.html</Table.Cell>
+                        <Table.Cell>water</Table.Cell>
+                    </Table.Row>
+                </Table.Body>
+            </Table>
         </Confirm>
     </div>
 }

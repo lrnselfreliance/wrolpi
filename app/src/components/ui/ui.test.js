@@ -1528,6 +1528,41 @@ describe('modal sizes', () => {
         });
     });
 
+    /**
+     * The size Mantine was actually handed for each open modal, in source order, read off the
+     * inline style it writes on the modal root (`--modal-size: var(--modal-size-lg)`).
+     *
+     * Read rather than restated so a call site that names a size the table cannot translate
+     * shows up as the raw string it passed instead of quietly resolving to the default.
+     *
+     * All roots, not the first: a modal is portalled to `document.body`, so two renders in
+     * one test both land there and `querySelector` on `baseElement` returns whichever opened
+     * first.  That is how the first version of this reported the default twice and looked like
+     * the size prop had no effect.
+     */
+    const renderedModalSizes = (baseElement) =>
+        [...baseElement.querySelectorAll('.mantine-Modal-root')]
+            .map(root => (root.getAttribute('style') ?? '').match(/--modal-size:\s*([^;]+)/)?.[1]);
+
+    it('gives Confirm the tiny width by default, and lets a call site widen it', () => {
+        /*
+         * Confirm hardcoded `size='tiny'` and its props interface accepted no size at all, so
+         * all twelve confirmations in the app were 380px whatever they contained -- including
+         * TaggedDeleteConfirmModal, which renders a two-column table of file paths.  No call
+         * site could do anything about it without editing this library.
+         *
+         * The default stays `tiny`: eleven of the twelve are one sentence, and a confirmation
+         * that is wider than its question reads as a bigger decision than it is.
+         */
+        const {baseElement} = renderUI(<>
+            <Confirm open title='Delete?'/>
+            <Confirm open size='large' title='Delete these?'/>
+        </>);
+
+        expect(renderedModalSizes(baseElement))
+            .toEqual(['var(--modal-size-sm)', 'var(--modal-size-lg)']);
+    });
+
     it('never lets a call site name a size the table does not know', () => {
         /*
          * Two different hazards, and neither announces itself.
@@ -1570,13 +1605,23 @@ describe('modal sizes', () => {
 
         const offenders = [];
         let scanned = 0;
+        let confirms = 0;
         for (const [file, source] of walk(path.join(__dirname, '..', '..'))) {
-            for (const match of source.matchAll(/<Modal\b/g)) {
+            /*
+             * `Confirm` as well as `Modal`, now that it takes a size: it forwards the name
+             * straight to Modal, so it is the same vocabulary and the same hazard.
+             *
+             * `(?![.\w])` because `<Modal\b` also matches `<Modal.Header` -- harmless while
+             * those never declare a size, but it inflated an earlier count of these tags to
+             * 243 and made the number useless as a premise check.
+             */
+            for (const match of source.matchAll(/<(Modal|Confirm)(?![.\w])/g)) {
                 const tag = openingTag(source, match.index);
                 // Quote-agnostic; a computed `size={...}` is the caller's business.
                 const declared = tag.match(/\bsize=["']([^"']+)["']/);
                 if (!declared) continue;
                 scanned += 1;
+                if (match[1] === 'Confirm') confirms += 1;
                 if (!known.has(declared[1])) {
                     offenders.push(`${path.basename(file)}: size='${declared[1]}'`);
                 }
@@ -1586,6 +1631,9 @@ describe('modal sizes', () => {
         // The premise.  A scanner that silently matched nothing would report no offenders
         // and read exactly like a clean codebase, which is how the first version passed.
         expect(scanned).toBeGreaterThan(50);
+        // And the premise for the half of the pattern that is new: at least one confirmation
+        // names a size, so widening the scan is doing something rather than matching nothing.
+        expect(confirms).toBeGreaterThan(0);
         expect(offenders).toEqual([]);
     });
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import {Loader as MLoader, Skeleton} from '@mantine/core';
 import {Icon} from './Icon';
+import {pxToRem} from './scale';
 import {RoleName, SemanticColorName} from '../../themes/mantine';
 
 /*
@@ -224,7 +225,7 @@ export function Placeholder({lines = 3, height = 12}: {lines?: number; height?: 
         {Array.from({length: lines}, (_, index) => <Skeleton
             key={index}
             // In rem so a placeholder line matches the height of the text it stands in for.
-            height={`${height / 16}rem`}
+            height={pxToRem(height)}
             // A ragged last line reads as text rather than a block.
             width={index === lines - 1 ? '60%' : '100%'}
             radius={0}

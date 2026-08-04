@@ -68,7 +68,7 @@ describe('--ui-scale', () => {
         expect(stripComments(mantine)).not.toMatch(/\bscale:\s*[\d.]/);
     });
 
-    it('writes every scalable length in rem, so the scale reaches it', () => {
+    it('writes every scalable length in our stylesheets in rem, so the scale reaches it', () => {
         /*
          * A px font-size does not grow with the root, so it would shrink RELATIVE to
          * everything around it -- the failure is a 13px caption beside 14.3px prose, which
@@ -78,17 +78,41 @@ describe('--ui-scale', () => {
          * scaling it is exactly what made `zoom` the wrong tool.  Same for outlines, which are
          * hairlines wearing a different name.
          */
-        const SCALABLE = /^\s*(font-size|padding|padding-\w+|margin|margin-\w+|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|border-radius|top|right|bottom|left)\s*:/;
+        /*
+         * `transform` and `flex-basis` are on the list because a length there is as much part
+         * of the layout as a padding.  The first version left them off and the name of this
+         * test still said "every scalable length": `transform: translateX(26px)` sat in App.css
+         * untouched while the track and knob either side of it were converted to rem, so a
+         * switch's thumb travelled 26px across a track that had grown to 54px.
+         */
+        const SCALABLE = new RegExp('^\\s*(' + [
+            'font-size', 'padding', 'padding-\\w+', 'margin', 'margin-\\w+',
+            'gap', 'row-gap', 'column-gap', 'width', 'min-width', 'max-width',
+            'height', 'min-height', 'max-height', 'border-radius',
+            'top', 'right', 'bottom', 'left',
+            'transform', '-webkit-transform', '-ms-transform', 'translate',
+            'flex', 'flex-basis',
+        ].join('|') + ')\\s*:');
 
         const offenders = [];
         let scanned = 0;
+        let negatives = 0;
         for (const [name, full] of STYLESHEETS) {
             stripComments(fs.readFileSync(full, 'utf8')).split('\n').forEach((line, index) => {
                 if (!SCALABLE.test(line)) return;
                 scanned += 1;
-                // 0 has no unit to scale, and 1px in a scalable property is a hairline too.
-                const px = [...line.matchAll(/(?<![\w.-])(\d+(?:\.\d+)?)px/g)]
-                    .filter(match => parseFloat(match[1]) > 1);
+                /*
+                 * The optional leading `-` is load-bearing.  Without it the lookbehind treated
+                 * a minus sign as part of the preceding token, so every NEGATIVE length was
+                 * invisible: `left: -7px` and `margin-top: -2.5px` position the eyelet on a
+                 * tag whose diamond had been converted to rem, and `right: -3px` / `bottom:
+                 * -3px` place the corner badge on an icon that had also been converted.  Each
+                 * one is a piece of geometry that stopped tracking the piece it belongs to.
+                 */
+                const px = [...line.matchAll(/(?<![\w.])(-?\d+(?:\.\d+)?)px/g)]
+                    // 0 has no unit to scale, and 1px either way is a hairline.
+                    .filter(match => Math.abs(parseFloat(match[1])) > 1);
+                if (px.some(match => match[1].startsWith('-'))) negatives += 1;
                 if (px.length) offenders.push(`${name}:${index + 1}: ${line.trim().slice(0, 64)}`);
             });
         }
@@ -163,6 +187,39 @@ describe('--ui-scale', () => {
         const remSizes = sourceFiles().flatMap(file =>
             [...fs.readFileSync(file, 'utf8').matchAll(/fontSize:\s*['"][\d.]+rem/g)]);
         expect(remSizes.length).toBeGreaterThan(40);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('keeps numeric geometry out of the component library, where a scale cannot reach it', () => {
+        /*
+         * The library's own inline styles, held to the same rule as its font sizes.  `gap: 10`
+         * in Confirm and `padding: '10px 12px 12px'` in Card were px forever, so the ten such
+         * blocks moved into ui.css; this is what stops the eleventh being written.
+         *
+         * Deliberately the LIBRARY only.  There are about 176 numeric geometry values left in
+         * 23 feature files -- the map overlays were the visible ones and are converted, but
+         * sweeping the rest is a change to 23 files that nobody has looked at, and it is not
+         * this test's job to pretend otherwise.  That gap is the reason the sibling test above
+         * says "in our stylesheets" rather than "everywhere": an earlier name claimed the
+         * whole app while scanning four files.
+         */
+        const GEOMETRY = new RegExp('\\b(' + [
+            'padding', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
+            'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
+            'gap', 'rowGap', 'columnGap', 'width', 'height', 'minWidth', 'minHeight',
+            'maxWidth', 'maxHeight', 'borderRadius', 'flexBasis',
+        ].join('|') + "):\\s*(-?[1-9][0-9]*\\b|['\"]-?[\\d.]+px)");
+
+        const offenders = [];
+        for (const file of sourceFiles(path.join(SRC, 'components', 'ui'))) {
+            if (file.endsWith('.css')) continue;
+            stripComments(fs.readFileSync(file, 'utf8')).split('\n').forEach((line, index) => {
+                if (GEOMETRY.test(line)) {
+                    offenders.push(`${path.relative(SRC, file)}:${index + 1}: ${line.trim().slice(0, 60)}`);
+                }
+            });
+        }
 
         expect(offenders).toEqual([]);
     });

@@ -17,17 +17,41 @@ describe('Keyboard Shortcuts', () => {
             body: {settings: {}}
         }).as('getSettings');
 
-        // Mock tags API
-        cy.intercept('GET', '/api/tags', {
+        /*
+         * `/api/tag` and `/api/events/feed`, which are the URLs the app actually requests.
+         *
+         * These read `/api/tags` and `/api/events` before -- neither of which anything calls,
+         * so both mocks matched nothing and the real calls fell through.  In CI, where the
+         * React app is served with no API behind it, they failed and api.js raised an
+         * "Unexpected server response" toast, which then covered the search modal's input and
+         * failed an occlusion-sensitive assertion.  Locally the API answered and the spec
+         * passed, which is why it only ever broke on CI.
+         */
+        cy.intercept('GET', '/api/tag*', {
             statusCode: 200,
             body: {tags: []}
         }).as('getTags');
 
-        // Mock events API
-        cy.intercept('GET', '/api/events', {
+        cy.intercept('GET', '/api/events/feed*', {
             statusCode: 200,
-            body: {events: []}
+            // `now` as well as `events`: Events.js reads both off the response.
+            body: {events: [], now: new Date(0).toISOString()}
         }).as('getEvents');
+
+        /*
+         * The other two the home page calls.  `file_groups` is reached as
+         * `data['totals']['file_groups']`, so an empty object here would throw rather than
+         * toast -- the shape has to be right, which is why a blanket `{}` stub does not work.
+         */
+        cy.intercept('POST', '/api/files/search', {
+            statusCode: 200,
+            body: {file_groups: [], totals: {file_groups: 0}}
+        }).as('searchFiles');
+
+        cy.intercept('GET', '/api/files/worker_status', {
+            statusCode: 200,
+            body: {status: {}}
+        }).as('getWorkerStatus');
 
         // Mock search suggestions API
         cy.intercept('POST', '/api/search/suggestions', {
@@ -56,25 +80,13 @@ describe('Keyboard Shortcuts', () => {
             cy.get('[role="dialog"]').should('be.visible');
 
             /*
-             * Take down any toast before the assertion below, which is occlusion-sensitive.
-             *
-             * Toasts paint above modals on purpose -- z-index 400 against the modal stack's
-             * 200 -- so that an error raised while a modal is open stays visible.  The search
-             * modal is tall, so it sits near the top of the window, and a top-right toast
-             * covers the right-hand 192px of its 365px input.  Cypress occlusion-checks a
-             * `position: fixed` element, so `should('be.visible')` on that input fails.
-             *
-             * That is not this spec's subject.  It passed locally and failed in CI, where the
-             * React app is served with no API behind it: `/api/tag`, `/api/events/feed`,
-             * `/api/files/search` and `/api/files/worker_status` are not mocked here, they
-             * fail, and api.js raises "Unexpected server response".  The overlap itself is an
-             * accepted trade-off -- see the toast/modal note in ui.css -- so the environment is
-             * made quiet rather than the assertion weakened.
-             *
-             * Removed rather than dismissed by clicking: a click races the next failing call.
+             * Occlusion-sensitive: Cypress checks whether a `position: fixed` element is
+             * covered, and a toast at top-right covers the right-hand 192px of this 365px
+             * input.  Toasts paint above modals on purpose -- z-index 400 against the modal
+             * stack's 200 -- so an error raised while a modal is open stays visible, and that
+             * overlap is an accepted trade-off rather than something this spec should assert
+             * about.  The endpoints are all mocked in `beforeEach` so no toast is raised.
              */
-            cy.get('body').then(($body) => $body.find('.mantine-Notifications-root').remove());
-
             cy.get('[role="dialog"] input').should('be.visible');
         });
 

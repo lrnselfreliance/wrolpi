@@ -1249,6 +1249,29 @@ describe('a tag is legible in every theme, whatever color the user picked', () =
             expect($tag[0].getBoundingClientRect().height, 'height').to.be.at.least(26);
         });
     });
+
+    it("sets a tag's word within a fifth of the body text it sits beside", () => {
+        /*
+         * Matching Semantic was the wrong target for this one.  A tag is not an annotation on
+         * something else -- it is the whole content of its chip, and the thing a user scans a
+         * wall of them for -- so it wants to read as text, not as a footnote.  At 12.5px design
+         * against a 16px base it was 78% of the prose around it, and on the dashboard, where
+         * the tags ARE the content, that read as small.
+         *
+         * Expressed as a ratio rather than a pixel count so the assertion cannot be satisfied
+         * by the interface scale alone: 1.1 raised the tag to 13.75px and the prose to 17.6px
+         * at the same time, leaving the tag exactly as small next to it as before.
+         */
+        cy.mountUI(tags);
+
+        cy.get('.wrolpi-tag').first().should(($tag) => {
+            const tag = parseFloat(getComputedStyle($tag[0]).fontSize);
+            const body = parseFloat(getComputedStyle(Cypress.$('html')[0]).fontSize);
+            expect(tag / body, "the tag's share of body text").to.be.at.least(0.8);
+            // And is still a chip rather than prose in a colored box.
+            expect(tag / body, 'but not the same size as prose').to.be.at.most(0.95);
+        });
+    });
 });
 
 describe('a tag looks like a physical tag', () => {

@@ -401,8 +401,18 @@ html .wrolpi-searchbox-clear {
      * Tall enough for a full set of grouped suggestions -- directories, channels and
      * domains together run past 320px, and the last group was being clipped -- but
      * still capped so a long list cannot cover the page.
+     *
+     * 70vh, raised from 60.  The rem ceiling scales with the interface but a fraction of
+     * the VIEWPORT does not, so when the type grew 10% the rows grew with it and the cap
+     * did not: the full set now needs about 420px, and 60vh of a 660px-tall window is
+     * 396px, so the last group was clipped again -- the exact defect this comment already
+     * describes.  70vh is 462px there, and the 30rem ceiling still bounds it on a tall
+     * window, so it cannot cover the page either way.
+     *
+     * `directory-search.cy.js` is the regression test: it fails at 660px of viewport
+     * height and passes from 700px up, which is how the shortfall was measured.
      */
-    max-height: min(60vh, 30rem);
+    max-height: min(70vh, 30rem);
     overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--border);

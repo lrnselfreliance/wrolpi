@@ -54,6 +54,27 @@ describe('Keyboard Shortcuts', () => {
 
             // Search modal should open
             cy.get('[role="dialog"]').should('be.visible');
+
+            /*
+             * Take down any toast before the assertion below, which is occlusion-sensitive.
+             *
+             * Toasts paint above modals on purpose -- z-index 400 against the modal stack's
+             * 200 -- so that an error raised while a modal is open stays visible.  The search
+             * modal is tall, so it sits near the top of the window, and a top-right toast
+             * covers the right-hand 192px of its 365px input.  Cypress occlusion-checks a
+             * `position: fixed` element, so `should('be.visible')` on that input fails.
+             *
+             * That is not this spec's subject.  It passed locally and failed in CI, where the
+             * React app is served with no API behind it: `/api/tag`, `/api/events/feed`,
+             * `/api/files/search` and `/api/files/worker_status` are not mocked here, they
+             * fail, and api.js raises "Unexpected server response".  The overlap itself is an
+             * accepted trade-off -- see the toast/modal note in ui.css -- so the environment is
+             * made quiet rather than the assertion weakened.
+             *
+             * Removed rather than dismissed by clicking: a click races the next failing call.
+             */
+            cy.get('body').then(($body) => $body.find('.mantine-Notifications-root').remove());
+
             cy.get('[role="dialog"] input').should('be.visible');
         });
 

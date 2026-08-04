@@ -119,7 +119,7 @@ export function MapSearchView() {
     }
 
     return <React.Fragment>
-        <CardGroup minWidth={220}>
+        <CardGroup minWidth={275}>
             {results.map((place, i) =>
                 <MapPlaceCard key={`${place.name}-${place.lat}-${place.lon}-${i}`} place={place} index={i}/>
             )}

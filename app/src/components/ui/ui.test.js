@@ -946,6 +946,22 @@ describe('CardGroup', () => {
         expect(screen.getByText('Three')).toBeInTheDocument();
     });
 
+    it('gives a card 250px of track by default', () => {
+        /*
+         * Was 200.  Raised 25% because a card wall was reading too dense: at 1280px the grid
+         * ran five cards to a row where the pre-migration build ran four, and a video title
+         * had about two words per line.  It is the default rather than a per-page choice
+         * because every card wall in the app -- videos, archives, docs, files, the gallery --
+         * takes it, which is the point of it being a default.
+         *
+         * A phone is unaffected: one column below about 570px of content width either way.
+         */
+        const {container} = renderUI(<CardGroup><Card title='One'/></CardGroup>);
+
+        expect(container.querySelector('.wrolpi-card-group'))
+            .toHaveStyle({gridTemplateColumns: 'repeat(auto-fill, minmax(15.625rem, 1fr))'});
+    });
+
     it('lays cards out on a track no narrower than minWidth, in rem so it scales', () => {
         /*
          * The default suits file results; a group of wide cards raises it.  If the value were

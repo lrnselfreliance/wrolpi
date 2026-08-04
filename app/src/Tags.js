@@ -142,29 +142,41 @@ export function useTags() {
         </Group>
     }
 
+    /*
+     * The link carries no margin of its own.  It had `0.3em` either side, from when these were
+     * Semantic labels that had none -- but a tag already reserves a `margin-left` in ui.css for
+     * the point drawn outside its body, so that was 0.3em twice on top of the group's gap and
+     * the point's own room.  Two tags sat 34.7px apart where the point needs 18.4px.
+     */
     const TagLabelLink = ({name, props}) => {
         const to = getLocationStr({tag: name}, '/search');
-        const style = {marginLeft: '0.3em', marginRight: '0.3em'};
         try {
             // We prefer to use Link to avoid reloading the page, check if React Router is available, so we can use it.
             useNavigate();
-            return <Link to={to} style={style}>
+            return <Link to={to}>
                 <NameToTagLabel name={name} {...props}/>
             </Link>
         } catch {
             // React Router is not available, use anchor.
-            return <a href={to} style={style}>
+            return <a href={to}>
                 <NameToTagLabel name={name} {...props}/>
             </a>
         }
     }
 
-    const TagsLinkGroup = ({tagNames, ...props}) => {
+    const TagsLinkGroup = ({tagNames, style, ...props}) => {
         if (!tagNames || tagNames.length === 0) {
             return <React.Fragment/>;
         }
 
-        return <Group gap={6}>
+        /*
+         * `style` belongs to the group, not to each tag in it.  It used to go down with the rest
+         * of the props to every chip, so the dashboard's `marginTop` -- meant to space the row
+         * below its heading -- landed on all 34 tags and became 7.7px of extra space between
+         * every wrapped row.  The remaining props still reach the chips, which is how `onClick`
+         * gets there.
+         */
+        return <Group gap={6} style={style}>
             {tagNames.map(i => <TagLabelLink key={i} name={i} props={props}/>)}
         </Group>
     }

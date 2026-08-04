@@ -39,6 +39,18 @@ const renderTag = (name, tags) => render(
     </QueryContext.Provider>
 );
 
+// The same, for the group -- which is where a row's spacing is decided.
+const GroupProbe = ({tagNames, ...props}) => {
+    const {TagsLinkGroup} = useTags();
+    return <TagsLinkGroup tagNames={tagNames} {...props}/>;
+};
+
+const renderGroup = (tagNames, props = {}) => render(
+    <QueryContext.Provider value={queryContextFixture()}>
+        <GroupProbe tagNames={tagNames} {...props}/>
+    </QueryContext.Provider>
+);
+
 const tagOf = (name) => screen.getByText(name);
 
 /*
@@ -111,5 +123,62 @@ describe('a tag chip', () => {
         renderTag('Water');
 
         expect(await screen.findByText('Water')).toBeInTheDocument();
+    });
+});
+
+/*
+ * How far apart a row of tags sits.
+ *
+ * A tag already carries a `margin-left` in ui.css, and that one is structural: the point is
+ * drawn outside the body, so the margin is the room it needs and cannot be reclaimed.  Every
+ * other gap in a row was decoration on top of it, and measured on the dashboard the tags were
+ * 34.7px apart horizontally and 18.5px apart vertically -- of which only 18.4px was the point.
+ */
+describe('a row of tags', () => {
+    beforeEach(() => {
+        getTags.mockResolvedValue({
+            tags: [
+                {id: 1, name: 'Water', color: BRIGHT},
+                {id: 2, name: 'Archived', color: DARK},
+            ],
+        });
+        getRecentTags.mockResolvedValue({tags: []});
+    });
+
+    it('adds no margin of its own around a linked tag', async () => {
+        /*
+         * The link wrapper carried `0.3em` either side, from when these were Semantic labels
+         * that had no margin of their own.  It is 0.3em twice, plus the group's gap, plus the
+         * structural margin -- so two tags sat 34.7px apart where the point needs 17.3px, and
+         * a wall of tags on the dashboard read as loose.
+         */
+        renderGroup(['Water', 'Archived']);
+
+        const tag = await awaitColored('Water', BRIGHT);
+        // The link has to exist first, or `null.style` would be the failure rather than a margin.
+        const link = tag.closest('a');
+        expect(link).toBeTruthy();
+        expect(link.style.marginLeft).toBe('');
+        expect(link.style.marginRight).toBe('');
+    });
+
+    it('applies the caller-given spacing to the group, not to every tag in it', async () => {
+        /*
+         * The dashboard passes `marginTop` to space the row below its heading.  `TagsLinkGroup`
+         * spread its props all the way down to each chip, so that margin landed on all 34 tags
+         * -- which is not a margin above the row, it is 7.7px added between every wrapped row
+         * of it.  The tags were the only thing on the page whose rows were further apart than
+         * the group's own gap.
+         */
+        renderGroup(['Water', 'Archived'], {style: {marginTop: '0.5em'}});
+
+        const tag = await awaitColored('Water', BRIGHT);
+        // Not on the chip ...
+        expect(tag.style.marginTop).toBe('');
+
+        // ... and on the group, so the spacing the caller asked for still happens.
+        const group = tag.closest('.mantine-Group-root');
+        expect(group).toBeTruthy();
+        expect(group.style.marginTop).toBe('0.5em');
     });
 });

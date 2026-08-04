@@ -11,6 +11,7 @@
 
 import './ui.css';
 
+export * from './scale';
 export * from './Icon';
 export * from './Button';
 export * from './Feedback';

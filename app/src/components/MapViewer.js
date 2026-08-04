@@ -264,15 +264,15 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
     // every theme, same as the nav bar.
     const panelStyle = {
         position: "absolute",
-        top: 10,
-        left: 10,
+        top: "0.625rem",
+        left: "0.625rem",
         zIndex: 1000,
         background: "var(--panel)",
         border: "1px solid var(--border)",
         color: "var(--text)",
-        maxHeight: "calc(100vh - 120px)",
+        maxHeight: "calc(100vh - 7.5rem)",
         overflowY: "auto",
-        minWidth: iconOnly ? 0 : 200,
+        minWidth: iconOnly ? 0 : "12.5rem",
         fontSize: '0.8125rem',
     };
 
@@ -280,10 +280,10 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         ? {
             padding: 0, cursor: "pointer", userSelect: "none",
             display: "flex", alignItems: "center", justifyContent: "center",
-            width: 40, height: 40,
+            width: "2.5rem", height: "2.5rem",
         }
         : {
-            padding: "8px 12px", cursor: "pointer", fontWeight: 600,
+            padding: "0.5rem 0.75rem", cursor: "pointer", fontWeight: 600,
             display: "flex", justifyContent: "space-between", alignItems: "center",
             borderBottom: collapsed ? "none" : "1px solid var(--border)", userSelect: "none",
         };
@@ -302,9 +302,9 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
                     <Icon name={collapsed ? "chevron right" : "chevron down"} size="small"/>
                 </>}
         </div>
-        {!collapsed && <div style={{padding: "4px 12px 8px"}}>
+        {!collapsed && <div style={{padding: "0.25rem 0.75rem 0.5rem"}}>
             {Object.keys(LAYER_GROUPS).map(name =>
-                <div key={name} style={{padding: "2px 0"}}>
+                <div key={name} style={{padding: "0.125rem 0"}}>
                     <Checkbox
                         label={name}
                         checked={visibility[name]}
@@ -312,7 +312,7 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
                     />
                 </div>
             )}
-            <div style={{borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6}}>
+            <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
                 <Toggle
                     label={scaleUnit === "imperial" ? "Imperial" : "Metric"}
                     checked={scaleUnit === "imperial"}
@@ -334,31 +334,31 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
     return <div style={{
         position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
         zIndex: 1002, background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)",
-        padding: 16, minWidth: 250,
+        padding: "1rem", minWidth: "15.625rem",
     }}>
-        <div style={{fontWeight: 600, marginBottom: 8}}>Add Pin</div>
-        <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
+        <div style={{fontWeight: 600, marginBottom: "0.5rem"}}>Add Pin</div>
+        <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
         <TextInput
             placeholder="Label"
             value={label}
             onChange={e => setLabel(e.target.value)}
             autoFocus
             onKeyDown={e => e.key === "Enter" && label.trim() && onSubmit(label.trim(), color)}
-            style={{marginBottom: 8}}
+            style={{marginBottom: "0.5rem"}}
         />
-        <div style={{display: "flex", gap: 6, marginBottom: 12}}>
+        <div style={{display: "flex", gap: "0.375rem", marginBottom: "0.75rem"}}>
             {PIN_COLORS.map(c =>
                 <div
                     key={c}
                     onClick={() => setColor(c)}
                     style={{
-                        width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                        width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: c, cursor: "pointer",
                         border: color === c ? "3px solid var(--text)" : "2px solid var(--border)",
                     }}
                 />
             )}
         </div>
-        <div style={{display: "flex", gap: 8, justifyContent: "flex-end"}}>
+        <div style={{display: "flex", gap: "0.5rem", justifyContent: "flex-end"}}>
             <Button role='cancel' size='sm' onClick={onCancel}>Cancel</Button>
             <Button
                 role='primary'
@@ -484,8 +484,8 @@ function MapSearch({map}) {
     // Floating search chrome over the canvas — page interface, not map data, so it is
     // never filtered.  Flat surfaces: bordered, no box-shadow, token colors only.
     return <div ref={containerRef} style={{
-        position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
-        zIndex: 5, width: 320, maxWidth: "calc(100% - 100px)",
+        position: "absolute", top: "0.625rem", left: "50%", transform: "translateX(-50%)",
+        zIndex: 5, width: "20rem", maxWidth: "calc(100% - 100px)",
     }}>
         <input
             type="text"
@@ -495,20 +495,20 @@ function MapSearch({map}) {
             onFocus={() => results.length > 0 && setShowResults(true)}
             onKeyDown={handleKeyDown}
             style={{
-                width: "100%", padding: "8px 12px", border: "1px solid var(--border)",
+                width: "100%", padding: "0.5rem 0.75rem", border: "1px solid var(--border)",
                 fontSize: '0.875rem', background: "var(--panel)", color: "var(--text)",
             }}
         />
         {showResults && results.length > 0 && <div style={{
             background: "var(--panel)", border: "1px solid var(--border)", borderTop: "none",
-            maxHeight: 300, overflowY: "auto",
+            maxHeight: "18.75rem", overflowY: "auto",
         }}>
             {results.map((r, i) => <div
                 key={i}
                 onClick={() => handleSelect(r)}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--head)"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", borderBottom: "1px solid var(--border)"}}
             >
                 <div style={{fontWeight: 500}}>{r.name}</div>
                 {resultSubtext(r) && <div style={{fontSize: '0.6875rem', color: "var(--muted)"}}>{resultSubtext(r)}</div>}
@@ -933,14 +933,14 @@ export default function MapViewer() {
                 top: contextMenu.y,
                 zIndex: 1001,
                 background: "white",
-                borderRadius: 6,
+                borderRadius: "0.375rem",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                padding: "4px 0",
+                padding: "0.25rem 0",
                 fontSize: '0.8125rem',
-                minWidth: 180,
+                minWidth: "11.25rem",
             }}
         >
-            <div style={{padding: "6px 12px", color: "#666", fontSize: '0.75rem', borderBottom: "1px solid #eee"}}>
+            <div style={{padding: "0.375rem 0.75rem", color: "#666", fontSize: '0.75rem', borderBottom: "1px solid #eee"}}>
                 {(() => {
                     const map = mapRef.current;
                     const zoom = map ? map.getZoom() : 10;
@@ -949,7 +949,7 @@ export default function MapViewer() {
                 })()}
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleCopyCoords}
@@ -957,7 +957,7 @@ export default function MapViewer() {
                 Copy GPS coordinates
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleExportPng}
@@ -965,7 +965,7 @@ export default function MapViewer() {
                 Export as PNG
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
@@ -973,7 +973,7 @@ export default function MapViewer() {
                 Add Pin Here
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleSetDefaultLocation}

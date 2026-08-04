@@ -1,6 +1,7 @@
 import React from 'react';
 import {Card as MCard, Tabs as MTabs, Accordion as MAccordion, Breadcrumbs} from '@mantine/core';
 import {Icon} from './Icon';
+import {pxToRem} from './scale';
 
 /*
  * Surfaces and structure: headers, panels, cards, statistics, tabs, accordions,
@@ -225,7 +226,7 @@ export function CardGroup({children, minWidth = 200, className, style, ...props}
              * The prop stays a px number: seven call sites pass one, and a caller thinking in
              * px is thinking about the unscaled design.
              */
-            gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth / 16}rem, 1fr))`,
+            gridTemplateColumns: `repeat(auto-fill, minmax(${pxToRem(minWidth)}, 1fr))`,
             ...style,
         }}
         {...props}

@@ -784,8 +784,9 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
  * A tag is a label with a physical shape: a pointed left edge and an eyelet, like a tag
  * tied to a garment.  The point is a square rotated 45 degrees behind the left edge -- its
  * right half sits under the body in the same color and merges, leaving the left half
- * showing as the point.  At 20px a side its diagonal is 28px, which is the body's height,
- * so the two edges of the point meet the body exactly at its corners.
+ * showing as the point.  At 21px a side its diagonal is 29.7px, within half a pixel of the
+ * body's 30.2px height, so the two edges of the point meet the body at its corners.  (Design
+ * px throughout: the interface scale multiplies both, so the match holds at any size.)
  *
  * The eyelet is drawn in `currentColor`, so it reads as a hole punched through the tag on
  * any surface, filled or outlined, without needing to know what is behind it.
@@ -794,14 +795,24 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 .wrolpi-tag {
     position: relative;
     /*
-     * Room for the point, which is drawn outside the body: half its diagonal (14.1px) plus
-     * the 1px it is nudged left, rounded up.
+     * Larger than a plain label, which is the one place the two part company.  A label
+     * annotates something else -- the count beside a tab's name, the page number in the CBZ
+     * viewer -- and wants to sit under the text it belongs to.  A tag is the whole content of
+     * its chip and the thing a wall of them is scanned for, so at 78% of body text it read as
+     * a footnote on the dashboard, where the tags are the page.
      */
-    margin-left: 1rem;
+    font-size: 0.875rem;
+    /*
+     * Room for the point, which is drawn outside the body: half its diagonal (14.85px), plus
+     * the 1px it is nudged left, plus the 1px border it is positioned inside of, rounded up.
+     * This is the one length here that grew: 16px covered the smaller point, and the larger
+     * one overhung it by a third of a pixel, which is enough to clip against the tag before it.
+     */
+    margin-left: 1.0625rem;
     /* Tags wrap, and a wrapped row was sitting on the row above it. */
     margin-bottom: 0.3125rem;
     /*
-     * The point is centred on the left edge, so its inner half covers the body's first 10px
+     * The point is centred on the left edge, so its inner half covers the body's first 10.5px
      * -- and a positioned pseudo-element paints above the parent's text, not behind it, so
      * without this the first letter is hidden under the point.  Semantic's tag label carried
      * the same asymmetry (`padding-left: 1.5em`) for the same reason.
@@ -814,8 +825,13 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     position: absolute;
     top: 50%;
     right: 100%;
-    width: 1.25rem;
-    height: 1.25rem;
+    /*
+     * Tied to the body's height, not chosen: the diagonal has to equal it or the point's two
+     * edges meet the body short of its corners.  So this grew with the font -- 21px a side for
+     * the 30.2px body, where 20px served the 28.2px body the tag had at 12.5px text.
+     */
+    width: 1.3125rem;
+    height: 1.3125rem;
     /*
      * Nudged 1px left of where `right: 100%` puts it.  That property positions against the
      * containing block's *padding* box, and the body carries a 1px border, so a square centred

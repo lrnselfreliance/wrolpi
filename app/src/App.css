@@ -216,66 +216,18 @@ div.inverted {
     background-color: #1B1C1D;
 }
 
-.toggle {
-    position: relative;
-    display: inline-block;
-    width: 3.0625rem;
-    height: 1.4375rem;
-}
-
-.toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgb(166, 166, 166);
-    -webkit-transition: .4s;
-    transition: .4s;
-    border-radius: 2.125rem;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 1.375rem;
-    width: 1.375rem;
-    left: 0;
-    bottom: 0;
-    background-color: white;
-    -webkit-transition: .4s;
-    transition: .4s;
-    border-radius: 50%;
-}
-
-.slider.disabled:before {
-    background-color: #CCCCCC;
-}
-
-input:checked + .slider {
-    background-color: #6435C9FF;
-}
-
-input.inverted:checked + .slider.inverted {
-    background-color: #6435C9AA;
-}
-
-input.disabled + .slider {
-    background-color: rgb(147, 147, 147);
-}
-
-input:checked + .slider:before {
-    -webkit-transform: translateX(26px);
-    -ms-transform: translateX(26px);
-    transform: translateX(26px);
-}
+/*
+ * The hand-rolled `.toggle` / `.slider` switch is gone.
+ *
+ * Nothing referenced either class: `Toggle` is a Mantine Switch, and the only remaining
+ * matches for the words were the `classList.toggle` DOM method and the controller's own
+ * templates, which do not load this stylesheet.
+ *
+ * It is deleted rather than finished because it was already half-converted and broken: the
+ * track and knob became rem while the checked-state travel stayed `translateX(26px)`, so on a
+ * 54px track the thumb would have stopped ~4px short.  Dead CSS that is also wrong is a trap
+ * for whoever revives it, and it also hardcoded #6435C9 and white, which no theme can reach.
+ */
 
 .inverted-progress-text.ui.indicating.progress .bar > .progress,
 .inverted-progress-text.ui.progress > .label {
@@ -306,7 +258,8 @@ input:checked + .slider:before {
 }
 
 .preview-toolbar-tags {
-    flex: 1 1 200px;
+    /* rem so the basis grows with the tags it holds. */
+    flex: 1 1 12.5rem;
     min-width: 0;
 }
 

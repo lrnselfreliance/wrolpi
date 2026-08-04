@@ -30,6 +30,92 @@ const uiScale = () => {
     return value;
 };
 
+describe('the interface scale actually reaches what it is supposed to', () => {
+    /*
+     * Every other check on the scale reads source text, which proves a declaration says `rem`
+     * and nothing about whether the browser then paints a larger control.  This is the one
+     * that measures, and it is the reason the source guards are worth trusting: it fails if
+     * `--ui-scale` stops being applied to the root, if Mantine's `theme.scale` is set and
+     * cancels it, or if a rule someone adds later pins a px size over the top.
+     */
+    /*
+     * The root of the application-under-test, not the runner's.  Cypress mounts the
+     * component in an iframe and loads the stylesheets there, so `window.top` reads the
+     * runner's own document -- where `--ui-scale` is not declared, so it came back NaN.
+     * `Cypress.$` is scoped to the AUT.
+     */
+    const root = () => Cypress.$('html')[0];
+
+    it('makes the root font-size the declared multiple of the browser default', () => {
+        cy.mountUI(<Button>Save</Button>);
+
+        cy.get('.mantine-Button-root').should(() => {
+            const scale = parseFloat(getComputedStyle(root()).getPropertyValue('--ui-scale'));
+            expect(scale, 'the scale is declared').to.be.within(0.5, 3);
+            // 16px is the browser default the percentage resolves against.
+            expect(parseFloat(getComputedStyle(root()).fontSize), 'root font-size')
+                .to.be.closeTo(16 * scale, 0.5);
+        });
+    });
+
+    it('grows a Mantine control and our own text together when the scale changes', () => {
+        /*
+         * Both halves in one measurement, because the failure that matters is them
+         * DISAGREEING: Mantine's sizes are `calc(Xrem * var(--mantine-scale))` and ours are
+         * plain rem, so a `theme.scale` of 1.1 alongside a 110% root would leave Mantine's
+         * buttons at the old size beside 10% larger card text.
+         */
+        cy.mountUI(<Card title='Rainwater Harvesting' meta='engineering775.com'/>);
+
+        /*
+         * DOUBLE whatever the scale currently is, rather than setting it to 2.  Setting the
+         * literal gave a ratio of 1.818 -- 2 divided by the 1.1 already in effect -- so the
+         * first version of this failed against a perfectly working scale.
+         */
+        const doubled = () => {
+            const current = parseFloat(getComputedStyle(root()).getPropertyValue('--ui-scale'));
+            root().style.setProperty('--ui-scale', String(current * 2));
+        };
+
+        cy.get('.wrolpi-card-title').should(($title) => {
+            const before = parseFloat(getComputedStyle($title[0]).fontSize);
+            expect(before, 'the card title has a size to grow from').to.be.greaterThan(1);
+            doubled();
+            const after = parseFloat(getComputedStyle($title[0]).fontSize);
+            root().style.removeProperty('--ui-scale');
+
+            // A px declaration would not have moved at all.
+            expect(after / before, 'our own text tracks the scale').to.be.closeTo(2, 0.05);
+        });
+
+        cy.mountUI(<Button>Save</Button>);
+        cy.get('.mantine-Button-root').should(($button) => {
+            const before = $button[0].getBoundingClientRect().height;
+            doubled();
+            const after = $button[0].getBoundingClientRect().height;
+            root().style.removeProperty('--ui-scale');
+
+            expect(after / before, "Mantine's controls track it too, by the same factor")
+                .to.be.closeTo(2, 0.05);
+        });
+    });
+
+    it('leaves a hairline a hairline at any scale', () => {
+        // The inverse, and the whole reason rem was chosen over `zoom`.
+        cy.mountUI(<Panel>Structure</Panel>);
+
+        cy.get('.wrolpi-panel').should(($panel) => {
+            const before = parseFloat(getComputedStyle($panel[0]).borderTopWidth);
+            root().style.setProperty('--ui-scale', '2');
+            const after = parseFloat(getComputedStyle($panel[0]).borderTopWidth);
+            root().style.removeProperty('--ui-scale');
+
+            expect(before, 'the panel has a hairline border').to.be.within(0.5, 2);
+            expect(after, 'and it does not grow with the type').to.be.closeTo(before, 0.05);
+        });
+    });
+});
+
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
     const value = hex.replace('#', '');

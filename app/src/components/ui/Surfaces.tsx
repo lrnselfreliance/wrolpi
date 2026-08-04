@@ -207,14 +207,19 @@ export function Card({media, title, meta, children, actions, onClick, color, cla
 
 export interface CardGroupProps extends React.HTMLAttributes<HTMLDivElement> {
     /**
-     * The narrowest a card may be laid out.  `auto-fill` rather than `auto-fit`, so a group
-     * of two cards in a wide column keeps them card-sized instead of stretching each to half
-     * the page.
+     * The narrowest a card may be laid out, in px at the unscaled design size.  `auto-fill`
+     * rather than `auto-fit`, so a group of two cards in a wide column keeps them card-sized
+     * instead of stretching each to half the page.
+     *
+     * The default was 200 and is 250: a card wall read too dense, running five to a row at
+     * 1280px where the pre-migration build ran four, which left a video title about two words
+     * wide.  Raising the default rather than each page is the point of it being a default --
+     * videos, archives, docs, files and the gallery all take it.
      */
     minWidth?: number;
 }
 
-export function CardGroup({children, minWidth = 200, className, style, ...props}: CardGroupProps) {
+export function CardGroup({children, minWidth = 250, className, style, ...props}: CardGroupProps) {
     return <div
         className={['wrolpi-card-group', className].filter(Boolean).join(' ')}
         style={{

@@ -333,7 +333,14 @@ export function FilesView(
 ) {
     const {view} = useSearchView();
 
-    const paginator = <div style={{marginTop: '2em'}}>
+    /*
+     * No margin of its own.  Videos, Archives, Docs and Files all render this as a top-level block
+     * of the page, and the page spaces its blocks (see `wrolpi-stack`) -- so a `marginTop: 2em`
+     * here added to that and put the pager twice as far from the results as anything else on the
+     * page sits from its neighbour.  Zim keeps its own paginator, inside an accordion panel that
+     * does not stack, and is untouched.
+     */
+    const paginator = <div>
         <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
     </div>;
 
@@ -817,7 +824,9 @@ export function SearchControlBar(
         inputRef={inputRef}
     />;
 
-    return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '1em'}}>
+    // No `marginBottom`: this is a top-level block on Videos, Archives and Docs, and the page
+    // spaces its own blocks.  Carrying one here added to that gap.
+    return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em'}}>
         {viewButton}
         <div style={{flexGrow: 1, minWidth: 0}}>{searchInput}</div>
         <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}
@@ -898,7 +907,8 @@ export function FilesSearchView({
     }
 
     return <>
-        {showView && <div style={{marginBottom: '1em'}}>{viewButton}</div>}
+        {/* No margin: another top-level block, spaced by the page. */}
+        {showView && <div>{viewButton}</div>}
         {body}
         {deepHint}
         {paginator}

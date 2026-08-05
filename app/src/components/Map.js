@@ -649,7 +649,9 @@ export function MapRoute() {
         {text: 'Manage', to: '/map/manage', key: 'manage'},
     ];
 
-    return <div style={{marginTop: '2em'}}>
+    // `wrolpi-stack`: as in ZimRoute, this route wraps its own content instead of using
+    // PageContainer, so the spacing below the tab bar is this element's to provide.
+    return <div className='wrolpi-stack' style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<MapPage/>}/>

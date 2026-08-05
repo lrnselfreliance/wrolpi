@@ -660,13 +660,29 @@ export function TabLinks({links, right}) {
     </TabBar>
 }
 
+/**
+ * The outer wrapper of a page, and the thing that decides how far apart its blocks sit.
+ *
+ * A page is a stack of panels -- the dashboard is five, Status six, Settings six -- and they used
+ * to share edges, because nothing anywhere put space between them.  The space belongs here rather
+ * than on the panel: how far a panel sits from its neighbour is a property of the two being
+ * stacked, not of the panel, which also appears inside modals and grids that space it themselves.
+ *
+ * `.wrolpi-stack` spaces every top-level block of the page, whatever it is -- which is why it
+ * works through the `Media` wrappers that several pages put around a panel.  It spaces the
+ * wrapper, and the wrapper is the sibling.
+ */
 export function PageContainer(props) {
     return <>
         <Media at='mobile'>
-            <div style={{marginTop: '1em', padding: 0}}>{props.children}</div>
+            <div className='wrolpi-stack' style={{marginTop: '1em', padding: 0}}>
+                {props.children}
+            </div>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <div style={{marginTop: '1em', padding: '1em'}}>{props.children}</div>
+            <div className='wrolpi-stack' style={{marginTop: '1em', padding: '1em'}}>
+                {props.children}
+            </div>
         </Media>
     </>;
 }
@@ -674,7 +690,10 @@ export function PageContainer(props) {
 export function CardGroupCentered(props) {
     // One responsive grid; it centres what it cannot fill, so the two viewports no
     // longer need separate markup.
-    return <div style={{marginTop: '1em'}}>
+    //
+    // No `marginTop`: this is a top-level block on every module page, and the page's stack
+    // spaces it.  Carrying one added to that gap.
+    return <div>
         <CardGroup>{props.children}</CardGroup>
     </div>
 }

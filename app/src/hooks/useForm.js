@@ -356,8 +356,15 @@ export function InputForm({
         </Message>;
     }
 
-    return <>
-        <label htmlFor={`${name}_input`}>
+    /*
+     * One element, not a fragment: every caller that puts an InputForm in a grid or flex
+     * container was getting the label and the input laid out as two separate items -- the
+     * input beside its own label rather than under it.  The label is block with the same
+     * 4px gap the migrated fields (Download.js FieldLabel) use, so an InputForm and a
+     * DestinationForm side by side line their inputs up at the same height.
+     */
+    return <div>
+        <label htmlFor={`${name}_input`} style={{display: 'block', marginBottom: 4}}>
             <b>{label} {required && <RequiredAsterisk/>}</b>
             {helpContent &&
                 <InfoPopup
@@ -375,7 +382,7 @@ export function InputForm({
             />
         </div>
         {messageElm}
-    </>
+    </div>
 }
 
 export function NumberInputForm({

@@ -968,7 +968,7 @@ describe('Form Components', () => {
             );
         });
 
-        it('renders the label as a block above the input', () => {
+        it('renders the label as a block above the input, with the gap FieldLabel uses', () => {
             const form = createMockForm({name: ''});
 
             renderWithProviders(
@@ -980,7 +980,9 @@ describe('Form Components', () => {
             );
 
             const label = screen.getByText(/Channel Name/).closest('label');
-            expect(label).toHaveStyle({display: 'block'});
+            // Both halves of the alignment: without the margin, an InputForm beside a
+            // DestinationForm starts its input 4px higher.
+            expect(label).toHaveStyle({display: 'block', marginBottom: '4px'});
         });
     });
 

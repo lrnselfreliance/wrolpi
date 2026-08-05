@@ -378,9 +378,10 @@ export function ThemeSamplePage() {
                 </div>
             </Panel>
             <p style={{fontSize: '0.75rem', color: 'var(--muted)'}}>
-                The disc masks the rule behind it and is painted with <code>--panel</code>, so it
-                only disappears into the surface on a Panel — on any other ground it reads as a
-                chip. Below the tablet breakpoint the halves stack and the rule turns horizontal.
+                The rule runs down, stops at the word, and picks up below it. That break is made
+                by painting the word with <code>--panel</code>, so it only disappears into the
+                surface on a Panel — on any other ground the paint reads as a chip. Below the
+                tablet breakpoint the halves stack and the rule turns horizontal.
             </p>
         </Section>
 

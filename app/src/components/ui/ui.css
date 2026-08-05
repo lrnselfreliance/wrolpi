@@ -1404,40 +1404,46 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     padding: 1.5rem 1rem;
 }
 
-.wrolpi-or-split > * + * {
+/*
+ * `:not(.wrolpi-or-label)` on both sides.  The label is a third child of the grid -- absolutely
+ * positioned, so it takes no column, but `> * + *` still matches it and gave the word a 1px rule
+ * down its own left edge, a stray line beside "OR" rather than the one running behind it.
+ */
+.wrolpi-or-split > *:not(.wrolpi-or-label) + *:not(.wrolpi-or-label) {
     border-left: 1px solid var(--border);
 }
 
 /*
- * The "Or" sits ON the rule, in a disc that masks the line behind it.  `--panel` because that is
- * what the surrounding Panel is painted with; on any other surface the disc would show as a chip.
+ * The "Or" sits ON the rule, breaking it rather than being enclosed by it -- the rule runs down,
+ * stops at the word, and picks up below it.
+ *
+ * The break is made by painting the word with `--panel`, which is what the surrounding Panel is
+ * painted with, so the line simply ends where the word begins.  That means the label carries no
+ * shape of its own: no border and no radius, only enough padding to open the gap.  On any surface
+ * that is not a Panel the paint would show as a chip, which is the one thing to know before
+ * reusing this.
  */
 .wrolpi-or-label {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
+    /* Vertical padding opens the gap in the rule; horizontal keeps the halves off the word. */
+    padding: 0.375rem 0.5rem;
     background: var(--panel);
-    border: 1px solid var(--border);
     color: var(--muted);
     font-size: 0.8125rem;
     font-weight: 600;
     text-transform: uppercase;
 }
 
-/* Stacked on a phone: the rule turns horizontal, and the disc rides it. */
+/* Stacked on a phone: the rule turns horizontal, and the word breaks it there instead. */
 @media (max-width: 699px) {
     .wrolpi-or-split {
         grid-template-columns: 1fr;
     }
 
-    .wrolpi-or-split > * + * {
+    .wrolpi-or-split > *:not(.wrolpi-or-label) + *:not(.wrolpi-or-label) {
         border-left: none;
         border-top: 1px solid var(--border);
     }

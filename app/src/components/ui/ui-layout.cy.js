@@ -955,19 +955,37 @@ describe('a progress bar has room for the label inside it', () => {
         });
     });
 
+    /*
+     * What the track really separates from, per theme, and NOT a single floor: the monochrome
+     * themes collapse the surface ramp, so one number either lets light and dark regress or
+     * fails night for being what it deliberately is.  These are the measured ratios rounded
+     * down, so each theme is held to its own behaviour -- night's near-flat 1.05 / 1.01 is
+     * recorded as such rather than passed off as an edge.  See the note in ui.css for why
+     * night cannot have a brighter track: the label crossing it drops below 4.5 if it does.
+     */
+    const trackFloors = {
+        light: {panel: 1.2, page: 1.1},
+        dark: {panel: 1.2, page: 1.08},
+        amber: {panel: 1.3, page: 1.4},
+        night: {panel: 1.04, page: 1.005},
+    };
+
     themeNames.forEach((theme) => {
         it(`draws no outline of its own in ${theme}, and is the size it was with one`, () => {
             /*
-             * The border came off.  Both halves matter: the bar must not be the 1px smaller
-             * inside that removing an outline usually makes it -- it is not, because
-             * `box-sizing: border-box` is global and the declared height was always the outer
-             * box -- and the empty part of the track has to keep an edge of its own now that
-             * no line is drawing one, which is why the track paints `--head` rather than the
-             * `--bg` / `--panel` pair that a bar sits on.
+             * The border came off, and the bar must not be the 1px smaller inside that
+             * removing an outline usually makes it -- it is not, because `box-sizing:
+             * border-box` is global and the declared size was always the outer box.
+             *
+             * The bar is mounted in a wrapper NARROWER than its min-width so that the floor is
+             * exercised by layout.  Reading `style.minWidth` instead, as the first version of
+             * this did, only repeats the declaration back: it is the same string whether or not
+             * the box it produces is right, so a content-box regression would have passed.
              *
              * Measured against `rem`, not px: 1.375rem and 7.5rem move with `--ui-scale`.
              */
-            cy.mountUI(bar({percent: 40, label: 'CPU Usage'}), {theme});
+            cy.mountUI(<Panel><div style={{width: 40}}><Progress percent={40} label='CPU'/></div></Panel>,
+                {theme});
 
             cy.get('.wrolpi-progress').should(($bar) => {
                 const style = getComputedStyle($bar[0]);
@@ -976,20 +994,39 @@ describe('a progress bar has room for the label inside it', () => {
                         .to.equal('0px'));
 
                 const rem = 16 * uiScale();
-                expect($bar[0].getBoundingClientRect().height, 'the bar is the height it was')
-                    .to.be.closeTo(1.375 * rem, 0.5);
-                expect(parseFloat(style.minWidth), 'and the width it was')
-                    .to.be.closeTo(7.5 * rem, 0.5);
+                const box = $bar[0].getBoundingClientRect();
+                expect(box.height, 'the bar is the height it was').to.be.closeTo(1.375 * rem, 0.5);
+                expect(box.width, 'and no narrower than it was, laid out against a 40px parent')
+                    .to.be.at.least(7.5 * rem - 0.5);
             });
+        });
 
-            // The Panel the bar sits on, which is what the track has to stay off.
+        it(`separates the empty track from what the bar sits on in ${theme}`, () => {
+            /*
+             * The other half of removing the border: with no line around it, a bar at 0% is
+             * only the track, so the track has to be off BOTH surfaces a bar lands on -- a
+             * Panel on Status and Downloads, the page itself for the overall upload bar.
+             */
+            cy.mountUI(bar({percent: 40, label: 'CPU Usage'}), {theme});
+
             cy.get('.wrolpi-progress').should(($bar) => {
                 const track = getComputedStyle($bar[0]).backgroundColor;
-                const panel = getComputedStyle($bar[0].closest('.wrolpi-panel')).backgroundColor;
                 expect(track, 'the track paints a surface of its own')
                     .to.not.match(/^rgba\(.*,\s*0(\.0+)?\)$/);
-                expect(contrast(toRgb(track), toRgb(panel)), 'track against the panel under it')
-                    .to.be.greaterThan(1.05);
+
+                const panel = getComputedStyle($bar[0].closest('.wrolpi-panel')).backgroundColor;
+                expect(contrast(toRgb(track), toRgb(panel)), 'track against a Panel under it')
+                    .to.be.at.least(trackFloors[theme].panel);
+
+                /*
+                 * The page is read from `--bg`, not from the root's backgroundColor: `body`
+                 * carries the page color and the root element carries none, so computing it
+                 * gives `rgba(0, 0, 0, 0)` and any comparison against it is unfalsifiable.
+                 */
+                const page = hexToRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--bg').trim());
+                expect(contrast(toRgb(track), page), 'track against the page under it')
+                    .to.be.at.least(trackFloors[theme].page);
             });
         });
     });

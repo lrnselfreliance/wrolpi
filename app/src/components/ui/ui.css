@@ -1161,11 +1161,13 @@ html .mantine-Notification-closeButton:hover {
  * band slides from `margin-left: -35%` to `100%` in full view, so the animation ran from
  * outside the left edge to outside the right one, painting over whatever sat beside it.
  *
- * No border: the track is drawn by its own fill instead, so `--head` rather than `--bg`.
- * A bar sits on a Panel as often as on the page, and `--bg` is invisible against one of
- * those two by definition -- `--head` is off both in every theme.  Height and min-width
- * are the outer box (`box-sizing: border-box` is global), so dropping the 1px border left
- * the bar exactly the size it was.
+ * No border, so the EMPTY part of the track has to be its own edge.  A bar sits on a Panel
+ * (Status, Downloads) as often as on the page (the overall upload bar), and `--bg` is by
+ * definition invisible against one of those two, so the track is `--head`: 1.14 against the
+ * page and 1.25 against a Panel in light, 1.10 / 1.24 in dark.
+ *
+ * Height and min-width are the outer box -- `box-sizing: border-box` is global -- so
+ * dropping the 1px border left the bar exactly the size it was.
  */
 .wrolpi-progress {
     position: relative;
@@ -1267,6 +1269,21 @@ html .mantine-Notification-closeButton:hover {
  */
 html[data-theme="light"] .wrolpi-progress-fill {
     filter: brightness(1.75) saturate(0.55);
+}
+
+/*
+ * The monochrome themes collapse the surface ramp, so `--head` barely separates from what
+ * the bar sits on: in amber 1.11 against a Panel and 1.04 against the page, in night 1.05
+ * and 1.01 -- a 0% bar has next to no silhouette.  Amber can afford a brighter track and
+ * takes one; night cannot, and MEASURED is why.  The label crosses the empty track, and
+ * against night's `--text` the candidates go 5.25 at `--head`, 4.22 at `--table-line`,
+ * 3.42 at `--border` -- everything with a visible edge is below the 4.5 the label needs.
+ * A hairline would buy the edge back, but a hairline is the border this removed.
+ *
+ * So night's empty track is deliberately near-flat, and the bar's own fill is what shows.
+ */
+html[data-theme="amber"] .wrolpi-progress {
+    background: var(--table-line);
 }
 
 /* Night: a mostly-full bar must not become a large bright surface. */

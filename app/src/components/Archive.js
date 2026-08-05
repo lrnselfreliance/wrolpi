@@ -498,8 +498,9 @@ export function DomainsPage() {
         }
     }, {enableOnFormTags: false});
 
-    // Header section matching ChannelsPage pattern
-    const header = <div style={{marginBottom: '1em', display: 'flex', flexWrap: 'wrap', gap: '1em', alignItems: 'center'}}>
+    // Header section matching ChannelsPage pattern.  No `marginBottom`: this is a top-level block
+    // of the page, and the page's stack spaces it -- its own margin was added to that gap.
+    const header = <div style={{display: 'flex', flexWrap: 'wrap', gap: '1em', alignItems: 'center'}}>
         <div style={{flex: '1 1 240px'}}>
             <SearchInput
                 placeholder='Domain filter...'
@@ -987,7 +988,13 @@ function ArchiveSettingsPage() {
         onClick={() => navigator.clipboard.writeText('url')}
     />;
 
-    return <PageContainer>
+    /*
+     * A fragment, not a `PageContainer`.  `ArchiveRoute` already wraps its `<Routes>` in one, and
+     * a second applies its `margin-top: 1em` and `padding: 1em` again -- so this page sat 1em
+     * lower and 1em further in on all four sides than /archives/domains beside it.  As a fragment
+     * these panels become blocks of the route's own page stack, which spaces them.
+     */
+    return <>
         <Panel>
             <Header as='h3'>Archive Downloader Config</Header>
 
@@ -1081,7 +1088,7 @@ function ArchiveSettingsPage() {
                    action={urlFieldNameClipboardButton}
             />
         </Panel>
-    </PageContainer>
+    </>
 }
 
 function ArchivesPage() {

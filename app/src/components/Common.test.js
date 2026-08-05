@@ -1,4 +1,6 @@
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import {act, render, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {
@@ -724,4 +726,85 @@ describe('PageContainer', () => {
         expect(stacks).toHaveLength(2);
         stacks.forEach(stack => expect(stack.textContent).toBe('Body'));
     });
+
+    it('is never rendered by a page that a PageContainer already wraps', () => {
+        /*
+         * `PageContainer` carries `margin-top: 1em` and `padding: 1em`, so nesting one inside
+         * another applies both twice: the page is pushed 1em further down and inset 1em further
+         * in on all four sides than every other page in the app.  `/archives/settings` did this
+         * -- `ArchiveRoute` wraps its `<Routes>` in one, and `ArchiveSettingsPage` wrapped itself
+         * in another -- and read as "more margin than /archives/domains", which is exactly what
+         * it was.
+         *
+         * Nothing about a doubled margin throws, so this is a source scan.  It reads each route
+         * wrapper (a `PageContainer` holding `<Routes>` or `<Outlet/>`), takes the components it
+         * routes to, and checks the ones defined in the same file -- which is where a route and
+         * its pages normally live together.
+         */
+        const src = path.join(__dirname, '..');
+        const files = (dir) => fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) return files(full);
+            if (!/\.jsx?$/.test(entry.name)) return [];
+            if (/\.(test|cy)\.jsx?$/.test(entry.name)) return [];
+            return [full];
+        });
+
+        const offenders = [];
+        for (const file of files(src)) {
+            const text = fs.readFileSync(file, 'utf8');
+
+            /*
+             * EVERY `<PageContainer>` in the file, not just the first.  Checking only the first
+             * is what let this bug through a version of this test: in Archive.js the first one
+             * is `ArchiveSettingsPage`'s -- the offender -- and its block holds no `<Routes>`, so
+             * the file was skipped before the route wrapper 400 lines below was ever looked at.
+             */
+            for (const block of routeWrapperBlocks(text)) {
+                const routed = [...block.matchAll(/element=\{<(\w+)\s*\/>\}/g)].map(m => m[1]);
+                for (const name of routed) {
+                    // The component's body, bounded by the next top-level declaration.
+                    const declaration = new RegExp(`^(?:export\\s+)?(?:function|const)\\s+${name}\\b`, 'm');
+                    const found = declaration.exec(text);
+                    if (!found) continue;   // Defined elsewhere; out of this scan's reach.
+                    const after = text.slice(found.index + 1);
+                    const next = after.search(/^(?:export\s+)?(?:function|const|class)\s/m);
+                    const body = next === -1 ? after : after.slice(0, next);
+                    if (body.includes('<PageContainer>')) {
+                        offenders.push(`${path.relative(src, file)}: ${name}`);
+                    }
+                }
+            }
+        }
+
+        /*
+         * The premise: a scan that found no route wrappers, or routed to no components, would
+         * report no offenders and read exactly like a clean codebase.
+         */
+        const wrappers = files(src).flatMap(file => routeWrapperBlocks(fs.readFileSync(file, 'utf8')));
+        expect(wrappers.length).toBeGreaterThan(2);
+        expect(wrappers.flatMap(b => [...b.matchAll(/element=\{<(\w+)\s*\/>\}/g)]).length)
+            .toBeGreaterThan(8);
+
+        expect(offenders).toEqual([]);
+    });
 });
+
+/**
+ * Every `<PageContainer>...</PageContainer>` in `text` that wraps a router -- so, the ones that
+ * wrap a whole section of the app rather than one page.  All of them, because a file may hold both
+ * a route wrapper and the pages it routes to, in either order.
+ */
+const routeWrapperBlocks = (text) => {
+    const blocks = [];
+    let from = 0;
+    for (;;) {
+        const start = text.indexOf('<PageContainer>', from);
+        if (start === -1) return blocks;
+        const end = text.indexOf('</PageContainer>', start);
+        if (end === -1) return blocks;
+        const block = text.slice(start, end);
+        if (/<Routes>|<Outlet\s*\/>/.test(block)) blocks.push(block);
+        from = end + 1;
+    }
+};

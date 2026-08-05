@@ -81,10 +81,12 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                 <Table.Body>
                     {draft.map((f, index) => <Table.Row key={index}>
                         <Table.Cell>
-                            <IconButton size='xs' icon='arrow up' onClick={() => move(index, -1)}
-                                        disabled={index === 0} label='Move up'/>
-                            <IconButton size='xs' icon='arrow down' onClick={() => move(index, 1)}
-                                        disabled={index === draft.length - 1} label='Move down'/>
+                            <div className='wrolpi-button-row'>
+                                <IconButton size='xs' icon='arrow up' onClick={() => move(index, -1)}
+                                            disabled={index === 0} label='Move up'/>
+                                <IconButton size='xs' icon='arrow down' onClick={() => move(index, 1)}
+                                            disabled={index === draft.length - 1} label='Move down'/>
+                            </div>
                         </Table.Cell>
                         <Table.Cell>
                             <TextInput value={f.label || ''} placeholder='Label'
@@ -121,11 +123,13 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                     </Table.Row>)}
                 </Table.Body>
             </Table>
-            <Button icon='plus' onClick={add}>Add Field</Button>
-            <Button icon='balance scale' onClick={addCountByWeight}
-                    title='Add Unit Weight, Total Weight, and an auto-counted Count'>
-                Count by Weight
-            </Button>
+            <div className='wrolpi-button-row'>
+                <Button icon='plus' onClick={add}>Add Field</Button>
+                <Button icon='balance scale' onClick={addCountByWeight}
+                        title='Add Unit Weight, Total Weight, and an auto-counted Count'>
+                    Count by Weight
+                </Button>
+            </div>
         </Modal.Content>
         <Modal.Actions>
             <Button role='cancel' onClick={onClose}>Cancel</Button>

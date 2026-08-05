@@ -612,6 +612,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
     const footer = <Table.Footer>
         <Table.Row>
             <Table.HeaderCell colSpan={4}>
+                <div className='wrolpi-button-row'>
                 <ClearDownloadsButton
                     callback={fetchDownloads}
                     selectedIds={selectedIds}
@@ -627,6 +628,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                     selectedIds={selectedIds}
                     clearSelection={clearSelection}
                 />
+                </div>
             </Table.HeaderCell>
         </Table.Row>
     </Table.Footer>;

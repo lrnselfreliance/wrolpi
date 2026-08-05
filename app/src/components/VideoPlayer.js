@@ -485,7 +485,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                     </Link>}
                 </h3>
 
-                <p>
+                <div className='wrolpi-button-row'>
                     <Button component='a' href={downloadUrl} icon='download'>
                         Download
                     </Button>
@@ -503,7 +503,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         disabled={!videoFile.url}
                     >Refresh</APIButton>
                     <AddToPlaylistButton fileGroupId={videoFile.id}/>
-                </p>
+                </div>
             </Panel>
 
             <Panel>

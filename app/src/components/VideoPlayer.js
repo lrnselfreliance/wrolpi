@@ -474,7 +474,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
         {/* `wrolpi-stack`: everything below the player is stacked in here rather than in the
             page, so this is what spaces it. */}
-        <div className='wrolpi-stack' style={{marginTop: '1em'}}>
+        <div className='wrolpi-stack wrolpi-page-inset' style={{marginTop: '1em'}}>
             <Panel>
 
                 <Header as='h2'>{title}</Header>

@@ -366,6 +366,24 @@ export function ThemeSamplePage() {
             </Panel>
         </Section>
 
+        <Section label='Two choices of equal weight'>
+            <Panel>
+                {/* Semantic's `Segment placeholder` with a vertical Divider, which is what the
+                    dashboard's Download/Upload panel is. The halves are a grid so they stay equal
+                    whatever the labels say, and the rule falls at the panel's true middle. */}
+                <div className='wrolpi-or-split'>
+                    <div><Button role='primary' icon='download'>Download</Button></div>
+                    <div><Button role='save' icon='upload'>Upload</Button></div>
+                    <span className='wrolpi-or-label'>Or</span>
+                </div>
+            </Panel>
+            <p style={{fontSize: '0.75rem', color: 'var(--muted)'}}>
+                The disc masks the rule behind it and is painted with <code>--panel</code>, so it
+                only disappears into the surface on a Panel — on any other ground it reads as a
+                chip. Below the tablet breakpoint the halves stack and the rule turns horizontal.
+            </p>
+        </Section>
+
         <Section label='Toasts'>
             <Panel>
                 {/*

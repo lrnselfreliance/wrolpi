@@ -184,12 +184,23 @@ pre.wrap-text {
     word-wrap: break-word; /* Internet Explorer 5.5+ */
 }
 
+/*
+ * A video's length, pinned to the corner of its poster.
+ *
+ * Tokens, not a literal white-on-black.  The poster under it is filtered by night mode -- it is a
+ * `.media` leaf -- but this chip is drawn beside the image rather than inside it, so it was never
+ * filtered: a white tile on a card whose picture had gone dim red, which is the brightest thing on
+ * the videos page in the theme meant to have nothing bright on it.
+ *
+ * Opaque, because it sits on an arbitrary poster and has to be legible over any of them.
+ */
 .duration-overlay {
     position: absolute;
     top: 0.25rem;
     right: 0.25rem;
-    color: black;
-    background: #ffffff;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
     padding: 0px 0.25rem;
     border-radius: 0.1875rem;
 }

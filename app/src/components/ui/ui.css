@@ -1354,6 +1354,95 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     gap: 0.625rem;
 }
 
+/*
+ * The horizontal inset a page gets from `PageContainer`, for content that cannot be inside one.
+ *
+ * The video page is the case: its route sits OUTSIDE `VideosTabLayout`'s `PageContainer` so the
+ * player can run to both edges of the window, which is the most viewing area a phone can give it.
+ * Everything below the player inherited that, so the panels touched the left edge too.
+ *
+ * The 700px is fresnel's `tablet` breakpoint (contexts.js), matching `PageContainer`: below it a
+ * page has no side padding at all, and this has to agree or the video page would be inset on a
+ * phone where every other page is not.
+ */
+.wrolpi-page-inset {
+    padding-left: 1em;
+    padding-right: 1em;
+}
+
+@media (max-width: 699px) {
+    .wrolpi-page-inset {
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
+
+/* ------------------------------------------------------------- Or divider */
+
+/*
+ * Two choices of equal weight, split down the middle -- Semantic's `Segment placeholder` with a
+ * vertical `Divider`, which the dashboard's Download/Upload panel was built as.
+ *
+ * The migrated version was a `Group` with a divider between two buttons, so the halves were sized
+ * to their buttons rather than to the panel: the pair huddled in the centre with the rule wherever
+ * they left it, instead of two equal fields with the rule at the true middle.
+ *
+ * A grid, so the halves are equal whatever the labels say, and the rule is drawn on the second
+ * column's edge rather than as an element between them -- an element would be a third grid item
+ * and push the middle off centre by its own width.
+ */
+.wrolpi-or-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    position: relative;
+}
+
+.wrolpi-or-split > * {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+}
+
+.wrolpi-or-split > * + * {
+    border-left: 1px solid var(--border);
+}
+
+/*
+ * The "Or" sits ON the rule, in a disc that masks the line behind it.  `--panel` because that is
+ * what the surrounding Panel is painted with; on any other surface the disc would show as a chip.
+ */
+.wrolpi-or-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Stacked on a phone: the rule turns horizontal, and the disc rides it. */
+@media (max-width: 699px) {
+    .wrolpi-or-split {
+        grid-template-columns: 1fr;
+    }
+
+    .wrolpi-or-split > * + * {
+        border-left: none;
+        border-top: 1px solid var(--border);
+    }
+}
+
 /* ----------------------------------------------------------------- Panels */
 
 .wrolpi-panel {

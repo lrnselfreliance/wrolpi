@@ -238,15 +238,19 @@ export function Getters() {
     }
 
     const getter = <Panel>
-        <Group justify='center' align='stretch' gap='xl' wrap='wrap'>
-            <Button role='primary' icon='download' onClick={e => handleSetGetter(e, 'downloads')}>
-                Download
-            </Button>
-            <Divider orientation='vertical' label='Or' labelPosition='center'/>
-            <Button role='save' icon='upload' onClick={e => handleSetGetter(e, 'upload')}>
-                Upload
-            </Button>
-        </Group>
+        <div className='wrolpi-or-split'>
+            <div>
+                <Button role='primary' icon='download' onClick={e => handleSetGetter(e, 'downloads')}>
+                    Download
+                </Button>
+            </div>
+            <div>
+                <Button role='save' icon='upload' onClick={e => handleSetGetter(e, 'upload')}>
+                    Upload
+                </Button>
+            </div>
+            <span className='wrolpi-or-label'>Or</span>
+        </div>
     </Panel>;
 
     let getterModal;

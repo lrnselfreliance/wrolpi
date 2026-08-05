@@ -433,6 +433,142 @@ describe('a row of buttons is spaced and aligned by the row', () => {
     });
 });
 
+describe('two choices of equal weight are split down the middle', () => {
+    /*
+     * The dashboard's Download/Upload panel, which Semantic drew as a `Segment placeholder` with a
+     * vertical `Divider`.  The migrated version was a `Group` with a divider between the buttons,
+     * so the halves were sized to their labels: the pair huddled in the middle of the panel with
+     * the rule wherever they happened to leave it, rather than two equal fields split at the centre.
+     */
+
+    /*
+     * The viewport is set explicitly.  Cypress component tests default to 500x500, which is BELOW
+     * the 699px breakpoint where these halves stack -- so without this every assertion below would
+     * be measuring the phone layout while claiming to measure the desktop one.
+     */
+    const mountSplit = (width = 1000) => cy.viewport(width, 700).then(() => cy.mountUI(<div>
+        <Panel>
+            <div className='wrolpi-or-split'>
+                <div><Button role='primary'>Download</Button></div>
+                <div><Button role='save'>Upload</Button></div>
+                <span className='wrolpi-or-label'>Or</span>
+            </div>
+        </Panel>
+    </div>));
+
+    it('gives each choice half the panel, whatever its label says', () => {
+        mountSplit();
+
+        cy.get('.wrolpi-or-split').should(($split) => {
+            const halves = [...$split[0].children]
+                .filter(el => !el.classList.contains('wrolpi-or-label'))
+                .map(el => el.getBoundingClientRect());
+            expect(halves, 'two halves').to.have.length(2);
+            // Equal, and each really is half -- not two content-sized boxes that happen to match.
+            expect(halves[1].width, 'the halves are equal').to.be.closeTo(halves[0].width, 1);
+            const split = $split[0].getBoundingClientRect();
+            expect(halves[0].width, 'and each is half the row').to.be.closeTo(split.width / 2, 1);
+        });
+    });
+
+    it('centres each button in its own half', () => {
+        // Semantic centred them; the Group version left them either side of the divider instead.
+        mountSplit();
+
+        cy.get('.wrolpi-or-split').should(($split) => {
+            const halves = [...$split[0].children]
+                .filter(el => !el.classList.contains('wrolpi-or-label'));
+            halves.forEach((half) => {
+                const box = half.getBoundingClientRect();
+                const button = half.querySelector('button').getBoundingClientRect();
+                expect(button.left + button.width / 2, 'button centred in its half')
+                    .to.be.closeTo(box.left + box.width / 2, 1);
+            });
+        });
+    });
+
+    it('puts the rule and its label at the true middle', () => {
+        mountSplit();
+
+        cy.get('.wrolpi-or-split').should(($split) => {
+            const split = $split[0].getBoundingClientRect();
+            const middle = split.left + split.width / 2;
+
+            // The rule is the second half's left border, so its edge IS the middle.
+            const second = $split[0].children[1];
+            expect(parseFloat(getComputedStyle(second).borderLeftWidth), 'a rule is drawn')
+                .to.be.greaterThan(0);
+            expect(second.getBoundingClientRect().left, 'the rule falls at the middle')
+                .to.be.closeTo(middle, 1);
+
+            const label = $split[0].querySelector('.wrolpi-or-label').getBoundingClientRect();
+            expect(label.left + label.width / 2, 'and the label rides it').to.be.closeTo(middle, 1);
+            expect(label.top + label.height / 2, 'halfway down')
+                .to.be.closeTo(split.top + split.height / 2, 1);
+        });
+    });
+
+    it('stacks the halves below the tablet breakpoint', () => {
+        // The other branch, and the one the suite would otherwise test by default.
+        mountSplit(400);
+
+        cy.get('.wrolpi-or-split').should(($split) => {
+            const halves = [...$split[0].children]
+                .filter(el => !el.classList.contains('wrolpi-or-label'));
+            const boxes = halves.map(el => el.getBoundingClientRect());
+            expect(boxes[1].top, 'the second sits below the first').to.be.greaterThan(boxes[0].top);
+            expect(boxes[1].width, 'each takes the full width').to.be.closeTo(boxes[0].width, 1);
+
+            const second = getComputedStyle(halves[1]);
+            expect(parseFloat(second.borderLeftWidth), 'no vertical rule').to.equal(0);
+            expect(parseFloat(second.borderTopWidth), 'a horizontal one instead').to.be.greaterThan(0);
+        });
+    });
+
+    it('masks the rule behind its label rather than letting it strike through', () => {
+        // An "Or" with a line through it is the thing the disc exists to prevent, so it has to be
+        // painted -- and with the Panel's own color, or it reads as a chip laid on the surface.
+        mountSplit();
+
+        cy.get('.wrolpi-or-label').should(($label) => {
+            const panel = getComputedStyle(Cypress.$('.wrolpi-panel')[0]).backgroundColor;
+            expect(getComputedStyle($label[0]).backgroundColor, 'painted with the panel')
+                .to.equal(panel);
+        });
+    });
+});
+
+describe('the video page insets what sits under its player', () => {
+    /*
+     * The video route is deliberately outside `VideosTabLayout`'s `PageContainer` so the player can
+     * run to both edges of the window -- the most viewing area a phone can give it.  Everything
+     * below the player inherited that, so the panels touched the left edge of the page.
+     */
+    it('pads the stack under the player, and nothing above it', () => {
+        // Above the tablet breakpoint; below it a page has no side padding and neither has this.
+        cy.viewport(1000, 700);
+        cy.mountUI(<div>
+            <video data-testid='player' style={{width: '100%'}}/>
+            <div className='wrolpi-stack wrolpi-page-inset'>
+                <Panel>About</Panel>
+            </div>
+        </div>);
+
+        cy.get('.wrolpi-page-inset').should(($inset) => {
+            const styles = getComputedStyle($inset[0]);
+            const padding = parseFloat(styles.paddingLeft);
+            expect(padding, 'the stack is inset').to.be.greaterThan(0);
+            expect(parseFloat(styles.paddingRight), 'on both sides').to.be.closeTo(padding, 0.5);
+
+            // The player keeps the full width; only what is under it moves in.
+            const player = Cypress.$('[data-testid="player"]')[0].getBoundingClientRect();
+            const panel = $inset[0].querySelector('.wrolpi-panel').getBoundingClientRect();
+            expect(panel.left - player.left, 'the panel clears the edge the player touches')
+                .to.be.closeTo(padding, 0.5);
+        });
+    });
+});
+
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
     const value = hex.replace('#', '');
@@ -2162,6 +2298,51 @@ describe('theme tokens actually resolve', () => {
                 expect(getComputedStyle($control[0]).borderTopColor, 'border resolved')
                     .to.match(/^rgba?\(/);
             });
+        });
+    });
+});
+
+describe("a video's duration chip belongs to the theme, not to the poster", () => {
+    /*
+     * The chip was a literal `#ffffff` with black text.  The poster under it IS filtered by night
+     * mode -- it is a `.media` leaf -- but the chip is drawn beside the image rather than inside it,
+     * so the filter never reached it: a white tile on a card whose picture had gone dim red, and the
+     * brightest thing on the videos page in the theme whose whole point is that nothing is bright.
+     */
+    themeNames.forEach((theme) => {
+        it(`takes the surface and text of ${theme}`, () => {
+            cy.mountUI(<><Panel>Surface</Panel><div className='duration-overlay'>12:34</div></>,
+                {theme, mediaFilter: theme === 'night' ? 'night-red' : undefined});
+
+            cy.get('.duration-overlay').should(($chip) => {
+                const chip = getComputedStyle($chip[0]);
+                const panel = getComputedStyle(Cypress.$('.wrolpi-panel')[0]);
+
+                // The theme's surface, not a hardcoded one.
+                expect(chip.backgroundColor, 'painted with the theme surface')
+                    .to.equal(panel.backgroundColor);
+                expect(chip.color, 'and the theme text').to.equal(panel.color);
+
+                // And still readable, which is what it is for: a length nobody can read is chrome.
+                expect(contrast(chip.color, chip.backgroundColor), 'legible')
+                    .to.be.at.least(4.5);
+            });
+        });
+    });
+
+    it('is never the brightest thing on a night card', () => {
+        /*
+         * The report, stated as something measurable.  In night the chip sat at full white against
+         * a panel around 4% luminance -- the specific complaint was "the timestamp is white".
+         */
+        cy.mountUI(<><Panel>Card</Panel><div className='duration-overlay'>12:34</div></>,
+            {theme: 'night', mediaFilter: 'night-red'});
+
+        cy.get('.duration-overlay').should(($chip) => {
+            const chip = getComputedStyle($chip[0]);
+            const page = getComputedStyle(document.documentElement).backgroundColor;
+            expect(luminance(chip.backgroundColor), 'no brighter than the page it sits on')
+                .to.be.at.most(luminance(page) + 0.05);
         });
     });
 });

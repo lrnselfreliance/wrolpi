@@ -277,6 +277,136 @@ describe('a page stacks its own blocks', () => {
     });
 });
 
+describe('a row of buttons is spaced and aligned by the row', () => {
+    /*
+     * Semantic's Button carried `margin: 0 .25em .25em 0` of its own, so a page could list
+     * buttons as bare siblings and they arrived spaced.  Nothing replaced that margin, and
+     * five pages still list them that way -- the archive page's six actions all shared edges.
+     *
+     * Two of those six also carried `marginTop: 0.5em`, which is what made "Update" sit lower
+     * than its neighbours: a Button is `display: inline-flex; vertical-align: middle`, and
+     * `vertical-align` aligns the MARGIN box, so half of any top margin pushes the visible
+     * button down.  The margin was there to keep a wrapped row from touching vertically --
+     * the right thing, solved in the wrong axis.  A flex row with `gap` covers both axes and
+     * needs no per-button margin, so the alignment comes back for free.
+     */
+
+    const rowButtons = ($row) => [...$row[0].querySelectorAll('button')];
+
+    it('puts a gap between the buttons, horizontally and when wrapped', () => {
+        cy.mountUI(<div className='wrolpi-button-row'>
+            <Button>View</Button>
+            <Button>Read</Button>
+            <Button>Update</Button>
+        </div>);
+
+        cy.get('.wrolpi-button-row').should(($row) => {
+            const row = $row[0];
+            const styles = getComputedStyle(row);
+            const declared = parseFloat(styles.columnGap);
+            expect(declared, 'the row declares a gap').to.be.greaterThan(0);
+            expect(parseFloat(styles.rowGap), 'and the same one between wrapped lines')
+                .to.be.closeTo(declared, 0.5);
+            expect(styles.flexWrap, 'the row wraps rather than overflowing').to.equal('wrap');
+
+            /*
+             * Narrowed to exactly two buttons' worth, measured rather than guessed.  A hardcoded
+             * 150px was a hidden assertion about both the font and the interface scale, and at 1.1
+             * it fitted one button, not the two the assertions below are about.
+             */
+            const widths = rowButtons($row).map(el => el.getBoundingClientRect().width);
+            expect(widths, 'three buttons measured').to.have.length(3);
+            row.style.width = `${widths[0] + declared + widths[1] + 1}px`;
+
+            const rects = rowButtons($row).map(el => el.getBoundingClientRect());
+            const top = Math.min(...rects.map(rect => rect.top));
+            const first = rects.filter(rect => Math.round(rect.top) === Math.round(top));
+            expect(first, 'two buttons on the first line').to.have.length(2);
+            expect(first[1].left - first[0].right, 'gap along the line').to.be.closeTo(declared, 0.5);
+
+            // And the third dropped to a second line, held off the first by the same gap.
+            const wrapped = rects.find(rect => Math.round(rect.top) !== Math.round(top));
+            expect(wrapped, 'the third button wrapped').to.not.be.undefined;
+            expect(wrapped.top - first[0].bottom, 'gap between the lines')
+                .to.be.closeTo(declared, 0.5);
+        });
+    });
+
+    it('centres its buttons against a taller item beside them', () => {
+        /*
+         * A row is not always all buttons: the doc page puts its format picker beside its actions,
+         * and the downloads table an error trigger beside its two icon buttons.  Whatever is
+         * tallest sets the line height, and `align-items: center` is what keeps the buttons reading
+         * as part of that line rather than hanging from the top of it.
+         *
+         * Written as tops first, which was a test with no teeth -- `stretch` stretches the WRAPPER
+         * and leaves the button at the top of it, so the tops agreed either way.  Centres are what
+         * the property actually decides.
+         *
+         * The row is also mixed in the way the archive page's is: a button inside an `<a>`, a bare
+         * one, and an APIButton.
+         */
+        cy.mountUI(<div className='wrolpi-button-row'>
+            <div style={{height: '80px', width: '40px'}}>Tall</div>
+            <a href='/media/archive.html'><Button>View</Button></a>
+            <Button>Read</Button>
+            <APIButton onClick={() => Promise.resolve()}>Update</APIButton>
+        </div>);
+
+        cy.get('.wrolpi-button-row').should(($row) => {
+            const row = $row[0].getBoundingClientRect();
+            expect(row.height, 'the tall item set the line height').to.be.at.least(80);
+
+            const centers = rowButtons($row).map((el) => {
+                const rect = el.getBoundingClientRect();
+                return rect.top + rect.height / 2;
+            });
+            expect(centers, 'three buttons measured').to.have.length(3);
+            const middle = row.top + row.height / 2;
+            centers.forEach(center => expect(center, 'centred in the line').to.be.closeTo(middle, 1));
+        });
+    });
+
+    it('counts a confirmed action as one item in the row, not two', () => {
+        /*
+         * `APIButton` with `confirmContent` returns a fragment -- the button AND a `<Confirm/>`.
+         * In a flex row those flatten into siblings, so a Confirm that rendered anything in
+         * place would take a gap of its own and open a hole between two buttons.  It portals,
+         * and this is what says so; three of the archive page's six actions are confirmed.
+         */
+        cy.mountUI(<div className='wrolpi-button-row'>
+            <Button>Plain</Button>
+            <APIButton confirmContent='Sure?' onClick={() => Promise.resolve()}>Delete</APIButton>
+            <Button>Also plain</Button>
+        </div>);
+
+        cy.get('.wrolpi-button-row').should(($row) => {
+            const declared = parseFloat(getComputedStyle($row[0]).columnGap);
+            const rects = rowButtons($row).map(el => el.getBoundingClientRect());
+            expect(rects, 'three buttons measured').to.have.length(3);
+            rects.slice(1).forEach((rect, index) => expect(
+                rect.left - rects[index].right, 'gap either side of the confirmed action',
+            ).to.be.closeTo(declared, 0.5));
+        });
+    });
+
+    it('grows its gap with the interface scale', () => {
+        cy.mountUI(<div className='wrolpi-button-row'><Button>One</Button><Button>Two</Button></div>);
+
+        cy.get('.wrolpi-button-row').should(($row) => {
+            const before = parseFloat(getComputedStyle($row[0]).columnGap);
+            const root = Cypress.$('html')[0];
+            const scale = parseFloat(getComputedStyle(root).getPropertyValue('--ui-scale')) || 1;
+            root.style.setProperty('--ui-scale', String(scale * 2));
+            const after = parseFloat(getComputedStyle($row[0]).columnGap);
+            root.style.removeProperty('--ui-scale');
+
+            expect(before, 'the gap exists at all').to.be.greaterThan(0);
+            expect(after / before, 'and doubles with the scale').to.be.closeTo(2, 0.05);
+        });
+    });
+});
+
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
     const value = hex.replace('#', '');

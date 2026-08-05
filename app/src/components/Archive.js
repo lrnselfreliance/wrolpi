@@ -174,7 +174,6 @@ function ArchivePage() {
         confirmButton='Update'
         onClick={localUpdateArchive}
         obeyWROLMode={true}
-        style={{marginTop: '0.5em'}}
     >
         Update
     </APIButton>;
@@ -193,7 +192,6 @@ function ArchivePage() {
         confirmButton='Generate'
         onClick={localGenerateScreenshot}
         obeyWROLMode={true}
-        style={{marginTop: '0.5em'}}
     >
         Generate Screenshot
     </APIButton> : null;
@@ -275,12 +273,14 @@ function ArchivePage() {
                 </div>
             </div>
 
-            {singlefileButton}
-            {readButton}
-            {updateButton}
-            {deleteButton}
-            {generateScreenshotButton}
-            <AddToPlaylistButton fileGroupId={archiveFile.id}/>
+            <div className='wrolpi-button-row'>
+                {singlefileButton}
+                {readButton}
+                {updateButton}
+                {deleteButton}
+                {generateScreenshotButton}
+                <AddToPlaylistButton fileGroupId={archiveFile.id}/>
+            </div>
         </Panel>
 
         <Panel>
@@ -648,7 +648,6 @@ export function DomainEditPage() {
         confirmHeader='Delete Domain?'
         onClick={handleDelete}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Delete</APIButton>;
 
     const refreshButton = domain?.directory ? (
@@ -657,7 +656,6 @@ export function DomainEditPage() {
             size='small'
             onClick={handleRefreshDomain}
             obeyWROLMode={true}
-            style={{marginTop: '1em'}}
         >Refresh</APIButton>
     ) : null;
 
@@ -666,7 +664,6 @@ export function DomainEditPage() {
         size='small'
         onClick={() => setTagEditModalOpen(true)}
         color='violet'
-        style={{marginTop: '1em'}}
     >Tag</Button>;
 
     const reorganizeButton = (
@@ -675,7 +672,6 @@ export function DomainEditPage() {
             size='small'
             onClick={() => setReorganizeModalOpen(true)}
             obeyWROLMode={true}
-            style={{marginTop: '1em'}}
         >Reorganize Files</APIButton>
     );
 

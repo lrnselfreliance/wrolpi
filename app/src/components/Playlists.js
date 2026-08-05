@@ -479,7 +479,6 @@ export function PlaylistEditPage() {
         confirmHeader='Delete Playlist?'
         onClick={handleDelete}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Delete</APIButton>;
 
     const tagButton = <Button
@@ -488,7 +487,6 @@ export function PlaylistEditPage() {
         onClick={() => setTagModalOpen(true)}
         role='primary'
         disabled={!editable}
-        style={{marginTop: '1em'}}
     >Tag</Button>;
 
     const actionButtons = <>

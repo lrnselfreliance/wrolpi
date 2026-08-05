@@ -332,9 +332,30 @@ export function ThemeSamplePage() {
                         </div>)}
                     </Row>
                 </div>
+                <div style={{marginTop: 12}}>
+                    <Header as='h5'>A row of actions</Header>
+                    {/* `.wrolpi-button-row` is how a page lists the actions on a thing -- the
+                        archive page's View/Read/Update/Delete, the edit pages' action row. It
+                        wraps, so the last button drops to a second line at this width instead of
+                        overflowing, and the row gap keeps the two lines apart. */}
+                    <div className='wrolpi-button-row' style={{maxWidth: 320}}>
+                        <Button color='violet'>View</Button>
+                        <Button color='blue'>Read</Button>
+                        <Button role='save'>Update</Button>
+                        <Button role='danger'>Delete</Button>
+                        <Button color='yellow'>Generate Screenshot</Button>
+                    </div>
+                </div>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     In night mode Delete drops its fill for a dashed red outline; dashed means
                     destructive or failed, and nothing else uses it.
+                </p>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
+                    Buttons in a row are spaced by the row, never by margins of their own. Semantic's
+                    Button brought its own margin and nothing replaced it, so pages that listed
+                    buttons as bare siblings had them sharing edges — and the ones that answered with
+                    <code>margin-top</code> got a button sitting lower than its neighbours instead,
+                    because <code>vertical-align: middle</code> is measured on the margin box.
                 </p>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     An icon button is exactly as tall as a labelled one at every size, so a

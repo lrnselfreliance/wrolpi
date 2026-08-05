@@ -329,10 +329,14 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
             {download.progress && <DownloadProgressModal progress={download.progress} url={download.url}/>}
         </Table.Cell>
         <Table.Cell>{next}</Table.Cell>
-        <Table.Cell style={{textAlign: 'right'}}>
-            {error && !download.progress && errorTrigger}
-            {editButton}
-            {restartButton}
+        <Table.Cell>
+            {/* `justify-content` rather than the cell's `text-align: right`, which a flex row
+                does not answer to.  These two are icon buttons and were sharing an edge. */}
+            <div className='wrolpi-button-row' style={{justifyContent: 'flex-end'}}>
+                {error && !download.progress && errorTrigger}
+                {editButton}
+                {restartButton}
+            </div>
         </Table.Cell>
         {errorModal}
         {editModal}

@@ -173,7 +173,6 @@ export function ChannelEditPage() {
         confirmHeader='Delete Channel?'
         onClick={handleDelete}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Delete</APIButton>;
 
     const refreshButton = <APIButton
@@ -181,7 +180,6 @@ export function ChannelEditPage() {
         size='small'
         onClick={handleRefreshChannel}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Refresh</APIButton>;
 
     const tagButton = <Button
@@ -189,7 +187,6 @@ export function ChannelEditPage() {
         size='small'
         onClick={() => setTagEditModalOpen(true)}
         role='primary'
-        style={{marginTop: '1em'}}
     >Tag</Button>;
 
     const reorganizeButton = (
@@ -198,7 +195,6 @@ export function ChannelEditPage() {
             size='small'
             onClick={() => setReorganizeModalOpen(true)}
             obeyWROLMode={true}
-            style={{marginTop: '1em'}}
         >Reorganize Files</APIButton>
     );
 

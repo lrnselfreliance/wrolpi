@@ -752,14 +752,8 @@ describe('PageContainer', () => {
          * naming components from other files, so the page cannot be resolved from one file's text.
          * That is `VideosTabLayout`, whose pages are clean today but are not covered here.
          */
-        const src = path.join(__dirname, '..');
-        const files = (dir) => fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) return files(full);
-            if (!/\.jsx?$/.test(entry.name)) return [];
-            if (/\.(test|cy)\.jsx?$/.test(entry.name)) return [];
-            return [full];
-        });
+        const src = SRC;
+        const files = () => sourceFiles();
 
         const offenders = [];
         for (const file of files(src)) {
@@ -783,6 +777,241 @@ describe('PageContainer', () => {
 
         expect(offenders).toEqual([]);
     });
+});
+
+describe('a row of buttons', () => {
+    /*
+     * Semantic's Button brought `margin: 0 .25em .25em 0` with it, so a page could list buttons as
+     * bare siblings and they arrived both spaced and, when the row wrapped, separated.  Nothing
+     * replaced that margin.  The archive page's six actions shared edges, and two of them carried
+     * `marginTop: 0.5em` -- put there to keep a wrapped row from touching vertically, which instead
+     * made those two sit lower than the rest, because `vertical-align: middle` aligns the margin box.
+     *
+     * `.wrolpi-button-row` is a flex row with a gap, so it covers both axes at once and no button
+     * needs a margin of its own.  ui-layout.cy.js measures that the row really spaces and aligns
+     * what it holds; these two scans are about the row being REACHED and left alone -- neither of
+     * which throws, and both of which is how the app got here.
+     */
+
+    /*
+     * `=>` is blanked before any tag scanning.  An arrow function in a prop -- `onClick={() =>
+     * handleDelete(false)}`, which most of these buttons have -- puts a `>` inside an opening tag,
+     * and a scanner reading `>` as "tag ends here" splits one button into two bogus tags.  Two
+     * characters for two, so every index still points where it did in the original text.
+     */
+    const scannable = (text) => text.replace(/=>/g, '=~');
+
+    const TAG = /<(\/?)([A-Za-z][\w.]*)([^>]*?)(\/?)>/g;
+    const tagsIn = (text) => [...scannable(text).matchAll(TAG)].map(match => ({
+        start: match.index,
+        end: match.index + match[0].length,
+        attributes: match[3],
+        closing: match[1] === '/',
+        selfClosing: match[4] === '/',
+    }));
+
+    /**
+     * The tag that encloses `index`: walk the tags before it backwards, letting a close push the
+     * depth up and an open bring it back down, and stop at the first open that is still unclosed.
+     */
+    const enclosingTag = (tags, index) => {
+        let depth = 0;
+        for (const tag of [...tags].filter(tag => tag.end <= index).reverse()) {
+            if (tag.selfClosing) continue;
+            if (tag.closing) depth += 1;
+            else if (depth === 0) return tag;
+            else depth -= 1;
+        }
+        return null;
+    };
+
+    /**
+     * Every `const <name> = ...` declared at any indentation, as button consts are.
+     *
+     * Every one, not the first: Archive.js declares a `deleteButton` in the archive page and
+     * another in the domain edit page, and a resolver that stopped at the first found the clean one
+     * and reported the page with the margin on it as clean too.
+     */
+    const localBodiesOf = (text, name) => {
+        const pattern = new RegExp(`^[ \\t]*(?:const|let)\\s+${name}\\s*=`, 'gm');
+        return [...text.matchAll(pattern)].map(found => {
+            const after = text.slice(found.index + found[0].length);
+            const next = after.search(/\n[ \t]*(?:const|let|function|return|\})[\s(]/);
+            return next === -1 ? after : after.slice(0, next);
+        });
+    };
+
+    /** Every `const actionButtons = <>...</>` fragment in `text`: a button row under another name. */
+    const actionFragments = (text) => {
+        const bodies = [];
+        const pattern = /^[ \t]*const\s+actionButtons\s*=\s*<>/gm;
+        for (const found of text.matchAll(pattern)) {
+            const from = found.index + found[0].length;
+            const end = text.indexOf('</>', from);
+            if (end !== -1) bodies.push(text.slice(from, end));
+        }
+        return bodies;
+    };
+
+    const VERTICAL_MARGIN = /margin(?:Top|Bottom)\s*:|margin\s*:/;
+
+    /*
+     * The classes that lay buttons out in a row.  A row is a row whatever it is called -- the file
+     * preview's toolbar had one before this, at a tighter gap because its buttons are icons -- so
+     * the check below is "is this one of them", and the test after it is what keeps the list honest
+     * by reading each one out of the stylesheet and confirming it really is a flex row with a gap.
+     */
+    const ROW_CLASSES = [
+        'wrolpi-button-row', 'wrolpi-modal-actions', 'wrolpi-confirm-actions', 'preview-toolbar-group',
+    ];
+    const isRow = (tag) => !!tag && ROW_CLASSES.some(name => tag.attributes.includes(name));
+
+    it('lays every row out as a flex row with a gap', () => {
+        // Otherwise the list above is just a list of names the scans below happen to accept.
+        const stylesheets = ['components/ui/ui.css', 'App.css']
+            .map(name => fs.readFileSync(path.join(SRC, name), 'utf8')).join('\n');
+
+        ROW_CLASSES.forEach(name => {
+            const found = new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`).exec(stylesheets);
+            // Named in the failure rather than passed to `expect`, which takes no message.
+            expect(found ? name : `${name} is not declared`).toBe(name);
+            expect(found[1]).toMatch(/display:\s*flex/);
+            expect(found[1]).toMatch(/gap:/);
+        });
+    });
+
+    it('never stamps a vertical margin on a button the row already spaces', () => {
+        /*
+         * The margin and the gap add up.  Nine buttons across the three collection edit pages had
+         * `marginTop: 1em` each and sat 1em below the Save button beside them; the archive page's
+         * Update and Generate Screenshot had 0.5em and sat half that below their own neighbours.
+         */
+        const offenders = [];
+        let rows = 0;
+        let resolved = 0;
+
+        for (const file of sourceFiles()) {
+            const text = fs.readFileSync(file, 'utf8');
+            const where = path.relative(SRC, file);
+
+            const blocks = actionFragments(text);
+            for (const tag of tagsIn(text)) {
+                if (!tag.closing && tag.attributes.includes('wrolpi-button-row')) {
+                    // A row holds buttons, not more divs, so its first `</div>` is its own.
+                    const closes = text.indexOf('</div>', tag.end);
+                    blocks.push(closes === -1 ? '' : text.slice(tag.end, closes));
+                }
+            }
+            rows += blocks.length;
+
+            for (const block of blocks) {
+                // A button declared inline in the row, style and all.
+                if (VERTICAL_MARGIN.test(block)) offenders.push(`${where}: inline in the row`);
+                // ...or interpolated by name, which is how most of them are written.
+                for (const name of new Set([...block.matchAll(/\{(\w*[Bb]utton\w*)\}/g)]
+                    .map(match => match[1]))) {
+                    for (const body of localBodiesOf(text, name)) {
+                        resolved += 1;
+                        if (VERTICAL_MARGIN.test(body)) offenders.push(`${where}: ${name}`);
+                    }
+                }
+            }
+        }
+
+        // A scan that found no rows, or resolved none of their buttons, reports a clean app.
+        expect(rows).toBeGreaterThan(3);
+        expect(resolved).toBeGreaterThan(8);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('puts every row of buttons in a row', () => {
+        /*
+         * The other half: a page can have margin-free buttons and still list them as bare siblings,
+         * which is the touching this fixes.  Every `{actionButtons}` is rendered somewhere, and the
+         * element it is rendered into is what has to carry the gap -- on the doc page that was a
+         * plain `<div style={{marginTop: '1em'}}>`, spacing the row from what was above it while
+         * leaving the buttons inside it edge to edge.
+         */
+        const offenders = [];
+        let sites = 0;
+
+        for (const file of sourceFiles()) {
+            const text = fs.readFileSync(file, 'utf8');
+            if (!text.includes('{actionButtons}')) continue;
+            const tags = tagsIn(text);
+
+            for (const found of text.matchAll(/\{actionButtons\}/g)) {
+                // `actionButtons={actionButtons}` is the prop being handed down, not a render.
+                if (text.slice(found.index - 14, found.index) === 'actionButtons=') continue;
+                sites += 1;
+                const parent = enclosingTag(tags, found.index);
+                if (!isRow(parent)) {
+                    offenders.push(`${path.relative(SRC, file)}: ${
+                        parent ? parent.attributes.trim().slice(0, 40) : 'no enclosing tag'}`);
+                }
+            }
+        }
+
+        /*
+         * Three: the shared collection edit form, which three pages hand a fragment to, and the doc
+         * page's own two responsive branches.  A scan that counted the `actionButtons={...}` props
+         * instead would reach eight and never look at a render site at all.
+         */
+        expect(sites).toBe(3);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('never lists buttons as bare siblings', () => {
+        /*
+         * The touching itself, and the reported defect: the archive page interpolated six buttons
+         * one after another straight into its Panel, so every pair shared an edge.
+         *
+         * A run of adjacent button interpolations is the shape to look for.  Runs inside an
+         * `actionButtons` fragment are blanked first -- a fragment is spread into its parent's row
+         * and has no business being one itself, which the previous test is what checks.  Blanked
+         * rather than skipped so every index still points where it did.
+         */
+        const offenders = [];
+        let runs = 0;
+
+        for (const file of sourceFiles()) {
+            let text = fs.readFileSync(file, 'utf8');
+            for (const fragment of actionFragments(text)) {
+                text = text.replace(fragment, ' '.repeat(fragment.length));
+            }
+            const tags = tagsIn(text);
+
+            for (const found of text.matchAll(/\{\w*[Bb]utton\w*\}(?:\s*\{\w*[Bb]utton\w*\})+/g)) {
+                runs += 1;
+                const parent = enclosingTag(tags, found.index);
+                if (!isRow(parent)) {
+                    offenders.push(`${path.relative(SRC, file)}: ${found[0].replace(/\s+/g, '')}`);
+                }
+            }
+        }
+
+        /*
+         * Four: the archive page's actions, the file preview's toolbar (which had a row of its own
+         * already), the downloads table's edit/restart pair, and the doc page's format picker
+         * beside its actions.  Asserted exactly, because a run that stopped being recognised would
+         * leave this reporting a clean app.
+         */
+        expect(runs).toBe(4);
+
+        expect(offenders).toEqual([]);
+    });
+});
+
+/** The app's own source, minus its tests: what a source scan is allowed to read. */
+const SRC = path.join(__dirname, '..');
+const sourceFiles = (dir = SRC) => fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(full);
+    if (!/\.jsx?$/.test(entry.name)) return [];
+    if (/\.(test|cy)\.jsx?$/.test(entry.name)) return [];
+    return [full];
 });
 
 /**

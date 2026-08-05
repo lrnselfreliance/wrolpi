@@ -1306,6 +1306,36 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     gap: 1rem;
 }
 
+/*
+ * The same idea along the other axis: a row of buttons, spaced by the row.
+ *
+ * Semantic's Button carried `margin: 0 .25em .25em 0`, so a page could list buttons as bare
+ * siblings and they arrived both spaced and, when the row ran out of width, separated from the line
+ * below.  Nothing replaced that margin -- the archive page's six actions shared edges, and the
+ * downloads table's two icon buttons did too.
+ *
+ * Two of the archive page's six had `marginTop: 0.5em` instead, which is where the "Update sits
+ * lower than the rest" came from: a Button is `display: inline-flex; vertical-align: middle`, and
+ * `vertical-align` aligns the MARGIN box, so half of any top margin shows up as the visible button
+ * dropping.  The margin was solving the wrapped-row case in the only axis a margin can, and paying
+ * for it in the other one.  A gap covers both at once, so no button needs a margin of its own; the
+ * scans in Common.test.js are what keep them from growing back.
+ *
+ * 0.625rem matches `.wrolpi-modal-actions`, which is the same row in a modal footer.
+ */
+.wrolpi-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    /*
+     * Centred, not stretched.  Rows here are not all buttons -- the doc page puts its format
+     * picker beside its actions, and the downloads table its error trigger -- and a taller item
+     * makes the line taller than a button.  `stretch` would leave the buttons hanging from the
+     * top of it; centring keeps a row of unequal things reading as one line.
+     */
+    align-items: center;
+    gap: 0.625rem;
+}
+
 /* ----------------------------------------------------------------- Panels */
 
 .wrolpi-panel {

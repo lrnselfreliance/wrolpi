@@ -253,18 +253,28 @@ describe('CollectionEditForm', () => {
     });
 
     describe('CSS Classes', () => {
-        it('uses action-button-spacing class for cancel button', () => {
+        it('puts its actions in a button row, and leaves their margins alone', () => {
+            /*
+             * `action-button-spacing` was `margin-top: 1em` on Cancel alone, matching the same
+             * margin the three calling pages stamped on each of their action buttons -- so every
+             * button in this row sat 1em below the Save beside it, which has none.  The row spaces
+             * and wraps them now, and nothing in it carries a margin of its own.
+             */
             const form = createTestForm(mockCollection);
             const mockOnCancel = jest.fn();
 
-            render(
+            const {container} = render(
                 <CollectionEditForm form={form} onCancel={mockOnCancel}>
                     <div>Form content</div>
                 </CollectionEditForm>
             );
 
             const cancelButton = screen.getByRole('button', {name: /cancel/i});
-            expect(cancelButton).toHaveClass('action-button-spacing');
+            const row = container.querySelector('.wrolpi-button-row');
+            expect(row).toBeInTheDocument();
+            expect(row).toContainElement(cancelButton);
+            expect(row).toContainElement(screen.getByRole('button', {name: /save/i}));
+            expect(cancelButton).not.toHaveClass('action-button-spacing');
         });
     });
 });

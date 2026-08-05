@@ -944,6 +944,44 @@ describe('Form Components', () => {
             const input = screen.getByRole('textbox');
             expect(input).toBeDisabled();
         });
+
+        it('puts the label and the input inside a single element', () => {
+            // A fragment made them two children of whatever contained them, so a grid or flex
+            // parent laid the input out beside its label instead of under it.
+            const form = createMockForm({file_name_format: ''});
+
+            renderWithProviders(
+                <div data-testid="grid">
+                    <InputForm
+                        form={form}
+                        name="file_name_format"
+                        label="Video File Format"
+                    />
+                </div>
+            );
+
+            const grid = screen.getByTestId('grid');
+            expect(grid.children).toHaveLength(1);
+            expect(grid.firstElementChild).toContainElement(screen.getByRole('textbox'));
+            expect(grid.firstElementChild).toContainElement(
+                screen.getByText(/Video File Format/).closest('label')
+            );
+        });
+
+        it('renders the label as a block above the input', () => {
+            const form = createMockForm({name: ''});
+
+            renderWithProviders(
+                <InputForm
+                    form={form}
+                    name="name"
+                    label="Channel Name"
+                />
+            );
+
+            const label = screen.getByText(/Channel Name/).closest('label');
+            expect(label).toHaveStyle({display: 'block'});
+        });
     });
 
     describe('NumberInputForm', () => {

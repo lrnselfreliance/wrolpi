@@ -254,7 +254,7 @@ function ArchivePage() {
     const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
 
     return <>
-        <BackButton/>
+        <div className='wrolpi-button-row'><BackButton/></div>
 
         <Panel>
             {screenshot}
@@ -619,7 +619,7 @@ export function DomainEditPage() {
     if (!form.ready) {
         if (form.error) {
             return <>
-                <BackButton/>
+                <div className='wrolpi-button-row'><BackButton/></div>
                 <Message kind='error' title='Domain not found'>
                     <p>{form.error}</p>
                 </Message>
@@ -685,10 +685,12 @@ export function DomainEditPage() {
     const [descriptionProps] = form.getCustomProps({name: 'description', path: 'description'});
 
     return <>
-        <BackButton/>
-        <Link to={`/archives?domain=${domain?.domain}`}>
-            <Button>Archives</Button>
-        </Link>
+        <div className='wrolpi-button-row'>
+            <BackButton/>
+            <Link to={`/archives?domain=${domain?.domain}`}>
+                <Button>Archives</Button>
+            </Link>
+        </div>
 
         {domain?.needs_reorganization && (
             <Message kind='warning' title='File Format Changed'>
@@ -1171,7 +1173,7 @@ function ArchivesPage() {
         setSelectedArchives([]);
     }
 
-    const selectElm = <div style={{marginTop: '0.5em'}}>
+    const selectElm = <div className='wrolpi-button-row' style={{marginTop: '0.5em'}}>
         <Button
             role='primary'
             disabled={_.isEmpty(selectedArchives)}

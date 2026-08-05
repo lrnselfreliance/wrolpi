@@ -132,7 +132,10 @@ describe('a tag chip', () => {
  * A tag already carries a `margin-left` in ui.css, and that one is structural: the point is
  * drawn outside the body, so the margin is the room it needs and cannot be reclaimed.  Every
  * other gap in a row was decoration on top of it, and measured on the dashboard the tags were
- * 34.7px apart horizontally and 18.5px apart vertically -- of which only 18.4px was the point.
+ * 34.7px apart horizontally and 18.5px apart vertically -- of which only 18.7px was the point.
+ *
+ * Rendered px throughout, measured in the browser at the default interface scale.  ui.css states
+ * the same margin in design px, as `1.0625rem`.
  */
 describe('a row of tags', () => {
     beforeEach(() => {
@@ -149,7 +152,7 @@ describe('a row of tags', () => {
         /*
          * The link wrapper carried `0.3em` either side, from when these were Semantic labels
          * that had no margin of their own.  It is 0.3em twice, plus the group's gap, plus the
-         * structural margin -- so two tags sat 34.7px apart where the point needs 17.3px, and
+         * structural margin -- so two tags sat 34.7px apart where the point needs 18.7px, and
          * a wall of tags on the dashboard read as loose.
          */
         renderGroup(['Water', 'Archived']);
@@ -180,5 +183,25 @@ describe('a row of tags', () => {
         const group = tag.closest('.mantine-Group-root');
         expect(group).toBeTruthy();
         expect(group.style.marginTop).toBe('0.5em');
+    });
+
+    it('dresses the row with a className, and still hands the rest to each tag', async () => {
+        /*
+         * `className` goes the same way as `style`, and for the same reason: it describes the row.
+         * It is tested rather than only documented because the two halves of this contract are
+         * one destructure apart, and the `style` half was wrong for as long as it existed.
+         *
+         * `onClick` is the other half, asserted here so a later tidy-up cannot route everything
+         * to the group and leave a wall of tags that no longer responds to a click.
+         */
+        const onClick = jest.fn();
+        renderGroup(['Water', 'Archived'], {className: 'tag-row', onClick});
+
+        const tag = await awaitColored('Water', BRIGHT);
+        expect(tag.className).not.toContain('tag-row');
+        expect(tag.closest('.mantine-Group-root').className).toContain('tag-row');
+
+        tag.click();
+        expect(onClick).toHaveBeenCalled();
     });
 });

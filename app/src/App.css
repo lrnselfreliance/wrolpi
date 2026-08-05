@@ -590,7 +590,8 @@ tr.drag-deselecting td {
 .file-browser-filter-container {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 0.5em;
+    /* No `margin-bottom`: this is a top-level block of the Files page, and the page's stack
+       spaces it (see `.wrolpi-stack`).  Its own 0.5em was added to that. */
 }
 
 /* Double the default input width on desktop. */

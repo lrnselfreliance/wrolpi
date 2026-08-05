@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import {
     CardLink, contrastingColor, contrastRatio, DirectorySearch, ExternalCardLink, HelpHeader,
     InfoHeader, loadRole,
+    PageContainer,
     SearchResultsInput, TAG_TEXT_DARK, TAG_TEXT_LIGHT,
 } from './Common';
 import {healthRole} from './admin/ControllerPage';
@@ -705,5 +706,22 @@ describe('card links', () => {
         expect(link).toHaveClass('card-link');
         expect(link).toHaveClass('no-link-underscore');
         expect(link).toHaveClass('card-title-ellipsis');
+    });
+});
+
+describe('PageContainer', () => {
+    /*
+     * The wrapper that decides how far apart a page's blocks sit.  The spacing itself is a
+     * stylesheet rule and is measured in ui-layout.cy.js, where there is a layout engine; what
+     * this asserts is that the rule is REACHED -- the class has to be on both of the responsive
+     * branches, or the spacing silently applies on one viewport and not the other.
+     */
+    it('marks both of its viewport branches as a stack', () => {
+        const {container} = render(<PageContainer><div>Body</div></PageContainer>);
+
+        const stacks = container.querySelectorAll('.wrolpi-stack');
+        // Mobile and tablet-and-up, both rendered; `Media` hides one with CSS.
+        expect(stacks).toHaveLength(2);
+        stacks.forEach(stack => expect(stack.textContent).toBe('Body'));
     });
 });

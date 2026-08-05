@@ -901,7 +901,9 @@ export function SettingsPage() {
         </a>
     </Panel>;
 
-    return <div>
+    // `wrolpi-stack`: these panels sit in a wrapper of this page's own, so the stack on
+    // PageContainer does not reach them and this wrapper is what has to space them.
+    return <div className='wrolpi-stack'>
         <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
         <Panel>

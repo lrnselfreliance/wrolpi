@@ -472,7 +472,9 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             {captionUrls.map(i => <CaptionTrack key={i} src={i}/>)}
         </video>}
 
-        <div style={{marginTop: '1em'}}>
+        {/* `wrolpi-stack`: everything below the player is stacked in here rather than in the
+            page, so this is what spaces it. */}
+        <div className='wrolpi-stack' style={{marginTop: '1em'}}>
             <Panel>
 
                 <Header as='h2'>{title}</Header>

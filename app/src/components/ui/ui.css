@@ -250,7 +250,11 @@ html[data-theme="amber"] .wrolpi-pagination button[data-active] {
     justify-content: space-between;
     gap: 0.75rem;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 0.875rem;
+    /*
+     * No `margin-bottom`.  A tab bar is always the first block of a page, inside the page's own
+     * stack, so the 0.875rem it used to carry was added to the stack's gap and put the bar 33px
+     * from the content it labels where every other pair of blocks sat 17.6px apart.
+     */
 }
 
 .wrolpi-tabs-links {
@@ -1270,12 +1274,57 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     background: var(--muted);
 }
 
+/* ----------------------------------------------------------------- Stacks */
+
+/*
+ * The space between stacked blocks, owned by whatever stacks them rather than by the blocks.
+ *
+ * `PageContainer` puts this on every page, so a page's own blocks are spaced without asking.  A
+ * component that stacks blocks one level deeper -- Settings holds its six panels in a wrapper of
+ * its own -- puts it on that wrapper.  Mantine's `Stack` is the same thing with the same 1rem gap
+ * and is equally correct where a call site already reaches for it.
+ *
+ * `gap`, not the `> * + * { margin-top }` this was written as first.  The margin version is the
+ * older recommendation and it is quietly broken here: the responsive `Media` component injects
+ * `.fresnel-container { margin: 0; padding: 0 }` into the document at runtime, which has the same
+ * specificity as `.wrolpi-stack > * + *` and comes later in source order -- so every block a
+ * page wraps in `Media`, which on Status is the one carrying the CPU and RAM bars, threw the
+ * margin away and went on touching its neighbour.  A gap belongs to the parent and a child cannot
+ * zero it.
+ *
+ * It also handles `Media`'s hidden half for free: the branch for the other viewport is
+ * `display: none`, so it is not a flex item and contributes no gap, where `* + *` would have
+ * spaced around something invisible.
+ *
+ * `align-items: stretch` is the default and is what keeps every block full-width, as it was as a
+ * block element.  Heights are unaffected: the column is auto-height, so nothing shrinks, and the
+ * map's 85vh box and the CBZ viewer's full-height page measure the same as before.
+ */
+.wrolpi-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 /* ----------------------------------------------------------------- Panels */
 
 .wrolpi-panel {
     background: var(--panel);
     border: 1px solid var(--border);
     padding: 0.875rem 1rem;
+    /*
+     * Deliberately NO outer margin.  A panel is dropped into pages, modals, Stacks and grids, and
+     * how far it sits from its neighbour is a property of that relationship rather than of the
+     * panel -- so the space between stacked panels is owned by whatever stacks them
+     * (`.wrolpi-stack` for a page, Mantine's `Stack` gap inside a modal).
+     *
+     * This was tried the other way first, as `margin-bottom: 1rem` here, and it went wrong in
+     * both of the documented ways within the hour: it compounded with the gap of every `Stack`
+     * that already held panels (four of them, spacing those lists at 35.2px against the app's
+     * 17.6px), and the `:last-child` reset that would have kept the trailing space off the bottom
+     * of a container silently did nothing, because WROLPi wraps panels in the responsive `Media`
+     * component and a panel is frequently the only child of its own wrapper.
+     */
 }
 
 /* Danger zones are dashed in every theme; it doubles as a colorblind-safe cue. */

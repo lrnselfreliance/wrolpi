@@ -183,8 +183,9 @@ export function InventoryRoute() {
             </TabBar>
 
             {tab === 'items' && <>
-                {/* The search filter lives here so it clearly applies to the Items tab only, not Summary/Ration/Export. */}
-                <div style={{marginBottom: '0.75em'}}>
+                {/* The search filter lives here so it clearly applies to the Items tab only, not Summary/Ration/Export.
+                    No margin of its own: it is a top-level block and the page's stack spaces it. */}
+                <div>
                     <SearchBox value={search} onChange={setSearch} clearable placeholder='Search items…'
                                label='Search items'/>
                 </div>

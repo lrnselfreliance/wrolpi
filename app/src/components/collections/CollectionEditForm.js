@@ -70,23 +70,30 @@ export function CollectionEditForm({
                   */}
                 <div className='wrolpi-button-row'>
                     {actionButtons}
-                    {onCancel && <Button
-                        type='button'
-                        role='cancel'
-                        onClick={onCancel}
-                        disabled={form.disabled}
-                    >
-                        Cancel
-                    </Button>}
-                    <Button
-                        type='submit'
-                        role='save'
-                        size='lg'
-                        style={{marginLeft: 'auto'}}
-                        disabled={form.disabled}
-                    >
-                        Save
-                    </Button>
+                    {/*
+                      * Cancel and Save travel together, in a row of their own pushed to the end.
+                      * `margin-left: auto` was on Save alone, which was right for a row that could
+                      * not wrap: now that it can, Save would drop onto a second line by itself,
+                      * flush right, with Cancel left behind among the action buttons.
+                      */}
+                    <div className='wrolpi-button-row' style={{marginInlineStart: 'auto'}}>
+                        {onCancel && <Button
+                            type='button'
+                            role='cancel'
+                            onClick={onCancel}
+                            disabled={form.disabled}
+                        >
+                            Cancel
+                        </Button>}
+                        <Button
+                            type='submit'
+                            role='save'
+                            size='lg'
+                            disabled={form.disabled}
+                        >
+                            Save
+                        </Button>
+                    </div>
                 </div>
             </div>
         </form>

@@ -805,10 +805,36 @@ describe('a row of buttons', () => {
     const tagsIn = (text) => [...scannable(text).matchAll(TAG)].map(match => ({
         start: match.index,
         end: match.index + match[0].length,
+        // The name was not captured until a test needed to accept `Group` and `Modal.Actions` as
+        // rows: `ROW_COMPONENTS.has(undefined)` is false for every tag, so the list of components
+        // that lay out their own children silently accepted none of them.
+        name: match[2],
         attributes: match[3],
         closing: match[1] === '/',
         selfClosing: match[4] === '/',
     }));
+
+    /**
+     * The text inside the element opened by `open`, found by walking forward to its MATCHING close.
+     *
+     * Written as "slice to the first `</div>`" first, which is true of every row in the app today
+     * and is a false negative waiting to happen: one nested div -- an error-trigger wrapper, a
+     * format-picker span, the Cancel/Save pair the collection form now groups -- truncates the body,
+     * and every button after it goes unscanned.
+     */
+    const bodyOfElement = (text, tags, open) => {
+        let depth = 0;
+        for (const tag of tags) {
+            if (tag.start <= open.start || tag.selfClosing) continue;
+            if (tag.closing) {
+                if (depth === 0) return text.slice(open.end, tag.start);
+                depth -= 1;
+            } else {
+                depth += 1;
+            }
+        }
+        return text.slice(open.end);   // Unclosed; scan what is left rather than nothing.
+    };
 
     /**
      * The tag that encloses `index`: walk the tags before it backwards, letting a close push the
@@ -863,8 +889,40 @@ describe('a row of buttons', () => {
      */
     const ROW_CLASSES = [
         'wrolpi-button-row', 'wrolpi-modal-actions', 'wrolpi-confirm-actions', 'preview-toolbar-group',
+        // Two that predate `.wrolpi-button-row` and are already correct: the file browser's sticky
+        // footer, and its filter row.  Both are checked against the stylesheet below like the rest.
+        'sticky-footer', 'file-browser-filter-container',
     ];
-    const isRow = (tag) => !!tag && ROW_CLASSES.some(name => tag.attributes.includes(name));
+
+    /*
+     * Components that lay their own children out in a row.  A `Group` or a `ButtonGroup` is a row by
+     * construction, so a caller putting buttons in one has already answered the question.
+     */
+    const ROW_COMPONENTS = new Set(['Group', 'ButtonGroup', 'Row', 'Stack', 'Modal.Actions']);
+
+    /*
+     * An inline flex or grid with a gap of its own -- an anonymous row.  Several call sites write one
+     * rather than reach for a class, and they are not wrong; a scan that only knew about class names
+     * would report every one of them.
+     */
+    const INLINE_ROW = /display:\s*['"]?(?:flex|grid)/;
+    const isInlineRow = (attributes, text) => {
+        if (INLINE_ROW.test(attributes) && attributes.includes('gap')) return true;
+        /*
+         * `style={someStyle}` -- the style is a const somewhere above, so the attribute itself says
+         * nothing.  Resolving it matters: the seasons row on the dates selector is a four-column
+         * grid with a gap, declared exactly that way, and it would otherwise be reported forever.
+         */
+        const named = /style=\{(\w+)\}/.exec(attributes);
+        if (!named) return false;
+        const declared = new RegExp(`\\b${named[1]}\\s*=\\s*(\\{[^;]*?\\});`).exec(text);
+        return !!declared && INLINE_ROW.test(declared[1]) && declared[1].includes('gap');
+    };
+
+    const isRow = (tag, text = '') => !!tag && (
+        ROW_COMPONENTS.has(tag.name)
+        || ROW_CLASSES.some(name => tag.attributes.includes(name))
+        || isInlineRow(tag.attributes, text));
 
     it('lays every row out as a flex row with a gap', () => {
         // Otherwise the list above is just a list of names the scans below happen to accept.
@@ -895,11 +953,10 @@ describe('a row of buttons', () => {
             const where = path.relative(SRC, file);
 
             const blocks = actionFragments(text);
-            for (const tag of tagsIn(text)) {
+            const tags = tagsIn(text);
+            for (const tag of tags) {
                 if (!tag.closing && tag.attributes.includes('wrolpi-button-row')) {
-                    // A row holds buttons, not more divs, so its first `</div>` is its own.
-                    const closes = text.indexOf('</div>', tag.end);
-                    blocks.push(closes === -1 ? '' : text.slice(tag.end, closes));
+                    blocks.push(bodyOfElement(text, tags, tag));
                 }
             }
             rows += blocks.length;
@@ -963,7 +1020,7 @@ describe('a row of buttons', () => {
         expect(offenders).toEqual([]);
     });
 
-    it('never lists buttons as bare siblings', () => {
+    it('never lists interpolated buttons as bare siblings', () => {
         /*
          * The touching itself, and the reported defect: the archive page interpolated six buttons
          * one after another straight into its Panel, so every pair shared an edge.
@@ -972,6 +1029,8 @@ describe('a row of buttons', () => {
          * `actionButtons` fragment are blanked first -- a fragment is spread into its parent's row
          * and has no business being one itself, which the previous test is what checks.  Blanked
          * rather than skipped so every index still points where it did.
+         *
+         * The sibling test below covers the other way a row is written; this one only sees `{foo}`.
          */
         const offenders = [];
         let runs = 0;
@@ -999,6 +1058,55 @@ describe('a row of buttons', () => {
          * leave this reporting a clean app.
          */
         expect(runs).toBe(4);
+
+        expect(offenders).toEqual([]);
+    });
+
+    it('never lists written-out buttons as bare siblings either', () => {
+        /*
+         * The same claim for the other way a row is written.  The interpolation scan above sees
+         * `{fooButton}` and nothing else, and most of the app writes its buttons out in place --
+         * which is how the video page's Download/Delete/Refresh/AddToPlaylist strip, the direct
+         * analogue of the archive row this PR started with, went on touching after that scan
+         * reported the app clean.  Twelve more rows were in the same state, in table cells, on the
+         * controller page, and under the one-time-pad and ration calculators.
+         *
+         * A "row" is deliberately broad here: the class, a Group or ButtonGroup, or an inline
+         * flex/grid with a gap, including one whose style is a const declared above.  The point is
+         * whether the buttons are spaced by something, not whether they use this PR's class.
+         */
+        const offenders = [];
+        let runs = 0;
+
+        for (const file of sourceFiles()) {
+            let text = fs.readFileSync(file, 'utf8');
+            // A fragment is spread into its parent's row; the earlier test checks that parent.
+            for (const fragment of actionFragments(text)) {
+                text = text.replace(fragment, ' '.repeat(fragment.length));
+            }
+            const tags = tagsIn(text);
+
+            // A button element ending, then whitespace, then another button beginning.
+            const runPattern = /(?:<\/\w*Button>|<\w*Button\b[^>]*?\/>)\s*<\w*Button\b/g;
+            for (const match of scannable(text).matchAll(runPattern)) {
+                // Anchor on the SECOND button's `<`: at the first one's closing tag the pair is
+                // still open, and the walk would report the first button as its own parent.
+                const at = match.index + match[0].lastIndexOf('<');
+                runs += 1;
+                if (!isRow(enclosingTag(tags, at), text)) {
+                    offenders.push(`${path.relative(SRC, file)}:${
+                        text.slice(0, at).split('\n').length}`);
+                }
+            }
+        }
+
+        /*
+         * Around eighty, which is why this is a scan and not a list.  Asserted loosely at both ends
+         * -- tight enough that a pattern matching nothing shows up, loose enough that adding a
+         * button to an existing row is not a test failure.
+         */
+        expect(runs).toBeGreaterThan(60);
+        expect(runs).toBeLessThan(200);
 
         expect(offenders).toEqual([]);
     });

@@ -155,10 +155,12 @@ export function OneTimePadCalculator() {
         <Header as='h4'>One-Time Pads can be used to encrypt your communications. This can be done by hand
             (yes, really) or in this app.</Header>
         <p>These messages are never stored and cannot be retrieved.</p>
-        <Button color='violet' disabled={!activeChars} onClick={handleGenerateNewPad}>
-            Generate New Pad
-        </Button>
-        <Button role='cancel' component='a' href={cheatSheetURL}>Cheat Sheet PDF</Button>
+        <div className='wrolpi-button-row'>
+            <Button color='violet' disabled={!activeChars} onClick={handleGenerateNewPad}>
+                Generate New Pad
+            </Button>
+            <Button role='cancel' component='a' href={cheatSheetURL}>Cheat Sheet PDF</Button>
+        </div>
 
         <SimpleAccordion title='Advanced'>
             <Header as='h4'>Pad characters</Header>

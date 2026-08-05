@@ -346,7 +346,7 @@ export function PlaylistViewPage() {
     const items = playlist.items || [];
 
     return <>
-        <BackButton/>
+        <div className='wrolpi-button-row'><BackButton/></div>
 
         <Header as='h1'>
             {playlist.name}
@@ -498,10 +498,12 @@ export function PlaylistEditPage() {
     const form = {error: null, loading: false, disabled: !editable || !name.trim(), ready: true};
 
     return <>
-        <BackButton/>
-        <Link to={`/playlists/${playlistId}`}>
-            <Button>View</Button>
-        </Link>
+        <div className='wrolpi-button-row'>
+            <BackButton/>
+            <Link to={`/playlists/${playlistId}`}>
+                <Button>View</Button>
+            </Link>
+        </div>
 
         <CollectionEditForm
             form={form}

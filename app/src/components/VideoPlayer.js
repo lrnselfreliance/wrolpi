@@ -397,7 +397,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const audioPlayPauseLabel = audioPlaying ? 'Pause' : 'Play';
 
     return <>
-        <div style={{margin: '1em'}}>
+        <div className='wrolpi-button-row' style={{margin: '1em'}}>
             <BackButton/>
         </div>
 

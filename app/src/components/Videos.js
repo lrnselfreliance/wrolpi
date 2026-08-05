@@ -175,7 +175,7 @@ export function VideosPage() {
         setSelectedVideos([]);
     }
 
-    const selectElm = <div style={{marginTop: '0.5em'}}>
+    const selectElm = <div className='wrolpi-button-row' style={{marginTop: '0.5em'}}>
         <Button
             role='primary'
             disabled={_.isEmpty(selectedVideos)}

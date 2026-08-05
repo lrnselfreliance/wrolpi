@@ -571,7 +571,6 @@ export function FileBrowser() {
                 onClick={onCollapseAll}
                 disabled={!openFolders || openFolders.length === 0}
                 label='Close all folders'
-                style={{marginLeft: '0.5em'}}
             />
         </div>
         <FileBrowserContent

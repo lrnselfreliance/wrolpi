@@ -286,6 +286,7 @@ function MobileServiceRow({service, onAction}) {
                     <div style={{fontSize: '0.9em', color: 'var(--muted)'}}>{service.description}</div>}
             </Table.Cell>
             <Table.Cell numeric>
+                <div className='wrolpi-button-row' style={{justifyContent: 'flex-end'}}>
                 {isRunning ? (
                     <IconButton
                         icon='stop'
@@ -319,6 +320,7 @@ function MobileServiceRow({service, onAction}) {
                     role='primary'
                     onClick={handleViewLogs}
                 />
+                </div>
                 <ServiceLogsModal
                     service={service}
                     logsOpen={logsOpen}
@@ -366,6 +368,7 @@ function DesktopServiceRow({service, onAction, dockerized}) {
             </Table.Cell>
             <Table.Cell>{service.port || '-'}</Table.Cell>
             <Table.Cell>
+                <div className='wrolpi-button-row'>
                 {isRunning ? (
                     <IconButton
                         icon='stop'
@@ -399,6 +402,7 @@ function DesktopServiceRow({service, onAction, dockerized}) {
                     role='primary'
                     onClick={handleViewLogs}
                 />
+                </div>
                 <ServiceLogsModal
                     service={service}
                     logsOpen={logsOpen}
@@ -1575,7 +1579,7 @@ function HotspotSettingsForm() {
                 onChange={(value) => setForm({...form, protocol: value})}
             />
         </Group>
-        <div style={{marginTop: '0.8em'}}>
+        <div className='wrolpi-button-row' style={{marginTop: '0.8em'}}>
             <Button
                 color='violet'
                 disabled={dockerized}
@@ -1586,7 +1590,6 @@ function HotspotSettingsForm() {
                 icon='qrcode'
                 label='Scan this code to join the hotspot'
                 color='violet'
-                style={{marginLeft: '0.5em'}}
                 onClick={() => setQrOpen(true)}
             />
             <Modal size='small' open={qrOpen} onClose={() => setQrOpen(false)} closeIcon>
@@ -1620,7 +1623,7 @@ function AdminControlsSection() {
             <HotspotSettingsForm/>
 
             {!dockerized && (
-                <div style={{marginTop: '1em'}}>
+                <div className='wrolpi-button-row' style={{marginTop: '1em'}}>
                     <RestartButton/>
                     <ShutdownButton/>
                 </div>

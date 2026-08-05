@@ -586,6 +586,9 @@ tr.drag-deselecting td {
 .file-browser-filter-container {
     display: flex;
     justify-content: flex-end;
+    /* The gap is the container's.  The collapse-all button carried `margin-left: 0.5em` for it,
+       which is the same thing one element to the right of where it belongs. */
+    gap: 0.5em;
     /* No `margin-bottom`: this is a top-level block of the Files page, and the page's stack
        spaces it (see `.wrolpi-stack`).  Its own 0.5em was added to that. */
 }

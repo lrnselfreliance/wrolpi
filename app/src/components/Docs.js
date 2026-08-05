@@ -408,9 +408,16 @@ function DocPage() {
                         </div>
                     </Media>
                     <Media greaterThanOrEqual='tablet'>
-                        {/* The row's own `margin-top` separates it from what is above; the gap
-                            inside it separates the format picker from the actions, so the span
-                            that used to hold them apart with `margin-right` is gone. */}
+                        {/*
+                          * The format picker and the actions are one row, separated by its gap.
+                          *
+                          * This IS a change: the picker used to sit 1em from the actions, held
+                          * there by a span with `margin-right`, and it now sits at the row's
+                          * 0.625rem like everything else in a row.  The two groups read as slightly
+                          * closer than before.  Deliberate -- one spacing rule for buttons in a row
+                          * beats a second one for buttons in a row that happen to be a picker --
+                          * but it is a visual change and not a pure refactor.
+                          */}
                         <div className='wrolpi-button-row' style={{marginTop: '1em'}}>
                             {formatButtons}
                             {actionButtons}

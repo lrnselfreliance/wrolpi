@@ -313,13 +313,15 @@ function PlaylistItemsTable({items, editable, onMove, onRemove}) {
                     <Table.Cell>
                         <ItemTitle item={item} label={label}/>
                     </Table.Cell>
-                    {editable && <Table.Cell style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
-                        <Button icon='arrow up' size='xs' disabled={index === 0}
-                                onClick={() => onMove(index, -1)}/>
-                        <Button icon='arrow down' size='xs' disabled={index === items.length - 1}
-                                onClick={() => onMove(index, 1)}/>
-                        <Button role='danger' icon='trash' size='xs'
-                                onClick={() => onRemove(item.id)}/>
+                    {editable && <Table.Cell>
+                        <div className='wrolpi-button-row' style={{justifyContent: 'flex-end'}}>
+                            <Button icon='arrow up' size='xs' disabled={index === 0}
+                                    onClick={() => onMove(index, -1)}/>
+                            <Button icon='arrow down' size='xs' disabled={index === items.length - 1}
+                                    onClick={() => onMove(index, 1)}/>
+                            <Button role='danger' icon='trash' size='xs'
+                                    onClick={() => onRemove(item.id)}/>
+                        </div>
                     </Table.Cell>}
                 </Table.Row>;
             })}

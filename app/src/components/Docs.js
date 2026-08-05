@@ -83,7 +83,7 @@ function DocsPage() {
         setSelectedDocs([]);
     }
 
-    const selectElm = <div style={{marginTop: '0.5em'}}>
+    const selectElm = <div className='wrolpi-button-row' style={{marginTop: '0.5em'}}>
         <Button color='violet' disabled={_.isEmpty(selectedDocs)}
                 onClick={() => setBulkTagOpen(true)}>Tag</Button>
         <APIButton
@@ -339,7 +339,7 @@ function DocPage() {
     </table>;
 
     return <>
-        <BackButton/>
+        <div className='wrolpi-button-row'><BackButton/></div>
 
         {isCbz && activePath && <CbzViewer path={activePath}/>}
 

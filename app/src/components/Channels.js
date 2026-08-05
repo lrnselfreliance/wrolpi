@@ -209,10 +209,12 @@ export function ChannelEditPage() {
     const downloadMissingDataLabel = <>Download Missing Data<InfoPopup content={downloadMissingDataInfo}/></>;
 
     return <>
-        <BackButton/>
-        <Link to={`/videos/channel/${channel.id}/video`}>
-            <Button>Videos</Button>
-        </Link>
+        <div className='wrolpi-button-row'>
+            <BackButton/>
+            <Link to={`/videos/channel/${channel.id}/video`}>
+                <Button>Videos</Button>
+            </Link>
+        </div>
 
         {channel?.needs_reorganization && (
             <Message kind='warning' title='File Format Changed'>
@@ -419,7 +421,7 @@ export function ChannelNewPage() {
     }
 
     return <>
-        <BackButton/>
+        <div className='wrolpi-button-row'><BackButton/></div>
 
         <Panel>
             <Header as="h1">New Channel</Header>

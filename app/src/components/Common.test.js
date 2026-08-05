@@ -1002,6 +1002,41 @@ describe('a row of buttons', () => {
 
         expect(offenders).toEqual([]);
     });
+
+    it('puts every Back button in a row, so the page stack cannot stretch it', () => {
+        /*
+         * A page's blocks are stacked by `.wrolpi-stack`, which is a flex column at
+         * `align-items: stretch` -- deliberately, because a panel was full-width as a block
+         * element and has to stay that way.  A BARE button as a direct child of that stack is
+         * stretched too, and every page's Back button was one: full-page-width, and on the domain,
+         * channel and playlist edit pages the button beside it was pushed onto its own line where
+         * the two had been inline before.
+         *
+         * A row fixes it without touching the stack: the row is the stretched child, and it lays
+         * its buttons out at their own width.  Nine sites, so this scan rather than nine
+         * assertions -- and a scan because a stretched button is still a working button.
+         */
+        const offenders = [];
+        let found = 0;
+
+        for (const file of sourceFiles()) {
+            const text = fs.readFileSync(file, 'utf8');
+            const tags = tagsIn(text);
+
+            for (const match of text.matchAll(/<BackButton\b/g)) {
+                found += 1;
+                if (!isRow(enclosingTag(tags, match.index))) {
+                    offenders.push(`${path.relative(SRC, file)}:${
+                        text.slice(0, match.index).split('\n').length}`);
+                }
+            }
+        }
+
+        // Nine renders.  Common.js declares it, and a declaration is not a `<BackButton`.
+        expect(found).toBe(9);
+
+        expect(offenders).toEqual([]);
+    });
 });
 
 /** The app's own source, minus its tests: what a source scan is allowed to read. */

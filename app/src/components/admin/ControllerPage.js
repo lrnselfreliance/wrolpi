@@ -1631,7 +1631,9 @@ function AdminControlsSection() {
 
 export function ControllerPage() {
     return (
-        <div>
+        // `wrolpi-stack`: these four sections are panels held in a wrapper of this page's own,
+        // so the stack on PageContainer does not reach them -- the same hole Settings had.
+        <div className='wrolpi-stack'>
             <AdminControlsSection/>
             <ServicesSection/>
             <SambaSection/>

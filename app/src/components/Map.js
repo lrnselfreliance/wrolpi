@@ -5,7 +5,6 @@ import {
     HandPointMessage,
     humanFileSize,
     InfoMessage,
-    PageContainer,
     TabLinks,
     useTitle,
     WROLModeMessage
@@ -366,13 +365,18 @@ function ManageMap() {
     };
 
     if (files === undefined) {
-        return <PageContainer>
+        return <>
             <WROLModeMessage content='Cannot modify Map'/>
             <ErrorMessage>Could not fetch map files</ErrorMessage>
-        </PageContainer>;
+        </>;
     }
 
-    return <PageContainer>
+    /*
+     * A fragment, not a `PageContainer`.  `MapRoute` already provides the page chrome -- a
+     * `wrolpi-stack` wrapper with its own top margin -- so a second one put this page a further
+     * 1em down and 1em in from the tab bar than the viewer beside it.
+     */
+    return <>
         <WROLModeMessage content='Cannot modify Map'/>
 
         <Header as='h3'>Map Files</Header>
@@ -420,7 +424,7 @@ function ManageMap() {
         <HandPointMessage>
             <p>You can also view the map at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
         </HandPointMessage>
-    </PageContainer>
+    </>
 }
 
 const PIN_COLORS = ["red", "blue", "green", "yellow", "orange", "purple"];
@@ -605,13 +609,15 @@ function MapPins() {
         )
         : pins;
 
-    return <PageContainer>
+    // A fragment for the same reason as ManageMap above.  The filter carries no `marginBottom`
+    // either: it is a top-level block of the page, and the route's stack spaces it.
+    return <>
         <TextInput
             leftSection={<Icon name='search'/>}
             placeholder='Filter by label or coordinates...'
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            style={{marginBottom: '1em', width: '100%'}}
+            style={{width: '100%'}}
         />
         <Media at='mobile'>
             <SortableTable
@@ -633,7 +639,7 @@ function MapPins() {
                 emptyRow={emptyRow}
             />
         </Media>
-    </PageContainer>;
+    </>;
 }
 
 function MapPage() {

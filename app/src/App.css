@@ -462,10 +462,6 @@ table.ratio-table td.min-width {
     color: red;
 }
 
-.action-button-spacing {
-    margin-top: 1em;
-}
-
 /* Form loading skeleton */
 .form-skeleton-field {
     margin-bottom: 1.5em;

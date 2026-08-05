@@ -403,13 +403,16 @@ function DocPage() {
                 return <>
                     <Media at='mobile'>
                         {formatButtons && <div style={{marginTop: '1em'}}>{formatButtons}</div>}
-                        <div style={{marginTop: '1em'}}>{actionButtons}</div>
+                        <div className='wrolpi-button-row' style={{marginTop: '1em'}}>
+                            {actionButtons}
+                        </div>
                     </Media>
                     <Media greaterThanOrEqual='tablet'>
-                        <div style={{marginTop: '1em'}}>
-                            {formatButtons && <span style={{marginRight: '1em', display: 'inline-block'}}>
-                                {formatButtons}
-                            </span>}
+                        {/* The row's own `margin-top` separates it from what is above; the gap
+                            inside it separates the format picker from the actions, so the span
+                            that used to hold them apart with `margin-right` is gone. */}
+                        <div className='wrolpi-button-row' style={{marginTop: '1em'}}>
+                            {formatButtons}
                             {actionButtons}
                         </div>
                     </Media>

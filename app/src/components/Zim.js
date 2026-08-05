@@ -527,7 +527,9 @@ export function ZimRoute() {
         {text: 'Manage', to: '/zim/manage', key: 'manage'},
     ]
 
-    return <div style={{marginTop: '2em'}}>
+    // `wrolpi-stack`: this route wraps its own content rather than using PageContainer, so it is
+    // what spaces the tab bar from the page below it.
+    return <div className='wrolpi-stack' style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<ZimViewer/>}/>

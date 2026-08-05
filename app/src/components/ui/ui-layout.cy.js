@@ -116,6 +116,158 @@ describe('the interface scale actually reaches what it is supposed to', () => {
     });
 });
 
+describe('a page stacks its own blocks', () => {
+    /*
+     * A page is built out of panels -- the dashboard is five, Status is six, Settings is six --
+     * and nothing put space between them, so every pair shared an edge.  Two 1px borders meeting
+     * do not read as a seam between two surfaces; they read as one tall surface with a rule across
+     * it, and which heading owns which content stops being obvious.
+     *
+     * The space is the page's, not the panel's.  How far a panel sits from its neighbour is a
+     * property of the two of them being stacked, and the same panel also appears inside modals,
+     * grids and Mantine `Stack`s that space it themselves.  This was tried the other way first, as
+     * `margin-bottom` on `.wrolpi-panel`, and it failed in both of the ways that rule is known to
+     * fail -- see the sibling test below, which is what stops it being tried again.
+     */
+
+    const gapsBetween = ($panels) => {
+        const rects = [...$panels].map((el) => el.getBoundingClientRect());
+        return rects.slice(1).map((rect, index) => rect.top - rects[index].bottom);
+    };
+
+    it('leaves a gap between the panels it stacks', () => {
+        cy.mountUI(<div className='wrolpi-stack'>
+            <Panel>Tags</Panel>
+            <Panel>Status</Panel>
+            <Panel>Calculators</Panel>
+        </div>);
+
+        cy.get('.wrolpi-panel').should(($panels) => {
+            const gaps = gapsBetween($panels);
+            expect(gaps, 'both pairs measured').to.have.length(2);
+            gaps.forEach((gap) => {
+                // Enough to read as a seam rather than a heavier border ...
+                expect(gap, 'gap between panels').to.be.at.least(12);
+                // ... and not so much that one page reads as unrelated cards.
+                expect(gap, 'gap between panels').to.be.at.most(28);
+            });
+        });
+    });
+
+    it('spaces a block that is wrapped as readily as a bare one', () => {
+        /*
+         * This is the case that chose where the rule lives.  Several pages put a panel inside the
+         * responsive `Media` component, so the page's child is a wrapper rather than the panel.
+         *
+         * Spacing from the page handles that for free -- it spaces the wrapper, and the wrapper is
+         * the sibling.  A `margin-bottom` on the panel plus the `:last-child` reset that would
+         * keep the trailing space off the bottom of a container does NOT: the panel is the only
+         * child of its wrapper, so `:last-child` matches it, zeroes the margin, and leaves it hard
+         * against the next panel.  On Status that separated four pairs out of five and left the
+         * first touching -- one page showing both, which reads as a rendering glitch.
+         */
+        cy.mountUI(<div className='wrolpi-stack'>
+            <div><Panel>Wrapped, as Media does it</Panel></div>
+            <Panel>Bare</Panel>
+        </div>);
+
+        cy.get('.wrolpi-panel').should(($panels) =>
+            expect(gapsBetween($panels)[0], 'gap across a wrapper').to.be.at.least(12));
+    });
+
+    it('survives a block that zeroes its own margin', () => {
+        /*
+         * The reason this is a gap and not `> * + * { margin-top }`.  The responsive `Media`
+         * component injects `.fresnel-container { margin: 0; padding: 0 }` into the document at
+         * runtime -- same specificity as the owl selector, later in source order -- so a wrapped
+         * block threw the margin away and went on touching its neighbour, while the bare blocks
+         * on the same page separated.  A gap is the parent's, and a child cannot zero it.
+         *
+         * The margin here stands in for fresnel's rule; the point is that the spacing does not
+         * depend on the child's own margin being left alone.
+         */
+        cy.mountUI(<div className='wrolpi-stack'>
+            <Panel>Before</Panel>
+            <div style={{margin: 0}}><Panel>Zeroed its own margin</Panel></div>
+        </div>);
+
+        cy.get('.wrolpi-panel').should(($panels) =>
+            expect(gapsBetween($panels)[0], 'gap despite the child margin').to.be.at.least(12));
+    });
+
+    it('adds nothing before the first block or after the last', () => {
+        // A gap goes only between, so the page's own padding decides its edges.
+        cy.mountUI(<div className='wrolpi-stack'>
+            <Panel>First</Panel>
+            <Panel>Last</Panel>
+        </div>);
+
+        cy.get('.wrolpi-stack').should(($stack) => {
+            const stack = $stack[0].getBoundingClientRect();
+            const panels = [...$stack[0].querySelectorAll('.wrolpi-panel')]
+                .map(el => el.getBoundingClientRect());
+            expect(panels[0].top - stack.top, 'above the first').to.be.closeTo(0, 0.5);
+            expect(stack.bottom - panels[1].bottom, 'below the last').to.be.closeTo(0, 0.5);
+        });
+    });
+
+    it('grows the gap with the interface scale', () => {
+        // In px it would hold still while the panels either side of it grew.
+        cy.mountUI(<div className='wrolpi-stack'>
+            <Panel>One</Panel>
+            <Panel>Two</Panel>
+        </div>);
+
+        cy.get('.wrolpi-stack').should(($stack) => {
+            const before = parseFloat(getComputedStyle($stack[0]).rowGap);
+            const root = Cypress.$('html')[0];
+            const scale = parseFloat(getComputedStyle(root).getPropertyValue('--ui-scale')) || 1;
+            root.style.setProperty('--ui-scale', String(scale * 2));
+            const after = parseFloat(getComputedStyle($stack[0]).rowGap);
+            root.style.removeProperty('--ui-scale');
+
+            expect(before, 'the gap exists at all').to.be.greaterThan(0);
+            expect(after / before, 'and doubles with the scale').to.be.closeTo(2, 0.05);
+        });
+    });
+
+    it('contributes no gap for the half of a Media pair that is hidden', () => {
+        /*
+         * `Media` renders both viewports and hides one with `display: none`.  A hidden flex item
+         * is not a flex item at all, so it takes no gap -- where `* + *` would have put space
+         * around something invisible and left a page with a stray 1rem hole in it.
+         */
+        cy.mountUI(<div className='wrolpi-stack'>
+            <Panel>Shown</Panel>
+            <div style={{display: 'none'}}><Panel>The other viewport</Panel></div>
+            <Panel>Also shown</Panel>
+        </div>);
+
+        cy.get('.wrolpi-panel:visible').should(($panels) => {
+            expect($panels, 'the hidden panel is not measured').to.have.length(2);
+            expect(gapsBetween($panels)[0], 'one gap, not two').to.be.at.most(28);
+        });
+    });
+
+    it('leaves a panel with no outer margin, so a Stack can space it instead', () => {
+        /*
+         * The inverse rule, and the reason it is worth its own test: the moment a panel carries
+         * its own margin, it adds to the spacing of every container that already spaces its
+         * children.  Four `Stack`s in the app hold nothing but panels -- the conflict list, both
+         * halves of the one-time pad, the electrical calculators -- and with `margin-bottom` on
+         * the panel they spaced those lists at 35.2px against the 17.6px used everywhere else.
+         */
+        cy.mountUI(<Panel>Composable</Panel>);
+
+        cy.get('.wrolpi-panel').should(($panel) => {
+            const styles = getComputedStyle($panel[0]);
+            ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'].forEach((side) => {
+                expect(parseFloat(styles[side]), side).to.equal(0);
+            });
+        });
+    });
+});
+
 /* `--panel` is authored as a hex; computed backgrounds come back as rgb(). */
 const hexToRgb = (hex) => {
     const value = hex.replace('#', '');

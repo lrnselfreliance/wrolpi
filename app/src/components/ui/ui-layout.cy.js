@@ -390,6 +390,32 @@ describe('a row of buttons is spaced and aligned by the row', () => {
         });
     });
 
+    it('keeps its buttons their own width inside a page stack', () => {
+        /*
+         * `.wrolpi-stack` is a flex column at `align-items: stretch`, which is what keeps a panel
+         * full-width as it was as a block element -- and which stretched every page's Back button
+         * to the full width of the page, because a bare button was a direct child of it.
+         *
+         * The row is what absorbs that: the ROW is the stretched child, and it lays its buttons out
+         * at their own width.  Both halves are asserted, because a row that also refused to stretch
+         * would pass a test that only looked at the button.
+         */
+        cy.mountUI(<div className='wrolpi-stack'>
+            <div className='wrolpi-button-row'><Button>Back</Button></div>
+            <Panel>The page</Panel>
+        </div>);
+
+        cy.get('.wrolpi-stack').should(($stack) => {
+            const stack = $stack[0].getBoundingClientRect();
+            const row = $stack[0].querySelector('.wrolpi-button-row').getBoundingClientRect();
+            const button = $stack[0].querySelector('button').getBoundingClientRect();
+
+            expect(stack.width, 'the stack has a width to fill').to.be.greaterThan(200);
+            expect(row.width, 'the row stretches, as the panel does').to.be.closeTo(stack.width, 0.5);
+            expect(button.width, 'the button does not').to.be.lessThan(stack.width / 2);
+        });
+    });
+
     it('grows its gap with the interface scale', () => {
         cy.mountUI(<div className='wrolpi-button-row'><Button>One</Button><Button>Two</Button></div>);
 

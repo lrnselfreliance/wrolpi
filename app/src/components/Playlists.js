@@ -128,7 +128,9 @@ export function PlaylistsPage() {
         }
     };
 
-    const header = <Group justify='space-between' align='flex-end' wrap='wrap' mb='1em'>
+    // No `mb`: this is a top-level block of the page, and the page's stack spaces it.  Its own
+    // margin was added to that gap -- the same fix as the twin filter rows on Channels/Domains.
+    const header = <Group justify='space-between' align='flex-end' wrap='wrap'>
         <SearchInput
             placeholder='Name filter...'
             size='large'

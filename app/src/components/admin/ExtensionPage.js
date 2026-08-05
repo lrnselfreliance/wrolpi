@@ -32,7 +32,9 @@ function DestinationHint() {
             // Fall through silently — the user can still copy manually.
         }
     };
-    return <Panel style={{marginBottom: '1em'}}>
+    // No `marginBottom`: this Panel sits in a Mantine `Stack`, whose gap already spaces it.
+    // A margin here is added to that gap -- the compound the panel-margin approach caused.
+    return <Panel>
         <Header as='h4' icon='globe'>This WROLPi's URL</Header>
         <p style={{color: 'var(--muted)'}}>
             After installing the extension, paste this URL into the

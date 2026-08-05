@@ -525,15 +525,35 @@ describe('two choices of equal weight are split down the middle', () => {
         });
     });
 
-    it('masks the rule behind its label rather than letting it strike through', () => {
-        // An "Or" with a line through it is the thing the disc exists to prevent, so it has to be
-        // painted -- and with the Panel's own color, or it reads as a chip laid on the surface.
+    it('breaks the rule at the word rather than letting it strike through', () => {
+        /*
+         * The rule runs down, stops at the word, and picks up below it.  The break is made by
+         * painting the word with the Panel's own color -- so the paint is load-bearing, and it has
+         * to be that color or the word reads as a chip laid on the surface.
+         *
+         * The word carries no shape of its own: it is not a disc, and a border or a radius would
+         * enclose it instead of breaking the line.
+         */
         mountSplit();
 
         cy.get('.wrolpi-or-label').should(($label) => {
+            const styles = getComputedStyle($label[0]);
             const panel = getComputedStyle(Cypress.$('.wrolpi-panel')[0]).backgroundColor;
-            expect(getComputedStyle($label[0]).backgroundColor, 'painted with the panel')
-                .to.equal(panel);
+            expect(styles.backgroundColor, 'painted with the panel').to.equal(panel);
+
+            /*
+             * All four sides, not just the top.  Reading one side was how a stray rule down the
+             * word's left edge survived this test: the label is a third child of the grid, so the
+             * `> * + *` that draws the divider matched it too and gave it a border of its own.
+             */
+            ['Top', 'Right', 'Bottom', 'Left'].forEach(side => expect(
+                parseFloat(styles[`border${side}Width`]), `no rule on the word's ${side} edge`,
+            ).to.equal(0));
+            expect(parseFloat(styles.borderRadius), 'and no disc').to.equal(0);
+
+            // Padded enough to actually open a gap, rather than sitting on the line unbroken.
+            expect(parseFloat(styles.paddingTop), 'padded enough to break the rule')
+                .to.be.greaterThan(0);
         });
     });
 });

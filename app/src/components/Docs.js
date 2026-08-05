@@ -469,7 +469,8 @@ function AuthorsPage() {
     const [searchStr, setSearchStr] = useOneQuery('author');
     const searchInputRef = React.useRef();
 
-    const header = <div style={{marginBottom: '1em'}}>
+    // No `marginBottom`: a top-level block of the page, spaced by the page's stack.
+    const header = <div>
         <SearchInput
             placeholder='Author filter...'
             size='large'
@@ -501,7 +502,8 @@ function SubjectsPage() {
     const [searchStr, setSearchStr] = useOneQuery('subject');
     const searchInputRef = React.useRef();
 
-    const header = <div style={{marginBottom: '1em'}}>
+    // No `marginBottom`: a top-level block of the page, spaced by the page's stack.
+    const header = <div>
         <SearchInput
             placeholder='Subject filter...'
             size='large'

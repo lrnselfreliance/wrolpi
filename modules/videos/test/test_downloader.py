@@ -10,7 +10,7 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
     prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download, \
-    parse_ytdlp_progress, is_youtube_rss_feed_url, is_youtube_url
+    parse_ytdlp_progress, is_youtube_rss_feed_url, is_youtube_url, format_selector, VIDEO_RESOLUTION_MAP
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -1117,6 +1117,58 @@ async def test_video_download_uses_effective_settings(test_session, test_directo
     assert '--sleep-requests' in cmd, 'sleep_requests override should appear in command'
     sleep_idx = cmd.index('--sleep-requests')
     assert cmd[sleep_idx + 1] == '5.0', f'Expected sleep_requests=5.0, got {cmd[sleep_idx + 1]}'
+
+
+@pytest.mark.parametrize('video_resolutions', [
+    ['1080p', '720p', '480p', 'maximum'],  # The default.
+    ['480p'],
+    ['2160p', 'maximum'],
+])
+def test_format_selector_contains_no_comma(video_resolutions):
+    """`format_selector` joins selectors with "/" so yt-dlp downloads only the first match.
+
+    A "," would tell yt-dlp to download *every* matching selector, which downloads and
+    post-processes the same video once per match.
+    """
+    selector = format_selector(video_resolutions)
+
+    assert ',' not in selector, f'A comma makes yt-dlp download every matching format: {selector}'
+    # Every selector of every requested resolution is present, in order, as a "/" fallback.
+    expected = [j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i]]
+    assert selector == '/'.join(expected)
+
+
+@pytest.mark.asyncio
+async def test_video_download_requests_one_format(test_session, test_directory, mock_video_extract_info,
+                                                  video_download_manager, mock_video_process_runner,
+                                                  image_file, simple_channel, test_videos_downloader_config):
+    """The `-f` passed to yt-dlp is a fallback chain, so only one format is downloaded."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    image_file.rename(video_path.with_suffix('.jpg'))
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name)
+        await video_download_manager.wait_for_all_downloads()
+
+        mock_video_process_runner.assert_called_once()
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    assert '-f' in cmd, 'A video download must request formats'
+    format_arg = cmd[cmd.index('-f') + 1]
+    assert ',' not in format_arg, \
+        f'A comma makes yt-dlp download the video once per matching format: {format_arg}'
+    # The multiple resolutions the config requests are all still offered, as fallbacks.
+    assert format_arg == format_selector(get_videos_downloader_config().video_resolutions)
 
 
 @pytest.mark.asyncio

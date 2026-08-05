@@ -159,6 +159,16 @@ DEFAULT_POSTER_FORMAT = 'jpg'
 DEFAULT_CHANNEL_DOWNLOAD_ORDER = 'newest'
 
 
+def format_selector(video_resolutions: List[str]) -> str:
+    """Flatten the requested resolutions into a single yt-dlp `-f` format selector.
+
+    The selectors are joined with "/" so yt-dlp downloads only the first one that matches.
+    Joining with "," would instead ask yt-dlp to download *every* matching selector, which
+    downloads (and post-processes) the same video once per match.
+    """
+    return '/'.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+
+
 def get_youtube_video_id(url: str) -> Optional[str]:
     """Extract YouTube video ID from various URL formats."""
     parsed = urlparse(url)
@@ -933,7 +943,7 @@ class VideoDownloader(Downloader, ABC):
 
         try:
             video_resolutions = effective['video_resolutions']
-            video_resolutions_str = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+            video_resolutions_str = format_selector(video_resolutions)
             video_format = effective['video_format']
             video_path, entry = prepare_video_filename(url, out_dir, video_resolutions_str, video_format,
                                                       audio_only=audio_only, audio_format=audio_format)

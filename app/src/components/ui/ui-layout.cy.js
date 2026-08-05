@@ -799,6 +799,45 @@ describe('a progress bar has room for the label inside it', () => {
         });
     });
 
+    themeNames.forEach((theme) => {
+        it(`draws no outline of its own in ${theme}, and is the size it was with one`, () => {
+            /*
+             * The border came off.  Both halves matter: the bar must not be the 1px smaller
+             * inside that removing an outline usually makes it -- it is not, because
+             * `box-sizing: border-box` is global and the declared height was always the outer
+             * box -- and the empty part of the track has to keep an edge of its own now that
+             * no line is drawing one, which is why the track paints `--head` rather than the
+             * `--bg` / `--panel` pair that a bar sits on.
+             *
+             * Measured against `rem`, not px: 1.375rem and 7.5rem move with `--ui-scale`.
+             */
+            cy.mountUI(bar({percent: 40, label: 'CPU Usage'}), {theme});
+
+            cy.get('.wrolpi-progress').should(($bar) => {
+                const style = getComputedStyle($bar[0]);
+                ['Top', 'Right', 'Bottom', 'Left'].forEach(side =>
+                    expect(style[`border${side}Width`], `no border on the ${side} edge`)
+                        .to.equal('0px'));
+
+                const rem = 16 * uiScale();
+                expect($bar[0].getBoundingClientRect().height, 'the bar is the height it was')
+                    .to.be.closeTo(1.375 * rem, 0.5);
+                expect(parseFloat(style.minWidth), 'and the width it was')
+                    .to.be.closeTo(7.5 * rem, 0.5);
+            });
+
+            // The Panel the bar sits on, which is what the track has to stay off.
+            cy.get('.wrolpi-progress').should(($bar) => {
+                const track = getComputedStyle($bar[0]).backgroundColor;
+                const panel = getComputedStyle($bar[0].closest('.wrolpi-panel')).backgroundColor;
+                expect(track, 'the track paints a surface of its own')
+                    .to.not.match(/^rgba\(.*,\s*0(\.0+)?\)$/);
+                expect(contrast(toRgb(track), toRgb(panel)), 'track against the panel under it')
+                    .to.be.greaterThan(1.05);
+            });
+        });
+    });
+
     it('keeps a long label on one line', () => {
         /*
          * `white-space: nowrap` on the label.  The first version of this asserted the bar did

@@ -1160,14 +1160,19 @@ html .mantine-Notification-closeButton:hover {
  * `overflow: hidden` is what keeps the indeterminate band inside the bar.  Without it the
  * band slides from `margin-left: -35%` to `100%` in full view, so the animation ran from
  * outside the left edge to outside the right one, painting over whatever sat beside it.
+ *
+ * No border: the track is drawn by its own fill instead, so `--head` rather than `--bg`.
+ * A bar sits on a Panel as often as on the page, and `--bg` is invisible against one of
+ * those two by definition -- `--head` is off both in every theme.  Height and min-width
+ * are the outer box (`box-sizing: border-box` is global), so dropping the 1px border left
+ * the bar exactly the size it was.
  */
 .wrolpi-progress {
     position: relative;
     height: 1.375rem;
     min-width: 7.5rem;
     overflow: hidden;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    background: var(--head);
 }
 
 /*
@@ -1260,10 +1265,6 @@ html .mantine-Notification-closeButton:hover {
  * is lighter than black by definition.  Left as it is, deliberately, rather than
  * asserted at a threshold chosen to pass.
  */
-html[data-theme="light"] .wrolpi-progress {
-    background: var(--panel);
-}
-
 html[data-theme="light"] .wrolpi-progress-fill {
     filter: brightness(1.75) saturate(0.55);
 }

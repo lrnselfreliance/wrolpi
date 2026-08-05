@@ -727,7 +727,7 @@ describe('PageContainer', () => {
         stacks.forEach(stack => expect(stack.textContent).toBe('Body'));
     });
 
-    it('is never rendered by a page that a PageContainer already wraps', () => {
+    it('is never rendered by a page whose route already provides page chrome', () => {
         /*
          * `PageContainer` carries `margin-top: 1em` and `padding: 1em`, so nesting one inside
          * another applies both twice: the page is pushed 1em further down and inset 1em further
@@ -736,10 +736,21 @@ describe('PageContainer', () => {
          * in another -- and read as "more margin than /archives/domains", which is exactly what
          * it was.
          *
-         * Nothing about a doubled margin throws, so this is a source scan.  It reads each route
-         * wrapper (a `PageContainer` holding `<Routes>` or `<Outlet/>`), takes the components it
-         * routes to, and checks the ones defined in the same file -- which is where a route and
-         * its pages normally live together.
+         * Nothing about a doubled margin throws, so this is a source scan.  It finds each router
+         * whose enclosing `return` provides page chrome, takes the components it routes to, and
+         * checks the ones declared in the same file -- which is where a route and its pages
+         * normally live together.
+         *
+         * "Chrome" is `PageContainer` OR a `wrolpi-stack` wrapper, not just the former.  Keying on
+         * `PageContainer` alone missed `MapRoute` and `ZimRoute`, which wrap their own content in a
+         * stack instead -- and three pages under them (`ManageMap`, `MapPins`, `ManageZim`) mounted
+         * a `PageContainer` each, so they sat a further 1em down and 1em in from the tab bar than
+         * the viewers beside them.  The same defect as Archive, in a shape the first scan could not
+         * see.
+         *
+         * Known limit: a layout that routes through `<Outlet/>` has its `<Route>` list in App.js,
+         * naming components from other files, so the page cannot be resolved from one file's text.
+         * That is `VideosTabLayout`, whose pages are clean today but are not covered here.
          */
         const src = path.join(__dirname, '..');
         const files = (dir) => fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
@@ -753,24 +764,9 @@ describe('PageContainer', () => {
         const offenders = [];
         for (const file of files(src)) {
             const text = fs.readFileSync(file, 'utf8');
-
-            /*
-             * EVERY `<PageContainer>` in the file, not just the first.  Checking only the first
-             * is what let this bug through a version of this test: in Archive.js the first one
-             * is `ArchiveSettingsPage`'s -- the offender -- and its block holds no `<Routes>`, so
-             * the file was skipped before the route wrapper 400 lines below was ever looked at.
-             */
-            for (const block of routeWrapperBlocks(text)) {
-                const routed = [...block.matchAll(/element=\{<(\w+)\s*\/>\}/g)].map(m => m[1]);
-                for (const name of routed) {
-                    // The component's body, bounded by the next top-level declaration.
-                    const declaration = new RegExp(`^(?:export\\s+)?(?:function|const)\\s+${name}\\b`, 'm');
-                    const found = declaration.exec(text);
-                    if (!found) continue;   // Defined elsewhere; out of this scan's reach.
-                    const after = text.slice(found.index + 1);
-                    const next = after.search(/^(?:export\s+)?(?:function|const|class)\s/m);
-                    const body = next === -1 ? after : after.slice(0, next);
-                    if (body.includes('<PageContainer>')) {
+            for (const block of chromedRouterBlocks(text)) {
+                for (const name of routedComponents(block)) {
+                    if (bodyOf(text, name).includes('<PageContainer>')) {
                         offenders.push(`${path.relative(src, file)}: ${name}`);
                     }
                 }
@@ -778,33 +774,64 @@ describe('PageContainer', () => {
         }
 
         /*
-         * The premise: a scan that found no route wrappers, or routed to no components, would
-         * report no offenders and read exactly like a clean codebase.
+         * The premise: a scan that found no routers, or resolved no page components, would report
+         * no offenders and read exactly like a clean codebase.
          */
-        const wrappers = files(src).flatMap(file => routeWrapperBlocks(fs.readFileSync(file, 'utf8')));
-        expect(wrappers.length).toBeGreaterThan(2);
-        expect(wrappers.flatMap(b => [...b.matchAll(/element=\{<(\w+)\s*\/>\}/g)]).length)
-            .toBeGreaterThan(8);
+        const blocks = files(src).flatMap(file => chromedRouterBlocks(fs.readFileSync(file, 'utf8')));
+        expect(blocks.length).toBeGreaterThan(3);
+        expect(blocks.flatMap(routedComponents).length).toBeGreaterThan(8);
 
         expect(offenders).toEqual([]);
     });
 });
 
 /**
- * Every `<PageContainer>...</PageContainer>` in `text` that wraps a router -- so, the ones that
- * wrap a whole section of the app rather than one page.  All of them, because a file may hold both
- * a route wrapper and the pages it routes to, in either order.
+ * Every `<Routes>...</Routes>` in `text` whose enclosing `return` provides page chrome -- a
+ * `PageContainer` or a `wrolpi-stack` wrapper.  Those are the routers that have already spaced and
+ * inset the page, so a page under one must not do it again.
+ *
+ * All of them, and located from the router rather than from the chrome: keying on the first
+ * `<PageContainer>` in a file missed this entirely in Archive.js, where the first one belongs to
+ * the offending page and holds no router at all.
  */
-const routeWrapperBlocks = (text) => {
+const chromedRouterBlocks = (text) => {
     const blocks = [];
     let from = 0;
     for (;;) {
-        const start = text.indexOf('<PageContainer>', from);
+        const start = text.indexOf('<Routes>', from);
         if (start === -1) return blocks;
-        const end = text.indexOf('</PageContainer>', start);
+        const end = text.indexOf('</Routes>', start);
         if (end === -1) return blocks;
-        const block = text.slice(start, end);
-        if (/<Routes>|<Outlet\s*\/>/.test(block)) blocks.push(block);
         from = end + 1;
+
+        const returned = text.lastIndexOf('return', start);
+        if (returned === -1) continue;
+        const chrome = text.slice(returned, start);
+        if (chrome.includes('<PageContainer>') || chrome.includes('wrolpi-stack')) {
+            blocks.push(text.slice(start, end));
+        }
     }
+};
+
+/**
+ * The page components a router block routes to.  Any capitalised tag that is not routing furniture,
+ * so `element={<ErrorBoundary><Page/></ErrorBoundary>}` yields `Page` as well as the plain
+ * `element={<Page/>}` form.
+ */
+const FURNITURE = new Set(['Route', 'Routes', 'ErrorBoundary', 'Suspense', 'Navigate', 'Outlet']);
+const routedComponents = (block) => [...new Set(
+    [...block.matchAll(/<([A-Z]\w*)/g)].map(m => m[1]).filter(name => !FURNITURE.has(name)))];
+
+/**
+ * The source of the component named `name`, bounded by the next top-level declaration.  `class` is
+ * in both patterns because `ManageZim` is one, and a scan that only knew about functions would
+ * have reported it clean.
+ */
+const bodyOf = (text, name) => {
+    const declaration = new RegExp(`^(?:export\\s+)?(?:function|const|class)\\s+${name}\\b`, 'm');
+    const found = declaration.exec(text);
+    if (!found) return '';   // Declared elsewhere; out of this scan's reach.
+    const after = text.slice(found.index + 1);
+    const next = after.search(/^(?:export\s+)?(?:function|const|class)\s/m);
+    return next === -1 ? after : after.slice(0, next);
 };

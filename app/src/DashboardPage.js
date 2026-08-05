@@ -452,7 +452,13 @@ export function DashboardPage() {
         if (big) {
             inputProps.size = 'big';
         }
-        return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '2em'}}>
+        /*
+         * No `marginBottom`.  This row is a top-level block of the dashboard, so its own 2em was
+         * added to the page stack's gap -- 52.8px below the search box against 17.6px between
+         * every other pair of blocks, on the most-looked-at page in the app.  One source of
+         * spacing, and it is the stack.
+         */
+        return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em'}}>
             {getSearchResultsInput(inputProps)}
             <SearchFilterButton fileFilterOptions={fileMimetypeFilterOptions} showDates={true} showDeep={true}
                                 size={big ? 'big' : undefined}/>

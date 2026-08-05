@@ -142,15 +142,19 @@ describe('a page stacks its own blocks', () => {
             <Panel>Calculators</Panel>
         </div>);
 
-        cy.get('.wrolpi-panel').should(($panels) => {
-            const gaps = gapsBetween($panels);
+        cy.get('.wrolpi-stack').should(($stack) => {
+            /*
+             * Measured against the stack's own `row-gap` rather than a pixel range.  The range was
+             * 12-28px, which assumes the default `--ui-scale`: at a larger scale the gap grows past
+             * 28 and a correct layout would have failed the assertion.  A separate test covers the
+             * ratio; this one is about the panels really being that far apart.
+             */
+            const declared = parseFloat(getComputedStyle($stack[0]).rowGap);
+            expect(declared, 'the stack declares a gap').to.be.greaterThan(0);
+
+            const gaps = gapsBetween($stack[0].querySelectorAll('.wrolpi-panel'));
             expect(gaps, 'both pairs measured').to.have.length(2);
-            gaps.forEach((gap) => {
-                // Enough to read as a seam rather than a heavier border ...
-                expect(gap, 'gap between panels').to.be.at.least(12);
-                // ... and not so much that one page reads as unrelated cards.
-                expect(gap, 'gap between panels').to.be.at.most(28);
-            });
+            gaps.forEach((gap) => expect(gap, 'gap between panels').to.be.closeTo(declared, 0.5));
         });
     });
 
@@ -243,9 +247,14 @@ describe('a page stacks its own blocks', () => {
             <Panel>Also shown</Panel>
         </div>);
 
-        cy.get('.wrolpi-panel:visible').should(($panels) => {
-            expect($panels, 'the hidden panel is not measured').to.have.length(2);
-            expect(gapsBetween($panels)[0], 'one gap, not two').to.be.at.most(28);
+        // One gap, not two: measured against the declared gap rather than a pixel ceiling, which
+        // would have false-failed at a larger interface scale instead of catching a doubled gap.
+        cy.get('.wrolpi-stack').should(($stack) => {
+            const declared = parseFloat(getComputedStyle($stack[0]).rowGap);
+            const shown = $stack[0].querySelectorAll('.wrolpi-panel:not([style*="none"])');
+            const visible = [...shown].filter((el) => el.offsetParent !== null);
+            expect(visible, 'the hidden panel is not measured').to.have.length(2);
+            expect(gapsBetween(visible)[0], 'one gap, not two').to.be.closeTo(declared, 0.5);
         });
     });
 

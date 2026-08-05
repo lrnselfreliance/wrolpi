@@ -9,7 +9,6 @@ import {
     IframeViewer,
     InfoMessage,
     normalizeEstimate,
-    PageContainer,
     Paginator,
     TabLinks,
     TagIcon,
@@ -489,7 +488,12 @@ class ManageZim extends React.Component {
             kiwixCatalog = <ErrorMessage>Could not fetch catalog</ErrorMessage>;
         }
 
-        return <PageContainer>
+        /*
+         * A fragment, not a `PageContainer`.  `ZimRoute` already provides the page chrome -- a
+         * `wrolpi-stack` wrapper with its own top margin -- so a second one put this page a
+         * further 1em down and 1em in from the tab bar than the viewer beside it.
+         */
+        return <>
             <Header as='h2'>Zim Files</Header>
             {zimFilesBody}
 
@@ -500,7 +504,7 @@ class ManageZim extends React.Component {
 
             <DownloadMessage/>
             <ViewerMessage/>
-        </PageContainer>
+        </>
     }
 }
 

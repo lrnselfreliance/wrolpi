@@ -283,15 +283,17 @@ function SupplyPlan({name, items, fields, caloriesKey, countKey, currentDays, to
                             {projectedDays ? <> to reach about <strong>{formatDuration(projectedDays)}</strong> of food.</> : '.'}
                         </p>
 
-                        <Button role='primary' icon='download'
-                                onClick={() => downloadCSV(
-                                    inventoryExportFilename(`${name || 'inventory'} shopping list`, 'csv'),
-                                    shoppingListCSV(sortedRows))}>
-                            Download CSV
-                        </Button>
-                        <Button icon='print' onClick={printShoppingList}>
-                            Print / Save as PDF
-                        </Button>
+                        <div className='wrolpi-button-row'>
+                            <Button role='primary' icon='download'
+                                    onClick={() => downloadCSV(
+                                        inventoryExportFilename(`${name || 'inventory'} shopping list`, 'csv'),
+                                        shoppingListCSV(sortedRows))}>
+                                Download CSV
+                            </Button>
+                            <Button icon='print' onClick={printShoppingList}>
+                                Print / Save as PDF
+                            </Button>
+                        </div>
 
                         {/* Hidden printable block — `printShoppingList` makes this the only thing printed. */}
                         <ShoppingListPrint name={name} rows={sortedRows}

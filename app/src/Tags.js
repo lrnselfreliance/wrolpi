@@ -146,7 +146,11 @@ export function useTags() {
      * The link carries no margin of its own.  It had `0.3em` either side, from when these were
      * Semantic labels that had none -- but a tag already reserves a `margin-left` in ui.css for
      * the point drawn outside its body, so that was 0.3em twice on top of the group's gap and
-     * the point's own room.  Two tags sat 34.7px apart where the point needs 18.4px.
+     * the point's own room.  Two tags sat 34.7px apart, of which the point needs 18.7px.
+     *
+     * Those are rendered px, measured in the browser at the default interface scale -- which is
+     * what a user sees, and why they are the numbers worth recording.  The stylesheet states the
+     * same margin in design px, as `1.0625rem`; 17 x 1.1 is the 18.7 above.
      */
     const TagLabelLink = ({name, props}) => {
         const to = getLocationStr({tag: name}, '/search');
@@ -164,19 +168,24 @@ export function useTags() {
         }
     }
 
-    const TagsLinkGroup = ({tagNames, style, ...props}) => {
+    /*
+     * Props here have two possible targets, and which one they take is part of the contract:
+     *
+     *   `style` and `className` dress the ROW.  Everything else reaches each CHIP, which is how
+     *   `onClick` gets to a tag.
+     *
+     * `style` used to go down with the rest, so the dashboard's `marginTop` -- meant to space the
+     * row below its heading -- landed on all 34 tags and became 7.7px of extra space between
+     * every wrapped row of them.  `className` is named alongside it because it is the same kind
+     * of thing and would fail the same way; a Mantine `Group` prop (`gap`, `wrap`, `justify`) or
+     * a `data-*` meant for the row still would, so add it here rather than at a call site.
+     */
+    const TagsLinkGroup = ({tagNames, style, className, ...props}) => {
         if (!tagNames || tagNames.length === 0) {
             return <React.Fragment/>;
         }
 
-        /*
-         * `style` belongs to the group, not to each tag in it.  It used to go down with the rest
-         * of the props to every chip, so the dashboard's `marginTop` -- meant to space the row
-         * below its heading -- landed on all 34 tags and became 7.7px of extra space between
-         * every wrapped row.  The remaining props still reach the chips, which is how `onClick`
-         * gets there.
-         */
-        return <Group gap={6} style={style}>
+        return <Group gap={6} style={style} className={className}>
             {tagNames.map(i => <TagLabelLink key={i} name={i} props={props}/>)}
         </Group>
     }

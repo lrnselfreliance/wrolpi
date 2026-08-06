@@ -2667,6 +2667,126 @@ describe('a card reads as titles, not as a wall of links', () => {
     });
 });
 
+describe('a panel wrapped in a link does not read as a link', () => {
+    /*
+     * The dashboard's Status panel is wrapped in a `<Link to='/admin/status'>`, so the whole
+     * block is one anchor.  `a` takes `color: var(--blue)` and an underline on hover from
+     * tokens.css, and `.wrolpi-statistic-value` sets no color of its own -- so the three load
+     * figures inherited the link color and underlined as a group whenever the pointer crossed
+     * any part of the panel.  Blue numbers on a panel where nothing else is blue.
+     *
+     * The panel should still be clickable and still say so with the cursor.  That is the
+     * whole reason to wrap it; it is only the link's LOOK that is wrong here.
+     */
+    const mountLinkedPanel = (className, theme) => cy.mountUI(<MemoryRouter>
+        <Panel>
+            <a href='/admin/status' className={className} data-testid='panel-link'>
+                <Header as='h2'>Status</Header>
+                <StatisticGroup>
+                    <Statistic label='1 Min. Load' value='0.4'/>
+                    <Statistic label='5 Min. Load' value='0.5'/>
+                </StatisticGroup>
+            </a>
+        </Panel>
+    </MemoryRouter>, theme ? {theme} : undefined);
+
+    it('gives the figures the panel\'s text color rather than the link color', () => {
+        mountLinkedPanel('no-link-underscore card-link');
+
+        cy.get('[data-testid="panel-link"] .wrolpi-statistic-value').first().should(($value) => {
+            const root = getComputedStyle(document.documentElement);
+            const shown = toRgb(getComputedStyle($value[0]).color);
+
+            expect(shown, 'the load figure').to.deep.equal(toRgb(root.getPropertyValue('--text')));
+            expect(shown, 'and not the link color')
+                .to.not.deep.equal(toRgb(root.getPropertyValue('--blue')));
+        });
+    });
+
+    it('is a real constraint: the same panel without the classes IS blue', () => {
+        // Without this the assertion above would pass just as well if `--text` and `--blue`
+        // happened to resolve to the same value, or if the anchor were never styled at all.
+        mountLinkedPanel(undefined);
+
+        cy.get('[data-testid="panel-link"] .wrolpi-statistic-value').first().should(($value) => {
+            const root = getComputedStyle(document.documentElement);
+            expect(toRgb(getComputedStyle($value[0]).color), 'an unclassed link is blue')
+                .to.deep.equal(toRgb(root.getPropertyValue('--blue')));
+        });
+    });
+
+    /*
+     * `:hover` cannot be forced -- no event applies it and getComputedStyle will never
+     * report it -- so the live CSSOM is searched instead.
+     *
+     * The question is not "does a hover rule exist": `a:hover {text-decoration: underline}`
+     * in tokens.css matches this element either way, and asserting merely that it is not
+     * `!important` would pass with or without the fix.  What decides it is whether some
+     * rule the element matches at rest sets `text-decoration: none` as `!important`, since
+     * that is what no later hover rule can outrank.  That is `no-link-underscore`, and
+     * nothing else in the app declares it.
+     */
+    const importantlyUndecorated = (element) => [...document.styleSheets]
+        .flatMap((sheet) => {
+            try {
+                return [...sheet.cssRules];
+            } catch (e) {
+                return []; // A cross-origin sheet; none of ours are.
+            }
+        })
+        .filter(rule => rule.selectorText
+            && !rule.selectorText.includes(':hover')
+            && rule.style.getPropertyPriority('text-decoration') === 'important'
+            && rule.style.textDecoration.includes('none')
+            && rule.selectorText.split(',').some((selector) => {
+                try {
+                    return selector.trim() && element.matches(selector.trim());
+                } catch (e) {
+                    return false;
+                }
+            }));
+
+    it('cannot be underlined, resting or hovered', () => {
+        mountLinkedPanel('no-link-underscore card-link');
+
+        cy.get('[data-testid="panel-link"]').should(($link) => {
+            expect(getComputedStyle($link[0]).textDecorationLine, 'at rest').to.equal('none');
+            expect(importantlyUndecorated($link[0]).map(rule => rule.selectorText),
+                'a rule no hover rule can outrank').to.not.be.empty;
+        });
+    });
+
+    it('is a real constraint: the same panel without the classes can be', () => {
+        mountLinkedPanel(undefined);
+
+        cy.get('[data-testid="panel-link"]').should(($link) => {
+            expect(importantlyUndecorated($link[0]).map(rule => rule.selectorText),
+                'nothing protects an unclassed link').to.be.empty;
+        });
+    });
+
+    it('keeps the pointer, so the panel still says it is clickable', () => {
+        mountLinkedPanel('no-link-underscore card-link');
+
+        cy.get('[data-testid="panel-link"]').should(($link) => {
+            expect(getComputedStyle($link[0]).cursor).to.equal('pointer');
+        });
+    });
+
+    themeNames.forEach((theme) => {
+        it(`keeps the figures legible on the panel in ${theme}`, () => {
+            mountLinkedPanel('no-link-underscore card-link', theme);
+
+            cy.get('[data-testid="panel-link"] .wrolpi-statistic-value').first().should(($value) => {
+                const panel = toRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--panel'));
+                expect(contrast(toRgb(getComputedStyle($value[0]).color), panel),
+                    `load figure on the panel in ${theme}`).to.be.greaterThan(4.5);
+            });
+        });
+    });
+});
+
 describe('a card keeps its meta with the title and its actions at the foot', () => {
     /*
      * A grid stretches every card to the tallest in its row.  The meta line used to carry

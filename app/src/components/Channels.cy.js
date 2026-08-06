@@ -53,6 +53,6 @@ describe('Channels Page', () => {
         cy.wait(500);
         cy.get('input[name="name"]').should('be.visible');
         cy.get('input[name="name"]').should('have.value', 'Editing Channel');
-        cy.get('div.ui.label.large').contains('Automotive').should('be.visible');
+        cy.get('.wrolpi-tag').contains('Automotive').should('be.visible');
     });
 });

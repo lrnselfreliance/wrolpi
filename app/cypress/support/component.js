@@ -32,6 +32,7 @@ import '../../src/App.css';
 import {MemoryRouter, Route, Routes} from "react-router";
 import {QueryProvider} from "../../src/hooks/customHooks";
 import {TagsProvider} from "../../src/Tags";
+import {FileWorkerStatusProvider} from "../../src/contexts/FileWorkerStatusContext";
 import {MantineProvider} from "@mantine/core";
 import {cssVariablesResolver, mantineTheme} from "../../src/themes/mantine";
 import {isDarkTheme} from "../../src/themes/names";
@@ -53,17 +54,27 @@ Cypress.Commands.add('mountWithRouter', (component, options) => {
      * MantineProvider, configured exactly as ThemeProvider configures it.  Every component
      * in src/components/ui renders Mantine internals and throws without it -- the same
      * thing that had to be added to test-utils.js for jest.
+     *
+     * FileWorkerStatusProvider is here for the same reason: App.js wraps the whole app in
+     * it, and `useFileWorkerStatus` THROWS rather than returning a default when it is
+     * missing.  A page that reaches it only through a modal buried a few levels down --
+     * the channel edit page reaches it via CollectionReorganizeModal -- therefore mounted
+     * fine everywhere else and died here, which is what the edit-channel spec was failing
+     * on.  The poll is slowed right down because a spec is over long before the second
+     * request would tell it anything, and its fetch errors are swallowed by the provider.
      */
     return cy.mount(
         <MemoryRouter initialEntries={initialEntries}>
             <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
             <QueryProvider>
-                <Routes>
-                    <Route path='/videos/channels/new' element={component}/>
-                    <Route path='/videos/channel/:channelId/edit' element={component}/>
-                    <Route path='/videos/channels/:channelId' element={component}/>
-                    <Route path='*' element={component}/>
-                </Routes>
+                <FileWorkerStatusProvider pollInterval={60000}>
+                    <Routes>
+                        <Route path='/videos/channels/new' element={component}/>
+                        <Route path='/videos/channel/:channelId/edit' element={component}/>
+                        <Route path='/videos/channels/:channelId' element={component}/>
+                        <Route path='*' element={component}/>
+                    </Routes>
+                </FileWorkerStatusProvider>
             </QueryProvider>
             </MantineProvider>
         </MemoryRouter>,

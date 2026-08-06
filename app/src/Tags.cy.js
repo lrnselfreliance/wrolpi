@@ -10,6 +10,8 @@ describe('Tags', () => {
 
     it('Tags Dashboard displays Tags.', () => {
         cy.wait('@getTags');
-        cy.get('div.ui.label.large').contains('Automotive').should('be.visible');
+        // `.wrolpi-tag` is what a tag chip is now.  `div.ui.label.large` named the old
+        // framework's markup, and has matched nothing since its stylesheet stopped loading.
+        cy.get('.wrolpi-tag').contains('Automotive').should('be.visible');
     });
 });

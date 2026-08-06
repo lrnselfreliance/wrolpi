@@ -78,9 +78,15 @@ const Row = ({children}) => <div style={{display: 'flex', gap: 10, flexWrap: 'wr
     {children}
 </div>;
 
-// The labels Settings shows beside its own log-level slider, so the sample reads like the
-// control it stands in for rather than a bare number.
-const logLevelNames = ['Critical', 'Error', 'Warning', 'Info', 'Debug'];
+/*
+ * The labels Settings shows beside its own log-level slider, so the sample reads like the
+ * control it stands in for rather than a bare number.
+ *
+ * Keyed 1..5 to match `levelNameMap` and the `<datalist>` in Settings.js exactly.  The first
+ * version of this invented an "Error" step, dropped Trace, and ran 0..4 -- a gallery whose
+ * job is to show the real control misrepresenting it is worse than not showing it.
+ */
+const logLevelNames = {1: 'Critical', 2: 'Warning', 3: 'Info', 4: 'Debug', 5: 'Trace'};
 
 /*
  * One navigation bar, in one of the twelve colors a user can pick for it.
@@ -153,9 +159,10 @@ export function ThemeSamplePage() {
     const [wideConfirmOpen, setWideConfirmOpen] = useState(false);
     const [comments, setComments] = useState(true);
     const [hotspot, setHotspot] = useState(true);
-    // Draggable, because the accent only shows on the FILLED half of the track -- a slider
-    // parked at either end shows almost none of the color this section is here to check.
-    const [logLevel, setLogLevel] = useState(2);
+    // Draggable, and starting at Info rather than at either end: the accent only shows on the
+    // FILLED half of the track, so a slider parked at a limit shows almost none of the color
+    // this section is here to check, or none of the unfilled track beside it.
+    const [logLevel, setLogLevel] = useState(3);
     const [dismissed, setDismissed] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [realColors, setRealColors] = useState(false);
@@ -719,8 +726,8 @@ export function ThemeSamplePage() {
                     <input
                         type='range'
                         id='sample_range'
-                        min={0}
-                        max={4}
+                        min={1}
+                        max={5}
                         step={1}
                         value={logLevel}
                         onChange={e => setLogLevel(parseInt(e.target.value))}
@@ -730,9 +737,10 @@ export function ThemeSamplePage() {
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 8, marginBottom: 0}}>
                     A range slider is drawn by the browser, not by us — so with nothing said
                     about it the UA paints it in its own fixed blue, which no theme can reach.
-                    Check it in night: the accent follows <code>--blue</code> like a link does,
-                    and the unfilled half of the track is dark rather than the UA's pale slab.
-                    Settings and three of the calculators each have one.
+                    Check it in night: the accent follows <code>--blue</code> like a link does.
+                    The accent reaches the thumb and the filled half only; the rest of the
+                    track comes from the browser's own dark palette, which the theme already
+                    selects. Settings and three of the calculators each have one.
                 </p>
             </Panel>
         </Section>

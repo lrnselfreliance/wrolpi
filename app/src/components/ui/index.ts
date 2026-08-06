@@ -1,7 +1,7 @@
 /*
  * The WROLPi component library: token-driven components built on Mantine.
  *
- * Import from here, not from `@mantine/core` or `semantic-ui-react`:
+ * Import from here, not from `@mantine/core` directly:
  *   import {Button, Table, Message} from '../components/ui';
  *
  * Everything resolves its colors through theme tokens, so no component branches

@@ -984,7 +984,7 @@ const REFRESH_PHASES = [
     {key: 5, icon: 'check circle', title: 'Cleanup', description: 'Finalizing'},
 ];
 
-// Replaces Semantic's Step.Group/Step: a row of phase markers, brightness/weight (via the active
+// A row of phase markers, brightness/weight (via the active
 // border) carrying the current stage rather than a bespoke component from the shared library.
 function RefreshStepItem({phase, isActive, isCompleted, isDisabled, description}) {
     return <div style={{

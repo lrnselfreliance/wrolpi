@@ -14,7 +14,7 @@ import {
 } from "../Common";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
 import {ConfigsTable} from "./Configs";
-import {semanticUIColorMap} from "../Vars";
+import {navColorHexMap} from "../Vars";
 import {Link} from "react-router";
 import {
     Button,
@@ -506,7 +506,7 @@ export function SettingsPage() {
         {value: tz, label: tz}
     ));
 
-    const navColorOptions = Object.keys(semanticUIColorMap).map(i => {
+    const navColorOptions = Object.keys(navColorHexMap).map(i => {
         return {value: i, label: i.charAt(0).toUpperCase() + i.slice(1)}
     });
 

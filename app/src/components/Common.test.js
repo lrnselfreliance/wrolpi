@@ -110,7 +110,7 @@ describe('DirectorySearch', () => {
         it('renders the dropdown without crashing when directoryName is null', async () => {
             // An unset form field (e.g. the new Channel page) passes a null value.  With
             // isDir=false a "New Directory" result is built from directoryName; if that title is
-            // null, Semantic UI's Search crashes reading null.length when the menu opens.
+            // null, the old Search crashed reading null.length when the menu opened.
             setMockHookState({
                 directories: [],
                 channelDirectories: [],
@@ -135,7 +135,7 @@ describe('DirectorySearch', () => {
                 <DirectorySearch onSelect={mockOnSelect} value="" required/>
             );
 
-            // Unlike Semantic UI's Search, the SearchBox forwards `required` straight
+            // Unlike the old Search, the SearchBox forwards `required` straight
             // onto the input.
             const input = screen.getByPlaceholderText(/search directory names/i);
             expect(input).toBeRequired();
@@ -495,7 +495,7 @@ describe('contrastingColor', () => {
      */
 
     it('picks whichever of the two options actually reads better', () => {
-        // Semantic's blue.  The old threshold check chose light text here, at 2.9:1, when dark
+        // The palette blue.  The old threshold check chose light text here, at 2.9:1, when dark
         // text on the same fill gives 5.3:1 -- the worse of the only two available answers.
         // Every mid-tone blue, teal and purple a user might choose sat in that band.
         const blue = '#2185d0';
@@ -781,7 +781,7 @@ describe('PageContainer', () => {
 
 describe('a row of buttons', () => {
     /*
-     * Semantic's Button brought `margin: 0 .25em .25em 0` with it, so a page could list buttons as
+     * Buttons used to bring `margin: 0 .25em .25em 0` with them, so a page could list buttons as
      * bare siblings and they arrived both spaced and, when the row wrapped, separated.  Nothing
      * replaced that margin.  The archive page's six actions shared edges, and two of them carried
      * `marginTop: 0.5em` -- put there to keep a wrapped row from touching vertically, which instead

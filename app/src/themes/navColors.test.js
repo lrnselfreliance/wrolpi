@@ -3,7 +3,7 @@ import path from 'path';
 import {contrastRatio, isMeasurable} from './contrast';
 import {defaultNavColor, navColorNames, navColorsFrom} from './navColors';
 import {themeNames} from './names';
-import {semanticUIColorMap} from '../components/Vars';
+import {navColorHexMap} from '../components/Vars';
 
 /*
  * The navbar foreground, measured against the palette that actually ships.
@@ -53,12 +53,12 @@ describe('the navbar palette', () => {
 
     it('offers exactly the colors the favicon has an icon for', () => {
         /*
-         * `semanticUIColorMap` supplies the fixed hexes for `/favicon-<color>.svg` and the
+         * `navColorHexMap` supplies the fixed hexes for `/favicon-<color>.svg` and the
          * `theme-color` meta tag -- a file on disk and OS chrome, neither of which can take a
          * token.  A color offered here with no icon there falls back to violet, so the bar
          * and the browser tab would disagree.
          */
-        expect([...navColorNames].sort()).toEqual(Object.keys(semanticUIColorMap).sort());
+        expect([...navColorNames].sort()).toEqual(Object.keys(navColorHexMap).sort());
     });
 
     it('defaults to a color it offers', () => {

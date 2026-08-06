@@ -90,7 +90,7 @@ describe('Domains List Page', () => {
 
     it('Edit control is a link to that domain\'s edit page', () => {
         /*
-         * This used to assert Semantic's `ui button secondary` classes.  Framework class
+         * This used to assert the old `ui button secondary` classes.  Framework class
          * names say nothing a user can perceive and they broke the moment the button
          * changed libraries, so it now checks what actually matters: the control is a real
          * link, and it points at the edit route rather than relying on a click handler.

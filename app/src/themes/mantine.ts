@@ -29,16 +29,22 @@ export const roleNames = ['neutral', 'info', 'success', 'warning', 'danger'] as 
 
 export type RoleName = typeof roleNames[number];
 
-/** The Semantic UI color names WROLPi uses.  Each maps to a token of the same name. */
-export const semanticColorNames = [
+/**
+ * The named colors WROLPi uses, each mapping to a token of the same name.
+ *
+ * A hue, unlike a role: this is the palette a user picks a nav bar or a calculator group
+ * from, where the point is telling one thing from another rather than saying how serious
+ * it is.  The same twelve as `navColorHexMap` in components/Vars.js.
+ */
+export const paletteColorNames = [
     'red', 'orange', 'yellow', 'olive', 'green', 'teal', 'blue', 'violet', 'purple', 'pink',
     'brown', 'grey',
 ] as const;
 
-export type SemanticColorName = typeof semanticColorNames[number];
+export type PaletteColorName = typeof paletteColorNames[number];
 
-const semanticColors = Object.fromEntries(
-    [...semanticColorNames, ...roleNames].map(name => [name, tokenColor(name)])
+const paletteColors = Object.fromEntries(
+    [...paletteColorNames, ...roleNames].map(name => [name, tokenColor(name)])
 );
 
 export const mantineTheme = createTheme({
@@ -58,7 +64,7 @@ export const mantineTheme = createTheme({
     // Mantine cannot compute contrast from a `var()`, so it must not try.
     autoContrast: false,
     colors: {
-        ...semanticColors,
+        ...paletteColors,
         /*
          * Mantine reads `dark` and `gray` shades directly for surfaces, borders, and
          * secondary text — table borders, zebra stripes, input chrome, disabled states.

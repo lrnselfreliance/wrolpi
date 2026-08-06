@@ -11,7 +11,7 @@ import {clearToasts, toast} from './toast';
  * Tests for toasts.
  *
  * `toast` has thirteen call sites and had no test at all, having already failed once in the
- * way that is hardest to notice: App.js dropped Semantic's toast container while seven pages
+ * way that is hardest to notice: App.js dropped the old toast container while seven pages
  * were still importing the old helper, so every notification in the app silently went
  * nowhere.  Nothing threw, and nothing looked wrong until somebody expected a message.
  *
@@ -175,7 +175,7 @@ describe('toast', () => {
 
 describe('a toast that can be clicked', () => {
     /*
-     * Semantic's toast took an `onClick` in its options and made the whole toast activate it.
+     * The old toast took an `onClick` in its options and made the whole toast activate it.
      * `Events.js` still passes one -- it did before the migration and was never changed -- for
      * three events that each open a URL: a shared page pushed from the browser extension, a
      * finished archive upload, and a generated screenshot.  The migrated helper destructured
@@ -314,7 +314,7 @@ describe('how long a toast stays up', () => {
 
     it('stays until dismissed when the caller asks for time 0', async () => {
         /*
-         * Semantic treated `time: 0` as "stay up".  Mantine wants `autoClose: false`: its
+         * Callers spell "stay up" as `time: 0`.  Mantine wants `autoClose: false`: its
          * `getAutoClose` returns any number as given, and the container then calls
          * `setTimeout(hide, 0)` -- so passing the 0 straight through dismisses the toast on the
          * next tick.  Call sites use 0 for errors the user must actually see, so getting this

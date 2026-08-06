@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import {MantineProvider} from '@mantine/core';
 import {IconMoodSmile} from '@tabler/icons-react';
 import {ThemeContext} from '../../contexts/contexts';
-import {cssVariablesResolver, mantineTheme, semanticColorNames} from '../../themes/mantine';
+import {cssVariablesResolver, mantineTheme, paletteColorNames} from '../../themes/mantine';
 import {themeChoices} from '../../themes/names';
 import {
     ActionInput,
@@ -49,7 +49,7 @@ const renderUI = (ui) => render(
 );
 
 describe('Icon', () => {
-    it('renders a Semantic name as an SVG', () => {
+    it('renders a named icon as an SVG', () => {
         const {container} = renderUI(<Icon name='trash'/>);
 
         expect(container.querySelector('svg')).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('Icon', () => {
         expect(container.querySelector('svg')).toBeInTheDocument();
     });
 
-    it('maps every Semantic icon name the app uses', () => {
+    it('maps every icon name the app uses', () => {
         // A name that falls through renders a fallback glyph, leaving a hole in the UI.
         const names = ['trash', 'warning sign', 'download', 'refresh', 'plus', 'edit', 'wifi',
             'search', 'lock', 'check', 'upload', 'play', 'folder', 'filter', 'file text',
@@ -212,7 +212,7 @@ describe('Button', () => {
         expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
     });
 
-    it('translates Semantic size names, which Mantine would otherwise ignore', () => {
+    it('translates our size names, which Mantine would otherwise ignore', () => {
         // Unmigrated call sites still pass size='tiny'.  Mantine drops a size it does not
         // recognise without warning, so the button quietly renders at the default size.
         renderUI(<><Button size='tiny'>Old</Button><Button size='sm'>New</Button></>);
@@ -225,7 +225,7 @@ describe('Button', () => {
     it('renders an anchor when given an href, without being told twice', () => {
         /*
          * Mantine drops `href` unless it also gets `component='a'`, so a button carrying
-         * only an href looked like a link and navigated nowhere.  Semantic spelled this
+         * only an href looked like a link and navigated nowhere.  The old library spelled this
          * `as='a'`, so every migrated call site that kept just the href was silently
          * broken — a download button that downloads nothing.
          */
@@ -242,7 +242,7 @@ describe('Button', () => {
 
     it('forwards a ref to the underlying DOM element', () => {
         /*
-         * Ported from the old Theme.test.js, which caught a real crash: Semantic's Button
+         * Ported from the old Theme.test.js, which caught a real crash: the old Button
          * was a class component, so a forwarded ref resolved to the class instance, and
          * anything that called `node.contains(...)` on the trigger -- a Modal or Popup
          * portal checking whether a click landed inside -- threw "contains is not a
@@ -621,7 +621,7 @@ describe('Progress', () => {
 
     it('keeps its percent text readable on every bar color', () => {
         /*
-         * Ported from Theme.test.js, which asserted Semantic's `inverted-progress-text`
+         * Ported from Theme.test.js, which asserted the old `inverted-progress-text`
          * class across all fourteen colors and both modes.  That class is gone; the
          * mechanism now is that the text always takes `--text` while light mode lightens
          * the fill beneath it, because the text sits across both the filled and unfilled
@@ -649,7 +649,7 @@ describe('Progress', () => {
     });
 
     it('reports no value when the size is unknown', () => {
-        // Semantic called this `indicating`.  An upload that has not reported its size
+        // An upload that has not reported its size
         // would otherwise sit at 0% and read as stalled, and `aria-valuenow=0` would tell
         // a screen reader the same wrong thing.
         renderUI(<Progress indeterminate label='Uploading…'/>);
@@ -676,12 +676,12 @@ describe('Status', () => {
 });
 
 describe('Label', () => {
-    it('supports every Semantic color', () => {
+    it('supports every palette color', () => {
         const {container} = renderUI(<>
-            {semanticColorNames.map(color => <Label key={color} color={color}>{color}</Label>)}
+            {paletteColorNames.map(color => <Label key={color} color={color}>{color}</Label>)}
         </>);
 
-        expect(container.querySelectorAll('.wrolpi-label')).toHaveLength(semanticColorNames.length);
+        expect(container.querySelectorAll('.wrolpi-label')).toHaveLength(paletteColorNames.length);
     });
 });
 
@@ -802,7 +802,7 @@ describe('nothing paints a label\'s text with an inline color', () => {
 });
 
 describe('Table', () => {
-    it('renders a Semantic-shaped compound table', () => {
+    it('renders a compound table', () => {
         renderUI(<Table>
             <Table.Header>
                 <Table.Row><Table.HeaderCell>URL</Table.HeaderCell></Table.Row>
@@ -882,7 +882,7 @@ describe('Table', () => {
 describe('Card', () => {
     it('draws a mimetype accent from a token, not a hex', () => {
         // File cards carry the mimetype's color on their top edge so a grid of results is
-        // scannable by kind.  Semantic did this with `<Card color='violet'>`; two migrated
+        // scannable by kind.  The old card did this with `<Card color='violet'>`; two migrated
         // files had dropped the accent because our Card had no equivalent.
         const {container} = renderUI(<Card title='Water Storage.pdf' color='red'/>);
 
@@ -1520,7 +1520,7 @@ describe('modal sizes', () => {
     /*
      * The size table is the single thing that halved every modal in the migration.
      *
-     * Semantic's names were measured on the pre-migration build: mini 360, tiny 540, small
+     * The names were measured on the build users had before: mini 360, tiny 540, small
      * 720, large 1080, fullscreen 95%.  They are mapped onto Mantine's much smaller scale, so
      * a modal that said `small` went from 720px to 440px and one that said nothing at all
      * went from 900px to 440px.  That is deliberate now -- the sizes were audited call site
@@ -1543,7 +1543,7 @@ describe('modal sizes', () => {
         });
     });
 
-    it('maps every Semantic name onto that scale', () => {
+    it('maps every size name onto that scale', () => {
         // The mapping the call sites are written against.  `fullscreen` is the one that did
         // not shrink, and the one several audited modals were moved TO.
         const source = fs.readFileSync(path.join(__dirname, 'Overlays.tsx'), 'utf8');
@@ -1595,7 +1595,7 @@ describe('modal sizes', () => {
         /*
          * Two different hazards, and neither announces itself.
          *
-         * A misspelled SEMANTIC name is not in the table, so it passes through untranslated,
+         * A misspelled name is not in the table, so it passes through untranslated,
          * Mantine does not recognise it either, and the modal silently renders at the default
          * 440px.  A raw MANTINE name -- `sm`, `md` -- is recognised and honoured: it works,
          * so nothing ever complains, and the call site quietly sits outside the vocabulary

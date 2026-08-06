@@ -25,10 +25,8 @@ export interface PaginationProps {
 }
 
 /**
- * Page controls.  Replaces Semantic's Pagination, keeping its prop names
- * (`activePage`, `totalPages`, `onPageChange`) so call sites migrate as a
- * rename — but `onPageChange` receives the page number directly rather than
- * Semantic's `(event, data)` pair.
+ * Page controls: `activePage`, `totalPages`, `onPageChange`.  `onPageChange` receives
+ * the page number directly.
  */
 export function Pagination({
     activePage,

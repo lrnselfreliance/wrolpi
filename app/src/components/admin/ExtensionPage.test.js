@@ -56,7 +56,7 @@ describe('ExtensionPage', () => {
 
     it('shows the not-yet-installed warning when no binaries are available', async () => {
         // This test exists specifically to render the <Message warning> block,
-        // which catches missing imports from the Theme/Semantic-UI module.
+        // which catches missing imports from the component library.
         setUserAgent(CHROME_UA);
         global.fetch = mockFetch({
             files: {

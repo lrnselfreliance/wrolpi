@@ -365,9 +365,8 @@ html[data-theme="amber"] .wrolpi-searchbox-control:focus-within {
  *
  * The control is a bordered box with `padding: 0 8px`, so the button sat 9px short of the
  * right edge and 2px short of the full height -- reading as a glyph dropped inside the input
- * rather than as a control of its own.  Semantic rendered this as an action button welded to
- * the field: measured on the QA Pi, zero gap to the input, zero to the outer edge, and the
- * full 44px height.
+ * rather than as a control of its own.  It should read as an action button welded to the
+ * field: zero gap to the input, zero to the outer edge, and the field's full height.
  *
  * A negative right margin rather than removing the control's padding: the padding is what
  * holds the search icon and the text off the border, and only this one child should escape
@@ -503,7 +502,7 @@ html .wrolpi-searchbox-clear {
     margin-top: 1.125rem;
 }
 
-/* A stack of form rows, replacing Semantic's `ui stackable grid` in edit forms. */
+/* A stack of form rows: the layout of every edit form. */
 .wrolpi-form-rows {
     display: flex;
     flex-direction: column;
@@ -525,9 +524,9 @@ html .wrolpi-searchbox-clear {
 }
 
 /*
- * `hooks/useForm.js` renders its own <label> and native <input> — it always did, with
- * Semantic's Form.Input only wrapping them for field styling.  These rules supply that
- * styling from tokens instead, so a native input matches the library's own controls.
+ * `hooks/useForm.js` renders its own <label> and native <input> rather than a library
+ * control.  These rules dress a native input from the tokens, so one of those fields
+ * matches the library's own controls beside it.
  */
 
 .wrolpi-form-field input {
@@ -725,11 +724,10 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
  * checked track keeps coming from the `color` prop.
  */
 /*
- * Semantic's inverted stylesheet colors *every* descendant of `.ui.inverted.segment`
- * (rgba(255,255,255,.9), and #dddddd on labels).  Our components are mounted inside
- * unmigrated pages that still use those wrappers, so an inherited color puts white
- * pixels on screen in night mode.  Restating from tokens is the fix; the rule can go
- * when the last Semantic wrapper does.
+ * A switch's label and description are body text, stated from the tokens rather than
+ * inherited.  Mantine draws the description from its own gray palette, which is a
+ * non-red pixel in night mode; and an inherited color is only ever as good as whatever
+ * the switch happens to be mounted inside.
  */
 .wrolpi-switch .mantine-Switch-label {
     color: var(--text);
@@ -760,9 +758,9 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
 /* ----------------------------------------------------------------- Labels */
 
 /*
- * Sized to Semantic's label (12px text, ~7px of vertical padding), which these replaced.
- * The first pass came out at 11.5px with 3px of padding and read as noticeably smaller than
- * what users had before -- a tag is a hit target as well as a word.
+ * 12px text with ~7px of vertical padding.  The first pass came out at 11.5px with 3px of
+ * padding and read as noticeably smaller than what users had before -- a tag is a hit
+ * target as well as a word, and a phone is where it is hardest to hit.
  */
 .wrolpi-label {
     display: inline-flex;
@@ -818,8 +816,8 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     /*
      * The point is centred on the left edge, so its inner half covers the body's first 10.5px
      * -- and a positioned pseudo-element paints above the parent's text, not behind it, so
-     * without this the first letter is hidden under the point.  Semantic's tag label carried
-     * the same asymmetry (`padding-left: 1.5em`) for the same reason.
+     * without this the first letter is hidden under the point.  The asymmetry is the point's
+     * width, not a nudge.
      */
     padding-left: 0.8125rem;
 }
@@ -970,10 +968,10 @@ html[data-theme="night"] .wrolpi-tag::before {
     gap: 0.5rem;
     margin: 0;
     /*
-     * Stated explicitly because semantic.min.css sets `h1,h2,h3,h4,h5 { font-family:
-     * Lato }` and loads after Mantine's element rule, so headings would ignore the
-     * theme's body face — visible in amber, where the body is mono and headings were
-     * not.  A class outranks the element selector.  Can go once Semantic is gone.
+     * The face is stated here rather than left to inheritance or to Mantine's heading
+     * config, so a heading cannot quietly diverge from the theme's body face.  Amber is
+     * where that shows: its body is mono, and a heading that misses the token renders in
+     * a proportional face beside it.
      */
     font-family: var(--font-body);
     font-weight: 600;
@@ -1203,9 +1201,8 @@ html .mantine-Notification-closeButton:hover {
 }
 
 /*
- * Indeterminate: a sliding band, for work whose size is not known yet.  Semantic called
- * this `indicating`; without it an upload that has not reported its size sits at 0% and
- * reads as stalled.
+ * Indeterminate: a sliding band, for work whose size is not known yet.  Without it an
+ * upload that has not reported its size sits at 0% and reads as stalled.
  */
 .wrolpi-progress-indeterminate .wrolpi-progress-fill {
     width: 35%;
@@ -1327,10 +1324,10 @@ html[data-theme="amber"] .wrolpi-progress-fill {
 /*
  * The same idea along the other axis: a row of buttons, spaced by the row.
  *
- * Semantic's Button carried `margin: 0 .25em .25em 0`, so a page could list buttons as bare
+ * Buttons used to carry `margin: 0 .25em .25em 0` of their own, so a page could list them as bare
  * siblings and they arrived both spaced and, when the row ran out of width, separated from the line
- * below.  Nothing replaced that margin -- the archive page's six actions shared edges, and the
- * downloads table's two icon buttons did too.
+ * below.  Once that margin went nothing replaced it -- the archive page's six actions shared edges,
+ * and the downloads table's two icon buttons did too.
  *
  * Two of the archive page's six had `marginTop: 0.5em` instead, which is where the "Update sits
  * lower than the rest" came from: a Button is `display: inline-flex; vertical-align: middle`, and
@@ -1380,10 +1377,9 @@ html[data-theme="amber"] .wrolpi-progress-fill {
 /* ------------------------------------------------------------- Or divider */
 
 /*
- * Two choices of equal weight, split down the middle -- Semantic's `Segment placeholder` with a
- * vertical `Divider`, which the dashboard's Download/Upload panel was built as.
+ * Two choices of equal weight, split down the middle: the dashboard's Download/Upload panel.
  *
- * The migrated version was a `Group` with a divider between two buttons, so the halves were sized
+ * An earlier version was a flex row with a divider between two buttons, so the halves were sized
  * to their buttons rather than to the panel: the pair huddled in the centre with the rule wherever
  * they left it, instead of two equal fields with the rule at the true middle.
  *
@@ -1501,8 +1497,8 @@ html[data-theme="amber"] .wrolpi-progress-fill {
  */
 :root {
     --card-poster-max-height: 12.5rem;
-    /* How far a disabled control fades.  Semantic used 0.45 and it reads correctly against
-       every theme's panel; the tests read this rather than repeating the number. */
+    /* How far a disabled control fades.  0.45 reads correctly against every theme's panel;
+       the tests read this rather than repeating the number. */
     --disabled-opacity: 0.45;
 }
 
@@ -1641,9 +1637,8 @@ html[data-theme="amber"] .wrolpi-card-tag {
 /*
  * A statistic carries its own spacing rather than relying on a parent to supply
  * it, so that one dropped on a page by itself still sits clear of its
- * neighbours.  Semantic's `Statistic.Group` only spaced elements carrying
- * Semantic's own classes, so without this the labels ran together into one
- * unreadable line.
+ * neighbours.  Without it the labels run together into one unreadable line
+ * wherever a statistic is used outside a group.
  */
 
 .wrolpi-statistic {
@@ -1846,9 +1841,9 @@ html[data-theme="amber"] .wrolpi-th-sort:focus-visible {
  * A disabled button keeps its own color.
  *
  * Mantine repaints one flat grey -- background, text and border all replaced with
- * `--mantine-color-disabled`.  Semantic kept the color and dropped the whole control to
- * `opacity: 0.45`, and that is the better signal: it says "not available" without also
- * saying "no longer the delete button".
+ * `--mantine-color-disabled`.  Keeping the color and dropping the whole control to
+ * `opacity: 0.45` is the better signal: it says "not available" without also saying
+ * "no longer the delete button".
  *
  * The file browser is where the difference shows.  Its footer is eight buttons, six of them
  * disabled until something is selected, so the toolbar a user meets on arriving at /files was

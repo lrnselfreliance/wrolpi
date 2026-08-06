@@ -32,7 +32,7 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
             return;
         }
         // Our inputs forward their ref straight to the underlying <input> DOM node, so focus + select work
-        // directly on it (unlike Semantic's Input, which wrapped the node behind `.inputRef`).
+        // directly on it (the old Input wrapped the node behind `.inputRef`).
         const node = localRef.current;
         if (node && node.focus) {
             node.focus();

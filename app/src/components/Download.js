@@ -37,11 +37,11 @@ import {
 } from "./Vars";
 
 /*
- * Download.js was built around Semantic UI's <Form> family (Form.Input,
+ * Download.js was built around the old <Form> family (Form.Input,
  * FormDropdown, TextArea) via `hooks/useForm.js`'s JSX helpers (InputForm,
  * NumberInputForm, ToggleForm, UrlInput, UrlsTextarea).  `hooks/useForm.js` is
  * off-limits for this migration and its JSX helpers still render through
- * `./Theme` (Semantic UI).  Rather than use those helpers, the field
+ * `./Theme`.  Rather than use those helpers, the field
  * components below call `useForm`'s plain data getters (getInputProps,
  * getSelectionProps, getCustomProps) directly and render our own markup with
  * the token-driven `./ui` library.  See the migration report for what this
@@ -110,7 +110,7 @@ function NumberField({
     </div>
 }
 
-/** A single-select field.  `options` are Semantic-shaped ({key, text, value}); Mantine's Select
+/** A single-select field.  `options` are {key, text, value}; Mantine's Select
  *  requires string data values, so values are stringified for display and mapped back on change. */
 function SelectField({form, name, path, label, options, required = false, placeholder, disabled = false, afterChange}) {
     const [inputProps] = form.getSelectionProps({name, path, required, afterChange});
@@ -1547,7 +1547,7 @@ export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuc
     />
 }
 
-/** URL field for a single URL (Semantic's `UrlInput`). */
+/** URL field for a single URL. */
 function UrlField({form, required = true, name = 'url', path = 'url', disabled = false}) {
     const validator = (i) => validURL(i) ? null : 'Invalid URL';
     return <TextField
@@ -1562,7 +1562,7 @@ function UrlField({form, required = true, name = 'url', path = 'url', disabled =
     />
 }
 
-/** Multiline URLs field (Semantic's `UrlsTextarea`). */
+/** Multiline URLs field: one URL per line. */
 function UrlsField({name = 'urls', required, form}) {
     required = required !== undefined;
 

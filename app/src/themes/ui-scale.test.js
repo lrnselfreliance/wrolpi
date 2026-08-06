@@ -4,15 +4,15 @@ import path from 'path';
 /*
  * The size of the interface.
  *
- * Measured against the pre-migration Semantic build on the QA Pi at 1280px, the drift was not
+ * Measured on the QA Pi at 1280px against the build users had before, the drift was not
  * one number: its headings were h1 28 / h2 24 / h3 18 / h4 15 / h5 14 against our 26 / 21 / 17
  * / 14 / 13, and its video card a fixed 290px with an 18px title against our 238px with a 13px
- * one -- while our BODY text and chrome went the other way, 16px base against Semantic's 14 and
+ * one -- while our BODY text and chrome went the other way, 16px base against its 14 and
  * 42px buttons against 36.  So no per-component nudge reproduces what a user comparing the two
  * actually sees, which is the whole page at once.
  *
  * Ten percent is not a fudge factor.  Our heading scale multiplied by 1.1 is 28.6 / 23.1 / 18.7
- * / 15.4 / 14.3 -- Semantic's numbers, to within a pixel at every step.
+ * / 15.4 / 14.3 -- the old numbers, to within a pixel at every step.
  *
  * The lever is the root font-size, and everything that should grow with it is written in `rem`.
  * That is Mantine's own mechanism: its 644 size declarations are `calc(Xrem * var(--mantine-

@@ -236,10 +236,10 @@ html[data-theme="amber"] {
 /*
  * Base element styling.
  *
- * semantic.min.css used to supply all of this, and removing it took the lot with it --
- * links lost their color and gained the browser's underline and visited purple, and
+ * A framework stylesheet used to supply all of this, and removing it took the lot with
+ * it -- links lost their color and gained the browser's underline and visited purple, and
  * every padded element silently changed size when `box-sizing: border-box` went away.
- * None of it belonged to Semantic; it belongs here, expressed in tokens.
+ * None of it belonged to a framework; it belongs here, expressed in tokens.
  */
 
 /* ------------------------------------------------------------------------- */
@@ -248,15 +248,15 @@ html[data-theme="amber"] {
 /*
  * How large the interface is, overall.
  *
- * Measured against the pre-migration Semantic build at 1280px, the drift was not one
- * number: its headings were h1 28 / h2 24 / h3 18 / h4 15 / h5 14 against our
+ * Measured against the build users had before this library, at 1280px, the drift was not
+ * one number: its headings were h1 28 / h2 24 / h3 18 / h4 15 / h5 14 against our
  * 26 / 21 / 17 / 14 / 13, and its video card a fixed 290px with an 18px title against
  * our 238px with a 13px one -- while our BODY text and chrome went the other way,
- * a 16px base against Semantic's 14 and 42px buttons against 36.  No per-component
- * nudge reproduces what a user comparing the two sees, which is the whole page.
+ * a 16px base against its 14 and 42px buttons against 36.  No per-component nudge
+ * reproduces what a user comparing the two sees, which is the whole page.
  *
  * Ten percent is not a fudge factor: our heading scale times 1.1 is
- * 28.6 / 23.1 / 18.7 / 15.4 / 14.3, which is Semantic's scale to within a pixel at
+ * 28.6 / 23.1 / 18.7 / 15.4 / 14.3, which is the old scale to within a pixel at
  * every step.
  *
  * The lever is the root font-size, and everything that should grow with it is written

@@ -41,7 +41,7 @@ import {
     clearToasts,
     toast,
 } from './ui';
-import {semanticColorNames} from '../themes/mantine';
+import {paletteColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
@@ -315,7 +315,7 @@ export function ThemeSamplePage() {
                         <IconButton icon='search' label='Search'/>
                         <IconButton icon='trash' role='danger' label='Delete'
                                     onClick={() => setConfirmOpen(true)}/>
-                        <Tooltip label='Tooltips replace Semantic popups'>
+                        <Tooltip label='A tooltip, on hover or focus'>
                             <Button role='cancel'>Hover me</Button>
                         </Tooltip>
                         <Button role='cancel' onClick={() => toast({
@@ -351,11 +351,10 @@ export function ThemeSamplePage() {
                     destructive or failed, and nothing else uses it.
                 </p>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
-                    Buttons in a row are spaced by the row, never by margins of their own. Semantic's
-                    Button brought its own margin and nothing replaced it, so pages that listed
-                    buttons as bare siblings had them sharing edges — and the ones that answered with
-                    <code>margin-top</code> got a button sitting lower than its neighbours instead,
-                    because <code>vertical-align: middle</code> is measured on the margin box.
+                    Buttons in a row are spaced by the row, never by margins of their own. A button
+                    that carries its own <code>margin-top</code> sits lower than its neighbours,
+                    because <code>vertical-align: middle</code> is measured on the margin box —
+                    which is why the spacing belongs to the row and not to the buttons in it.
                 </p>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0}}>
                     An icon button is exactly as tall as a labelled one at every size, so a
@@ -368,9 +367,8 @@ export function ThemeSamplePage() {
 
         <Section label='Two choices of equal weight'>
             <Panel>
-                {/* Semantic's `Segment placeholder` with a vertical Divider, which is what the
-                    dashboard's Download/Upload panel is. The halves are a grid so they stay equal
-                    whatever the labels say, and the rule falls at the panel's true middle. */}
+                {/* The dashboard's Download/Upload panel. The halves are a grid so they stay
+                    equal whatever the labels say, and the rule falls at the panel's true middle. */}
                 <div className='wrolpi-or-split'>
                     <div><Button role='primary' icon='download'>Download</Button></div>
                     <div><Button role='save' icon='upload'>Upload</Button></div>
@@ -389,7 +387,7 @@ export function ThemeSamplePage() {
             <Panel>
                 {/*
                   * `toast` has thirteen call sites and no test, and it has already failed once
-                  * app-wide: App.js dropped Semantic's toast container while seven pages were
+                  * app-wide: App.js dropped the old toast container while seven pages were
                   * still importing the old helper, and every notification silently vanished.
                   * A toast is also the one component you cannot see by loading a page -- it has
                   * to be provoked -- which is why it needs buttons here rather than a sample.
@@ -464,7 +462,7 @@ export function ThemeSamplePage() {
             </Panel>
         </Section>
 
-        <Section label='Semantic roles'>
+        <Section label='Roles'>
             <Panel>
                 {/*
                   The roles side by side, which is the only way to see the thing that
@@ -765,7 +763,7 @@ export function ThemeSamplePage() {
         <Section label='Labels'>
             <Panel>
                 <Row>
-                    {semanticColorNames.map(color => <Label key={color} color={color}>{color}</Label>)}
+                    {paletteColorNames.map(color => <Label key={color} color={color}>{color}</Label>)}
                     <Label color='black'>black</Label>
                     <Label color='white'>white</Label>
                     <Label color='blue' icon='tag'>tagged</Label>
@@ -938,8 +936,8 @@ export function ThemeSamplePage() {
                     <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
                 </Row>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
-                    Semantic's compound shape is kept — Modal.Header, Modal.Content,
-                    Modal.Actions — so the 34 call sites written against it migrate by import.
+                    A modal is compound — Modal.Header, Modal.Content, Modal.Actions — so the
+                    markup at a call site reads the way the dialog is laid out.
                 </p>
                 <Modal open={modalOpen} onClose={() => setModalOpen(false)} size='small'>
                     <Modal.Header>Restore Backup: channels.yaml</Modal.Header>

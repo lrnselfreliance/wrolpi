@@ -46,12 +46,7 @@ export function CollectionEditForm({
         </Message>}
 
         <form onSubmit={handleSubmit} autoComplete="off">
-            {/*
-              Every caller now passes library components rather than Semantic Grid rows, so
-              this is a plain flex column instead of the `ui stackable grid` bridge it used
-              to be.  That bridge was the last thing in the app depending on Semantic's
-              stylesheet.
-            */}
+            {/* Every caller passes library components, so this is a plain flex column. */}
             <div
                 className='wrolpi-form-rows'
                 style={form.loading ? {opacity: 0.6, pointerEvents: 'none'} : undefined}

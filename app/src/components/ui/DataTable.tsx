@@ -15,8 +15,8 @@ import {Icon} from './Icon';
  * Wide tables scroll in their own container so the page body never scrolls
  * sideways.
  *
- * The compound names mirror Semantic's (Header/Body/Row/Cell/HeaderCell/Footer)
- * so migrating a call site is a rename, not a rewrite.
+ * Compound: Table.Header / Body / Row / Cell / HeaderCell / Footer, so the markup at
+ * a call site reads the way the rendered table is structured.
  */
 
 export interface TableProps extends MTableProps {

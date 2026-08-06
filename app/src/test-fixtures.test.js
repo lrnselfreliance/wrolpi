@@ -16,7 +16,7 @@ import {
  * and the fixture is the last place anyone looks.
  *
  * That is not hypothetical here.  The theme fixture supplied `i`, `s` and `t` holding
- * hardcoded Semantic greys for months after ThemeProvider stopped supplying them, and
+ * hardcoded greys for months after ThemeProvider stopped supplying them, and
  * FileBrowser was still reading `inverted` off the context and pasting it into a className --
  * so the tests agreed with the fixture, the fixture agreed with nothing, and the file
  * browser's footer stayed light in all three dark themes.
@@ -128,7 +128,7 @@ describe('specs still mocking a context module', () => {
     });
 });
 
-describe('the Semantic theme compatibility props are gone for good', () => {
+describe('the theme compatibility props are gone for good', () => {
     it('no context, fixture, or component carries i/s/t/inverted from the theme', () => {
         /*
          * These four props are why this whole file exists.  They were removed from

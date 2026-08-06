@@ -102,7 +102,7 @@ describe('Domain Editing Workflow', () => {
         // Set directory - DirectorySearch component uses input inside field
         cy.contains('label', 'Directory').parent().find('input').clear().type('archive/example.com');
 
-        // Set description - Semantic UI TextArea
+        // Set description
         cy.contains('label', 'Description').parent().find('textarea').clear().type('Updated example domain');
 
         // Mock tags endpoint

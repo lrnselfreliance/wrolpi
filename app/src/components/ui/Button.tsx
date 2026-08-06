@@ -5,10 +5,9 @@ import {Icon} from './Icon';
 /*
  * Buttons.
  *
- * Roles carry meaning (Semantic UI heritage): blue = primary/download,
- * green = save/confirm, red = destructive, amber = retry/warning, neutral
- * outline = cancel.  Prefer `role` over naming a color, so a theme that remaps
- * a color keeps the meaning.
+ * Roles carry meaning: blue = primary/download, green = save/confirm,
+ * red = destructive, amber = retry/warning, neutral outline = cancel.  Prefer
+ * `role` over naming a color, so a theme that remaps a color keeps the meaning.
  */
 
 export type ButtonRole = 'primary' | 'save' | 'retry' | 'danger' | 'cancel';
@@ -25,7 +24,7 @@ const roleProps: Record<ButtonRole, {color?: string; variant: string; className?
 
 export interface ButtonProps extends Omit<MButtonProps, 'leftSection' | 'rightSection'> {
     role?: ButtonRole;
-    /** Semantic icon name or a Tabler component, rendered before the label. */
+    /** An icon name (see Icon.tsx) or a Tabler component, rendered before the label. */
     icon?: string | React.ComponentType<any>;
     iconAfter?: string | React.ComponentType<any>;
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
@@ -41,14 +40,15 @@ const renderIcon = (icon?: string | React.ComponentType<any>) => {
 }
 
 /*
- * Semantic's size names, mapped onto Mantine's scale.
+ * WROLPi's size names, mapped onto Mantine's scale.
  *
- * Unmigrated call sites still pass `size='tiny'`, and Mantine silently ignores a
- * size it does not know — the button renders at the default size and nobody sees
- * a warning.  Translating here keeps those call sites looking right until they
- * migrate, and costs nothing once they have.
+ * Call sites across the app say `size='tiny'` or `size='huge'`, and Mantine silently
+ * ignores a size it does not know — the button renders at the default size, with no
+ * warning and nothing on screen to say a size was asked for at all.  One table here
+ * is cheaper and safer than rewriting the size on several hundred call sites, and it
+ * keeps the vocabulary the rest of the app already reads in.
  */
-const semanticSizes: Record<string, string> = {
+const sizeAliases: Record<string, string> = {
     mini: 'xs',
     tiny: 'xs',
     small: 'sm',
@@ -60,9 +60,9 @@ const semanticSizes: Record<string, string> = {
 };
 
 // Generic so it passes each component's own size type straight through; only a
-// string that Semantic knew about is rewritten.
+// string in the table above is rewritten.
 export const resolveSize = <T, >(size: T): T =>
-    typeof size === 'string' ? ((semanticSizes[size] ?? size) as T) : size;
+    typeof size === 'string' ? ((sizeAliases[size] ?? size) as T) : size;
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
     {role, icon, iconAfter, className, children, ...props}, ref
@@ -105,9 +105,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>((
         ref={ref}
         /*
          * An `href` makes this an anchor.  Mantine needs `component='a'` to render one, and
-         * without it the href is accepted and silently dropped — the control looks like a
-         * link and navigates nowhere.  Semantic used `as='a'` for this, so every migrated
-         * call site that carried `href` alone was quietly broken.
+         * without it the href is accepted and silently dropped, so a call site carrying
+         * `href` alone renders a control that looks like a link and navigates nowhere.
          */
         component={props.component ?? (props.href ? 'a' : undefined)}
         // An explicit color/variant still wins, so a call site can deviate when it must.

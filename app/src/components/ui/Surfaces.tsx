@@ -16,7 +16,7 @@ export type HeaderLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5';
 export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElement>, 'color'> {
     /** Heading level.  Also the visual size — pick it for the outline, not the look. */
     as?: HeaderLevel;
-    /** Semantic icon name or a Tabler component, shown before the text. */
+    /** An icon name (see Icon.tsx) or a Tabler component, shown before the text. */
     icon?: string | React.ComponentType<any>;
     /** Secondary line below, in muted text. */
     subheader?: React.ReactNode;
@@ -42,8 +42,8 @@ export interface HeaderProps extends Omit<React.HTMLAttributes<HTMLHeadingElemen
 }
 
 /**
- * A section heading.  Named and shaped like Semantic's Header (`as`, `icon`,
- * `subheader`, `dividing`) so the app's 47 call sites migrate by import.
+ * A section heading: `as` picks the level, with optional `icon`, `subheader` and a
+ * `dividing` rule underneath.
  *
  * Sizes come from ui.css, keyed on the level, rather than each call site
  * choosing — that is what keeps the type scale a scale.
@@ -96,7 +96,7 @@ export interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
     danger?: boolean;
 }
 
-/** A bordered surface.  Replaces Semantic's Segment. */
+/** A bordered surface: the panel most of the app's content sits on. */
 export function Panel({danger, className, children, ...props}: PanelProps) {
     return <div
         className={['wrolpi-panel', danger ? 'wrolpi-panel-danger' : '', className]

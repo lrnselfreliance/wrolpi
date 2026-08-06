@@ -5,7 +5,7 @@
  * Usage: node scripts/generate-favicons.js
  *
  * This script reads the base icon.svg and generates a colored version
- * for each color in semanticUIColorMap (from src/components/Vars.js).
+ * for each color in navColorHexMap (from src/components/Vars.js).
  * The favicons are saved to public/favicon-{colorname}.svg
  */
 
@@ -17,14 +17,14 @@ const publicDir = path.join(__dirname, '..', 'public');
 const varsPath = path.join(srcDir, 'Vars.js');
 const iconPath = path.join(publicDir, 'icon.svg');
 
-// Parse semanticUIColorMap from Vars.js (single source of truth)
+// Parse navColorHexMap from Vars.js (single source of truth)
 function parseColorMapFromVars() {
     const varsContent = fs.readFileSync(varsPath, 'utf8');
 
-    // Extract the semanticUIColorMap object using regex
-    const match = varsContent.match(/export const semanticUIColorMap\s*=\s*\{([^}]+)\}/);
+    // Extract the navColorHexMap object using regex
+    const match = varsContent.match(/export const navColorHexMap\s*=\s*\{([^}]+)\}/);
     if (!match) {
-        throw new Error('Could not find semanticUIColorMap in Vars.js');
+        throw new Error('Could not find navColorHexMap in Vars.js');
     }
 
     const colorMap = {};
@@ -35,15 +35,15 @@ function parseColorMapFromVars() {
     }
 
     if (Object.keys(colorMap).length === 0) {
-        throw new Error('No colors found in semanticUIColorMap');
+        throw new Error('No colors found in navColorHexMap');
     }
 
     return colorMap;
 }
 
 // Parse colors from Vars.js
-const semanticUIColorMap = parseColorMapFromVars();
-console.log(`Found ${Object.keys(semanticUIColorMap).length} colors in Vars.js\n`);
+const navColorHexMap = parseColorMapFromVars();
+console.log(`Found ${Object.keys(navColorHexMap).length} colors in Vars.js\n`);
 
 // Colors that conflict with white stroke - use black stroke instead
 // Must match Nav.js conflictingColors
@@ -55,7 +55,7 @@ const iconSvg = fs.readFileSync(iconPath, 'utf8');
 console.log('Generating colored favicons from icon.svg...\n');
 
 // Generate a favicon for each color
-for (const [colorName, hexColor] of Object.entries(semanticUIColorMap)) {
+for (const [colorName, hexColor] of Object.entries(navColorHexMap)) {
     // Replace the dark fill color (#1b1c1d) with the nav color
     let coloredSvg = iconSvg.replace(/fill:#1b1c1d/g, `fill:${hexColor}`);
 
@@ -72,4 +72,4 @@ for (const [colorName, hexColor] of Object.entries(semanticUIColorMap)) {
     console.log(`  Created favicon-${colorName}.svg (${hexColor}${strokeInfo})`);
 }
 
-console.log(`\nGenerated ${Object.keys(semanticUIColorMap).length} favicon files in public/`);
+console.log(`\nGenerated ${Object.keys(navColorHexMap).length} favicon files in public/`);

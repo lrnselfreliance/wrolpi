@@ -11,7 +11,7 @@
  * The second is drift, which is the worse of the two.  A fixture that no longer matches the
  * shape it stands in for makes a test *confidently* wrong: it passes while the component
  * would break in the browser.  The theme context fixture carried `i`, `s` and `t` with
- * hardcoded Semantic greys for months after ThemeProvider stopped supplying them, and one
+ * hardcoded greys for months after ThemeProvider stopped supplying them, and one
  * component was still reading a prop that no longer existed.  test-fixtures.test.js compares
  * these against the real contexts so that class of drift fails a test rather than surviving.
  *

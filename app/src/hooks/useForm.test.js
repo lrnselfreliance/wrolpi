@@ -774,7 +774,7 @@ describe('useForm', () => {
                 const [selectionProps] = result.current.getSelectionProps({name: 'selected'});
 
                 act(() => {
-                    // Semantic UI dropdown passes (event, {value})
+                    // A dropdown passes (event, {value})
                     selectionProps.onChange({}, {value: 'option2'});
                 });
 

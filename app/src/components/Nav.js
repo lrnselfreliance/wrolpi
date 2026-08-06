@@ -17,14 +17,14 @@ import {
 } from "../hooks/customHooks";
 import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
-import {HELP_VIEWER_URI, NAME, semanticUIColorMap} from "./Vars";
+import {HELP_VIEWER_URI, NAME, navColorHexMap} from "./Vars";
 import {useOverflowNav} from "../hooks/useOverflowNav";
 import {defaultNavColor, navBarStyle, useNavColors} from "../themes/navColors";
 import _ from "lodash";
 
 function updateFavicon(colorName) {
     // Fall back to violet if invalid color
-    const safeColor = colorName in semanticUIColorMap ? colorName : 'violet';
+    const safeColor = colorName in navColorHexMap ? colorName : 'violet';
     const faviconPath = `/favicon-${safeColor}.svg`;
 
     // Update all favicon links
@@ -40,7 +40,7 @@ function updateFavicon(colorName) {
     if (icon16) icon16.href = faviconPath;
 
     // Update theme-color meta tag for iOS/Android status bar
-    const hexColor = semanticUIColorMap[safeColor];
+    const hexColor = navColorHexMap[safeColor];
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
     if (themeColorMeta) themeColorMeta.content = hexColor;
 }
@@ -88,8 +88,8 @@ function DropdownMenuItem({link}) {
     // "More" overflow menu.
     if (link.links) {
         // Mantine's Menu does not nest submenus without extra plumbing; a labelled,
-        // indented group stands in for Semantic's nested Dropdown.  No current data
-        // uses this path (no allLinks entry has its own `links`).
+        // indented group stands in for one.  No current data uses this path (no
+        // allLinks entry has its own `links`).
         return <React.Fragment>
             <Menu.Label>{link.text}</Menu.Label>
             {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}
@@ -158,8 +158,8 @@ function MobileMenu({links}) {
 /*
  * One status indicator's slot in the right-hand corner.
  *
- * This used to carry `marginTop: 0.8em`, a nudge left over from Semantic's menu.  The corner
- * centres its children, and a top margin is part of the margin box being centred, so the
+ * This used to carry `marginTop: 0.8em`, a nudge inherited from the bar this replaced.  The
+ * corner centres its children, and a top margin is part of the margin box being centred, so the
  * nudge pushed every indicator down by half of it -- about 6px.
  *
  * That read as an error on some and not others, which is why it survived: the bare-icon

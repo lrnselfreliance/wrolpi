@@ -2,7 +2,7 @@ import React from 'react';
 import {Loader as MLoader, Skeleton} from '@mantine/core';
 import {Icon} from './Icon';
 import {pxToRem} from './scale';
-import {RoleName, SemanticColorName} from '../../themes/mantine';
+import {RoleName, PaletteColorName} from '../../themes/mantine';
 
 /*
  * Feedback: messages, labels, progress, status text, loaders.
@@ -33,7 +33,7 @@ export interface MessageProps {
     kind?: MessageKind;
     title?: React.ReactNode;
     children?: React.ReactNode;
-    /** Semantic icon name or a Tabler component, shown to the left of the text. */
+    /** An icon name (see Icon.tsx) or a Tabler component, shown to the left of the text. */
     icon?: string | React.ComponentType<any>;
     /** Renders a dismiss button.  Omit for messages the user cannot clear. */
     onDismiss?: () => void;
@@ -69,7 +69,7 @@ export function Message({kind = 'info', title, children, icon, onDismiss, classN
 // -------------------------------------------------------------------- Labels
 
 export interface LabelProps {
-    color?: SemanticColorName | RoleName | 'black' | 'white';
+    color?: PaletteColorName | RoleName | 'black' | 'white';
     icon?: string | React.ComponentType<any>;
     /**
      * Draw it as a physical tag — pointed left edge and an eyelet — rather than a plain
@@ -108,7 +108,7 @@ export interface ProgressProps {
     indeterminate?: boolean;
     /** Show the percentage inside the bar. */
     showPercent?: boolean;
-    color?: SemanticColorName | RoleName;
+    color?: PaletteColorName | RoleName;
     /** Replaces the percentage with arbitrary text (e.g. "2.1 GB / 5.3 GB"). */
     label?: React.ReactNode;
     className?: string;
@@ -208,8 +208,8 @@ export interface LoadingProps {
 
 /**
  * A centered loader with a caption, for a region that has nothing to show yet.
- * Replaces Semantic's `<Loader active inline='centered'>`, which 19 call sites
- * used with their own wrapper div.
+ * A centred spinner with optional text under it.  The wrapper is the component's,
+ * so the 19 call sites that show one do not each roll their own.
  */
 export function Loading({children, size = 'sm', padding = '2em'}: LoadingProps) {
     // `padding` is the caller's, so it stays inline; the rest is in ui.css so it scales.
@@ -219,7 +219,7 @@ export function Loading({children, size = 'sm', padding = '2em'}: LoadingProps) 
     </div>
 }
 
-/** Placeholder for content that has not arrived.  Replaces Semantic's Placeholder. */
+/** Placeholder for content that has not arrived: a few skeleton lines. */
 export function Placeholder({lines = 3, height = 12}: {lines?: number; height?: number}) {
     return <div className='wrolpi-placeholder'>
         {Array.from({length: lines}, (_, index) => <Skeleton

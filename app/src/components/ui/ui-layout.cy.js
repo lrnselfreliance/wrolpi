@@ -551,9 +551,18 @@ describe('two choices of equal weight are split down the middle', () => {
             ).to.equal(0));
             expect(parseFloat(styles.borderRadius), 'and no disc').to.equal(0);
 
-            // Padded enough to actually open a gap, rather than sitting on the line unbroken.
+            // Padded enough to actually open a gap, rather than sitting on the line unbroken...
             expect(parseFloat(styles.paddingTop), 'padded enough to break the rule')
                 .to.be.greaterThan(0);
+            /*
+             * ...but its OWN padding, not a half's.  `.wrolpi-or-split > *` would lay this out as
+             * a half if it were not excluded, and it currently escapes on source order alone --
+             * same specificity, declared later.  Reordering the two blocks would quadruple the gap
+             * and an assertion that only read "greater than zero" would not notice.
+             */
+            const half = getComputedStyle($label[0].parentElement.children[0]);
+            expect(parseFloat(styles.paddingTop), "the word's own padding, not a half's")
+                .to.be.lessThan(parseFloat(half.paddingTop));
         });
     });
 });
@@ -2246,6 +2255,30 @@ describe('theme tokens actually resolve', () => {
     });
 });
 
+describe('the video page keeps its phone layout edge to edge', () => {
+    it('drops the inset below the tablet breakpoint, as every other page does', () => {
+        /*
+         * The other branch of `.wrolpi-page-inset`.  Below 699px a page has no side padding at all,
+         * so the video page must not either -- and with cypress defaulting to a 500px viewport this
+         * is the branch the rest of the suite runs in, which makes leaving it unasserted worse than
+         * it looks: a regression that padded phones would show up nowhere.
+         */
+        cy.viewport(400, 700);
+        cy.mountUI(<div className='wrolpi-stack wrolpi-page-inset'><Panel>About</Panel></div>);
+
+        cy.get('.wrolpi-page-inset').should(($inset) => {
+            const styles = getComputedStyle($inset[0]);
+            expect(parseFloat(styles.paddingLeft), 'no left inset on a phone').to.equal(0);
+            expect(parseFloat(styles.paddingRight), 'nor right').to.equal(0);
+
+            // And the panel really does reach the edge, not just declare that it may.
+            const panel = $inset[0].querySelector('.wrolpi-panel').getBoundingClientRect();
+            expect(panel.left, 'the panel reaches the edge')
+                .to.be.closeTo($inset[0].getBoundingClientRect().left, 0.5);
+        });
+    });
+});
+
 describe("a video's duration chip belongs to the theme, not to the poster", () => {
     /*
      * The chip was a literal `#ffffff` with black text.  The poster under it IS filtered by night
@@ -2267,6 +2300,16 @@ describe("a video's duration chip belongs to the theme, not to the poster", () =
                     .to.equal(panel.backgroundColor);
                 expect(chip.color, 'and the theme text').to.equal(panel.color);
 
+                /*
+                 * And an edge.  The chip is painted with `--panel`, so on a poster near that color
+                 * -- a pale sky in light, most screenshots -- the border is the only thing telling
+                 * the two apart.  Losing it leaves every contrast assertion above still green.
+                 */
+                expect(parseFloat(chip.borderTopWidth), 'has an edge').to.be.greaterThan(0);
+                expect(chip.borderTopColor, 'the theme border')
+                    .to.equal(toRgb(getComputedStyle(document.documentElement)
+                        .getPropertyValue('--border')));
+
                 // And still readable, which is what it is for: a length nobody can read is chrome.
                 expect(contrast(chip.color, chip.backgroundColor), 'legible')
                     .to.be.at.least(4.5);
@@ -2284,7 +2327,14 @@ describe("a video's duration chip belongs to the theme, not to the poster", () =
 
         cy.get('.duration-overlay').should(($chip) => {
             const chip = getComputedStyle($chip[0]);
-            const page = getComputedStyle(document.documentElement).backgroundColor;
+            /*
+             * `--bg` read as a token, not `html`'s computed background.  Tokens paint `--bg` on
+             * BODY, so `html` comes back `rgba(0, 0, 0, 0)` -- which `luminance` reads as black,
+             * making this "no brighter than black + slack" rather than the claim in its name.  It
+             * still failed the white chip, so it caught the reported bug by accident of the
+             * comparison rather than by measuring the thing it says it measures.
+             */
+            const page = toRgb(getComputedStyle(document.documentElement).getPropertyValue('--bg'));
             expect(luminance(chip.backgroundColor), 'no brighter than the page it sits on')
                 .to.be.at.most(luminance(page) + 0.05);
         });

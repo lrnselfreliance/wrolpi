@@ -1397,7 +1397,13 @@ html[data-theme="amber"] .wrolpi-progress-fill {
     position: relative;
 }
 
-.wrolpi-or-split > * {
+/*
+ * `:not(.wrolpi-or-label)` here for the same reason as the border rule below: the label is a third
+ * child of the grid and this would otherwise lay it out and pad it as though it were a half.  It
+ * only escaped because `.wrolpi-or-label` has the same specificity and comes later -- reorder the
+ * two blocks and the word takes the half's 1.5rem padding instead of its own 0.375rem.
+ */
+.wrolpi-or-split > *:not(.wrolpi-or-label) {
     display: flex;
     align-items: center;
     justify-content: center;

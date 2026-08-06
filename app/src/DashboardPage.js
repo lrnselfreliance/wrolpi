@@ -292,7 +292,7 @@ export function Getters() {
 }
 
 
-function DashboardStatus() {
+export function DashboardStatus() {
     const {status} = useContext(StatusContext);
 
     let percent = 0;
@@ -319,7 +319,16 @@ function DashboardStatus() {
     }
 
     return <Panel>
-        <Link to='/admin/status'>
+        {/*
+          * The panel is a link, but it should not read as one.
+          *
+          * `a` takes `color: var(--blue)` and an underline on hover from tokens.css, and a
+          * statistic's value sets no color of its own -- so the three load figures inherited
+          * the link color, and crossing the panel underlined them together.  The same pair
+          * every card title uses says "this text belongs to what contains it": the pointer
+          * cursor still comes from the UA stylesheet, which is the affordance that matters.
+          */}
+        <Link to='/admin/status' className='no-link-underscore card-link'>
             <Header as='h2'>Status</Header>
             <CPUUsageProgress value={percent} label='CPU Usage'/>
 
@@ -335,7 +344,7 @@ function DashboardStatus() {
 
         <Divider style={{marginTop: '3em'}}/>
 
-        <Link to='/admin'>
+        <Link to='/admin' className='no-link-underscore card-link'>
             <StatisticGroup>
                 <Statistic label='Downloading' value={pending_downloads}/>
             </StatisticGroup>

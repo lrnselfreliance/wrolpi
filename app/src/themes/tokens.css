@@ -318,6 +318,50 @@ a:has(img, svg, .wrolpi-card-icon):hover {
     text-decoration: none;
 }
 
+/*
+ * Native controls the browser paints itself.
+ *
+ * A range slider, a checkbox and a radio are drawn by the UA, and with nothing said about
+ * them the UA uses its own accent -- a fixed blue no theme can reach.  Five sliders are on
+ * screen: the log level on Settings, and the duration sliders in the food, water and ration
+ * calculators.
+ *
+ * Night is where that is not merely inconsistent.  The theme exists so a user reading in
+ * the dark keeps their adaptation and every token is a red, so a slider arriving in the
+ * browser's blue was the brightest non-red thing on the page -- on a control the user drags
+ * back and forth while watching it.
+ *
+ * `--blue` for the same reason links take it: it remaps per theme, so night gets the dim
+ * red and amber the amber without a second rule.
+ */
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"],
+progress {
+    accent-color: var(--blue);
+}
+
+/*
+ * The half of a slider's track that is NOT filled, and the tick marks beside it, are drawn
+ * from the UA's own light palette -- `accent-color` reaches the thumb and the filled half
+ * and nothing else.  On a dark ground that leaves a pale slab behind the thumb.
+ *
+ * Scoped to the controls rather than declared on `html`: `color-scheme` also governs
+ * scrollbars, spinners and every other piece of browser chrome on the page, which is a
+ * larger change than this and one to make deliberately rather than as a side effect.
+ */
+html[data-theme="dark"] input[type="range"],
+html[data-theme="night"] input[type="range"],
+html[data-theme="amber"] input[type="range"],
+html[data-theme="dark"] input[type="checkbox"],
+html[data-theme="night"] input[type="checkbox"],
+html[data-theme="amber"] input[type="checkbox"],
+html[data-theme="dark"] input[type="radio"],
+html[data-theme="night"] input[type="radio"],
+html[data-theme="amber"] input[type="radio"] {
+    color-scheme: dark;
+}
+
 a:focus-visible {
     outline: 2px solid var(--blue);
     outline-offset: 2px;

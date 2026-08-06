@@ -214,7 +214,7 @@ describe('ControllerPage', () => {
         });
         expect(screen.getByText('Hotspot Protocol')).toBeInTheDocument();
         // The saved protocol is selected; WPA3 is offered because the device supports it.
-        // Semantic UI renders the selected value as both the dropdown text and an option.
+        // The select renders its chosen value as both the field's text and an option.
         await waitFor(() => {
             expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
             expect(screen.getAllByText('WPA3').length).toBeGreaterThan(0);

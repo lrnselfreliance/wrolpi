@@ -4,8 +4,9 @@ import * as Tabler from '@tabler/icons-react';
 /*
  * Icons.
  *
- * Semantic UI shipped an icon font; we use Tabler's bundled SVG components, which
- * are tree-shaken at build time and need nothing from the network.
+ * Tabler's bundled SVG components, which are tree-shaken at build time and need
+ * nothing from the network -- an icon font would have to be fetched, and WROLPi
+ * has to draw its interface with no connection at all.
  *
  * Icons never name a color.  They stroke with `currentColor`, inheriting from the
  * button or text that wraps them, so status color and every theme come for free.
@@ -17,13 +18,14 @@ export type IconSize = 'small' | 'medium' | 'large';
 const sizes: Record<IconSize, number> = {small: 16, medium: 20, large: 24};
 
 /**
- * Semantic icon name -> Tabler component name.
+ * WROLPi's icon names -> Tabler component names.
  *
- * Covers every name the app renders today so call sites can migrate without also
- * choosing new icons.  New code should import the Tabler component directly and
- * pass it as `component`; this map exists for the migration, not forever.
+ * The app names an icon by what it is for -- `icon='book'`, `icon='arrow left'` --
+ * rather than by which component draws it, so hundreds of call sites are not coupled
+ * to the icon set.  Swapping Tabler for something else is then this table and nothing
+ * else.  New code may pass a Tabler component directly as `component` instead.
  */
-const semanticNames: Record<string, keyof typeof Tabler> = {
+const iconNameAliases: Record<string, keyof typeof Tabler> = {
     'add': 'IconPlus',
     'apple': 'IconBrandApple',
     'archive': 'IconArchive',
@@ -178,7 +180,7 @@ export interface IconStackProps {
 
 /**
  * Two icons composed into one symbol — a wifi glyph with a question mark on it,
- * say.  Replaces Semantic's IconGroup.
+ * say.
  *
  * The corner glyph gets a background matching the surface so it stays legible
  * over the icon beneath it; see `--icon-stack-bg` in ui.css.
@@ -196,7 +198,7 @@ export function IconStack({children, corner, label, style, className}: IconStack
 }
 
 export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'name' | 'ref'> {
-    /** A Semantic UI icon name, for migrated call sites. */
+    /** One of the icon names in `iconNameAliases`. */
     name?: string;
     /** A Tabler component, for new code. */
     component?: React.ComponentType<any>;
@@ -207,9 +209,9 @@ export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'name' | 
     label?: string;
 }
 
-/** Resolve a Semantic icon name to its Tabler component, or undefined if unmapped. */
+/** Resolve an icon name to its Tabler component, or undefined if unmapped. */
 export const resolveIconName = (name: string): React.ComponentType<any> | undefined => {
-    const taberName = semanticNames[name.trim().toLowerCase()];
+    const taberName = iconNameAliases[name.trim().toLowerCase()];
     return taberName ? (Tabler[taberName] as React.ComponentType<any>) : undefined;
 }
 
@@ -219,7 +221,7 @@ export function Icon({name, component, size = 'small', loading, label, ...props}
         Component = resolveIconName(name);
         if (!Component) {
             // Loud on purpose: a silently missing icon leaves a hole in the interface.
-            console.error(`No icon for Semantic name "${name}"; pass a Tabler component instead.`);
+            console.error(`No icon named "${name}"; add it to iconNameAliases, or pass a Tabler component.`);
             Component = Tabler.IconHelpCircle;
         }
     }

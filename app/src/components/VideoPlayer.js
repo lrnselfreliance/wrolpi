@@ -129,7 +129,7 @@ const NoComments = ({video}) => {
     }
 }
 
-// Semantic's <Comment>/<CommentGroup> have no equivalent in the token library -- this is a nested
+// The token library has no comment-thread component -- this is a nested
 // comment thread, not a reusable widget, so it is built here from plain elements and tokens.
 const VideoComment = ({comment, children}) => {
     const {is_favorited, like_count, author, timestamp, text, author_is_uploader} = comment;

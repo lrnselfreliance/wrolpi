@@ -53,7 +53,7 @@ import {bestForeground, contrastRatio, isMeasurable} from './contrast';
 /**
  * The colors offered for the bar, in picker order.
  *
- * The same keys as `semanticUIColorMap` in components/Vars.js, which maps them to the fixed
+ * The same keys as `navColorHexMap` in components/Vars.js, which maps them to the fixed
  * hexes used for the favicon and the mobile status bar (those are files and OS chrome, so
  * they cannot take a token).  navColors.test.js holds the two lists together.
  */

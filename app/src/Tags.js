@@ -144,7 +144,7 @@ export function useTags() {
 
     /*
      * The link carries no margin of its own.  It had `0.3em` either side, from when these were
-     * Semantic labels that had none -- but a tag already reserves a `margin-left` in ui.css for
+     * labels that had none -- but a tag already reserves a `margin-left` in ui.css for
      * the point drawn outside its body, so that was 0.3em twice on top of the group's gap and
      * the point's own room.  Two tags sat 34.7px apart, of which the point needs 18.7px.
      *

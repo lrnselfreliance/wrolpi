@@ -150,7 +150,7 @@ describe('a row of tags', () => {
 
     it('adds no margin of its own around a linked tag', async () => {
         /*
-         * The link wrapper carried `0.3em` either side, from when these were Semantic labels
+         * The link wrapper carried `0.3em` either side, from when these were framework labels
          * that had no margin of their own.  It is 0.3em twice, plus the group's gap, plus the
          * structural margin -- so two tags sat 34.7px apart where the point needs 18.7px, and
          * a wall of tags on the dashboard read as loose.

@@ -341,7 +341,7 @@ export function InputForm({
     inputProps.disabled = disabled || inputProps.disabled;
 
     /*
-     * Callers build these with Semantic's shape -- {content, header, positive|negative} --
+     * Callers build these as {content, header, positive|negative} --
      * and the pages that build them are migrating separately, so both spellings are
      * accepted until they have all moved to {kind, title}.
      */

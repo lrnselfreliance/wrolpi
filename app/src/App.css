@@ -3,16 +3,16 @@
     --navbar-height: 3.4em;
 }
 
-/* Nav bar: a hand-rolled flexbox bar (was a Semantic Menu).  The user-chosen background
-   and the foreground measured against it are set inline (see themes/navColors); this
-   stylesheet only supplies structure and hover affordances. */
+/* Nav bar: a hand-rolled flexbox bar.  The user-chosen background and the foreground
+   measured against it are set inline (see themes/navColors); this stylesheet only
+   supplies structure and hover affordances. */
 .wrolpi-navbar {
     display: flex;
     align-items: stretch;
     /*
-     * Wraps rather than clipping.  Semantic's menu wrapped, and with this many items the
-     * bar overflows a 1000px viewport -- `nowrap` cut "Admin" off the right edge, which
-     * is the one link a user needs to reach the settings that fix a broken WROLPi.
+     * Wraps rather than clipping.  With this many items the bar overflows a 1000px
+     * viewport, and `nowrap` cut "Admin" off the right edge -- the one link a user needs
+     * to reach the settings that fix a broken WROLPi.
      */
     flex-wrap: wrap;
     min-height: var(--navbar-height);
@@ -158,24 +158,8 @@ html .wrolpi-navbar .mantine-ActionIcon-root:hover {
     align-self: stretch;
 }
 
-.channel-edit {
-    border-radius: 0.1875rem;
-    padding: 0.75em;
-}
-
-.channel-edit:hover {
-    background-color: #7abaff;
-    cursor: pointer;
-}
-
 ::-ms-clear {
     display: none;
-}
-
-.form-control-clear {
-    z-index: 10;
-    pointer-events: auto;
-    cursor: pointer;
 }
 
 pre.wrap-text {
@@ -219,14 +203,6 @@ pre.wrap-text {
     color: var(--text);
 }
 
-.center-me {
-    margin: 0 auto;
-}
-
-div.inverted {
-    background-color: #1B1C1D;
-}
-
 /*
  * The hand-rolled `.toggle` / `.slider` switch is gone.
  *
@@ -239,17 +215,6 @@ div.inverted {
  * 54px track the thumb would have stopped ~4px short.  Dead CSS that is also wrong is a trap
  * for whoever revives it, and it also hardcoded #6435C9 and white, which no theme can reach.
  */
-
-.inverted-progress-text.ui.indicating.progress .bar > .progress,
-.inverted-progress-text.ui.progress > .label {
-    color: white !important;
-}
-
-/* Light bar colors (yellow, olive) need dark text on the bar — must override inverted-progress-text. */
-.light-bar-progress-text.ui.indicating.progress .bar > .progress,
-.light-bar-progress-text.ui.progress .bar > .progress {
-    color: rgba(0, 0, 0, 0.85) !important;
-}
 
 /* File preview Modal.Actions toolbar.
    Single layout that works at every viewport — buttons keep their order at any width.
@@ -316,18 +281,6 @@ td.file-path > svg {
     margin-right: 0.35em;
 }
 
-/* Necessary until react-semantic-toasts is upgraded to Node 18 */
-.ui-alerts {
-    position: fixed;
-    z-index: 2060;
-    padding: 1.5rem;
-}
-
-.ui-alerts.top-right {
-    top: 1.25rem;
-    right: 1.25rem;
-}
-
 textarea.otp {
     width: 100%;
     color: #333;
@@ -339,67 +292,8 @@ textarea.otp {
     padding-top: 3.3125rem;
 }
 
-.card-icon.inverted {
-    background-color: #222222;
-}
-
-.modal .inverted {
-    border-color: #888888;
-}
-
-.modal .header.inverted {
-    color: #DDDDDD !important;
-    background-color: #171616 !important;
-}
-
-.modal .content.inverted {
-    color: #DDDDDD !important;
-    border-color: #888888 !important;
-    background-color: #171616 !important;
-}
-
-.modal .actions.inverted {
-    color: #DDDDDD !important;
-    border-color: #888888 !important;
-    background-color: #171616 !important;
-}
-
-.modal.inverted i.close {
-    color: #DDDDDD !important;
-}
-
-/* The accordion has no background of its own; it inherits whatever container it sits in (Modal
-   content #171616, Segment #1B1C1D, the page body, etc.).  This matches how the light theme already
-   renders accordions (transparent), and avoids a darker band when the parent isn't #171616.
-   Direct children only, so nested components that use the `content`/`title` class names (e.g. a
-   Message's Message.Content) are not affected. */
-.ui.inverted.accordion,
-.ui.inverted.accordion > .title,
-.ui.inverted.accordion > .content {
-    background-color: transparent !important;
-}
-
-/* Semantic UI paints a definition table's empty corner cell white (background on the inverted
-   variant, white box-shadows on the celled/plain variants) to fake a "cut-out" corner on a white
-   page.  Our dark theme has a dark page, so the corner must be transparent with no shadow. */
-.ui.inverted.definition.table thead:not(.full-width) th:first-child,
-.ui.inverted.definition.table tfoot:not(.full-width) th:first-child,
-.ui.inverted.celled.definition.table thead:not(.full-width) th:first-child,
-.ui.inverted.celled.definition.table tfoot:not(.full-width) th:first-child {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
 .clickable {
     cursor: pointer;
-}
-
-.segment.inverted {
-    border: 1px solid #ffffff22 !important;
-}
-
-.inverted label {
-    color: #DDDDDD !important;
 }
 
 .table-ellipsis td.column-ellipsis {
@@ -431,14 +325,6 @@ textarea.otp {
     margin: 0.625rem;
 }
 
-.icon.divider {
-    color: rgb(0, 0, 0, 0.4) !important;
-}
-
-.divider.inverted {
-    color: rgb(255, 255, 255, 0.6) !important;
-}
-
 .video-player {
     display: block;
     margin: 0 auto; /* Center the video horizontally */
@@ -468,80 +354,14 @@ table.ratio-table td.min-width {
     width: auto;
 }
 
-/* CollectionEditForm styles */
-.required-indicator {
-    color: red;
-}
-
-/* Form loading skeleton */
-.form-skeleton-field {
-    margin-bottom: 1.5em;
-}
-
-.form-skeleton-label {
-    height: 0.875rem;
-    width: 5rem;
-    margin-bottom: 0.5rem;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 0.1875rem;
-}
-
-.form-skeleton-input {
-    height: 2.375rem;
-    width: 100%;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 0.25rem;
-}
-
-.form-skeleton-textarea {
-    height: 5rem;
-    width: 100%;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 0.25rem;
-}
-
-.form-skeleton-button {
-    height: 2.625rem;
-    width: 6.25rem;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 0.25rem;
-}
-
-@keyframes skeleton-shimmer {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
-    }
-}
-
-/* Dark mode skeleton */
-.inverted .form-skeleton-label,
-.inverted .form-skeleton-input,
-.inverted .form-skeleton-textarea,
-.inverted .form-skeleton-button {
-    background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-}
-
 /*
  * Sticky footer for the file browser.
  *
- * These were two hardcoded Semantic greys with `.inverted` selecting the dark one, but
- * nothing has set `.inverted` since ThemeProvider stopped supplying it -- so the footer stayed
- * at near-white `#f9fafb` in dark, night and amber.  In night mode a white bar pinned to the
- * bottom of the screen costs the user the dark adaptation the whole theme exists to protect.
- * Tokens have no such failure mode: there is one rule and each theme fills it in.
+ * The surface is a token.  It was two hardcoded greys with `.inverted` selecting the dark
+ * one, and once nothing set `.inverted` any more the footer stayed at near-white `#f9fafb`
+ * in dark, night and amber.  In night mode a white bar pinned to the bottom of the screen
+ * costs the user the dark adaptation the whole theme exists to protect.  A token has no
+ * such failure mode: there is one rule and each theme fills it in.
  */
 .sticky-footer {
     position: fixed;
@@ -557,9 +377,9 @@ table.ratio-table td.min-width {
      *
      * This was a plain block, so the buttons -- inline-block elements with no whitespace
      * between them, because JSX drops whitespace-only lines -- sat flush against each other
-     * in one unbroken slab.  Everywhere else buttons are laid out with Mantine's `Group`,
-     * which is a flex row with a gap; the file browser's footer is hand-rolled and never got
-     * one.  It wraps because the bar carries eight controls and a phone cannot hold them.
+     * in one unbroken slab.  Everywhere else a group of buttons is a flex row with a gap;
+     * the file browser's footer is hand-rolled and never got one.  It wraps because the bar
+     * carries eight controls and a phone cannot hold them.
      */
     display: flex;
     align-items: center;
@@ -567,22 +387,24 @@ table.ratio-table td.min-width {
     gap: 0.5em;
 }
 
-/* Drag selection visual feedback for FileBrowser */
+/*
+ * Drag selection visual feedback for FileBrowser: a blue tint over the rows being taken,
+ * red over the rows being dropped.
+ *
+ * Each had a second, stronger rule under `.inverted` for the dark themes.  Nothing has set
+ * that class since ThemeProvider stopped supplying it, so only the light tint has been
+ * drawn for some time -- and 15% of a fixed blue over a dark row is close to invisible,
+ * which is the one moment the user needs to see what they have hold of.
+ *
+ * A token mixed with transparent instead: the hue follows the theme, and the strength can
+ * go up without pinning it to a literal that only suits one background.
+ */
 tr.drag-selecting td {
-    background-color: rgba(33, 133, 208, 0.15) !important;
+    background-color: color-mix(in srgb, var(--blue) 22%, transparent) !important;
 }
 
-.inverted tr.drag-selecting td {
-    background-color: rgba(33, 133, 208, 0.25) !important;
-}
-
-/* Drag deselection visual feedback (red tint) */
 tr.drag-deselecting td {
-    background-color: rgba(219, 40, 40, 0.15) !important;
-}
-
-.inverted tr.drag-deselecting td {
-    background-color: rgba(219, 40, 40, 0.25) !important;
+    background-color: color-mix(in srgb, var(--red) 22%, transparent) !important;
 }
 
 /* Prevent text selection during drag */
@@ -604,8 +426,23 @@ tr.drag-deselecting td {
        spaces it (see `.wrolpi-stack`).  Its own 0.5em was added to that. */
 }
 
-/* Double the default input width on desktop. */
-.ui.input.file-browser-filter {
+/*
+ * Double the default input width on desktop.
+ *
+ * The selector was `.ui.input.file-browser-filter`, naming a wrapper the old input
+ * component rendered around the field.  Nothing carries `ui input` any more, so this rule
+ * and the mobile one below it had been matching nothing at all: the filter was rendering
+ * at the browser's default width on a bar laid out to give it 34em.
+ *
+ * The class lands on ActionInput's wrapper, which is the field and its clear button
+ * together -- that pair is the control being sized, not the text box alone.
+ *
+ * Qualified by the container so it carries two classes.  `.wrolpi-action-input` sets
+ * `width: 100%` in ui.css, which is one class like `.file-browser-filter` is, and ui.css
+ * is loaded after this file -- so a bare class selector here loses the tie and the field
+ * fills the row anyway.  Specificity, not source order, is what should decide it.
+ */
+.file-browser-filter-container .file-browser-filter {
     width: 34em;
     max-width: 100%;
 }
@@ -620,35 +457,11 @@ tr.drag-deselecting td {
     }
 
     /* Fill the row, but stay on one line with the collapse-all button. */
-    .ui.input.file-browser-filter {
+    .file-browser-filter-container .file-browser-filter {
         flex: 1 1 auto;
         width: auto;
     }
 }
-
-/* Ensure step icons are always visible, even when disabled */
-.ui.steps .step.disabled > .icon,
-.ui.steps .step.disabled > i.icon,
-.ui.steps .disabled.step > .icon,
-.ui.steps .disabled.step > i.icon {
-    opacity: 0.45 !important;
-    display: inline-block !important;
-    visibility: visible !important;
-    width: auto !important;
-    height: auto !important;
-    color: rgba(0, 0, 0, 0.87) !important;
-}
-
-/* Ensure the icon glyph (::before) is visible for disabled steps */
-.ui.steps .step.disabled > .icon:before,
-.ui.steps .step.disabled > i.icon:before,
-.ui.steps .disabled.step > .icon:before,
-.ui.steps .disabled.step > i.icon:before {
-    opacity: 0.45 !important;
-    visibility: visible !important;
-    color: rgba(0, 0, 0, 0.87) !important;
-}
-
 
 /* Inventory "PDF" export: the printable table is hidden on screen and becomes the only
    visible content when printing, so a user can use the browser dialog to Save as PDF. */

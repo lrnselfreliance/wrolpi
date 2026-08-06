@@ -77,7 +77,18 @@ export const allFrequencyOptions = {
     [days180Option.value]: days180Option,
 };
 
-export const semanticUIColorMap = {
+/*
+ * The named colors a user can pick for the navigation bar, and the fixed hex each one is.
+ *
+ * Fixed, and deliberately not tokens: these are the colors of the favicon files in
+ * `public/favicon-<color>.svg`, which `scripts/generate-favicons.js` writes from this very
+ * object, and of the `theme-color` meta tag the mobile browser paints its own chrome with.
+ * Neither can read a CSS variable, so both need a literal that cannot drift from the bar.
+ *
+ * The palette is a colorblind-friendly one and is shared with `themes/navColors.ts`, which
+ * measures a legible foreground against each.
+ */
+export const navColorHexMap = {
     red: '#db2828',
     orange: '#f2711c',
     yellow: '#fbbd08',
@@ -90,10 +101,6 @@ export const semanticUIColorMap = {
     pink: '#e03997',
     brown: '#a5673f',
     grey: '#767676',
-}
-
-export const ColorToSemanticHexColor = (color) => {
-    return semanticUIColorMap[color] || null;
 }
 
 export const validUrlRegex = /^(http|https):\/\/[^ "]+$/;

@@ -709,10 +709,8 @@ export function DomainEditPage() {
             appliedTagName={domain?.tag_name}
         >
             {/*
-             * CollectionEditForm still wraps its children in a `ui stackable grid` div (Semantic's
-             * grid CSS, not a component) because it is shared with unmigrated callers (Channels.js,
-             * Playlists.js). Plain "row"/"column" divs are that CSS's own class names, not a
-             * semantic-ui-react import.
+             * CollectionEditForm lays its children out as a grid, and "row"/"column" are that
+             * grid's own class names -- plain divs, not components.
              */}
             <div className="row">
                 <div className="column">

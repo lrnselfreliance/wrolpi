@@ -46,7 +46,7 @@ function getCollectionSearchLink(collection, routes, primaryKey) {
 }
 
 /**
- * Convert a Semantic-style relative column width (1-16) into a CSS percentage.
+ * Convert a relative column width (1-16, sixteenths) into a CSS percentage.
  * @param {number} width - Relative width, 1-16
  * @returns {Object|undefined} A style object, or undefined when no width is configured
  */

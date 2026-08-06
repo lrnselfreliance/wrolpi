@@ -5,9 +5,8 @@ import {RoleName} from '../../themes/mantine';
 /*
  * Toasts.
  *
- * Keeps the react-semantic-toasts-2 call signature so the ~19 call sites migrate
- * by changing their import, not their code.  The container is mounted by
- * ThemeProvider.
+ * One call signature for the ~19 places that raise a toast.  The container is mounted
+ * by ThemeProvider, so a caller only says what happened.
  */
 
 /* `error` is the original spelling and stays; `danger` is the token's name for it. */
@@ -20,9 +19,9 @@ export interface ToastOptions {
     /** Milliseconds before auto-dismiss.  0 keeps it until dismissed. */
     time?: number;
     /**
-     * Makes the whole toast activate this — Semantic's behaviour, which `Events.js` still
-     * relies on for the three events that carry a URL: a page shared from the browser
-     * extension, a finished archive upload, and a generated screenshot.
+     * Makes the whole toast activate this.  `Events.js` relies on it for the three events
+     * that carry a URL: a page shared from the browser extension, a finished archive
+     * upload, and a generated screenshot.
      */
     onClick?: () => void;
 }
@@ -74,7 +73,7 @@ export function toast({type = 'info', title, description, time = 5000, onClick}:
         title,
         message: description,
         color: toastRoles[type],
-        // Semantic treated 0 as "stay up"; Mantine wants false for that.  Its `getAutoClose`
+        // Callers spell "stay up" as `time: 0`; Mantine wants `false`.  Its `getAutoClose`
         // returns any number as given and the container then calls `setTimeout(hide, 0)`, so
         // passing the 0 through dismisses the toast on the next tick.
         autoClose: time === 0 ? false : time,

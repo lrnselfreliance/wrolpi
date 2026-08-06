@@ -247,7 +247,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
     const noResults = [{title: 'No results'}];
 
     const normalizeSuggestionsResults = (newSuggestions) => {
-        // Convert the suggestions from the Backend to what the Semantic <Search> expects.
+        // Convert the suggestions from the Backend to what SearchBox expects.
         const lowerSearchStr = searchStr ? searchStr.toLowerCase() : '';
 
         let results = {};
@@ -516,8 +516,8 @@ export function SearchIconButton() {
     /*
      * A single button which opens the search modal via keyboard shortcuts context.
      *
-     * `wrolpi-navbar-link`, not Semantic's leftover `item`, which carried no rules at all
-     * once Semantic was removed: no pointer cursor, no hover highlight, and a hit area of
+     * `wrolpi-navbar-link`, not the leftover `item` class, which carries no rules at all
+     * now that the stylesheet defining it is gone: no pointer cursor, no hover highlight, and a hit area of
      * whatever the 18px glyph occupied rather than the height of the bar.  It is the same
      * kind of thing as Help and Admin and now has the same affordance.
      */

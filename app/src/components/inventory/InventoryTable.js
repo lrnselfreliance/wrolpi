@@ -128,7 +128,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
     const visibleItems = useMemo(() => filterItems(displayItems, fields, search), [displayItems, fields, search]);
 
     const focusFirst = () => {
-        // Our inputs forward their ref straight to the underlying <input> DOM node (unlike Semantic's Input,
+        // Our inputs forward their ref straight to the underlying <input> DOM node (unlike the old Input,
         // which wrapped it behind `.inputRef`).
         const node = firstInputRef.current;
         if (node && node.focus) {

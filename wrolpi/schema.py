@@ -57,7 +57,13 @@ class SettingsResponse:
     zims_destination: str = 'zims'
 
 
-class SemanticUIColors(enum.StrEnum):
+class NavColors(enum.StrEnum):
+    """The colors a user may choose for the navigation bar.
+
+    The same twelve as `navColorHexMap` in app/src/components/Vars.js, which holds the hex
+    each one is drawn as, and as `navColorNames` in app/src/themes/navColors.ts.  A color
+    not on this list has no favicon file to go with it.
+    """
     red = enum.auto()
     orange = enum.auto()
     yellow = enum.auto()
@@ -107,7 +113,7 @@ class SettingsRequest:
 
     def __post_init__(self):
         self.nav_color = self.nav_color.lower() if self.nav_color else None
-        if self.nav_color and self.nav_color not in SemanticUIColors.__members__:
+        if self.nav_color and self.nav_color not in NavColors.__members__:
             raise ValidationError('Nav color is invalid')
 
 

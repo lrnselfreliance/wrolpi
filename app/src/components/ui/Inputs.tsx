@@ -49,7 +49,7 @@ export function Checkbox({style, ...props}: CheckboxProps) {
 
 export type ToggleProps = React.ComponentProps<typeof MSwitch>;
 
-/** An on/off switch.  Replaces Semantic's `Radio toggle`. */
+/** An on/off switch. */
 export function Toggle({style, className, ...props}: ToggleProps) {
     return <MSwitch
         className={['wrolpi-switch', className].filter(Boolean).join(' ')}
@@ -146,8 +146,8 @@ export interface ActionInputProps extends React.ComponentProps<typeof MTextInput
 }
 
 /**
- * A text input with a button joined to its right edge.  Replaces Semantic's
- * `<Input action={...}/>`.
+ * A text input with a button joined to its right edge -- a search field and its
+ * clear control, a path field and its browse control.
  *
  * The two share one outline rather than sitting side by side, so the pair reads
  * as a single control — the input's own right border is dropped and the button

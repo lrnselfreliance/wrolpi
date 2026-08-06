@@ -264,13 +264,13 @@ describe('useDriveHealth', () => {
 
 describe('Paginator rendering', () => {
     test('renders exactly totalPages numbered page links (no phantom trailing link)', () => {
-        // 48 results at 24 per page -> 2 pages.  If totalPages is 3, semantic-ui
+        // 48 results at 24 per page -> 2 pages.  If totalPages is 3, the pagination
         // will render an extra "3" link that fetches an empty page.
         render(
             <Paginator activePage={1} totalPages={2} onPageChange={() => {}}/>
         );
 
-        // Semantic UI renders page numbers as <a> elements with the page text.
+        // Page numbers render as <a> elements carrying the page text.
         // Tablet + mobile variants both render here because Media is mocked to
         // pass children through, so each numeric page appears at least once.
         expect(screen.queryAllByText('1').length).toBeGreaterThan(0);

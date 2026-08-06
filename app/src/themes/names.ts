@@ -4,7 +4,7 @@ import {SavedThemeName, ThemeMediaFilter, ThemeName} from '../types/theme';
  * Theme names and the choices offered by the pickers.
  *
  * These live here rather than in components/Theme.tsx so the component library can
- * use them without importing that module, which still pulls in Semantic UI.
+ * use them without importing that module, which pulls in the whole ThemeProvider.
  */
 
 export const darkTheme = 'dark';
@@ -18,7 +18,7 @@ export const themeSessionKey = 'color-scheme';
 /** Every theme a user can apply, in the order the pickers offer them. */
 export const themeNames: ThemeName[] = [lightTheme, darkTheme, nightTheme, amberTheme];
 
-/** Themes built on a dark background.  Semantic components are `inverted` in these. */
+/** Themes built on a dark background. */
 export const darkThemes: ThemeName[] = [darkTheme, nightTheme, amberTheme];
 
 /** Themes a user must choose deliberately; `prefers-color-scheme` never picks them. */
@@ -146,7 +146,7 @@ export const resolveMediaFilter = (
 export interface ThemeChoice {
     value: SavedThemeName;
     text: string;
-    /** Semantic icon name; resolved to a Tabler component by the Icon shim. */
+    /** An icon name; resolved to a Tabler component by Icon. */
     icon: string;
     description: string;
 }

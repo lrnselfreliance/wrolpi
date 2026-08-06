@@ -492,7 +492,7 @@ export function SearchResultsInput({
 
     const localHandleResultSelect = (result) => {
         if (handleResultSelect) {
-            // Semantic handed its callers `{result}`, and they destructure it -- passing the
+            // Callers destructure `{result}` from this -- passing the
             // bare result silently broke navigation from the search suggestions.  The shape
             // stays until the call sites are ready to change together.
             handleResultSelect({result});
@@ -1626,7 +1626,7 @@ export const TAG_TEXT_LIGHT = '#dddddd';
  * Dark or light text, whichever a user's chosen tag color actually reads better against.
  *
  * Measures both instead of comparing a brightness figure to a threshold.  The threshold
- * version put light text on Semantic's blue (`#2185d0`) at 2.9:1 when dark text on the same
+ * version put light text on the palette blue (`#2185d0`) at 2.9:1 when dark text on the same
  * fill gives 5.3:1 -- it had picked the worse of the only two options.  Every mid-tone blue,
  * teal and purple a user might choose sat in that band.
  */
@@ -1823,7 +1823,7 @@ export function useAPIButton(
         }
     }
 
-    // `color` was a Semantic color name; a role carries the meaning instead, and a
+    // `color` was a bare color name; a role carries the meaning instead, and a
     // caller that really wants a color can still pass one through `props`.
     const buttonArgs = {
         onClick: localOnClick, disabled, loading, type, size,
@@ -2118,7 +2118,7 @@ export function Breadcrumbs({crumbs, size = undefined}) {
         return <span key={index}>{text}</span>
     }
 
-    // The separator is a chevron rather than Semantic's slash, matching the icon set.
+    // The separator is a chevron rather than a slash, matching the icon set.
     return <UIBreadcrumbs separator={<Icon name='chevron right' size={14}/>}>
         {crumbs.map(getSection)}
     </UIBreadcrumbs>

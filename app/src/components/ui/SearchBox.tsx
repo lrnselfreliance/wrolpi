@@ -6,9 +6,9 @@ import {Loader} from './Feedback';
 /*
  * The search box, with optional grouped suggestions.
  *
- * Replaces Semantic's `<Search category>`, and deliberately keeps its `results`
- * shape — `{groupKey: {name, results: [{title, description}]}}` — because four
- * call sites already build that structure from the API.
+ * Grouped search suggestions.  `results` is
+ * `{groupKey: {name, results: [{title, description}]}}`, which is the shape four call
+ * sites already build from the API.
  *
  * Suggestions are a combobox: the input keeps focus and owns the keyboard, while
  * `aria-activedescendant` points at the highlighted option.  Arrow keys move,
@@ -64,6 +64,16 @@ export interface SearchBoxProps {
     className?: string;
     autoFocus?: boolean;
     name?: string;
+    /**
+     * Set on the input, not the wrapper, so a caller's own `<label htmlFor>` reaches it.
+     *
+     * SearchBox takes named props rather than spreading a rest object, so an `id` handed
+     * to it used to be dropped in silence.  `DestinationForm` passes one and renders a
+     * label pointing at it: the download forms' Destination field has therefore had a
+     * label associated with nothing at all, which a pointer user never notices and a
+     * screen reader user gets nothing from.
+     */
+    id?: string;
 }
 
 /** Flatten the groups into the order they are displayed, for keyboard movement. */
@@ -90,6 +100,7 @@ export function SearchBox({
     className,
     autoFocus,
     name,
+    id,
 }: SearchBoxProps) {
     const [open, setOpen] = useState(false);
     const [highlighted, setHighlighted] = useState(-1);
@@ -179,6 +190,7 @@ export function SearchBox({
             <input
                 ref={inputRef}
                 type='text'
+                id={id}
                 name={name}
                 className='wrolpi-searchbox-input'
                 placeholder={placeholder}

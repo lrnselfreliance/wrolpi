@@ -226,15 +226,12 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
     </ThemeContext.Provider>
 }
 /*
- * The Semantic UI wrappers that used to live below this line are gone.
+ * This module is the theme provider and nothing else: it resolves the chosen theme, stamps
+ * `data-theme` and `data-media-filter` on <html>, persists both, and hands Mantine our
+ * tokens.
  *
- * They existed so call sites could get a themed Button, Segment, Modal and so on while
- * the app still rendered Semantic components; every one of those call sites now imports
- * from `src/components/ui` instead.  The dark-mode compatibility props they consumed --
- * `i`, `s`, `t`, `inverted` -- went with them: those carried hardcoded greys, which is
- * precisely what the token themes replaced.
- *
- * What remains is the part that was never about Semantic: the provider that resolves the
- * chosen theme, stamps `data-theme` and `data-media-filter` on <html>, persists both, and
- * hands Mantine our tokens.
+ * It used to re-export a set of themed component wrappers as well, along with the
+ * dark-mode compatibility props they consumed (`i`, `s`, `t`, `inverted`).  Those carried
+ * hardcoded greys, which is precisely what the token themes replaced; components come from
+ * `src/components/ui` instead.
  */

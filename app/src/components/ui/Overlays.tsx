@@ -9,10 +9,9 @@ import {Button} from './Button';
 /*
  * Modals.
  *
- * Semantic's compound shape (`Modal.Header` / `Modal.Content` / `Modal.Actions`)
- * is kept because 34 call sites are written against it.  The subcomponents are
- * markers: Modal reads them out of its children and places each in the right
- * slot, so the children stay in source order at the call site.
+ * Compound: `Modal.Header` / `Modal.Content` / `Modal.Actions`.  The subcomponents are
+ * markers -- Modal reads them out of its children and places each in the right slot, so
+ * the children stay in source order at the call site.
  */
 
 const ModalHeader = ({children}: {children?: React.ReactNode}) => <>{children}</>;
@@ -24,7 +23,7 @@ ModalContent.displayName = 'Modal.Content';
 const ModalActions = ({children}: {children?: React.ReactNode}) => <>{children}</>;
 ModalActions.displayName = 'Modal.Actions';
 
-// Semantic's size names, mapped onto Mantine's scale.
+// WROLPi's size names, mapped onto Mantine's scale.  See `sizeAliases` in Button.tsx.
 const modalSizes: Record<string, string> = {
     mini: 'xs',
     tiny: 'sm',
@@ -34,12 +33,12 @@ const modalSizes: Record<string, string> = {
 };
 
 export interface ModalProps extends Omit<React.ComponentProps<typeof MModal>, 'opened' | 'size'> {
-    /** Semantic's name for `opened`.  Either works. */
+    /** An alias for `opened`.  Either works. */
     open?: boolean;
     opened?: boolean;
     /** A title given directly, instead of a `Modal.Header` child. */
     title?: React.ReactNode;
-    /** Semantic size name (mini/tiny/small/large/fullscreen) or a Mantine size. */
+    /** A size name (mini/tiny/small/large/fullscreen) or a Mantine size. */
     size?: string | number;
     /** Accepted and ignored: the close button is always shown. */
     closeIcon?: boolean;
@@ -52,8 +51,7 @@ export interface ModalProps extends Omit<React.ComponentProps<typeof MModal>, 'o
  * modal is open -- there is no check for whether it is the one the user is looking at.  Two
  * modals open meant two listeners, so a single Escape closed BOTH: opening the search modal
  * over the dashboard's download modal and pressing Escape once left you on the dashboard.
- * Semantic handled this; the migration lost it.
- *
+
  * Mantine's own answer is `Modal.Stack` with a `stackId` per modal, which is the only thing
  * that gates `closeOnEscape`.  It is not used here for two reasons: it requires every call
  * site to be rewritten to hoist its modal into a stack, and it sets `__hidden` on everything
@@ -246,7 +244,7 @@ export function Confirm({
 
 export type TooltipProps = React.ComponentProps<typeof MTooltip>;
 
-/** Replaces Semantic's Popup. */
+/** A hover/focus tooltip. */
 export function Tooltip(props: TooltipProps) {
     return <MTooltip withArrow={false} openDelay={200} {...props}/>
 }

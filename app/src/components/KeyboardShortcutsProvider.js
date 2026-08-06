@@ -69,7 +69,7 @@ function SearchModal({open, onClose}) {
          *
          * `autoFocus` on the input below is what actually does it: the modal mounts its
          * content on a later tick, so this effect runs while `inputRef.current` is still
-         * null.  Semantic's modal mounted synchronously, which is why focusing here used
+         * null.  The modal this replaced mounted synchronously, which is why focusing here used
          * to be enough.  The ref call is kept for the case where the modal is already
          * mounted and merely re-opened.
          */

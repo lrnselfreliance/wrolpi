@@ -9,7 +9,7 @@ import {VideoCard} from '../Videos';
 import {CardPoster, contrastingColor, HelpHeader, LoadStatistic} from '../Common';
 import {Notifications} from '@mantine/notifications';
 import {clearToasts, toast} from './toast';
-import {monochromeThemes, themeNames} from '../../themes/names';
+import {isDarkTheme, monochromeThemes, themeNames} from '../../themes/names';
 import {navColorNames} from '../../themes/navColors';
 import {NavBarSample} from '../ThemeSamplePage';
 import {DesktopNav, NavIconWrapper} from '../Nav';
@@ -2670,17 +2670,18 @@ describe('a card reads as titles, not as a wall of links', () => {
 describe('a range slider is painted by the theme, not by the browser', () => {
     /*
      * A native `<input type="range">` is drawn by the UA, and with nothing said about it the
-     * UA uses its own accent -- a fixed blue that no theme can reach.  Five of them are on
-     * screen: the log level on Settings, and the duration sliders in the food, water and
-     * ration calculators.
+     * UA uses its own accent -- a fixed blue that no theme can reach.  Four are in the product:
+     * the log level on Settings, and the duration sliders in the food, water and ration
+     * calculators.  (A fifth is on /theme-sample.)
      *
      * Night is where this is not merely inconsistent but wrong.  The theme exists so a user
      * reading in the dark keeps their adaptation, and every other token is a red; a slider
      * arriving in the browser's blue is the brightest non-red thing on the page, on the one
      * control a user drags back and forth while watching it.
      *
-     * `accent-color` takes `--blue` for the same reason links do: it remaps per theme, so
-     * night gets the dim red and amber the amber with no second rule.
+     * `accent-color` takes `--blue` for the same reason links do: it remaps per theme.  It
+     * reaches the thumb and the FILLED half of the track; the rest of the track comes from
+     * the UA palette `color-scheme` selects, which is asserted separately below.
      */
     const mountSlider = (theme) => cy.mountUI(
         <input type='range' min={1} max={5} defaultValue={3} data-testid='slider'/>,
@@ -2694,27 +2695,69 @@ describe('a range slider is painted by the theme, not by the browser', () => {
             cy.get('[data-testid="slider"]').should(($slider) => {
                 const expected = toRgb(getComputedStyle(document.documentElement)
                     .getPropertyValue('--blue'));
+                /*
+                 * `toRgb` THROWS on anything that is not a resolved color, and the computed
+                 * value of `accent-color: auto` is the keyword `auto` -- so this assertion
+                 * already fails on an unstyled slider rather than quietly comparing keywords.
+                 * That is why there is no separate "not auto" test: it would restate this one.
+                 */
                 expect(toRgb(getComputedStyle($slider[0]).accentColor), `accent in ${theme}`)
                     .to.equal(expected);
             });
         });
     });
 
-    it('never leaves it at the UA default, which is what night could not tolerate', () => {
+    it('is a real constraint: a control the rule does not name keeps the UA default', () => {
         /*
-         * The assertions above compare against a token, so they would also pass if the
-         * accent were `auto` and the token happened to resolve to the same string.  This
-         * states the failure directly: whatever the slider is accented with, it is a real
-         * color and not the keyword that hands the decision back to the browser.
+         * `accent-color` is an inherited property, so this also states where the accent comes
+         * from: the rule names the control types it paints, rather than being set high up and
+         * inherited by everything.  Without this the tests above would pass just as well on a
+         * page that had tinted the entire document.
          */
-        monochromeThemes.forEach((theme) => {
+        cy.mountUI(<div>
+            <input type='range' data-testid='slider'/>
+            <input type='text' data-testid='text' readOnly value='not an accented control'/>
+        </div>, {theme: 'night'});
+
+        cy.get('[data-testid="text"]').should(($text) => {
+            expect(getComputedStyle($text[0]).accentColor, 'a text field is untouched')
+                .to.equal('auto');
+        });
+    });
+
+    /*
+     * The rest of the track, which `accent-color` does not reach.
+     *
+     * The unfilled half and the tick marks are drawn from the UA palette that `color-scheme`
+     * selects.  This PR originally added a `color-scheme: dark` rule for it -- mutating that
+     * rule to match nothing left these tests green, which is how it emerged that Mantine
+     * already puts `color-scheme: var(--mantine-color-scheme)` on `:root` and ThemeProvider
+     * drives it with `forceColorScheme`.  The property is inherited, so the control had it
+     * all along and the rule was deleted.
+     *
+     * These stay, because that inheritance is load-bearing and belongs to another module:
+     * drop `forceColorScheme` from ThemeProvider and night's slider goes back to a pale slab
+     * behind the thumb, with every accent assertion above still passing.
+     */
+    themeNames.filter(isDarkTheme).forEach((theme) => {
+        it(`darkens the rest of the track in ${theme}`, () => {
             mountSlider(theme);
 
             cy.get('[data-testid="slider"]').should(($slider) => {
-                const accent = getComputedStyle($slider[0]).accentColor;
-                expect(accent, `accent in ${theme}`).to.not.equal('auto');
-                expect(() => toRgb(accent), `a resolved color in ${theme}`).to.not.throw();
+                expect(getComputedStyle($slider[0]).colorScheme, `color-scheme in ${theme}`)
+                    .to.equal('dark');
             });
+        });
+    });
+
+    it('is a real constraint: light leaves the track alone', () => {
+        // The dark palette follows the theme rather than being forced everywhere: on a light
+        // page the UA's own is already correct.
+        mountSlider('light');
+
+        cy.get('[data-testid="slider"]').should(($slider) => {
+            expect(getComputedStyle($slider[0]).colorScheme, 'color-scheme in light')
+                .to.not.equal('dark');
         });
     });
 });

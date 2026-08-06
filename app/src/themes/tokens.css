@@ -321,10 +321,9 @@ a:has(img, svg, .wrolpi-card-icon):hover {
 /*
  * Native controls the browser paints itself.
  *
- * A range slider, a checkbox and a radio are drawn by the UA, and with nothing said about
- * them the UA uses its own accent -- a fixed blue no theme can reach.  Five sliders are on
- * screen: the log level on Settings, and the duration sliders in the food, water and ration
- * calculators.
+ * A range slider is drawn by the UA, and with nothing said about it the UA uses its own
+ * accent -- a fixed blue no theme can reach.  Four are in the product: the log level on
+ * Settings, and the duration sliders in the food, water and ration calculators.
  *
  * Night is where that is not merely inconsistent.  The theme exists so a user reading in
  * the dark keeps their adaptation and every token is a red, so a slider arriving in the
@@ -333,33 +332,29 @@ a:has(img, svg, .wrolpi-card-icon):hover {
  *
  * `--blue` for the same reason links take it: it remaps per theme, so night gets the dim
  * red and amber the amber without a second rule.
+ *
+ * Checkbox, radio and `progress` are the other three types `accent-color` paints, and are
+ * listed for completeness rather than because they are on screen: the app's checkboxes and
+ * radios are Mantine's, which draw their own box from tokens, and `Progress` is a div.  So
+ * those three are a guard for the day a native one appears, not a fix for anything visible
+ * today -- the slider is the one that was actually wrong.
+ *
+ * `accent-color` reaches the thumb and the FILLED half of the track and nothing else.  The
+ * rest of the track comes from the UA palette that `color-scheme` selects -- which is
+ * already dark on the dark themes, because Mantine's stylesheet puts
+ * `color-scheme: var(--mantine-color-scheme)` on `:root` and ThemeProvider drives it with
+ * `forceColorScheme`.  That property is inherited, so a control needs nothing of its own; a
+ * rule here restating it was verified to change no pixel and is not present.
+ *
+ * Progressive enhancement: `accent-color` wants Safari 15.4+ / Chrome 93+ / Firefox 92+, and
+ * an older client keeps the UA blue, which is what it had before this rule.  A complete fix
+ * would mean `::-webkit-slider-runnable-track` and `::-moz-range-track` rules of our own.
  */
 input[type="range"],
 input[type="checkbox"],
 input[type="radio"],
 progress {
     accent-color: var(--blue);
-}
-
-/*
- * The half of a slider's track that is NOT filled, and the tick marks beside it, are drawn
- * from the UA's own light palette -- `accent-color` reaches the thumb and the filled half
- * and nothing else.  On a dark ground that leaves a pale slab behind the thumb.
- *
- * Scoped to the controls rather than declared on `html`: `color-scheme` also governs
- * scrollbars, spinners and every other piece of browser chrome on the page, which is a
- * larger change than this and one to make deliberately rather than as a side effect.
- */
-html[data-theme="dark"] input[type="range"],
-html[data-theme="night"] input[type="range"],
-html[data-theme="amber"] input[type="range"],
-html[data-theme="dark"] input[type="checkbox"],
-html[data-theme="night"] input[type="checkbox"],
-html[data-theme="amber"] input[type="checkbox"],
-html[data-theme="dark"] input[type="radio"],
-html[data-theme="night"] input[type="radio"],
-html[data-theme="amber"] input[type="radio"] {
-    color-scheme: dark;
 }
 
 a:focus-visible {

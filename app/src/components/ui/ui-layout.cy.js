@@ -2667,6 +2667,58 @@ describe('a card reads as titles, not as a wall of links', () => {
     });
 });
 
+describe('a range slider is painted by the theme, not by the browser', () => {
+    /*
+     * A native `<input type="range">` is drawn by the UA, and with nothing said about it the
+     * UA uses its own accent -- a fixed blue that no theme can reach.  Five of them are on
+     * screen: the log level on Settings, and the duration sliders in the food, water and
+     * ration calculators.
+     *
+     * Night is where this is not merely inconsistent but wrong.  The theme exists so a user
+     * reading in the dark keeps their adaptation, and every other token is a red; a slider
+     * arriving in the browser's blue is the brightest non-red thing on the page, on the one
+     * control a user drags back and forth while watching it.
+     *
+     * `accent-color` takes `--blue` for the same reason links do: it remaps per theme, so
+     * night gets the dim red and amber the amber with no second rule.
+     */
+    const mountSlider = (theme) => cy.mountUI(
+        <input type='range' min={1} max={5} defaultValue={3} data-testid='slider'/>,
+        theme ? {theme} : undefined,
+    );
+
+    themeNames.forEach((theme) => {
+        it(`accents the slider with the theme's own blue in ${theme}`, () => {
+            mountSlider(theme);
+
+            cy.get('[data-testid="slider"]').should(($slider) => {
+                const expected = toRgb(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--blue'));
+                expect(toRgb(getComputedStyle($slider[0]).accentColor), `accent in ${theme}`)
+                    .to.equal(expected);
+            });
+        });
+    });
+
+    it('never leaves it at the UA default, which is what night could not tolerate', () => {
+        /*
+         * The assertions above compare against a token, so they would also pass if the
+         * accent were `auto` and the token happened to resolve to the same string.  This
+         * states the failure directly: whatever the slider is accented with, it is a real
+         * color and not the keyword that hands the decision back to the browser.
+         */
+        monochromeThemes.forEach((theme) => {
+            mountSlider(theme);
+
+            cy.get('[data-testid="slider"]').should(($slider) => {
+                const accent = getComputedStyle($slider[0]).accentColor;
+                expect(accent, `accent in ${theme}`).to.not.equal('auto');
+                expect(() => toRgb(accent), `a resolved color in ${theme}`).to.not.throw();
+            });
+        });
+    });
+});
+
 describe('a panel wrapped in a link does not read as a link', () => {
     /*
      * The dashboard's Status panel is wrapped in a `<Link to='/admin/status'>`, so the whole

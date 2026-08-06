@@ -279,7 +279,7 @@ describe('a page stacks its own blocks', () => {
 
 describe('a row of buttons is spaced and aligned by the row', () => {
     /*
-     * Semantic's Button carried `margin: 0 .25em .25em 0` of its own, so a page could list
+     * Buttons used to carry `margin: 0 .25em .25em 0` of their own, so a page could list
      * buttons as bare siblings and they arrived spaced.  Nothing replaced that margin, and
      * five pages still list them that way -- the archive page's six actions all shared edges.
      *
@@ -435,7 +435,7 @@ describe('a row of buttons is spaced and aligned by the row', () => {
 
 describe('two choices of equal weight are split down the middle', () => {
     /*
-     * The dashboard's Download/Upload panel, which Semantic drew as a `Segment placeholder` with a
+     * The dashboard's Download/Upload panel, which used to be drawn as a placeholder panel with a
      * vertical `Divider`.  The migrated version was a `Group` with a divider between the buttons,
      * so the halves were sized to their labels: the pair huddled in the middle of the panel with
      * the rule wherever they happened to leave it, rather than two equal fields split at the centre.
@@ -472,7 +472,7 @@ describe('two choices of equal weight are split down the middle', () => {
     });
 
     it('centres each button in its own half', () => {
-        // Semantic centred them; the Group version left them either side of the divider instead.
+        // They were centred before; the flex-row version left them either side of the divider.
         mountSplit();
 
         cy.get('.wrolpi-or-split').should(($split) => {
@@ -1797,8 +1797,8 @@ describe('a tag is legible in every theme, whatever color the user picked', () =
         cy.contrastRatio('[data-tag="Legacy"]').should('be.lessThan', 1.5);
     });
 
-    it('is at least as large as the Semantic label it replaced', () => {
-        // The first pass came out at 11.5px against Semantic's 12px and read as shrunken.
+    it('is at least as large as the label it replaced', () => {
+        // The first pass came out at 11.5px against the old 12px and read as shrunken.
         // A tag is a hit target as well as a word, so it also has to stay tall enough to hit.
         cy.mountUI(tags);
 
@@ -1810,7 +1810,7 @@ describe('a tag is legible in every theme, whatever color the user picked', () =
 
     it("sets a tag's word within a fifth of the body text it sits beside", () => {
         /*
-         * Matching Semantic was the wrong target for this one.  A tag is not an annotation on
+         * Matching the old size was the wrong target for this one.  A tag is not an annotation on
          * something else -- it is the whole content of its chip, and the thing a user scans a
          * wall of them for -- so it wants to read as text, not as a footnote.  At 12.5px design
          * against a 16px base it was 78% of the prose around it, and on the dashboard, where
@@ -3349,8 +3349,8 @@ describe('the navbar overflow menu keeps the bar\'s styling', () => {
 
 describe('the icon-only triggers in the navbar corner are reachable', () => {
     /*
-     * The search glyph carried Semantic's `item` class, which has had no rules at all since
-     * Semantic was removed: no pointer cursor, no hover highlight, and a hit area of the
+     * The search glyph carried the old `item` class, which has had no rules at all since that
+     * stylesheet stopped loading: no pointer cursor, no hover highlight, and a hit area of the
      * 18px glyph rather than the height of the bar.  The share glyph did compute
      * `cursor: pointer` -- it is an `<a href>` -- but its target was the 24px box the icon
      * occupies, so the pointer showed only if you found it exactly.
@@ -3361,7 +3361,7 @@ describe('the icon-only triggers in the navbar corner are reachable', () => {
     /*
      * The REAL ShareButton, and the real SearchIconButton that DesktopNav renders for
      * itself.  The first version of this suite used hand-written anchors carrying the
-     * classes I expected the components to have, so reverting SearchIconButton to Semantic's
+     * classes I expected the components to have, so reverting SearchIconButton to the old
      * `item` left it green -- it was measuring my markup, not the app's.
      */
     const corner = <NavIconWrapper><ShareButton/></NavIconWrapper>;
@@ -3497,8 +3497,36 @@ describe('the navbar recalculates when the corner changes, not only the window',
             expect($filler[0].getBoundingClientRect().width).to.equal(180);
         });
 
+        /*
+         * Wait for the recalculation the grown corner triggers before counting anything.
+         *
+         * The corner reaching 180px is not the same moment as the bar responding to it: the
+         * ResizeObserver fires, React re-renders, and only then is the link count the
+         * shrunken one.  Reading the count in a bare `.then()` right after the width check
+         * therefore sometimes caught the bar at its FULL complement, which made `shrunken`
+         * the same number the assertion below wanted to exceed -- "expected 10 to be above
+         * 10", under load, on a test whose subject was never in doubt.
+         *
+         * One row is the settle signal, and not an arbitrary one: an unrecalculated bar at
+         * this width wraps, which is exactly what the test above this one asserts.
+         */
+        cy.get('.wrolpi-navbar').should(($nav) => {
+            const rows = new Set([...$nav[0].querySelectorAll('.wrolpi-navbar-link')]
+                .map(link => Math.round(link.getBoundingClientRect().top)));
+            expect([...rows], 'the bar has recalculated and is one row').to.have.length(1);
+        });
+
         cy.get('.wrolpi-navbar').then(($nav) => {
             const shrunken = $nav[0].querySelectorAll('.wrolpi-navbar-link').length;
+
+            /*
+             * The premise: the grown corner cost the bar links, so there are some to give
+             * back.  DesktopNav renders the "More" trigger only when `overflowLinks` is
+             * non-empty, which makes its presence the statement that something overflowed.
+             * Without this the assertion below could be satisfied by a bar that never
+             * overflowed, and the test would report success having measured nothing.
+             */
+            cy.get('.wrolpi-navbar').contains('button', 'More').should('exist');
 
             // Shrink the corner back, as a cleared warning would.
             cy.get('[data-testid="corner-filler"]').then(($filler) => {
@@ -3695,7 +3723,7 @@ describe('a toast does not cover the navigation bar', () => {
 describe('a disabled button keeps its own color', () => {
     /*
      * Mantine repaints a disabled button flat grey -- background, text and border all
-     * replaced with `--mantine-color-disabled`.  Semantic kept the color and dropped the
+     * replaced with `--mantine-color-disabled`.  We keep the color and drop the
      * whole control to `opacity: 0.45`, so a disabled Delete was still visibly the red one.
      *
      * The file browser is where this bites.  Its footer is eight buttons, six of which are
@@ -4065,14 +4093,66 @@ describe('the file browser footer is a row of buttons, not a slab', () => {
     });
 });
 
+describe('the file browser\'s filter is as wide as its bar reserves for it', () => {
+    /*
+     * The width rule was written as `.ui.input.file-browser-filter`, naming a wrapper the old
+     * input component rendered around the field.  Nothing carries `ui input` any more, so the
+     * rule matched nothing and the filter had been rendering at the browser's default width
+     * on a bar laid out to give it 34em -- a dead selector, which fails by doing nothing
+     * rather than by erroring, and so goes unnoticed.
+     *
+     * Mounted as the markup FileBrowser writes: the class lands on ActionInput's wrapper,
+     * because the field and its clear button are one control.
+     */
+    const mountFilter = () => cy.mountUI(<div className='file-browser-filter-container'>
+        <ActionInput
+            className='file-browser-filter'
+            placeholder='Filter files...'
+            action={<IconButton icon='close' label='Clear filter'/>}
+        />
+        <IconButton icon='arrow up' label='Collapse all'/>
+    </div>);
+
+    it('is far wider than a default input on a desktop viewport', () => {
+        cy.viewport(1200, 700);
+        mountFilter();
+
+        cy.get('.file-browser-filter').should(($filter) => {
+            // 34em against the root font size, which `--ui-scale` moves; measured rather
+            // than hardcoded so this does not fail the next time the scale changes.
+            const em = parseFloat(getComputedStyle(document.documentElement).fontSize);
+            expect($filter[0].getBoundingClientRect().width, 'the reserved 34em')
+                .to.be.closeTo(34 * em, 2);
+        });
+    });
+
+    it('fills the row on a phone instead, beside the collapse control', () => {
+        cy.viewport(400, 700);
+        mountFilter();
+
+        cy.get('.file-browser-filter-container').should(($row) => {
+            const row = $row[0].getBoundingClientRect();
+            const filter = $row[0].querySelector('.file-browser-filter').getBoundingClientRect();
+            const collapse = $row[0].querySelector('button[aria-label="Collapse all"]')
+                .getBoundingClientRect();
+
+            // Still one line -- the point of `flex: 1 1 auto` rather than `width: 100%`.
+            expect(filter.top, 'filter and collapse share a row').to.be.closeTo(collapse.top, 2);
+            // And it takes the room the collapse control does not.
+            expect(filter.width, 'most of the row').to.be.greaterThan(row.width * 0.6);
+            expect(filter.width, 'but not all of it').to.be.lessThan(row.width);
+        });
+    });
+});
+
 describe('the search field\'s clear button is attached to it', () => {
     /*
      * The control is a bordered box with `padding: 0 8px`, so the clear button sat 9px short
      * of the right edge and 2px short of the full height -- a glyph dropped inside the input
      * rather than a control of its own.
      *
-     * Semantic rendered it as an action button welded to the field.  Measured on the QA Pi,
-     * which still runs Semantic: zero gap from the input, zero to the outer edge, and the
+     * It should read as an action button welded to the field.  Measured on the QA Pi:
+     * zero gap from the input, zero to the outer edge, and the
      * full height of the field.
      */
     const mountField = () => cy.mountUI(<div style={{width: 420}}>
@@ -4307,7 +4387,7 @@ describe('APIButton honours the size its call site asks for', () => {
         });
     });
 
-    it('honours the Semantic size names the call sites actually use', () => {
+    it('honours the size names the call sites actually use', () => {
         /*
          * The seventeen call sites that were being ignored do not say `xs` and `lg` -- they say
          * `small`, `big`, `large` and `huge`, which `resolveSize` translates.  Testing only the

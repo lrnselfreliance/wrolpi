@@ -238,6 +238,49 @@ async def test_delete_duplicate_video_tagged_duplicate(async_client, test_sessio
 
 
 @pytest.mark.asyncio
+async def test_delete_duplicate_video_smaller_copy_at_destination(async_client, test_session, channel_factory,
+                                                                  video_factory):
+    """The kept Video can be renamed onto the path of the smaller duplicate that was just deleted."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
+    entry = channel.info_json['entries'][0]
+
+    # The smaller copy already occupies the destination path.
+    small = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title',
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+    )
+    large = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title ',  # Trailing space, so a different path.
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+    )
+    small.file_group.url = large.file_group.url = 'https://example.com/video'
+    large.file_group.size = small.file_group.size + 1
+    large_id = large.id
+
+    test_session.commit()
+    assert small.video_path == video_path
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    # The commit must not raise IntegrityError: the deleted duplicate still held `video_path` when the kept Video's
+    # `primary_path` was updated to it.
+    test_session.commit()
+
+    video = test_session.query(Video).one()
+    assert video.id == large_id, 'The larger Video was not the one kept'
+    assert video.video_path == video_path
+    assert video.video_path.is_file()
+
+
+@pytest.mark.asyncio
 async def test_delete_renamed_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, delete all the videos that do not have the new title."""
     channel = channel_factory(name='Channel Name')

@@ -265,6 +265,7 @@ async def test_delete_duplicate_video_smaller_copy_at_destination(async_client, 
     small.file_group.url = large.file_group.url = 'https://example.com/video'
     large.file_group.size = small.file_group.size + 1
     large_id = large.id
+    large_old_path = large.video_path
 
     test_session.commit()
     assert small.video_path == video_path
@@ -278,6 +279,8 @@ async def test_delete_duplicate_video_smaller_copy_at_destination(async_client, 
     assert video.id == large_id, 'The larger Video was not the one kept'
     assert video.video_path == video_path
     assert video.video_path.is_file()
+    assert not large_old_path.exists(), 'The kept Video was copied to the destination rather than moved'
+    assert set(channel.directory.iterdir()) == set(video.file_group.my_paths())
 
 
 @pytest.mark.asyncio

@@ -533,6 +533,11 @@ class Video(ModelHelper, Base):
         existing_video = Video.get_by_path(session, video_path)
         if existing_video and largest_video != existing_video:
             delete_video(existing_video)
+            # `FileGroup.delete` unlinks the files immediately, but its DELETE is only queued on the session.  The
+            # rename below claims `video_path` as its `primary_path`, and SQLAlchemy emits UPDATEs before DELETEs in a
+            # flush -- so without this flush the UPDATE hits the not-yet-deleted row and violates the unique index on
+            # `file_group.primary_path`, rolling back the entire download.
+            session.flush()
             for idx, video in enumerate(duplicate_videos):
                 if video == existing_video:
                     duplicate_videos.pop(idx)

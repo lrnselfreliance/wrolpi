@@ -455,7 +455,7 @@ describe('SearchResultsInput', () => {
     const results = {
         tags: {name: 'Tags', results: [{type: 'tag', title: 'Cooking'}]},
         videos: {name: 'Videos', results: [
-            {title: 'How To Sharpen An Axe', description: 'Wranglerstar', location: '/videos/1'},
+            {title: 'Big Buck Bunny', description: 'Blender', location: '/videos/1'},
         ]},
     };
 
@@ -470,7 +470,7 @@ describe('SearchResultsInput', () => {
                                    handleResultSelect={handleResultSelect}/>);
 
         await userEvent.click(screen.getByRole('combobox'));
-        await userEvent.click(screen.getByText('How To Sharpen An Axe'));
+        await userEvent.click(screen.getByText('Big Buck Bunny'));
 
         expect(handleResultSelect).toHaveBeenCalledWith(
             {result: expect.objectContaining({location: '/videos/1'})});

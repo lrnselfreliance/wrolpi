@@ -2652,8 +2652,8 @@ describe('a card reads as titles, not as a wall of links', () => {
         it(`keeps a card title legible in ${theme}`, () => {
             cy.mountUI(<MemoryRouter>
                 <Card title={<a href='/videos/1' className='no-link-underscore card-link'>
-                    How To Sharpen An Axe
-                </a>} meta='Wranglerstar'/>
+                    Big Buck Bunny
+                </a>} meta='Blender'/>
             </MemoryRouter>, {theme});
 
             cy.get('.card-link').should(($link) => {

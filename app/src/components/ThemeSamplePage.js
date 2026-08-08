@@ -760,8 +760,8 @@ export function ThemeSamplePage() {
                         channels: {
                             name: 'Channels',
                             results: [
-                                {title: 'videos/Wranglerstar', description: 'Wranglerstar'},
-                                {title: 'videos/RoseRed Homestead', description: 'RoseRed Homestead'},
+                                {title: 'videos/Blender', description: 'Blender'},
+                                {title: 'videos/WROLPi', description: 'WROLPi'},
                             ],
                         },
                     }}
@@ -885,8 +885,8 @@ export function ThemeSamplePage() {
         <Section label='Cards'>
             <CardGroup>
                 {[
-                    ['How To Sharpen An Axe The Right Way', 'Wranglerstar · 2024-11-03', 'blue', 'film'],
-                    ['Pressure Canning Basics', 'RoseRed Homestead · 2025-02-17', 'blue', 'film'],
+                    ['Big Buck Bunny', 'Blender · 2024-11-03', 'blue', 'film'],
+                    ['Getting Started With WROLPi', 'WROLPi · 2025-02-17', 'blue', 'film'],
                     ['Water Storage Guide.pdf', 'docs/ · 2025-08-21', 'red', 'file pdf'],
                     ['Ham Radio General License.epub', 'ebooks/ · 2024-05-09', 'yellow', 'book'],
                 ].map(([title, meta, color, icon]) => <Card
@@ -1023,10 +1023,10 @@ export function ThemeSamplePage() {
             onCancel={() => setConfirmOpen(false)}
         >
             <p style={{marginTop: 0}}>
-                The channel <strong>Wranglerstar</strong> and its download rules will be removed.
+                The channel <strong>Blender</strong> and its download rules will be removed.
             </p>
             <p style={{color: 'var(--muted)', marginBottom: 0}}>
-                videos/Wranglerstar/ (312 files) will not be deleted.
+                videos/Blender/ (312 files) will not be deleted.
             </p>
         </Confirm>
 

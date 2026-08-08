@@ -561,7 +561,6 @@ export function FileBrowser() {
                     type='button'
                     onClick={() => setFilterStr('')}
                     disabled={!filterStr}
-                    className='search-clear'
                     label='Clear filter'
                 />}
             />

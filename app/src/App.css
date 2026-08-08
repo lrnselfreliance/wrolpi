@@ -361,10 +361,6 @@ textarea.otp {
     flex-grow: 1;
 }
 
-.search-clear {
-    margin: 0.625rem;
-}
-
 .video-player {
     display: block;
     margin: 0 auto; /* Center the video horizontally */

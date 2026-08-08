@@ -1366,7 +1366,7 @@ describe('SearchBox', () => {
         directories: {name: 'Directories', results: [{title: 'videos/'}]},
         channels: {name: 'Channels', results: [
             {title: 'videos/Blender', description: 'Blender'},
-            {title: 'videos/RoseRed', description: 'RoseRed Homestead'},
+            {title: 'videos/WROLPi', description: 'WROLPi'},
         ]},
     };
 
@@ -1426,7 +1426,7 @@ describe('SearchBox', () => {
         await userEvent.keyboard('{ArrowUp}{Enter}');
 
         expect(onResultSelect).toHaveBeenCalledWith(
-            expect.objectContaining({title: 'videos/RoseRed'}));
+            expect.objectContaining({title: 'videos/WROLPi'}));
     });
 
     it('lets a caller render a suggestion its own way', async () => {

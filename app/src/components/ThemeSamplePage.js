@@ -761,7 +761,7 @@ export function ThemeSamplePage() {
                             name: 'Channels',
                             results: [
                                 {title: 'videos/Blender', description: 'Blender'},
-                                {title: 'videos/RoseRed Homestead', description: 'RoseRed Homestead'},
+                                {title: 'videos/WROLPi', description: 'WROLPi'},
                             ],
                         },
                     }}
@@ -886,7 +886,7 @@ export function ThemeSamplePage() {
             <CardGroup>
                 {[
                     ['Big Buck Bunny', 'Blender · 2024-11-03', 'blue', 'film'],
-                    ['Pressure Canning Basics', 'RoseRed Homestead · 2025-02-17', 'blue', 'film'],
+                    ['Getting Started With WROLPi', 'WROLPi · 2025-02-17', 'blue', 'film'],
                     ['Water Storage Guide.pdf', 'docs/ · 2025-08-21', 'red', 'file pdf'],
                     ['Ham Radio General License.epub', 'ebooks/ · 2024-05-09', 'yellow', 'book'],
                 ].map(([title, meta, color, icon]) => <Card

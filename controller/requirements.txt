@@ -3,7 +3,7 @@
 
 # Web framework
 fastapi>=0.140.13
-uvicorn[standard]>=0.49.0
+uvicorn[standard]>=0.52.1
 pydantic>=2.13.4
 
 # Templates

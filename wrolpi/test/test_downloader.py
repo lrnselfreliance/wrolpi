@@ -1713,7 +1713,7 @@ async def test_download_dispatched_outside_immediate_transaction(test_session, t
     """The download signal must be dispatched AFTER the claiming write transaction commits.
 
     Regression test for a production deadlock (found on 10.0.0.9, where downloads silently stopped):
-    `_dispatch_new_downloads` claimed downloads inside a `get_immediate_db_session()` (BEGIN
+    `_dispatch_new_downloads` claimed downloads inside a write (BEGIN
     IMMEDIATE) transaction and `await`ed `api_app.dispatch(...)` while that transaction was still
     open.  Under NullPool (production) the dispatched `signal_download_download` opens its OWN
     connection and — inheriting the `_immediate_txn` flag — also issues BEGIN IMMEDIATE, which

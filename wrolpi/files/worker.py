@@ -27,7 +27,7 @@ from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.common import get_media_directory, get_wrolpi_config, logger, walk, chunks, unique_by_predicate
 from wrolpi.dates import now
-from wrolpi.db import get_db_session, get_db_curs, get_immediate_db_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.files.lib import (
@@ -600,7 +600,7 @@ async def build_move_plan_bulk(
     # must begin as a writer.  A deferred transaction upgrading to a writer mid-way gets "database
     # is locked" *immediately* (busy_timeout is skipped for lock upgrades), so any concurrent
     # writer - a refresh, a download, a config save - would abort the whole move.
-    with get_immediate_db_session() as session:
+    with get_db_session(commit=True) as session:
         try:
             # Create temp table for source paths.  SQLite has no ON COMMIT DROP; the table is
             # explicitly dropped below on success/failure (and IF NOT EXISTS + DELETE guard
@@ -2045,7 +2045,7 @@ class FileWorker:
             # it must begin as a writer; a deferred transaction's lock upgrade fails instantly when
             # anything else is writing (see `build_move_plan_bulk`).
             with flags.file_worker_discovery:
-                with get_immediate_db_session() as session:
+                with get_db_session(commit=True) as session:
                     await self._execute_move_chunks(
                         plan, session, created_directories, revert_plan
                     )

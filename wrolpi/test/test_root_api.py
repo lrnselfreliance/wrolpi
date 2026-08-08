@@ -10,6 +10,7 @@ from wrolpi.api_utils import json_error_handler
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -969,3 +970,34 @@ async def test_search_other_estimates(async_client, test_session, channel_factor
     request, response = await async_client.post('/api/search_other_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['others']['channel_count'] == 1, 'Only one Channel is tagged.'
+
+
+@pytest.mark.asyncio
+async def test_mutating_request_survives_concurrent_writer(async_client, test_session, test_downloader,
+                                                           test_download_manager):
+    """Creating a Download must not fail because something else is writing.
+
+    Regression test for the production failure: a user created a video download while a refresh was
+    running and got `database is locked` on `INSERT INTO download`.  The request session begins
+    *deferred*, the handler reads (tag/duplicate checks) before it INSERTs, and SQLite refuses that
+    mid-transaction lock upgrade instantly -- busy_timeout is skipped for upgrades.  Mutating
+    requests must begin as writers so busy_timeout absorbs the contention instead.
+    """
+    db_file = test_session.get_bind().url.database
+    body = json.dumps(dict(urls=['https://example.com/during-refresh'], downloader=test_downloader.name))
+    # Release anything the fixtures left open on the shared session's connection; only the lock the
+    # test takes below should contend with the request.
+    test_session.commit()
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file):
+            request, response = await async_client.post('/api/download', content=body)
+
+    assert response.status_code == HTTPStatus.CREATED, response.body
+
+    # A separate session sees the committed Download, as the download worker would.
+    session = maker()
+    try:
+        assert [i.url for i in session.query(Download).all()] == ['https://example.com/during-refresh']
+    finally:
+        session.close()

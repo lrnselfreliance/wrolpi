@@ -10,6 +10,7 @@ import logging
 import multiprocessing
 import pathlib
 import shutil
+import sqlite3
 import tempfile
 import threading
 import time
@@ -397,6 +398,36 @@ def make_test_ctx(*, is_cancelled=None, can_download=None,
         report_progress=report_progress or (lambda p: None),
         clear_progress=clear_progress or (lambda: None),
     )
+
+
+@contextlib.contextmanager
+def write_lock_held_briefly(db_file: str, seconds: float = 1.0):
+    """Hold the SQLite write lock on `db_file` for `seconds`, from another connection.
+
+    Simulates the concurrent writer (refresh, download, config save) that a real WROLPi runs
+    alongside whatever the test is doing.  The lock is released while the test's work is still in
+    flight, so a correctly-written transaction waits (busy_timeout) and then succeeds; a deferred
+    one that upgrades its lock mid-transaction fails instantly instead.
+
+    Pair with `production_like_sessions` — the shared `test_session` uses one connection, which
+    cannot contend with itself.
+    """
+    holder = sqlite3.connect(db_file, timeout=30, check_same_thread=False)
+    holder.isolation_level = None
+    holder.execute('PRAGMA busy_timeout=30000')
+    holder.execute('BEGIN IMMEDIATE')
+
+    def release():
+        time.sleep(seconds)
+        holder.execute('ROLLBACK')
+        holder.close()
+
+    thread = threading.Thread(target=release, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        thread.join(timeout=30)
 
 
 @contextlib.contextmanager

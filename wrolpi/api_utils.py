@@ -128,7 +128,14 @@ api_app.error_handler.add(Exception, json_error_handler)
 
 @api_app.middleware('request')
 async def inject_session(request: Request):
-    """Inject a database session into the request context."""
+    """Inject a database session into the request context.
+
+    This session is deliberately *deferred*, even for a POST: it is committed by the response
+    middleware, so a writer would hold the SQLite write lock for the whole handler -- including the
+    slow parts (a chunk being written to disk, a subprocess) and including any background task the
+    handler fires before returning.  A handler that writes should use `get_db_session(commit=True)`,
+    which begins as a writer and commits before the handler returns.
+    """
     from wrolpi.db import get_db_context
     engine, session = get_db_context()
     request.ctx.session = session

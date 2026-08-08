@@ -35,7 +35,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
-from wrolpi.db import get_db_session, get_db_curs, get_immediate_db_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
     ValidationError, DownloadError
 from wrolpi.events import Events
@@ -1110,9 +1110,9 @@ class DownloadManager:
         so a transient "database is locked" can be handled there without retrying the signal
         dispatches inside this transaction.
 
-        Uses `get_immediate_db_session` because this is a read-then-write transaction (it reads the
-        `new` downloads, then claims each by setting `last_download_attempt`); a deferred lock
-        upgrade here fails instantly with "database is locked" under concurrency."""
+        This is a read-then-write transaction (it reads the `new` downloads, then claims each by
+        setting `last_download_attempt`), so it must hold the write lock from BEGIN -- which
+        `get_db_session(commit=True)` does."""
         # Downloads claimed this cycle: dicts of (download_id, download_url, domain).  Two things are
         # deferred until AFTER the immediate (write) transaction below commits:
         #   * `_add_processing_domain` — it mutates shared, non-transactional state, so adding it
@@ -1126,7 +1126,7 @@ class DownloadManager:
         # still holds even though `processing_domains` is not mutated until after commit.
         to_dispatch = []
         claimed = []
-        with get_immediate_db_session() as session:
+        with get_db_session(commit=True) as session:
             new_downloads = list(session.query(Download).filter(
                 Download.status == 'new',
                 Download.domain not in self.processing_domains,
@@ -1348,7 +1348,10 @@ class DownloadManager:
         """Mark any recurring downloads that are due for download as "new".  Start a download."""
         now_ = now()
 
-        with get_db_session() as session:
+        # `commit=True` (a writer from BEGIN): this reads the recurring Downloads and then renews
+        # the due ones.  As a read session its commit failed with "database is locked" whenever
+        # anything else wrote while it was reading -- a config import or refresh, constantly.
+        with get_db_session(commit=True) as session:
             recurring = self.get_recurring_downloads(session)
             renewed_count = 0
             for download in recurring:

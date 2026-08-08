@@ -7,6 +7,7 @@ Engines are created lazily (the media directory must be known first) and use Nul
 fresh session per use.  Every connection gets the same PRAGMAs (WAL, busy_timeout, foreign keys)
 via `create_wrolpi_engine` — use that factory for any engine touching a WROLPi database.
 """
+import contextvars
 import pathlib
 import sqlite3
 import threading
@@ -25,9 +26,13 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
-# Toggled only by `get_immediate_db_session()` (below) while such a session is open on this thread,
-# so the engine's `begin` listener knows to emit `BEGIN IMMEDIATE` instead of a deferred `BEGIN`.
-_immediate_txn = threading.local()
+# Set by `get_db_session(commit=True)` while its transaction is being opened, so the engine's `begin`
+# listener knows to emit `BEGIN IMMEDIATE` instead of a deferred `BEGIN`.  A ContextVar rather than a
+# `threading.local` because the writers that set it include coroutines: Sanic runs every request in
+# its own asyncio task on one shared thread, and a thread-local would leak the flag between
+# interleaved tasks -- arming it for a reader and disarming it under a writer.  Each asyncio task
+# (and each thread) gets its own copy of a ContextVar, so worker-thread callers behave as before.
+_immediate_txn = contextvars.ContextVar('wrolpi_immediate_txn', default=False)
 
 
 def _adapt_datetime(value):
@@ -128,9 +133,9 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):
-        # `get_immediate_db_session()` sessions take the write lock up front; everything else stays
-        # deferred so readers never block (in WAL; see `_immediate_txn`).
-        if getattr(_immediate_txn, 'active', False):
+        # Write sessions (`commit=True`) take the write lock up front; read sessions stay deferred
+        # so readers never block (in WAL; see `_immediate_txn`).
+        if _immediate_txn.get():
             conn.execute('BEGIN IMMEDIATE')
         else:
             conn.execute('BEGIN')
@@ -184,8 +189,22 @@ def get_db_context() -> Tuple[sqlalchemy.engine.Engine, Session]:
 def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
     """
     Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True.
+
+    `commit=True` declares write intent, so the transaction begins as a writer (`BEGIN IMMEDIATE`)
+    rather than deferred.  A deferred transaction that upgrades to a writer at its first INSERT
+    fails *instantly* with "database is locked" if any other connection wrote in the meantime —
+    SQLite skips `busy_timeout` for lock upgrades, because waiting cannot help a snapshot that is
+    already stale.  Taking the lock at BEGIN lets `busy_timeout` (30s) absorb the contention
+    instead.  Rails and Django both made IMMEDIATE the default for the same reason; a per-call-site
+    opt-in only works if every author remembers, and read-then-write is the normal shape of a write.
+
+    The cost is that writers serialize from BEGIN rather than from their first write, so a write
+    transaction must stay short — do the slow parts (globbing, ffprobe, indexing, big joins) in a
+    read session or outside a session, then write what you computed.  Readers are unaffected: WAL
+    readers never block, and `commit=False` sessions stay deferred.
     """
     _, session = get_db_context()
+    token = _immediate_txn.set(True) if commit else None
     try:
         yield session
         if commit:
@@ -194,33 +213,13 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
         session.rollback()
         raise
     finally:
+        if token is not None:
+            _immediate_txn.reset(token)
         # Rollback only if a transaction hasn't been committed.
         # In tests, the test_session fixture manages the session lifecycle,
         # so we should not rollback here - that would undo other test operations.
         if not PYTEST and session.transaction.is_active:
             session.rollback()
-
-
-@contextmanager
-def get_immediate_db_session() -> Generator[Session, Any, None]:
-    """A committing session that takes the SQLite write lock up front (`BEGIN IMMEDIATE`).
-
-    Use this for read-then-write transactions (read some rows, then UPDATE/INSERT them).  A plain
-    `get_db_session(commit=True)` begins *deferred* and only upgrades to a writer at its first
-    write; if another connection holds the write lock at that moment, SQLite returns "database is
-    locked" *immediately* — `busy_timeout` is skipped for lock upgrades to avoid deadlock.  Taking
-    the write lock at BEGIN instead lets `busy_timeout` (30s) absorb the contention.
-
-    The `_immediate_txn` flag is read by the engine's `begin` listener when the transaction opens
-    (on the caller's first statement), so keep queries inside this `with` block.
-    """
-    previous = getattr(_immediate_txn, 'active', False)
-    _immediate_txn.active = True
-    try:
-        with get_db_session(commit=True) as session:
-            yield session
-    finally:
-        _immediate_txn.active = previous
 
 
 @contextmanager

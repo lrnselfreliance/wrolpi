@@ -14,6 +14,9 @@ These tests use the REAL modeling flow:
 4. Verify the video is correctly associated with the channel
 """
 
+import contextlib
+from unittest import mock
+
 import pytest
 
 from modules.videos.models import Channel, Video
@@ -810,3 +813,71 @@ class TestVideoCleanupWithYearSubdirs:
         # video_cleanup should claim the video via LIKE clause
         assert video.channel_id == channel.id, \
             f'video_cleanup should claim video in year subdir, got channel_id={video.channel_id}'
+
+
+@pytest.mark.asyncio
+async def test_video_cleanup_claims_outside_a_write_transaction(async_client, test_session, test_directory,
+                                                                video_file, refresh_files):
+    """The Channel-claiming join must not run inside the write transaction.
+
+    Regression test for two minutes of global write starvation: `video_cleanup` ran the whole
+    `UPDATE video ... FROM channel ... LEFT JOIN file_group` in one `BEGIN IMMEDIATE` transaction.
+    The join is O(channels x file_groups), and on a library with ~1500 channels it held the write
+    lock for 110-130 seconds per refresh -- well past the 30s busy_timeout, so *every* other writer
+    failed with "database is locked", including correctly-written ones.  The join must be a read;
+    only the resulting UPDATEs may take the lock.
+    """
+    from modules.videos import video_cleanup, _UNCLAIMED_VIDEOS_SQL
+    from wrolpi.files import worker as worker_module  # noqa: F401  (import parity with other tests)
+    import modules.videos as videos_module
+
+    channel_dir = test_directory / 'videos' / 'LockChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='LockChannel', kind='channel', directory=channel_dir)
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, url='https://example.com/lockchannel')
+    test_session.add(channel)
+    test_session.commit()
+
+    video_file.rename(channel_dir / 'A Video.mp4')
+    await refresh_files()
+
+    video = test_session.query(Video).one()
+    video.channel_id = None
+    test_session.commit()
+
+    # Record whether each statement ran in a write transaction (`get_db_curs(commit=True)`).
+    executed = []
+    real_get_db_curs = videos_module.get_db_curs
+
+    @contextlib.contextmanager
+    def recording_get_db_curs(commit: bool = False):
+        with real_get_db_curs(commit=commit) as curs:
+            class _Recorder:
+                def __getattr__(self, name):
+                    return getattr(curs, name)
+
+                def execute(self, statement, *args, **kwargs):
+                    executed.append((commit, statement))
+                    return curs.execute(statement, *args, **kwargs)
+
+                def executemany(self, statement, *args, **kwargs):
+                    executed.append((commit, statement))
+                    return curs.executemany(statement, *args, **kwargs)
+
+            yield _Recorder()
+
+    with mock.patch.object(videos_module, 'get_db_curs', recording_get_db_curs):
+        video_cleanup()
+
+    test_session.expire_all()
+    assert test_session.query(Video).one().channel_id == channel.id, 'the Video was not claimed'
+
+    join_statements = [(commit, s) for commit, s in executed if 'FROM video v' in s]
+    assert join_statements, 'the claim join did not run'
+    assert not any(commit for commit, _ in join_statements), \
+        'the Channel-claiming join ran inside a write transaction, holding the lock across it'
+    assert any(commit for commit, s in executed if s.startswith('UPDATE video SET channel_id')), \
+        'the claims were not written'
+    assert _UNCLAIMED_VIDEOS_SQL.strip().startswith('SELECT'), 'the claim query must be a read'

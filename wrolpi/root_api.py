@@ -29,6 +29,7 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     set_global_log_level, get_relative_to_media_directory, search_other_estimates, set_system_timezone
 from wrolpi.config_api import config_bp
 from wrolpi.dates import now
+from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
 from wrolpi.events import get_events, Events
@@ -355,16 +356,21 @@ async def post_download(request: Request, body: schema.DownloadRequest):
     # Raises an InvalidDownload if the Downloader cannot be found.
     download_manager.find_downloader_by_name(body.downloader)
 
-    session = request.ctx.session
     kwargs = dict(downloader_name=body.downloader,
                   sub_downloader_name=body.sub_downloader, reset_attempts=True,
                   destination=body.destination, tag_names=body.tag_names,
                   settings=body.settings, override_skip=True)
-    if body.frequency:
-        download_manager.recurring_download(session, body.urls[0], body.frequency, collection_id=body.collection_id,
-                                            **kwargs)
-    else:
-        download_manager.create_downloads(session, body.urls, **kwargs)
+    # Not `request.ctx.session`: creating a Download reads (the Tags, then any existing Download for
+    # each URL) before it INSERTs, and a deferred transaction fails that lock upgrade *instantly*
+    # with "database is locked" if anything else wrote in between -- which is what a user creating a
+    # download during a refresh hit.  This session also commits before the handler returns, so the
+    # background dispatch `create_downloads` fires does not wait on a lock this request still holds.
+    with get_db_session(commit=True) as session:
+        if body.frequency:
+            download_manager.recurring_download(session, body.urls[0], body.frequency,
+                                                collection_id=body.collection_id, **kwargs)
+        else:
+            download_manager.create_downloads(session, body.urls, **kwargs)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')

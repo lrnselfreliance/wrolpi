@@ -1,12 +1,9 @@
 """Tests for the FileWorker move task."""
 import contextlib
-import sqlite3
-import threading
-import time
 
 import pytest
 
-from wrolpi.conftest import production_like_sessions
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.files import worker as worker_module
 from wrolpi.files.lib import _move_file_group_files
 from wrolpi.files.models import FileGroup, Directory
@@ -539,32 +536,6 @@ async def test_file_worker_move_cleans_directory_records(
     assert source_dir.exists(), "source should still exist on disk (empty)"
 
 
-@contextlib.contextmanager
-def _write_lock_held_briefly(db_file: str, seconds: float = 1.0):
-    """Hold the SQLite write lock on `db_file` for `seconds`, from another connection.
-
-    Simulates the concurrent writer (refresh, download, config save) that a real WROLPi runs
-    alongside a move.  The lock is released while the test's move is still planning, so a
-    correctly-written move waits (busy_timeout) and then succeeds.
-    """
-    holder = sqlite3.connect(db_file, timeout=30, check_same_thread=False)
-    holder.isolation_level = None
-    holder.execute('PRAGMA busy_timeout=30000')
-    holder.execute('BEGIN IMMEDIATE')
-
-    def release():
-        time.sleep(seconds)
-        holder.execute('ROLLBACK')
-        holder.close()
-
-    thread = threading.Thread(target=release, daemon=True)
-    thread.start()
-    try:
-        yield
-    finally:
-        thread.join(timeout=30)
-
-
 @pytest.mark.asyncio
 async def test_build_move_plan_waits_for_concurrent_writer(
         async_client, test_session, test_directory, make_files_structure
@@ -585,7 +556,7 @@ async def test_build_move_plan_waits_for_concurrent_writer(
     db_file = test_session.get_bind().url.database
 
     with production_like_sessions(test_session):
-        with _write_lock_held_briefly(db_file):
+        with write_lock_held_briefly(db_file):
             plan, _ = await build_move_plan_bulk([file1], dest)
 
     assert plan == {file1: dest / 'file1.txt'}
@@ -622,7 +593,7 @@ async def test_file_worker_move_survives_concurrent_writer(
         async def build_plan_then_hold_write_lock(*args, **kwargs):
             plan = await real_build_move_plan_bulk(*args, **kwargs)
             # Planning is done; the contention now falls entirely on the execute phase.
-            stack.enter_context(_write_lock_held_briefly(db_file))
+            stack.enter_context(write_lock_held_briefly(db_file))
             return plan
 
         monkeypatch.setattr(worker_module, 'build_move_plan_bulk', build_plan_then_hold_write_lock)

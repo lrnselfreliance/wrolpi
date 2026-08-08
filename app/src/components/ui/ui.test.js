@@ -1365,7 +1365,7 @@ describe('SearchBox', () => {
     const results = {
         directories: {name: 'Directories', results: [{title: 'videos/'}]},
         channels: {name: 'Channels', results: [
-            {title: 'videos/Wranglerstar', description: 'Wranglerstar'},
+            {title: 'videos/Blender', description: 'Blender'},
             {title: 'videos/RoseRed', description: 'RoseRed Homestead'},
         ]},
     };
@@ -1395,10 +1395,10 @@ describe('SearchBox', () => {
                             onResultSelect={onResultSelect}/>);
         await userEvent.click(screen.getByRole('combobox'));
 
-        await userEvent.click(screen.getByText('videos/Wranglerstar'));
+        await userEvent.click(screen.getByText('videos/Blender'));
 
         expect(onResultSelect).toHaveBeenCalledWith(
-            expect.objectContaining({title: 'videos/Wranglerstar'}));
+            expect.objectContaining({title: 'videos/Blender'}));
     });
 
     it('moves through suggestions with the arrow keys and takes one with Enter', async () => {
@@ -1412,7 +1412,7 @@ describe('SearchBox', () => {
         await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
 
         expect(onResultSelect).toHaveBeenCalledWith(
-            expect.objectContaining({title: 'videos/Wranglerstar'}));
+            expect.objectContaining({title: 'videos/Blender'}));
         // Enter took the highlighted suggestion instead of submitting the raw text.
         expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -1438,7 +1438,7 @@ describe('SearchBox', () => {
 
         await userEvent.click(screen.getByRole('combobox'));
 
-        expect(screen.getByText('custom: videos/Wranglerstar').tagName).toBe('EM');
+        expect(screen.getByText('custom: videos/Blender').tagName).toBe('EM');
         // The default title/description markup is replaced, not wrapped.
         expect(document.querySelector('.wrolpi-searchbox-result-title')).not.toBeInTheDocument();
     });

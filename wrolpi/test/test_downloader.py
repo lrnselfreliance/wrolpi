@@ -1713,7 +1713,7 @@ async def test_daily_limit_per_domain_allows_under_limit(test_session, test_down
 async def test_download_dispatched_outside_immediate_transaction(test_session, test_download_manager, test_downloader):
     """The download signal must be dispatched AFTER the claiming write transaction commits.
 
-    Regression test for a production deadlock (found on 10.0.0.9, where downloads silently stopped):
+    Regression test for a production deadlock (downloads silently stopped on a test device):
     `_dispatch_new_downloads` claimed downloads inside its write transaction and `await`ed
     `api_app.dispatch(...)` while that transaction was still open.  Under NullPool (production) the
     dispatched `signal_download_download` opens its OWN connection and also issues BEGIN IMMEDIATE,

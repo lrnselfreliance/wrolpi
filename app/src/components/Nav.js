@@ -61,9 +61,11 @@ const allLinks = [
     {text: 'Playlists', to: '/playlists', key: 'playlists'},
     {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
-    {to: '/more/calculators', text: 'Calculators', key: 'calculators', end: true},
+    // No `end` on these two: a tab stays current for the pages beneath it, and `end` would
+    // drop the mark the moment either grows a sub-page.
+    {to: '/more/calculators', text: 'Calculators', key: 'calculators'},
     {text: 'Flasher', to: '/flasher', key: 'flasher'},
-    {to: '/more/statistics', text: 'Statistics', key: 'statistics', end: true},
+    {to: '/more/statistics', text: 'Statistics', key: 'statistics'},
 ];
 
 function MenuLink({link}) {

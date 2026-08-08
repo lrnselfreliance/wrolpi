@@ -1,5 +1,5 @@
 import React from "react";
-import {Link, NavLink} from "react-router";
+import {Link, NavLink, useLocation} from "react-router";
 import {IconMenu2, IconPlugOff, IconTemperature, IconTemperaturePlus} from "@tabler/icons-react";
 import {Icon, IconButton, Menu, Tooltip} from "./ui";
 import {Media, SettingsContext, StatusContext} from "../contexts/contexts";
@@ -61,9 +61,11 @@ const allLinks = [
     {text: 'Playlists', to: '/playlists', key: 'playlists'},
     {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
-    {to: '/more/calculators', text: 'Calculators', key: 'calculators', end: true},
+    // No `end` on these two: a tab stays current for the pages beneath it, and `end` would
+    // drop the mark the moment either grows a sub-page.
+    {to: '/more/calculators', text: 'Calculators', key: 'calculators'},
     {text: 'Flasher', to: '/flasher', key: 'flasher'},
-    {to: '/more/statistics', text: 'Statistics', key: 'statistics', end: true},
+    {to: '/more/statistics', text: 'Statistics', key: 'statistics'},
 ];
 
 function MenuLink({link}) {
@@ -130,12 +132,42 @@ const NavDropdownTrigger = React.forwardRef(({text, className, ...props}, ref) =
 );
 NavDropdownTrigger.displayName = 'NavDropdownTrigger';
 
+/**
+ * Whether `link` covers `pathname`, matching NavLink's own rule: a link owns the pages
+ * beneath it unless it asks to match its path exactly.
+ *
+ * Duplicated from NavLink deliberately.  The question here is asked about a link that is
+ * NOT rendered -- one hidden inside the overflow menu -- so there is no NavLink to ask, and
+ * the hooks that would answer it cannot be called in a loop.
+ */
+export const isLinkActive = (pathname, link) => {
+    // An off-site link (Help) is never the current section.
+    if (!link.to || /^[a-z]+:\/\//i.test(link.to)) return false;
+    const to = link.to.length > 1 ? link.to.replace(/\/+$/, '') : link.to;
+    if (link.end || to === '/') return pathname === to;
+    return pathname === to || pathname.startsWith(`${to}/`);
+}
+
 function DropdownLinks({link}) {
     // A labelled dropdown trigger: the desktop "More" overflow, or any nested
     // link group handed to MenuLink.
+    const {pathname} = useLocation();
+    /*
+     * Mark the trigger when the current section is one of the links folded inside it.
+     *
+     * Without this the bar goes blank the moment the window narrows enough to push the
+     * current tab into "More" -- the mark exists, but only after the user opens the menu
+     * to look for it, which is precisely when they least need telling.
+     *
+     * The class only, not `aria-current`: the real NavLink inside the menu already carries
+     * that, and a second "current" on the button that opens the menu would announce the
+     * same page twice.
+     */
+    const holdsCurrent = (link.links || []).some(child => isLinkActive(pathname, child));
+
     return <Menu position='bottom-end' withinPortal>
         <Menu.Target>
-            <NavDropdownTrigger text={link.text}/>
+            <NavDropdownTrigger text={link.text} className={holdsCurrent ? 'active' : undefined}/>
         </Menu.Target>
         <Menu.Dropdown>
             {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}

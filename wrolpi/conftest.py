@@ -400,6 +400,28 @@ def make_test_ctx(*, is_cancelled=None, can_download=None,
     )
 
 
+def probe_write_lock_is_held(db_file: str) -> bool:
+    """Return True if a competing connection cannot immediately take the write lock.
+
+    Uses a zero busy-timeout so the probe fails instantly if another connection holds a
+    RESERVED (write) lock, rather than waiting.  In WAL mode a plain reader holds no such
+    lock, so this only returns True when a writer transaction is actually in progress.
+    """
+    probe = sqlite3.connect(db_file, timeout=0)
+    try:
+        probe.execute('PRAGMA busy_timeout=0')
+        try:
+            probe.execute('BEGIN IMMEDIATE')
+        except sqlite3.OperationalError as e:
+            if 'database is locked' in str(e):
+                return True
+            raise
+        probe.execute('ROLLBACK')
+        return False
+    finally:
+        probe.close()
+
+
 @contextlib.contextmanager
 def write_lock_held_briefly(db_file: str, seconds: float = 1.0):
     """Hold the SQLite write lock on `db_file` for `seconds`, from another connection.

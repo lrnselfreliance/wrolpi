@@ -16,6 +16,7 @@ from sqlalchemy.exc import OperationalError
 from wrolpi.api_utils import api_app
 from wrolpi.common import get_wrolpi_config, normalize_domain
 from wrolpi.dates import Seconds, now
+from wrolpi.conftest import probe_write_lock_is_held, production_like_sessions
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     get_download_manager_config, RSSDownloader, parse_aria2c_progress, _parse_size, \
@@ -1713,35 +1714,35 @@ async def test_download_dispatched_outside_immediate_transaction(test_session, t
     """The download signal must be dispatched AFTER the claiming write transaction commits.
 
     Regression test for a production deadlock (found on 10.0.0.9, where downloads silently stopped):
-    `_dispatch_new_downloads` claimed downloads inside a write (BEGIN
-    IMMEDIATE) transaction and `await`ed `api_app.dispatch(...)` while that transaction was still
-    open.  Under NullPool (production) the dispatched `signal_download_download` opens its OWN
-    connection and — inheriting the `_immediate_txn` flag — also issues BEGIN IMMEDIATE, which
-    blocks on the write lock the outer transaction still holds until `busy_timeout` (30s) expires:
-    `database is locked`, and no download ever starts.
+    `_dispatch_new_downloads` claimed downloads inside its write transaction and `await`ed
+    `api_app.dispatch(...)` while that transaction was still open.  Under NullPool (production) the
+    dispatched `signal_download_download` opens its OWN connection and also issues BEGIN IMMEDIATE,
+    which blocks on the write lock the outer transaction still holds until `busy_timeout` (30s)
+    expires: `database is locked`, and no download ever starts.
 
-    The test database shares a single connection, so it cannot reproduce the lock itself; instead it
-    asserts the invariant that prevents it — the signal is dispatched with no immediate transaction
-    active."""
-    from wrolpi.db import _immediate_txn
+    `production_like_sessions` gives the dispatcher its own connection, so the write lock is real
+    and a competing connection can probe for it at dispatch time.
+    """
     name = test_downloader.name
     d = Download(url='https://example.com/new', downloader=name, status='new')
     test_session.add(d)
     test_session.commit()
+    db_file = test_session.get_bind().url.database
 
-    immediate_active_at_dispatch = []
+    write_lock_held_at_dispatch = []
 
     async def record(event, *args, **kwargs):
         if event == 'wrolpi.download.download':
-            immediate_active_at_dispatch.append(getattr(_immediate_txn, 'active', False))
+            write_lock_held_at_dispatch.append(probe_write_lock_is_held(db_file))
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
-        dispatch.side_effect = record
-        await test_download_manager.dispatch_downloads()
+    with production_like_sessions(test_session):
+        with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+            dispatch.side_effect = record
+            await test_download_manager.dispatch_downloads()
 
-    assert immediate_active_at_dispatch, 'expected the download to be dispatched'
-    assert not any(immediate_active_at_dispatch), \
-        'download signal was dispatched inside an open BEGIN IMMEDIATE transaction (deadlocks under NullPool)'
+    assert write_lock_held_at_dispatch, 'expected the download to be dispatched'
+    assert not any(write_lock_held_at_dispatch), \
+        'download signal was dispatched while the claim still held the write lock (deadlocks under NullPool)'
 
 
 @pytest.mark.asyncio
@@ -1974,3 +1975,37 @@ async def test_recurring_downloads_bypass_daily_limits(test_session, test_downlo
     # Recurring downloads are excluded from the daily count entirely.
     global_count, domain_counts = test_download_manager.daily_download_counts(test_session)
     assert 'rumble.com' not in domain_counts
+
+
+@pytest.mark.asyncio
+async def test_renew_recurring_downloads_scans_without_the_write_lock(test_session, test_download_manager,
+                                                                     test_downloader):
+    """Deciding what is due must not hold the write lock.
+
+    The download manager calls this every cycle.  Scanning every recurring Download (plus a
+    `calculate_next_download` query per row) inside the write transaction blocks every other writer
+    for the length of the scan, even on the common cycle where nothing is due.  Read first, then
+    take the lock only for the rows that are actually being renewed.
+    """
+    db_file = test_session.get_bind().url.database
+    # A recurring Download that is NOT due, so nothing needs renewing.
+    d = Download(url='https://example.com/recurring', downloader=test_downloader.name, status='complete',
+                 frequency=DownloadFrequency.weekly, next_download=now() + timedelta(days=3))
+    test_session.add(d)
+    test_session.commit()
+
+    lock_held_during_scan = []
+    real_get_recurring_downloads = type(test_download_manager).get_recurring_downloads
+
+    def probing_get_recurring_downloads(self, session, limit: int = None):
+        lock_held_during_scan.append(probe_write_lock_is_held(db_file))
+        return real_get_recurring_downloads(self, session, limit)
+
+    with production_like_sessions(test_session):
+        with mock.patch.object(type(test_download_manager), 'get_recurring_downloads',
+                               probing_get_recurring_downloads):
+            test_download_manager.renew_recurring_downloads()
+
+    assert lock_held_during_scan, 'the recurring downloads were never scanned'
+    assert not any(lock_held_during_scan), \
+        'the write lock was held while scanning recurring downloads'

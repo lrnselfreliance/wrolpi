@@ -1,6 +1,9 @@
+import asyncio
 import sqlite3
 
-from wrolpi.conftest import production_like_sessions
+import pytest
+
+from wrolpi.conftest import production_like_sessions, probe_write_lock_is_held
 from wrolpi.db import get_db_session, _configure_sqlite_connection
 
 
@@ -98,28 +101,6 @@ def test_configure_connection_does_not_reattempt_wal_once_ruled_out():
     assert 'PRAGMA journal_mode=TRUNCATE' in conn._cursor.executed
 
 
-def _probe_write_lock_is_held(db_file: str) -> bool:
-    """Return True if a competing connection cannot immediately take the write lock.
-
-    Uses a zero busy-timeout so the probe fails instantly if another connection holds a
-    RESERVED (write) lock, rather than waiting.  In WAL mode a plain reader holds no such
-    lock, so this only returns True when a writer transaction is actually in progress.
-    """
-    probe = sqlite3.connect(db_file, timeout=0)
-    try:
-        probe.execute('PRAGMA busy_timeout=0')
-        try:
-            probe.execute('BEGIN IMMEDIATE')
-        except sqlite3.OperationalError as e:
-            if 'database is locked' in str(e):
-                return True
-            raise
-        probe.execute('ROLLBACK')
-        return False
-    finally:
-        probe.close()
-
-
 def test_write_session_takes_write_lock_up_front(test_session):
     """`get_db_session(commit=True)` must acquire the SQLite write lock at BEGIN.
 
@@ -137,7 +118,7 @@ def test_write_session_takes_write_lock_up_front(test_session):
             # Trigger the transaction's BEGIN with a trivial read (as the download dispatcher
             # does before writing).  This session already holds the write lock.
             session.execute('SELECT 1')
-            assert _probe_write_lock_is_held(db_file), \
+            assert probe_write_lock_is_held(db_file), \
                 'immediate session did not hold the write lock after BEGIN'
 
 
@@ -148,5 +129,34 @@ def test_read_session_does_not_take_write_lock(test_session):
     with production_like_sessions(test_session):
         with get_db_session() as session:
             session.execute('SELECT 1')
-            assert not _probe_write_lock_is_held(db_file), \
+            assert not probe_write_lock_is_held(db_file), \
                 'read-only session unexpectedly holds the write lock'
+
+
+@pytest.mark.asyncio
+async def test_background_task_does_not_inherit_write_intent(test_session):
+    """A task spawned while a write session is open must not inherit its write intent.
+
+    `asyncio.create_task` copies the current Context, so a ContextVar set for the duration of a
+    write session is inherited by every background task the session's code starts -- permanently,
+    because the parent's `reset()` cannot reach the child's copy.  `create_downloads` spawns
+    `dispatch_downloads` exactly that way, so every user-created download would leave that task
+    issuing BEGIN IMMEDIATE for its *read* sessions, serializing reads behind the write lock.
+    """
+    db_file = test_session.get_bind().url.database
+    held_during_child_read = dict()
+
+    async def child():
+        with get_db_session() as session:  # A read session: it must stay deferred.
+            session.execute('SELECT 1')
+            held_during_child_read['held'] = probe_write_lock_is_held(db_file)
+
+    with production_like_sessions(test_session):
+        with get_db_session(commit=True) as session:
+            session.execute('SELECT 1')
+            task = asyncio.create_task(child())
+        # The write session has committed; only the child's own session can hold the lock now.
+        await task
+
+    assert held_during_child_read['held'] is False, \
+        'a read session in a spawned task took the write lock, inheriting the parent write intent'

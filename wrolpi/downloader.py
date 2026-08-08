@@ -1348,23 +1348,39 @@ class DownloadManager:
         """Mark any recurring downloads that are due for download as "new".  Start a download."""
         now_ = now()
 
-        # `commit=True` (a writer from BEGIN): this reads the recurring Downloads and then renews
-        # the due ones.  As a read session its commit failed with "database is locked" whenever
-        # anything else wrote while it was reading -- a config import or refresh, constantly.
-        with get_db_session(commit=True) as session:
-            recurring = self.get_recurring_downloads(session)
-            renewed_count = 0
-            for download in recurring:
+        # Decide what is due in a read session.  This runs every download-manager cycle and scans
+        # every recurring Download -- with a `calculate_next_download` query per row that lacks one
+        # -- so it must not hold the write lock, least of all on the usual cycle where nothing is
+        # due.  WAL readers block nobody.
+        due_ids = list()
+        calculated = dict()
+        with get_db_session() as session:
+            for download in self.get_recurring_downloads(session):
                 # A new download may not have a `next_download`, create it if necessary.
-                download.next_download = download.next_download or self.calculate_next_download(session, download)
-                if download.next_download < now_ and download.status not in (
+                next_download = download.next_download or self.calculate_next_download(session, download)
+                if next_download != download.next_download:
+                    calculated[download.id] = next_download
+                if next_download < now_ and download.status not in (
                         DownloadStatus.new, DownloadStatus.pending):
+                    due_ids.append(download.id)
+
+        if not due_ids and not calculated:
+            return
+
+        # Take the write lock only for the rows that change.  A row's status may have moved on since
+        # the read above (the dispatcher claims downloads constantly), so re-check it here.
+        due = set(due_ids)
+        with get_db_session(commit=True) as session:
+            renewed_count = 0
+            for download in session.query(Download).filter(Download.id.in_(due | set(calculated))):
+                if (next_download := calculated.get(download.id)) is not None:
+                    download.next_download = download.next_download or next_download
+                if download.id in due and download.status not in (DownloadStatus.new, DownloadStatus.pending):
                     download.renew()
                     renewed_count += 1
 
             if renewed_count:
                 self.log_debug(f'Renewed {renewed_count} recurring downloads')
-                session.commit()
 
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:

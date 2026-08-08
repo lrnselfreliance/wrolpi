@@ -68,6 +68,46 @@ html .mantine-Notifications-root[data-position^='top'] {
 }
 
 /*
+ * The tab for the section the user is in.
+ *
+ * react-router marks it with `active` and `aria-current` on its own, and always did -- the
+ * mark reached the DOM and nothing here drew it, so every tab looked identical and clicking
+ * Videos appeared to leave the bar untouched.
+ *
+ * The underline is a pseudo-element in `currentColor`, not a border: `currentColor` follows
+ * the foreground the bar computed for whatever navbar color the user picked, so this works
+ * on all twelve of them (see `navColorNames`) and in all four themes without naming a color;
+ * and a pseudo-element adds no height, where a border would jog the whole row as the mark
+ * moved between tabs.  The darker wash is the hover treatment deepened, so the two read as
+ * the same idea.
+ */
+.wrolpi-navbar-link.active {
+    position: relative;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.wrolpi-navbar-link.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* rem, not px, so the mark grows with the --ui-scale setting like the text above it. */
+    height: 0.1875rem;
+    background: currentColor;
+}
+
+/*
+ * The same tabs inside the overflow "More" menu and the mobile hamburger, which are the
+ * only place most of them appear on a phone.  Those render in a portal, outside the bar,
+ * so they take theme tokens rather than the bar's foreground.
+ */
+.mantine-Menu-item.active {
+    background: var(--head);
+    font-weight: 600;
+}
+
+/*
  * Everything in the bar takes the bar's foreground.
  *
  * `color: inherit` on the links alone was not enough, because two of the things in the

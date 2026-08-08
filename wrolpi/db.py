@@ -204,7 +204,18 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
     readers never block, and `commit=False` sessions stay deferred.
     """
     _, session = get_db_context()
-    token = _immediate_txn.set(True) if commit else None
+    if commit:
+        # Open the transaction here rather than letting it begin lazily at the caller's first
+        # statement.  Two reasons: the write lock is taken up front (the whole point), and the
+        # `_immediate_txn` flag lives only across this synchronous call.  A flag held for the
+        # session's lifetime would be copied into every task the caller spawns --
+        # `asyncio.create_task` snapshots the Context -- and the parent's `reset()` cannot reach a
+        # child's copy, so those tasks would issue BEGIN IMMEDIATE for their *read* sessions.
+        token = _immediate_txn.set(True)
+        try:
+            session.connection()
+        finally:
+            _immediate_txn.reset(token)
     try:
         yield session
         if commit:
@@ -213,8 +224,6 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
         session.rollback()
         raise
     finally:
-        if token is not None:
-            _immediate_txn.reset(token)
         # Rollback only if a transaction hasn't been committed.
         # In tests, the test_session fixture manages the session lifecycle,
         # so we should not rollback here - that would undo other test operations.

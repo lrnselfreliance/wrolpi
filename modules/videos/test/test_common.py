@@ -9,6 +9,7 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from wrolpi.collections import Collection
+from wrolpi.conftest import probe_write_lock_is_held, production_like_sessions
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config, get_relative_to_media_directory
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
@@ -608,3 +609,38 @@ def test_get_custom_videos_directory(test_directory, test_wrolpi_config):
     assert common.get_videos_directory() == (test_directory / 'custom/directory/videos')
     assert (test_directory / 'custom/directory/videos').is_dir()
     assert not (test_directory / 'videos').is_dir()
+
+
+@pytest.mark.asyncio
+async def test_video_modeler_does_not_hold_write_lock_during_ffprobe(async_client, test_session, video_factory):
+    """Modeling must not hold the SQLite write lock while ffprobe runs.
+
+    `video_modeler` opened one write session per batch and `await`ed `get_ffprobe_json` -- an ffprobe
+    subprocess -- for up to 20 videos inside it.  Every other writer on the box waits on that lock
+    and gives up after `busy_timeout` (30s).  ffprobe belongs outside the transaction: read the
+    batch, probe the files, then write what was learned.
+    """
+    import modules.videos as videos_module
+    from modules.videos import video_modeler
+
+    video = video_factory(with_video_file=True)
+    video.file_group.indexed = False
+    video.file_group.model = None
+    test_session.delete(video)
+    test_session.commit()
+
+    db_file = test_session.get_bind().url.database
+    lock_held_during_ffprobe = []
+    real_get_or_create_ffprobe_json = videos_module.get_or_create_ffprobe_json
+
+    async def probing_ffprobe(video_path):
+        lock_held_during_ffprobe.append(probe_write_lock_is_held(db_file))
+        return await real_get_or_create_ffprobe_json(video_path)
+
+    with production_like_sessions(test_session):
+        with mock.patch.object(videos_module, 'get_or_create_ffprobe_json', probing_ffprobe):
+            await video_modeler()
+
+    assert lock_held_during_ffprobe, 'ffprobe never ran, so the test proves nothing'
+    assert not any(lock_held_during_ffprobe), \
+        'the write lock was held while ffprobe ran; every other writer waits out busy_timeout'

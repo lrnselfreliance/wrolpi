@@ -319,6 +319,31 @@ def write_ffprobe_json_file(path: Path, data: dict):
         json.dump(data, f, indent=2)
 
 
+async def get_or_create_ffprobe_json(video_path: Path) -> Tuple[dict, Optional[Path]]:
+    """Return `(ffprobe data, the cache file written)` for a video file.
+
+    Deliberately takes a path and touches no session: ffprobe is a subprocess that runs for
+    seconds, and a caller holding a write transaction while it runs blocks every other writer
+    until `busy_timeout` expires.  The caller persists the returned data afterwards, in a short
+    write transaction of its own.
+    """
+    ffprobe_path = video_path.with_suffix('.ffprobe.json')
+    if ffprobe_path.is_file() and (cached_data := read_ffprobe_json_file(ffprobe_path)):
+        return cached_data, None
+
+    data = await ffprobe_json(video_path)
+
+    written = None
+    from wrolpi.common import get_wrolpi_config
+    if get_wrolpi_config().save_ffprobe_json:
+        try:
+            write_ffprobe_json_file(ffprobe_path, data)
+            written = ffprobe_path
+        except IOError as e:
+            logger.warning(f'Failed to write ffprobe json cache file {ffprobe_path}', exc_info=e)
+    return data, written
+
+
 def extract_video_duration(video_path: Path) -> Optional[int]:
     """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):

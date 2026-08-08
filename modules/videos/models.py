@@ -413,28 +413,13 @@ class Video(ModelHelper, Base):
         if self.ffprobe_json:
             return self.ffprobe_json
 
-        from modules.videos.common import ffprobe_json, read_ffprobe_json_file, write_ffprobe_json_file
+        from modules.videos.common import get_or_create_ffprobe_json
 
-        # 2. Check if .ffprobe.json file exists
-        ffprobe_path = self.ffprobe_json_path
-        if ffprobe_path and ffprobe_path.is_file():
-            cached_data = read_ffprobe_json_file(ffprobe_path)
-            if cached_data:
-                self.ffprobe_json = cached_data
-                return self.ffprobe_json
-
-        # 3. Run ffprobe and cache the result
-        self.ffprobe_json = await ffprobe_json(self.video_path)
-        if ffprobe_path:
-            # Check if saving ffprobe json files is enabled
-            from wrolpi.common import get_wrolpi_config
-            if get_wrolpi_config().save_ffprobe_json:
-                try:
-                    write_ffprobe_json_file(ffprobe_path, self.ffprobe_json)
-                    # Add the new file to the FileGroup so it's tracked
-                    self.file_group.append_files(ffprobe_path)
-                except IOError as e:
-                    logger.warning(f'Failed to write ffprobe json cache file {ffprobe_path}', exc_info=e)
+        # 2/3. Read the cached .ffprobe.json, or run ffprobe and cache it.
+        self.ffprobe_json, written = await get_or_create_ffprobe_json(self.video_path)
+        if written:
+            # Track the new cache file in the FileGroup.
+            self.file_group.append_files(written)
 
         return self.ffprobe_json
 

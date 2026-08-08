@@ -1,10 +1,12 @@
 import asyncio
 import json
+import pathlib
 from typing import Callable, List, Tuple
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from modules.videos.common import get_or_create_ffprobe_json
 from modules.videos.models import Video
 from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
@@ -23,18 +25,37 @@ VIDEO_PROCESSING_LIMIT = 20
 async def video_modeler(progress_callback: Callable[[int], None] = None):
     total_processed = 0
     while True:
-        with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup, Video).filter(
+        # Read the batch; nothing is claimed yet, so the write lock stays free while ffprobe runs.
+        with get_db_session() as session:
+            batch: List[Tuple[int, pathlib.Path]] = list(session.query(FileGroup.id, FileGroup.primary_path).filter(
                 FileGroup.indexed != True,
                 or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
-            ).outerjoin(Video, Video.file_group_id == FileGroup.id) \
-                .limit(VIDEO_PROCESSING_LIMIT)
-            file_groups: List[Tuple[FileGroup, Video]] = list(file_groups)
+            ).limit(VIDEO_PROCESSING_LIMIT).all())
 
-            processed = 0
+        if not batch:
+            break
+
+        # ffprobe each file with no transaction open.  This is a subprocess per video and can run
+        # for seconds; inside the write transaction below it would hold the write lock for the whole
+        # batch, and every other writer on the box would wait out `busy_timeout` (30s).
+        probed = dict()
+        for file_group_id, primary_path in batch:
+            try:
+                probed[file_group_id] = await get_or_create_ffprobe_json(pathlib.Path(str(primary_path)))
+            except Exception as e:
+                if PYTEST:
+                    raise
+                logger.error(f'Unable to ffprobe Video: {primary_path}', exc_info=e)
+            # Sleep to catch cancel.
+            await asyncio.sleep(0)
+
+        with get_db_session(commit=True) as session:
+            file_groups: List[Tuple[FileGroup, Video]] = list(
+                session.query(FileGroup, Video)
+                .filter(FileGroup.id.in_([i for i, _ in batch]))
+                .outerjoin(Video, Video.file_group_id == FileGroup.id))
+
             for file_group, video in file_groups:
-                processed += 1
-
                 video_id = None
                 try:
                     if not video:
@@ -45,12 +66,16 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
                     if not Session.object_session(video):
                         session.add(video)
                         video.flush()
-                    # Extract ffprobe data.
-                    await video.get_ffprobe_json()
+                    # Store the ffprobe data gathered above.
+                    if (result := probed.get(file_group.id)) is not None:
+                        video.ffprobe_json, ffprobe_file = result
+                        if ffprobe_file:
+                            # Track the .ffprobe.json cache file that was just written.
+                            file_group.append_files(ffprobe_file)
                     video.flush(session)
-                    # Validate and index subtitles.
+                    # Validate and index subtitles.  (Poster generation happens here when a Channel
+                    # asks for it; it is the remaining slow work inside this transaction.)
                     video.validate(session)
-                    processed += 1
                 except Exception as e:
                     if PYTEST:
                         raise
@@ -59,18 +84,16 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
 
                 file_group.indexed = True
 
-            session.commit()
+        # Report batch progress
+        total_processed += len(batch)
+        if progress_callback:
+            progress_callback(total_processed)
 
-            # Report batch progress
-            total_processed += len(file_groups)
-            if progress_callback and len(file_groups) > 0:
-                progress_callback(total_processed)
+        logger.debug(f'Modeled {len(batch)} videos')
 
-            if processed < VIDEO_PROCESSING_LIMIT:
-                # Did not reach limit, do not query again.
-                break
-
-            logger.debug(f'Modeled {processed} videos')
+        if len(batch) < VIDEO_PROCESSING_LIMIT:
+            # Did not reach limit, do not query again.
+            break
 
         # Sleep to catch cancel.
         await asyncio.sleep(0)
@@ -127,8 +150,9 @@ _UNCLAIMED_VIDEOS_SQL = '''
                         SELECT v.id, c.id
                         FROM video v
                                  INNER JOIN file_group fg ON fg.id = v.file_group_id
-                                 INNER JOIN collection col ON fg.directory = col.directory
-                            OR fg.directory LIKE col.directory || '/%'
+                                 INNER JOIN collection col
+                                            ON (fg.directory = col.directory
+                                                OR fg.directory LIKE col.directory || '/%')
                                  INNER JOIN channel c ON c.collection_id = col.id
                         WHERE v.channel_id IS NULL
                         '''

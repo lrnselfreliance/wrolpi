@@ -1,4 +1,5 @@
-FROM caddy:latest
+# Pinned to the Caddy that Debian 13 devices run, so Docker matches hardware.
+FROM caddy:2.11.4
 
 RUN apk add --no-cache openssl bash
 

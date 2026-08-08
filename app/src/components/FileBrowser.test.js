@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {FileBrowser, filterBrowseFiles} from './FileBrowser';
@@ -492,6 +494,28 @@ describe('FileBrowser', () => {
     });
 
     describe('Filter', () => {
+        it('joins the clear button to the input, and keeps the row aligned', () => {
+            /*
+             * The clear button belongs INSIDE ActionInput's wrapper, which is what removes
+             * the input's right border so the pair reads as one control -- the same joined
+             * look the Videos and Archives filters have.
+             *
+             * It used to carry `search-clear`, a class left over from Semantic whose
+             * `margin: 0.625rem` did three things at once: opened a gap so the button read
+             * as detached, pushed it 11px below the input, and stretched the wrapper to
+             * 62px against a 40px field, which threw the collapse-all button out of line
+             * too.  jsdom applies no stylesheet, so the guard is that no rule reintroduces
+             * a margin on a control inside the wrapper.
+             */
+            renderFileBrowser(<FileBrowser browseFiles={mockBrowseFiles}/>);
+
+            const clear = screen.getByRole('button', {name: 'Clear filter'});
+            expect(clear.closest('.wrolpi-action-input')).not.toBeNull();
+
+            const css = fs.readFileSync(path.join(__dirname, '..', 'App.css'), 'utf8');
+            expect(css).not.toMatch(/\.search-clear\s*{/);
+        });
+
         // foo/ and bar/ are open, their children are loaded.
         const nestedBrowseFiles = [
             {

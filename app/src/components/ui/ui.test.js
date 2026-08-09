@@ -61,15 +61,44 @@ describe('Icon', () => {
         expect(container.querySelector('svg')).toBeInTheDocument();
     });
 
-    it('maps every icon name the app uses', () => {
-        // A name that falls through renders a fallback glyph, leaving a hole in the UI.
-        const names = ['trash', 'warning sign', 'download', 'refresh', 'plus', 'edit', 'wifi',
-            'search', 'lock', 'check', 'upload', 'play', 'folder', 'filter', 'file text',
-            'external', 'disk', 'circle notched', 'terminal', 'eye'];
+    it('maps every icon name the app defaults to', () => {
+        /*
+         * A name that falls through renders a fallback glyph, leaving a hole in the UI.
+         *
+         * Read off the source rather than listed by hand.  The list this replaced held
+         * twenty names and was titled "every icon name the app uses", and the two that
+         * were actually missing -- `info circle` and `help circle`, the DEFAULTS of
+         * InfoPopup and HelpPopup -- were not among them.  Being defaults, they fired on
+         * every use of those two helpers: opening Settings on a real device logged 43
+         * console errors, which no test saw because the assertion only read its own list.
+         *
+         * Defaults only (`icon = '...'`).  Scanning `name='...'` as well was tried and
+         * reverted: `name` is overwhelmingly a form-field attribute, so it reported 27
+         * field names as unmapped icons and would have failed on correct code.
+         */
+        const SRC = path.join(__dirname, '..', '..');
+        const sourceFiles = (dir) => fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sourceFiles(full);
+            if (!/\.(js|jsx|ts|tsx)$/.test(entry.name)) return [];
+            if (/\.(test|cy)\.(js|jsx|ts|tsx)$/.test(entry.name)) return [];
+            return [full];
+        });
 
-        const unmapped = names.filter(name => !resolveIconName(name));
+        const defaults = new Map();
+        for (const file of sourceFiles(SRC)) {
+            const source = fs.readFileSync(file, 'utf8');
+            for (const match of source.matchAll(/\bicon(?:Name)?\s*=\s*(?:"([^"]+)"|'([^']+)')/g)) {
+                const name = (match[1] ?? match[2]).toLowerCase().trim();
+                if (!defaults.has(name)) defaults.set(name, path.relative(SRC, file));
+            }
+        }
 
-        expect(unmapped).toEqual([]);
+        // The premise: a scan that matched nothing would report nothing unmapped.
+        expect(defaults.size).toBeGreaterThan(50);
+
+        const unmapped = [...defaults].filter(([name]) => !resolveIconName(name));
+        expect(unmapped.map(([name, file]) => `${name} (${file})`)).toEqual([]);
     });
 
     it('hides decorative icons from assistive technology but names labelled ones', () => {

@@ -1,31 +1,5 @@
 import {useOutdatedZims, useSearchZim, useWROLMode} from "../hooks/customHooks";
-import {
-    Accordion,
-    Button,
-    Divider,
-    Header,
-    Icon,
-    Loader,
-    Modal,
-    Placeholder,
-    Segment
-} from "./Theme";
-import {HeadlineText} from "./Headline";
-import {TextPlaceholder} from "./Placeholder";
-import {
-    AccordionContent,
-    AccordionTitle,
-    Button as SButton,
-    Dropdown,
-    Icon as SIcon,
-    Label,
-    Message,
-    PlaceholderHeader,
-    PlaceholderLine,
-    TableCell,
-    TableRow
-} from "semantic-ui-react";
-import React, {useContext, useState} from "react";
+import React, {useState} from "react";
 import {
     APIButton,
     encodeMediaPath,
@@ -35,7 +9,6 @@ import {
     IframeViewer,
     InfoMessage,
     normalizeEstimate,
-    PageContainer,
     Paginator,
     TabLinks,
     TagIcon,
@@ -43,7 +16,23 @@ import {
     useTitle,
     WarningMessage
 } from "./Common";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {
+    Accordion,
+    Button,
+    Divider,
+    Group,
+    Header,
+    Label,
+    Loading,
+    Message,
+    Modal,
+    Panel,
+    Placeholder,
+    Select,
+    Table,
+    toast,
+} from "./ui";
+import {TextPlaceholder} from "./Placeholder";
 import {TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {
@@ -60,19 +49,17 @@ import {
 } from "../api";
 import {useSearch} from "./Search";
 import {TagsQuerySelector} from "./Files";
-import {ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router";
 import {SortableTable} from "./SortableTable";
-import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
 import {ZIM_VIEWER_URI} from "./Vars";
+import {HeadlineText} from "./Headline";
 
 export const OutdatedZimsMessage = ({onClick}) => {
     const [open, setOpen] = React.useState(false);
 
     const {outdated, current} = useOutdatedZims();
 
-    const onOpen = () => setOpen(true);
     const onClose = () => setOpen(false);
 
     const handleDelete = async () => {
@@ -106,9 +93,7 @@ export const OutdatedZimsMessage = ({onClick}) => {
         }
     }
 
-    let modalContent = <Placeholder>
-        <PlaceholderLine/>
-    </Placeholder>;
+    let modalContent = <Placeholder lines={1}/>;
     if (outdated && outdated.length > 0) {
         modalContent = <>
             <Header as='h3'>To Delete</Header>
@@ -119,38 +104,29 @@ export const OutdatedZimsMessage = ({onClick}) => {
         </>
     }
 
-    return <Message icon info>
-        <SIcon name='question'/>
-        <Message.Content>
-            <Message.Header>Outdated Zim Files</Message.Header>
-            New Zim files have been downloaded. Outdated Zim files can be removed.
-            <p></p>
+    return <Message kind='info' icon='question' title='Outdated Zim Files'>
+        New Zim files have been downloaded. Outdated Zim files can be removed.
+        <p></p>
 
-            <SButton primary onClick={() => setOpen(true)}>Delete</SButton>
-            <Modal closeIcon
-                   open={open}
-                   onClose={onClose}
-                   onOpen={onOpen}
-            >
-                <Modal.Header>Delete</Modal.Header>
-                <Modal.Content>
-                    {modalContent}
-                </Modal.Content>
-                <Modal.Actions>
-                    <APIButton
-                        color='red'
-                        floated='left'
-                        onClick={handleDelete}
-                    >Delete</APIButton>
-                    <Button onClick={onClose}>Close</Button>
-                </Modal.Actions>
-            </Modal>
+        <Button role='danger' onClick={() => setOpen(true)}>Delete</Button>
+        <Modal size='small' open={open}
+               onClose={onClose}
+               title='Delete'
+        >
+            {modalContent}
+            <Modal.Actions>
+                <APIButton
+                    role='danger'
+                    onClick={handleDelete}
+                >Delete</APIButton>
+                <Button role='cancel' onClick={onClose}>Close</Button>
+            </Modal.Actions>
+        </Modal>
 
-            <Link to='/files?folders=zims'><SButton>Delete Manually</SButton></Link>
-            <APIButton secondary
-                       onClick={handleIgnore}
-            >Ignore Forever</APIButton>
-        </Message.Content>
+        <Link to='/files?folders=zims'><Button role='cancel'>Delete Manually</Button></Link>
+        <APIButton role='cancel'
+                   onClick={handleIgnore}
+        >Ignore Forever</APIButton>
     </Message>
 }
 
@@ -188,42 +164,38 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
             {tagIcon}
         </Header>
         <HeadlineText headline={headline}/>
-        <Modal closeIcon
-               open={open}
+        <Modal size='large' open={open}
                onClose={() => setOpen(false)}>
-            <Modal.Content>
-                <div className='preview-fit'>
-                    <ZimViewer src={url} style={{
-                        // Override IframeViewer's `fixed` so the iframe stays inside the Modal.
-                        position: 'static',
-                        height: '100%', width: '100%', border: 'none',
-                        // Use white to avoid iframe displaying with dark-theme.
-                        backgroundColor: '#ffffff',
-                    }}/>
-                </div>
-            </Modal.Content>
+            <div className='preview-fit'>
+                <ZimViewer src={url} style={{
+                    // Override IframeViewer's `fixed` so the iframe stays inside the Modal.
+                    position: 'static',
+                    height: '100%', width: '100%', border: 'none',
+                    // Use white to avoid iframe displaying with dark-theme.
+                    backgroundColor: '#ffffff',
+                }}/>
+            </div>
             <Modal.Actions>
-                <Grid>
-                    <Grid.Column mobile={10} tablet={12}>
-                        <TagsSelector selectedTagNames={tag_names} onAdd={localAddTag} onRemove={localUntag}/>
-                    </Grid.Column>
-                    <Grid.Column width={4} textAlign='right'>
+                <Group justify='space-between' align='flex-start' wrap='wrap' style={{width: '100%'}}>
+                    <TagsSelector selectedTagNames={tag_names} onAdd={localAddTag} onRemove={localUntag}/>
+                    <Group gap='xs'>
                         <AddToPlaylistButton
                             zim={{zimId, entry: path, title: (title || path).replace(/<[^>]*>/g, '')}}
                             content={null} title='Add to Playlist'/>
-                        <Button color='blue' as='a' href={url} target='_blank' rel='noopener noreferrer'>Open</Button>
-                    </Grid.Column>
-                </Grid>
+                        <Button role='primary' component='a' href={url} target='_blank' rel='noopener noreferrer'>
+                            Open
+                        </Button>
+                    </Group>
+                </Group>
             </Modal.Actions>
         </Modal>
     </div>
 }
 
-const ZimAccordion = ({data, index, activeIndex, onClick, searchStr, activeTags}) => {
+const ZimAccordionItem = ({value, active, data, searchStr, activeTags}) => {
     const {id, estimate, metadata} = data;
     const {title, date} = metadata;
-    const {zim, fetchSearch, pages, loading} = useSearchZim(searchStr, id, index === activeIndex, activeTags);
-    const {t} = useContext(ThemeContext);
+    const {zim, fetchSearch, pages, loading} = useSearchZim(searchStr, id, active, activeTags);
 
     const localAddTag = async (zimId, path, name) => {
         await tagZimEntry(zimId, path, name);
@@ -239,83 +211,69 @@ const ZimAccordion = ({data, index, activeIndex, onClick, searchStr, activeTags}
     if (zim && !loading) {
         const {search} = zim;
         if (search && search.length > 0) {
-            body = search.map(i => <Segment vertical key={i['path']}>
+            body = search.map(i => <div
+                key={i['path']}
+                style={{borderBottom: '1px solid var(--border)', paddingBottom: '1em', marginBottom: '1em'}}
+            >
                 <ZimSearchEntry zimId={id} onTag={localAddTag} onUntag={localUntag} entry={i}/>
-            </Segment>);
+            </div>);
         } else {
-            body = <p {...t}>No results</p>;
+            body = <p>No results</p>;
         }
     }
 
-    const paginator = <center style={{marginTop: '2em'}}>
+    const paginator = <div style={{marginTop: '2em'}}>
         <Paginator activePage={pages.activePage} totalPages={pages.totalPages} onPageChange={pages.setPage}/>
-    </center>;
+    </div>;
 
     const label = <Label color={estimate > 0 ? 'violet' : undefined}>{normalizeEstimate(estimate)}</Label>;
 
-    return <React.Fragment>
-        <AccordionTitle
-            index={index}
-            active={index === activeIndex}
-            onClick={() => onClick(index, activeIndex)}
-        >
-            <Header as='h3'>
-                <Icon name='dropdown'/> {title} {label}
-            </Header>
-        </AccordionTitle>
-        <AccordionContent active={index === activeIndex}>
+    return <Accordion.Item value={value}>
+        <Accordion.Control>
+            <Header as='h3' style={{marginBottom: 0}}>{title} {label}</Header>
+        </Accordion.Control>
+        <Accordion.Panel>
             <Header as='h4'>{date}</Header>
             {body}
             {paginator}
-        </AccordionContent>
-    </React.Fragment>
+        </Accordion.Panel>
+    </Accordion.Item>
 }
 
 const ZimsRefreshWarning = () => {
-    return <Message icon warning onClick={refreshFiles}>
-        <SIcon name='hand point right'/>
-        <Message.Content>
-            <Message.Header>No Zims have been indexed.</Message.Header>
+    return <div onClick={refreshFiles} style={{cursor: 'pointer'}}>
+        <Message kind='warning' icon='hand point right' title='No Zims have been indexed.'>
             <a href='#'>Click here</a> to refresh all your files.
-        </Message.Content>
-    </Message>;
+        </Message>
+    </div>;
 }
 
 export const ZimSearchView = ({suggestions, loading}) => {
-    const [activeIndex, setActiveIndex] = React.useState(null);
+    const [activeValue, setActiveValue] = React.useState(null);
     const {searchStr, activeTags, setTags} = useSearch();
     const {zimsEstimates} = suggestions;
 
-    const handleClick = (index, activeIndex_) => {
-        setActiveIndex(index === activeIndex_ ? -1 : index);
-    }
-
     let body;
     if (!_.isEmpty(zimsEstimates)) {
-        body = zimsEstimates.map((i, index) => <ZimAccordion
-            key={i['path']}
-            index={index}
-            activeIndex={activeIndex}
-            data={i}
-            searchStr={searchStr}
-            activeTags={activeTags}
-            onClick={handleClick}
-        />);
+        body = <Accordion value={activeValue} onChange={setActiveValue}>
+            {zimsEstimates.map(i => <ZimAccordionItem
+                key={i['path']}
+                value={String(i['id'])}
+                active={activeValue === String(i['id'])}
+                data={i}
+                searchStr={searchStr}
+                activeTags={activeTags}
+            />)}
+        </Accordion>;
     } else if (loading) {
-        body = <AccordionContent>
-            <Segment placeholder>
-                <Loader active={true}/>
-            </Segment>
-        </AccordionContent>;
+        body = <Panel><Loading/></Panel>;
     } else if (_.isEmpty(zimsEstimates)) {
         body = <ZimsRefreshWarning/>;
     }
 
     return <>
         <TagsQuerySelector onChange={(i, j) => setTags(i)}/>
-        <Accordion>
-            {body}
-        </Accordion>
+        {body}
     </>
 }
 
@@ -333,7 +291,7 @@ const ViewerMessage = () => {
     </HandPointMessage>
 }
 
-const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {
+export const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {
     const {name, languages, size} = item;
     const subscription = name in subscriptions ? subscriptions[name] : null;
     const subscriptionLanguage = subscription ? subscription['language'] : 'en';
@@ -369,39 +327,52 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
         }
     }
 
-    const handleLanguageChange = (e, {value}) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setLanguage(value);
-    }
-
+    /*
+     * The code itself when the API's table has no name for it.
+     *
+     * `iso_639_codes` covers 639-1 and 639-2; the Kiwix catalog also carries 639-3 codes and
+     * locale variants -- `ami`, `ary`, `arz`, `be-tarask` -- and 89 of the codes in the
+     * catalog on a live WROLPi are absent from its 672-entry table.  Each of those produced
+     * `label: undefined`, and a `searchable` Mantine Select calls `option.label.toLowerCase()`
+     * while building its dropdown on mount, before anyone opens it.  One unnamed language
+     * anywhere in the catalog therefore took the whole /zim/manage page down.
+     *
+     * The code rather than a blank: a user choosing which language to subscribe to has to be
+     * able to tell one unnamed language from another, and the code is all we know.
+     *
+     * `iso_639_codes` is also null on first render -- ManageZim initialises it that way and
+     * fills it from the API -- so it is read defensively too.
+     */
     const languageOptions = languages.map(i => {
-        return {key: i, value: i, text: iso_639_codes[i]}
+        return {value: i, label: (iso_639_codes && iso_639_codes[i]) || i}
     });
-    const languageDropdown = <Dropdown fluid search selection
-                                       placeholder='Language'
-                                       options={languageOptions}
-                                       value={language}
-                                       disabled={wrolModeEnabled}
-                                       onChange={handleLanguageChange}
+    const languageDropdown = <Select
+        searchable
+        placeholder='Language'
+        data={languageOptions}
+        value={language}
+        disabled={wrolModeEnabled}
+        onChange={(value) => setLanguage(value)}
     />;
 
+    const isDestructive = subscription && !languageChange;
     const subscribeButton = <APIButton
-        color='grey'
+        role={isDestructive ? 'danger' : 'primary'}
+        confirmContent={isDestructive ? 'Are you sure you want to unsubscribe from this Zim?' : undefined}
+        confirmButton={isDestructive ? 'Unsubscribe' : undefined}
         disabled={pending}
         onClick={handleButton}
         obeyWROLMode={true}
     >
-        {subscription && !languageChange ? 'Unsubscribe' : 'Subscribe'}
+        {isDestructive ? 'Unsubscribe' : 'Subscribe'}
     </APIButton>
 
-    return <TableRow key={name}>
-        <TableCell>{name}</TableCell>
-        <TableCell>{languageDropdown}</TableCell>
-        <TableCell>{subscribeButton}</TableCell>
-        <TableCell>{humanFileSize(size)}</TableCell>
-    </TableRow>
+    return <Table.Row key={name}>
+        <Table.Cell>{name}</Table.Cell>
+        <Table.Cell>{languageDropdown}</Table.Cell>
+        <Table.Cell>{subscribeButton}</Table.Cell>
+        <Table.Cell>{humanFileSize(size)}</Table.Cell>
+    </Table.Row>
 }
 
 class ManageZim extends React.Component {
@@ -458,11 +429,11 @@ class ManageZim extends React.Component {
             popupContent='Enable/Disable searching this Zim file in the Global Search.'
         />
 
-        return <TableRow key={path}>
-            <TableCell>{path}</TableCell>
-            <TableCell>{humanFileSize(size)}</TableCell>
-            <TableCell>{toggle}</TableCell>
-        </TableRow>
+        return <Table.Row key={path}>
+            <Table.Cell>{path}</Table.Cell>
+            <Table.Cell>{humanFileSize(size)}</Table.Cell>
+            <Table.Cell>{toggle}</Table.Cell>
+        </Table.Row>
     }
 
     render() {
@@ -473,15 +444,9 @@ class ManageZim extends React.Component {
             {key: 'size', text: 'Size', sortBy: 'size', width: 2},
             {key: 'search', text: 'Search', sortBy: 'auto_search', width: 2},
         ];
-        let zimFilesBody = <Placeholder>
-            <PlaceholderHeader>
-                <PlaceholderLine/>
-                <PlaceholderLine/>
-            </PlaceholderHeader>
-        </Placeholder>;
+        let zimFilesBody = <Placeholder lines={2}/>;
         if (zims && zims.length >= 1) {
             zimFilesBody = <SortableTable
-                tableProps={{striped: true}}
                 data={zims}
                 rowFunc={(i, sortData) => this.zimFileTableRow(i, sortData, this.fetchZims.bind(this))}
                 rowKey='path'
@@ -505,12 +470,7 @@ class ManageZim extends React.Component {
             {key: 'subscription', text: 'Subscription', 'sortBy': null, width: 2},
             {key: 'size', text: 'Maximum Size', sortBy: 'size', width: 2},
         ];
-        let kiwixCatalog = <Placeholder>
-            <PlaceholderHeader>
-                <PlaceholderLine/>
-                <PlaceholderLine/>
-            </PlaceholderHeader>
-        </Placeholder>;
+        let kiwixCatalog = <Placeholder lines={2}/>;
         if (catalog && catalog.length > 0) {
             kiwixCatalog = <SortableTable
                 defaultSortColumn='name'
@@ -528,7 +488,12 @@ class ManageZim extends React.Component {
             kiwixCatalog = <ErrorMessage>Could not fetch catalog</ErrorMessage>;
         }
 
-        return <PageContainer>
+        /*
+         * A fragment, not a `PageContainer`.  `ZimRoute` already provides the page chrome -- a
+         * `wrolpi-stack` wrapper with its own top margin -- so a second one put this page a
+         * further 1em down and 1em in from the tab bar than the viewer beside it.
+         */
+        return <>
             <Header as='h2'>Zim Files</Header>
             {zimFilesBody}
 
@@ -539,12 +504,12 @@ class ManageZim extends React.Component {
 
             <DownloadMessage/>
             <ViewerMessage/>
-        </PageContainer>
+        </>
     }
 }
 
 function ZimViewer({src = ZIM_VIEWER_URI, style = null}) {
-    const fallback = <Segment>
+    const fallback = <Panel>
         <Header as='h3'>Failed to fetch Zim service.</Header>
         <p>You may need to give permission to access the page: <a href={src}>{src}</a></p>
 
@@ -553,7 +518,7 @@ function ZimViewer({src = ZIM_VIEWER_URI, style = null}) {
 
         <p>Check the logs</p>
         <pre>journalctl -u wrolpi-kiwix</pre>
-    </Segment>;
+    </Panel>;
 
     return <IframeViewer title='zim' src={src} fallback={fallback} style={style}/>
 }
@@ -566,7 +531,9 @@ export function ZimRoute() {
         {text: 'Manage', to: '/zim/manage', key: 'manage'},
     ]
 
-    return <div style={{marginTop: '2em'}}>
+    // `wrolpi-stack`: this route wraps its own content rather than using PageContainer, so it is
+    // what spaces the tab bar from the page below it.
+    return <div className='wrolpi-stack' style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<ZimViewer/>}/>

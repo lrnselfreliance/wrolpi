@@ -1,6 +1,5 @@
 import React, {useMemo, useRef, useState} from "react";
-import {Checkbox, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Button, Icon, Table} from "../Theme";
+import {Button, Checkbox, Icon, Table} from "../ui";
 import {FieldCell} from "./FieldCell";
 import {applyComputedCounts, computedCountConfigs} from "./computeFields";
 import {NUMERIC_TYPES} from "./units";
@@ -129,11 +128,11 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
     const visibleItems = useMemo(() => filterItems(displayItems, fields, search), [displayItems, fields, search]);
 
     const focusFirst = () => {
+        // Our inputs forward their ref straight to the underlying <input> DOM node (unlike the old Input,
+        // which wrapped it behind `.inputRef`).
         const node = firstInputRef.current;
         if (node && node.focus) {
             node.focus();
-        } else if (node && node.inputRef && node.inputRef.current) {
-            node.inputRef.current.focus();
         }
     };
 
@@ -213,33 +212,32 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                 {catalog.map(e => <option key={e.id ?? e.name} value={e.name}/>)}
             </datalist>}
         {selected.size > 0 &&
-            <Button color='red' onClick={removeSelected} style={{marginBottom: '0.5em'}}>
+            <Button role='danger' onClick={removeSelected} style={{marginBottom: '0.5em'}}>
                 Delete {selected.size} selected
             </Button>}
-        <Table celled unstackable sortable>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell collapsing/>
-                    {sortedFields.map(f => <TableHeaderCell
+        <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell/>
+                    {sortedFields.map(f => <Table.HeaderCell
                         key={f.key}
                         sorted={sort && sort.key === f.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                        onClick={() => toggleSort(f.key)}
-                        style={{cursor: 'pointer'}}>
+                        onSort={() => toggleSort(f.key)}>
                         {f.label}
-                    </TableHeaderCell>)}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+                    </Table.HeaderCell>)}
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
                 {visibleItems.map(item => {
                     const editing = edits[item.id];
                     const expired = isExpired(item);
-                    return <TableRow key={item.id} negative={expired}>
-                        <TableCell collapsing>
+                    return <Table.Row key={item.id} failed={expired}>
+                        <Table.Cell>
                             <Checkbox checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)}/>
-                            {expired && <Icon name='warning sign' color='red' title='Expired'
-                                              style={{marginLeft: '0.4em'}}/>}
-                        </TableCell>
-                        {sortedFields.map(f => <TableCell key={f.key}>
+                            {expired && <Icon name='warning sign' label='Expired'
+                                              style={{color: 'var(--danger)', marginLeft: '0.4em'}}/>}
+                        </Table.Cell>
+                        {sortedFields.map(f => <Table.Cell key={f.key}>
                             {editing
                                 ? <FieldCell
                                     field={f}
@@ -254,23 +252,23 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                                 : <span onClick={() => startEdit(item, f.key)} style={{cursor: 'pointer'}}>
                                     {formatValue(item, f)}
                                 </span>}
-                        </TableCell>)}
-                    </TableRow>;
+                        </Table.Cell>)}
+                    </Table.Row>;
                 })}
                 {search && visibleItems.length === 0 && (items || []).length > 0 &&
-                    <TableRow>
-                        <TableCell colSpan={sortedFields.length + 1} style={{opacity: 0.7}}>
+                    <Table.Row>
+                        <Table.Cell colSpan={sortedFields.length + 1} style={{opacity: 0.7}}>
                             No items match "{search}".
-                        </TableCell>
-                    </TableRow>}
-            </TableBody>
-            <TableFooter>
+                        </Table.Cell>
+                    </Table.Row>}
+            </Table.Body>
+            <Table.Footer>
                 {/* The persistent new-item entry row. */}
-                <TableRow>
-                    <TableCell collapsing>
-                        <Button primary size='mini' onClick={submitDraft} aria-label='Add item'>+</Button>
-                    </TableCell>
-                    {sortedFields.map((f, index) => <TableCell key={f.key}>
+                <Table.Row>
+                    <Table.Cell>
+                        <Button role='primary' size='xs' onClick={submitDraft} aria-label='Add item'>+</Button>
+                    </Table.Cell>
+                    {sortedFields.map((f, index) => <Table.Cell key={f.key}>
                         <FieldCell
                             field={f}
                             value={draft[f.key]}
@@ -281,9 +279,9 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                             inputRef={index === 0 ? firstInputRef : undefined}
                             listId={listIdFor(f)}
                         />
-                    </TableCell>)}
-                </TableRow>
-            </TableFooter>
+                    </Table.Cell>)}
+                </Table.Row>
+            </Table.Footer>
         </Table>
     </>;
 }

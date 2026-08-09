@@ -1,7 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Grid, Input} from 'semantic-ui-react';
-import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
-import {Button, Modal} from '../Theme';
+import {Button, Message, Modal, Stack, TextInput} from '../ui';
 import {TagsSelector} from '../../Tags';
 import {APIButton, Toggle} from '../Common';
 
@@ -100,61 +98,43 @@ export function CollectionTagModal({
     const saveButtonText = hasDirectory && moveToTagDirectory ? 'Move' : 'Save';
 
     return (
-        <Modal
+        <Modal size='large'
             open={open}
             onClose={handleClose}
             closeIcon
         >
             <Modal.Header>{modalTitle}</Modal.Header>
             <Modal.Content>
-                <Grid columns={1}>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <TagsSelector
-                                limit={1}
-                                selectedTagNames={newTagName ? [newTagName] : []}
-                                onAdd={handleTagChange}
-                                onRemove={() => handleTagChange(null)}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
+                <Stack>
+                    <TagsSelector
+                        limit={1}
+                        selectedTagNames={newTagName ? [newTagName] : []}
+                        onAdd={handleTagChange}
+                        onRemove={() => handleTagChange(null)}
+                    />
                     {hasDirectory && (
-                        <Grid.Row>
-                            <Grid.Column>
-                                <Toggle
-                                    label='Move to directory: '
-                                    checked={moveToTagDirectory}
-                                    onChange={setMoveToTagDirectory}
-                                />
-                            </Grid.Column>
-                        </Grid.Row>
+                        <Toggle
+                            label='Move to directory: '
+                            checked={moveToTagDirectory}
+                            onChange={setMoveToTagDirectory}
+                        />
                     )}
                     {hasDirectory && (
-                        <Grid.Row>
-                            <Grid.Column>
-                                <Input
-                                    fluid
-                                    value={newTagDirectory}
-                                    onChange={(e, {value}) => setNewTagDirectory(value)}
-                                    disabled={!moveToTagDirectory}
-                                />
-                            </Grid.Column>
-                        </Grid.Row>
+                        <TextInput
+                            value={newTagDirectory}
+                            onChange={(e) => setNewTagDirectory(e.currentTarget.value)}
+                            disabled={!moveToTagDirectory}
+                        />
                     )}
                     {hasDirectory && conflictMessage && (
-                        <Grid.Row>
-                            <Grid.Column>
-                                <Message warning>
-                                    <Message.Header>Directory Conflict</Message.Header>
-                                    <p>{conflictMessage}</p>
-                                </Message>
-                            </Grid.Column>
-                        </Grid.Row>
+                        <Message kind='warning' title='Directory Conflict'>
+                            <p>{conflictMessage}</p>
+                        </Message>
                     )}
-                </Grid>
+                </Stack>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={handleClose}>Cancel</Button>
+                <Button role='cancel' onClick={handleClose}>Cancel</Button>
                 <APIButton
                     color='violet'
                     onClick={handleSave}

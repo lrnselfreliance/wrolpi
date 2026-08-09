@@ -1,18 +1,16 @@
 import React, {useState} from "react";
-import {Input, Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Button, Header, Icon, Modal, Table} from "../Theme";
+import {Button, IconButton, Modal, Select, Table, Text, TextInput} from "../ui";
 import {ALL_UNITS} from "./units";
-import {ThemeContext} from "../../contexts/contexts";
 
-const UNIT_OPTIONS = [{key: '', value: '', text: '—'}, ...ALL_UNITS.map(u => ({key: u, value: u, text: u}))];
+const UNIT_OPTIONS = [{value: '', label: '—'}, ...ALL_UNITS.map(u => ({value: u, label: u}))];
 
 const COLUMNS = [
-    {key: 'name', label: 'Name', width: 4},
-    {key: 'category', label: 'Category', width: 3},
-    {key: 'subcategory', label: 'Subcategory', width: 3},
-    {key: 'item_size', label: 'Size', width: 2},
-    {key: 'item_size_unit', label: 'Unit', width: 2},
-    {key: 'calories', label: 'kcal', width: 2},
+    {key: 'name', label: 'Name'},
+    {key: 'category', label: 'Category'},
+    {key: 'subcategory', label: 'Subcategory'},
+    {key: 'item_size', label: 'Size'},
+    {key: 'item_size_unit', label: 'Unit'},
+    {key: 'calories', label: 'kcal'},
 ];
 
 function blankEntry() {
@@ -25,7 +23,6 @@ function blankEntry() {
  */
 export function CatalogEditor({catalog, open, onClose, onSave}) {
     const [draft, setDraft] = useState([]);
-    const {t} = React.useContext(ThemeContext);
 
     React.useEffect(() => {
         if (open) {
@@ -45,66 +42,66 @@ export function CatalogEditor({catalog, open, onClose, onSave}) {
         onClose();
     };
 
-    return <Modal open={open} onClose={onClose} closeIcon size='fullscreen'>
+    return <Modal open={open} onClose={onClose} size='fullscreen'>
         <Modal.Header>Food Catalog</Modal.Header>
-        <Modal.Content scrolling>
-            <p {...t} style={{...t.style, opacity: 0.8}}>
+        <Modal.Content>
+            <Text size='sm' c='dimmed' mb='sm'>
                 Known items used to autocomplete and pre-fill the entry form. <strong>kcal</strong> is the total
                 calories for one package of the given size.
-            </p>
-            <Button onClick={add} style={{marginBottom: '0.5em'}}><Icon name='plus'/>Add Item</Button>
-            <Table celled unstackable compact>
-                <TableHeader>
-                    <TableRow>
-                        {COLUMNS.map(c => <TableHeaderCell key={c.key} width={c.width}>{c.label}</TableHeaderCell>)}
-                        <TableHeaderCell collapsing/>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
+            </Text>
+            <Button onClick={add} icon='plus' style={{marginBottom: '0.5em'}}>Add Item</Button>
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        {COLUMNS.map(c => <Table.HeaderCell key={c.key}>{c.label}</Table.HeaderCell>)}
+                        <Table.HeaderCell/>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
                     {draft.map((entry, index) => {
                         const aria = (col) => `${entry.name || 'new item'} ${col}`;
-                        return <TableRow key={entry.id ?? `new-${index}`}>
-                        <TableCell>
-                            <Input fluid name='catalog-name' aria-label={aria('name')} value={entry.name || ''}
-                                   placeholder='Name' onChange={e => update(index, 'name', e.target.value)}/>
-                        </TableCell>
-                        <TableCell>
-                            <Input fluid name='catalog-category' aria-label={aria('category')}
+                        return <Table.Row key={entry.id ?? `new-${index}`}>
+                        <Table.Cell>
+                            <TextInput name='catalog-name' aria-label={aria('name')} value={entry.name || ''}
+                                   placeholder='Name' onChange={e => update(index, 'name', e.currentTarget.value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <TextInput name='catalog-category' aria-label={aria('category')}
                                    value={entry.category || ''}
-                                   onChange={e => update(index, 'category', e.target.value)}/>
-                        </TableCell>
-                        <TableCell>
-                            <Input fluid name='catalog-subcategory' aria-label={aria('subcategory')}
+                                   onChange={e => update(index, 'category', e.currentTarget.value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <TextInput name='catalog-subcategory' aria-label={aria('subcategory')}
                                    value={entry.subcategory || ''}
-                                   onChange={e => update(index, 'subcategory', e.target.value)}/>
-                        </TableCell>
-                        <TableCell>
-                            <Input fluid type='number' name='catalog-size' aria-label={aria('size')}
+                                   onChange={e => update(index, 'subcategory', e.currentTarget.value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <TextInput type='number' name='catalog-size' aria-label={aria('size')}
                                    value={entry.item_size || ''}
-                                   onChange={e => update(index, 'item_size', e.target.value)}/>
-                        </TableCell>
-                        <TableCell>
-                            <Select compact search name='catalog-unit' aria-label={aria('unit')} options={UNIT_OPTIONS}
+                                   onChange={e => update(index, 'item_size', e.currentTarget.value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <Select searchable name='catalog-unit' aria-label={aria('unit')} data={UNIT_OPTIONS}
                                     value={entry.item_size_unit || ''}
-                                    onChange={(e, data) => update(index, 'item_size_unit', data.value)}/>
-                        </TableCell>
-                        <TableCell>
-                            <Input fluid type='number' name='catalog-calories' aria-label={aria('calories')}
+                                    onChange={value => update(index, 'item_size_unit', value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <TextInput type='number' name='catalog-calories' aria-label={aria('calories')}
                                    value={entry.calories || ''}
-                                   onChange={e => update(index, 'calories', e.target.value)}/>
-                        </TableCell>
-                        <TableCell collapsing>
-                            <Button color='red' icon size='mini' aria-label='Remove'
-                                    onClick={() => remove(index)}><Icon name='trash'/></Button>
-                        </TableCell>
-                    </TableRow>;
+                                   onChange={e => update(index, 'calories', e.currentTarget.value)}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <IconButton role='danger' icon='trash' label='Remove'
+                                    onClick={() => remove(index)}/>
+                        </Table.Cell>
+                    </Table.Row>;
                     })}
-                </TableBody>
+                </Table.Body>
             </Table>
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button primary onClick={save}>Save Catalog</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
+            <Button role='save' onClick={save}>Save Catalog</Button>
         </Modal.Actions>
     </Modal>;
 }

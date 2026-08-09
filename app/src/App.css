@@ -1,21 +1,205 @@
-.channel-edit {
-    border-radius: 3px;
-    padding: 0.75em;
+:root {
+    /* Shared with the toast offset below, so the two cannot drift apart. */
+    --navbar-height: 3.4em;
 }
 
-.channel-edit:hover {
-    background-color: #7abaff;
+/* Nav bar: a hand-rolled flexbox bar.  The user-chosen background and the foreground
+   measured against it are set inline (see themes/navColors); this stylesheet only
+   supplies structure and hover affordances. */
+.wrolpi-navbar {
+    display: flex;
+    align-items: stretch;
+    /*
+     * Wraps rather than clipping.  With this many items the bar overflows a 1000px
+     * viewport, and `nowrap` cut "Admin" off the right edge -- the one link a user needs
+     * to reach the settings that fix a broken WROLPi.
+     */
+    flex-wrap: wrap;
+    min-height: var(--navbar-height);
+    padding: 0 0.25em;
+}
+
+/*
+ * Toasts start below the navigation bar instead of on top of it.
+ *
+ * They are fixed at `top: var(--mantine-spacing-md)` -- 16px -- while the bar occupies the
+ * first 54px of the page, so every toast landed over the bar's right-hand corner: the search
+ * glyph, the hamburger, Help and Admin.  For as long as the toast was up those controls could
+ * not be clicked, and an error toast is exactly when a user reaches for Admin.
+ *
+ * It went unnoticed until the search glyph was given a proper hit area: at 18px it sat in the
+ * gap under the toast, and growing it to the height of the bar moved it into the overlap.
+ * The toast was always covering that corner; there was just nothing there to hit.
+ *
+ * `:where()` gives Mantine's own rule zero specificity, so one class is enough to win, but
+ * the attribute is matched too -- only the top-anchored positions need moving, and a future
+ * switch to `bottom-right` should not silently inherit a top offset.
+ */
+html .mantine-Notifications-root[data-position^='top'] {
+    top: calc(var(--navbar-height) + var(--mantine-spacing-md, 1rem));
+}
+
+.wrolpi-navbar-right {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 0.2em;
+}
+
+.wrolpi-navbar-link,
+.wrolpi-navbar-link-button {
+    display: flex;
+    align-items: center;
+    /* Tightened from 1.1em: the bar has eleven links plus nine indicators. */
+    padding: 0 0.8em;
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    font: inherit;
     cursor: pointer;
+}
+
+.wrolpi-navbar-link:hover,
+.wrolpi-navbar-link-button:hover {
+    /* A translucent black works on every navbar color, light or dark. */
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * The tab for the section the user is in.
+ *
+ * react-router marks it with `active` and `aria-current` on its own, and always did -- the
+ * mark reached the DOM and nothing here drew it, so every tab looked identical and clicking
+ * Videos appeared to leave the bar untouched.
+ *
+ * The underline is a pseudo-element in `currentColor`, not a border: `currentColor` follows
+ * the foreground the bar computed for whatever navbar color the user picked, so this works
+ * on all twelve of them (see `navColorNames`) and in all four themes without naming a color;
+ * and a pseudo-element adds no height, where a border would jog the whole row as the mark
+ * moved between tabs.  The darker wash is the hover treatment deepened, so the two read as
+ * the same idea.
+ */
+.wrolpi-navbar-link.active {
+    position: relative;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.wrolpi-navbar-link.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* rem, not px, so the mark grows with the --ui-scale setting like the text above it. */
+    height: 0.1875rem;
+    background: currentColor;
+}
+
+/*
+ * The same tabs inside the overflow "More" menu and the mobile hamburger, which are the
+ * only place most of them appear on a phone.  Those render in a portal, outside the bar,
+ * so they take theme tokens rather than the bar's foreground.
+ */
+.mantine-Menu-item.active {
+    background: var(--head);
+    font-weight: 600;
+}
+
+/*
+ * Everything in the bar takes the bar's foreground.
+ *
+ * `color: inherit` on the links alone was not enough, because two of the things in the
+ * corner do not inherit at all and both came out blue on every bar in every theme:
+ *
+ *   - An anchor takes `a {color: var(--blue)}` from tokens.css, which outranks an inherited
+ *     value however the bar sets it.  The search glyph is an anchor, and so is every status
+ *     icon that links to /admin -- those only looked right because they carry an inline
+ *     color of their own, which still wins here and is meant to.
+ *   - A Mantine ActionIcon paints `--ai-color`, its own themed blue.  The hamburger and the
+ *     theme toggle are ActionIcons.  The variable is no use as a hook: Mantine writes it
+ *     INLINE on the element, so a stylesheet declaring it loses every time (the same trap
+ *     as `--group-justify` on Pagination).  The painted property has to be set instead, and
+ *     `html` lifts this over Mantine's own single-class rule.
+ *
+ * Measuring the foreground against the bar is worth nothing if the icons opt out of it.
+ */
+.wrolpi-navbar a,
+html .wrolpi-navbar .mantine-ActionIcon-root {
+    color: inherit;
+}
+
+/* The bar's own hover, rather than a blue tint from Mantine's palette. */
+html .wrolpi-navbar .mantine-ActionIcon-root:hover {
+    background: rgba(0, 0, 0, 0.12);
+    color: inherit;
+}
+
+/*
+ * One status indicator's slot.  Laid out rather than nudged: see NavIconWrapper in Nav.js
+ * for the 0.8em top margin this replaces and why it looked correct on half the indicators.
+ */
+.wrolpi-navbar-icon {
+    display: flex;
+    align-items: center;
+    margin-left: 1.5em;
+    /* Full bar height, so the anchor inside has somewhere to stretch to. */
+    align-self: stretch;
+}
+
+/*
+ * An icon-only trigger in the corner gets a link's hit area, not its glyph's.
+ *
+ * The share glyph already computed `cursor: pointer` -- it is an `<a href>` -- but the
+ * target was the 24px box the icon occupies, so the pointer appeared only if you found it
+ * exactly, and there was no hover highlight to aim at.  Stretched and padded, it behaves
+ * like Help and Admin beside it.
+ *
+ * `align-self` rather than `align-items: stretch` on the wrapper: the IconButtons in the
+ * corner have an explicit height, and a stretch container places an item it cannot stretch
+ * at the start -- which would push the hotspot and theme glyphs back off centre.
+ */
+.wrolpi-navbar-icon > a {
+    align-self: stretch;
+    padding: 0 0.5em;
+    cursor: pointer;
+}
+
+.wrolpi-navbar-icon > a:hover {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * An anchor in the corner hugs its glyph instead of a text line box.
+ *
+ * A line box reserves descender space for text that is not there, which leaves an icon
+ * sitting about 3px above the centre of the box being centred -- the share and search
+ * glyphs, but not the hotspot or theme picker, which are square ActionIcons that centre
+ * their own glyph.  That difference is what made a single top margin look right on some
+ * indicators and wrong on others.
+ */
+.wrolpi-navbar-right a {
+    display: flex;
+    align-items: center;
+}
+
+/*
+ * A link in the corner fills the bar's height, as one outside it does.
+ *
+ * Help and Admin highlighted only a box around their text while Videos and Statistics
+ * highlighted the full height.  Same class and same rules; the difference is the parent.
+ * The bar stretches its children, but the corner is a nested flex container that centres
+ * its own, so a link inside it was sized to its content.  The hover background is painted
+ * on the link box, so this is the hover affordance itself and not just its outline.
+ */
+.wrolpi-navbar-right .wrolpi-navbar-link,
+.wrolpi-navbar-right .wrolpi-navbar-link-button {
+    align-self: stretch;
 }
 
 ::-ms-clear {
     display: none;
-}
-
-.form-control-clear {
-    z-index: 10;
-    pointer-events: auto;
-    cursor: pointer;
 }
 
 pre.wrap-text {
@@ -24,103 +208,53 @@ pre.wrap-text {
     word-wrap: break-word; /* Internet Explorer 5.5+ */
 }
 
+/*
+ * A video's length, pinned to the corner of its poster.
+ *
+ * Tokens, not a literal white-on-black.  The poster under it is filtered by night mode -- it is a
+ * `.media` leaf -- but this chip is drawn beside the image rather than inside it, so it was never
+ * filtered: a white tile on a card whose picture had gone dim red, which is the brightest thing on
+ * the videos page in the theme meant to have nothing bright on it.
+ *
+ * Opaque, because it sits on an arbitrary poster and has to be legible over any of them.
+ */
 .duration-overlay {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    color: black;
-    background: #ffffff;
-    padding: 0px 4px;
-    border-radius: 3px;
+    top: 0.25rem;
+    right: 0.25rem;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 0px 0.25rem;
+    border-radius: 0.1875rem;
 }
 
 .no-link-underscore {
     text-decoration: none !important;
 }
 
+/*
+ * A card's title and its author/channel/domain line are links, but they are the card's
+ * text -- they take the body color rather than the link color, so a grid of cards reads
+ * as titles and not as a wall of blue.  This was a literal `black` until the themes
+ * arrived, which left every title at about 1.1:1 on the dark, night and amber panels.
+ */
 .card-link {
-    color: black;
+    color: var(--text);
 }
 
-.center-me {
-    margin: 0 auto;
-}
-
-div.inverted {
-    background-color: #1B1C1D;
-}
-
-.toggle {
-    position: relative;
-    display: inline-block;
-    width: 49px;
-    height: 23px;
-}
-
-.toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgb(166, 166, 166);
-    -webkit-transition: .4s;
-    transition: .4s;
-    border-radius: 34px;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 22px;
-    width: 22px;
-    left: 0;
-    bottom: 0;
-    background-color: white;
-    -webkit-transition: .4s;
-    transition: .4s;
-    border-radius: 50%;
-}
-
-.slider.disabled:before {
-    background-color: #CCCCCC;
-}
-
-input:checked + .slider {
-    background-color: #6435C9FF;
-}
-
-input.inverted:checked + .slider.inverted {
-    background-color: #6435C9AA;
-}
-
-input.disabled + .slider {
-    background-color: rgb(147, 147, 147);
-}
-
-input:checked + .slider:before {
-    -webkit-transform: translateX(26px);
-    -ms-transform: translateX(26px);
-    transform: translateX(26px);
-}
-
-.inverted-progress-text.ui.indicating.progress .bar > .progress,
-.inverted-progress-text.ui.progress > .label {
-    color: white !important;
-}
-
-/* Light bar colors (yellow, olive) need dark text on the bar — must override inverted-progress-text. */
-.light-bar-progress-text.ui.indicating.progress .bar > .progress,
-.light-bar-progress-text.ui.progress .bar > .progress {
-    color: rgba(0, 0, 0, 0.85) !important;
-}
+/*
+ * The hand-rolled `.toggle` / `.slider` switch is gone.
+ *
+ * Nothing referenced either class: `Toggle` is a Mantine Switch, and the only remaining
+ * matches for the words were the `classList.toggle` DOM method and the controller's own
+ * templates, which do not load this stylesheet.
+ *
+ * It is deleted rather than finished because it was already half-converted and broken: the
+ * track and knob became rem while the checked-state travel stayed `translateX(26px)`, so on a
+ * 54px track the thumb would have stopped ~4px short.  Dead CSS that is also wrong is a trap
+ * for whoever revives it, and it also hardcoded #6435C9 and white, which no theme can reach.
+ */
 
 /* File preview Modal.Actions toolbar.
    Single layout that works at every viewport — buttons keep their order at any width.
@@ -140,7 +274,8 @@ input:checked + .slider:before {
 }
 
 .preview-toolbar-tags {
-    flex: 1 1 200px;
+    /* rem so the basis grows with the tags it holds. */
+    flex: 1 1 12.5rem;
     min-width: 0;
 }
 
@@ -150,9 +285,9 @@ input:checked + .slider:before {
    Use 100dvh so mobile browser chrome (URL bar) is accounted for. */
 .preview-fit {
     width: 100%;
-    height: calc(100dvh - 300px);
-    max-height: calc(100dvh - 300px);
-    min-height: 240px;
+    height: calc(100dvh - 18.75rem);
+    max-height: calc(100dvh - 18.75rem);
+    min-height: 15rem;
     overflow: hidden;
     position: relative;
     display: flex;
@@ -171,16 +306,19 @@ td.file-path {
     cursor: pointer;
 }
 
-/* Necessary until react-semantic-toasts is upgraded to Node 18 */
-.ui-alerts {
-    position: fixed;
-    z-index: 2060;
-    padding: 24px;
-}
-
-.ui-alerts.top-right {
-    top: 20px;
-    right: 20px;
+/*
+ * The row is an icon followed by a filename, as inline siblings.  An inline SVG
+ * sits on the text baseline by default, so a 24px glyph next to 13px text hangs
+ * well above it and the name looks like it is resting on the icon's floor.
+ * `middle` centres the glyph against the text instead.
+ *
+ * The margin is the gap that was never there: the folder icon touched the first
+ * letter of its own name, and two icons (a folder and its ignored marker) touched
+ * each other.
+ */
+td.file-path > svg {
+    vertical-align: middle;
+    margin-right: 0.35em;
 }
 
 textarea.otp {
@@ -188,102 +326,14 @@ textarea.otp {
     color: #333;
 }
 
-.inline-header h1 {
-    display: inline-block;
-}
-
-.inline-header h2 {
-    display: inline-block;
-}
-
-.inline-header h3 {
-    display: inline-block;
-}
-
-.inline-header h4 {
-    display: inline-block;
-}
-
-.inline-header h5 {
-    display: inline-block;
-}
-
-.inline-header span {
-    margin-left: 1em;
-}
-
 .card-icon {
-    min-height: 163px;
+    min-height: 10.1875rem;
     text-align: center;
-    padding-top: 53px;
-}
-
-.card-icon.inverted {
-    background-color: #222222;
-}
-
-.modal .inverted {
-    border-color: #888888;
-}
-
-.modal .header.inverted {
-    color: #DDDDDD !important;
-    background-color: #171616 !important;
-}
-
-.modal .content.inverted {
-    color: #DDDDDD !important;
-    border-color: #888888 !important;
-    background-color: #171616 !important;
-}
-
-.modal .actions.inverted {
-    color: #DDDDDD !important;
-    border-color: #888888 !important;
-    background-color: #171616 !important;
-}
-
-.modal.inverted i.close {
-    color: #DDDDDD !important;
-}
-
-/* The accordion has no background of its own; it inherits whatever container it sits in (Modal
-   content #171616, Segment #1B1C1D, the page body, etc.).  This matches how the light theme already
-   renders accordions (transparent), and avoids a darker band when the parent isn't #171616.
-   Direct children only, so nested components that use the `content`/`title` class names (e.g. a
-   Message's Message.Content) are not affected. */
-.ui.inverted.accordion,
-.ui.inverted.accordion > .title,
-.ui.inverted.accordion > .content {
-    background-color: transparent !important;
-}
-
-/* Semantic UI paints a definition table's empty corner cell white (background on the inverted
-   variant, white box-shadows on the celled/plain variants) to fake a "cut-out" corner on a white
-   page.  Our dark theme has a dark page, so the corner must be transparent with no shadow. */
-.ui.inverted.definition.table thead:not(.full-width) th:first-child,
-.ui.inverted.definition.table tfoot:not(.full-width) th:first-child,
-.ui.inverted.celled.definition.table thead:not(.full-width) th:first-child,
-.ui.inverted.celled.definition.table tfoot:not(.full-width) th:first-child {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-/* Mobile-responsive Confirm modal */
-.ui.modal.themed-confirm {
-    max-width: 95vw;
+    padding-top: 3.3125rem;
 }
 
 .clickable {
     cursor: pointer;
-}
-
-.segment.inverted {
-    border: 1px solid #ffffff22 !important;
-}
-
-.inverted label {
-    color: #DDDDDD !important;
 }
 
 .table-ellipsis td.column-ellipsis {
@@ -309,18 +359,6 @@ textarea.otp {
 
 .search-input {
     flex-grow: 1;
-}
-
-.search-clear {
-    margin: 10px;
-}
-
-.icon.divider {
-    color: rgb(0, 0, 0, 0.4) !important;
-}
-
-.divider.inverted {
-    color: rgb(255, 255, 255, 0.6) !important;
 }
 
 .video-player {
@@ -352,109 +390,57 @@ table.ratio-table td.min-width {
     width: auto;
 }
 
-/* CollectionEditForm styles */
-.required-indicator {
-    color: red;
-}
-
-.action-button-spacing {
-    margin-top: 1em;
-}
-
-/* Form loading skeleton */
-.form-skeleton-field {
-    margin-bottom: 1.5em;
-}
-
-.form-skeleton-label {
-    height: 14px;
-    width: 80px;
-    margin-bottom: 8px;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 3px;
-}
-
-.form-skeleton-input {
-    height: 38px;
-    width: 100%;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 4px;
-}
-
-.form-skeleton-textarea {
-    height: 80px;
-    width: 100%;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 4px;
-}
-
-.form-skeleton-button {
-    height: 42px;
-    width: 100px;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-    border-radius: 4px;
-}
-
-@keyframes skeleton-shimmer {
-    0% {
-        background-position: -200% 0;
-    }
-    100% {
-        background-position: 200% 0;
-    }
-}
-
-/* Dark mode skeleton */
-.inverted .form-skeleton-label,
-.inverted .form-skeleton-input,
-.inverted .form-skeleton-textarea,
-.inverted .form-skeleton-button {
-    background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s infinite;
-}
-
-/* Sticky footer for file browser */
+/*
+ * Sticky footer for the file browser.
+ *
+ * The surface is a token.  It was two hardcoded greys with `.inverted` selecting the dark
+ * one, and once nothing set `.inverted` any more the footer stayed at near-white `#f9fafb`
+ * in dark, night and amber.  In night mode a white bar pinned to the bottom of the screen
+ * costs the user the dark adaptation the whole theme exists to protect.  A token has no
+ * such failure mode: there is one rule and each theme fills it in.
+ */
 .sticky-footer {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     padding: 0.5em 1em;
-    background-color: #f9fafb;
-    border-top: 1px solid rgba(34, 36, 38, 0.15);
+    background-color: var(--panel);
+    border-top: 1px solid var(--border);
     z-index: 100;
+    /*
+     * A row with gaps, like every other group of buttons in the app.
+     *
+     * This was a plain block, so the buttons -- inline-block elements with no whitespace
+     * between them, because JSX drops whitespace-only lines -- sat flush against each other
+     * in one unbroken slab.  Everywhere else a group of buttons is a flex row with a gap;
+     * the file browser's footer is hand-rolled and never got one.  It wraps because the bar
+     * carries eight controls and a phone cannot hold them.
+     */
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5em;
 }
 
-.sticky-footer.inverted {
-    background-color: #1b1c1d;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Drag selection visual feedback for FileBrowser */
+/*
+ * Drag selection visual feedback for FileBrowser: a blue tint over the rows being taken,
+ * red over the rows being dropped.
+ *
+ * Each had a second, stronger rule under `.inverted` for the dark themes.  Nothing has set
+ * that class since ThemeProvider stopped supplying it, so only the light tint has been
+ * drawn for some time -- and 15% of a fixed blue over a dark row is close to invisible,
+ * which is the one moment the user needs to see what they have hold of.
+ *
+ * A token mixed with transparent instead: the hue follows the theme, and the strength can
+ * go up without pinning it to a literal that only suits one background.
+ */
 tr.drag-selecting td {
-    background-color: rgba(33, 133, 208, 0.15) !important;
+    background-color: color-mix(in srgb, var(--blue) 22%, transparent) !important;
 }
 
-.inverted tr.drag-selecting td {
-    background-color: rgba(33, 133, 208, 0.25) !important;
-}
-
-/* Drag deselection visual feedback (red tint) */
 tr.drag-deselecting td {
-    background-color: rgba(219, 40, 40, 0.15) !important;
-}
-
-.inverted tr.drag-deselecting td {
-    background-color: rgba(219, 40, 40, 0.25) !important;
+    background-color: color-mix(in srgb, var(--red) 22%, transparent) !important;
 }
 
 /* Prevent text selection during drag */
@@ -469,11 +455,30 @@ tr.drag-deselecting td {
 .file-browser-filter-container {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 0.5em;
+    /* The gap is the container's.  The collapse-all button carried `margin-left: 0.5em` for it,
+       which is the same thing one element to the right of where it belongs. */
+    gap: 0.5em;
+    /* No `margin-bottom`: this is a top-level block of the Files page, and the page's stack
+       spaces it (see `.wrolpi-stack`).  Its own 0.5em was added to that. */
 }
 
-/* Double the default input width on desktop. */
-.ui.input.file-browser-filter {
+/*
+ * Double the default input width on desktop.
+ *
+ * The selector was `.ui.input.file-browser-filter`, naming a wrapper the old input
+ * component rendered around the field.  Nothing carries `ui input` any more, so this rule
+ * and the mobile one below it had been matching nothing at all: the filter was rendering
+ * at the browser's default width on a bar laid out to give it 34em.
+ *
+ * The class lands on ActionInput's wrapper, which is the field and its clear button
+ * together -- that pair is the control being sized, not the text box alone.
+ *
+ * Qualified by the container so it carries two classes.  `.wrolpi-action-input` sets
+ * `width: 100%` in ui.css, which is one class like `.file-browser-filter` is, and ui.css
+ * is loaded after this file -- so a bare class selector here loses the tie and the field
+ * fills the row anyway.  Specificity, not source order, is what should decide it.
+ */
+.file-browser-filter-container .file-browser-filter {
     width: 34em;
     max-width: 100%;
 }
@@ -488,35 +493,11 @@ tr.drag-deselecting td {
     }
 
     /* Fill the row, but stay on one line with the collapse-all button. */
-    .ui.input.file-browser-filter {
+    .file-browser-filter-container .file-browser-filter {
         flex: 1 1 auto;
         width: auto;
     }
 }
-
-/* Ensure step icons are always visible, even when disabled */
-.ui.steps .step.disabled > .icon,
-.ui.steps .step.disabled > i.icon,
-.ui.steps .disabled.step > .icon,
-.ui.steps .disabled.step > i.icon {
-    opacity: 0.45 !important;
-    display: inline-block !important;
-    visibility: visible !important;
-    width: auto !important;
-    height: auto !important;
-    color: rgba(0, 0, 0, 0.87) !important;
-}
-
-/* Ensure the icon glyph (::before) is visible for disabled steps */
-.ui.steps .step.disabled > .icon:before,
-.ui.steps .step.disabled > i.icon:before,
-.ui.steps .disabled.step > .icon:before,
-.ui.steps .disabled.step > i.icon:before {
-    opacity: 0.45 !important;
-    visibility: visible !important;
-    color: rgba(0, 0, 0, 0.87) !important;
-}
-
 
 /* Inventory "PDF" export: the printable table is hidden on screen and becomes the only
    visible content when printing, so a user can use the browser dialog to Save as PDF. */
@@ -568,7 +549,7 @@ tr.drag-deselecting td {
     .inventory-print th,
     .inventory-print td {
         border: 1px solid #999;
-        padding: 4px 6px;
+        padding: 0.25rem 0.375rem;
         text-align: left;
         vertical-align: top;
     }

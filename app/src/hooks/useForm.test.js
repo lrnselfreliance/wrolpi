@@ -774,7 +774,7 @@ describe('useForm', () => {
                 const [selectionProps] = result.current.getSelectionProps({name: 'selected'});
 
                 act(() => {
-                    // Semantic UI dropdown passes (event, {value})
+                    // A dropdown passes (event, {value})
                     selectionProps.onChange({}, {value: 'option2'});
                 });
 
@@ -944,6 +944,46 @@ describe('Form Components', () => {
             const input = screen.getByRole('textbox');
             expect(input).toBeDisabled();
         });
+
+        it('puts the label and the input inside a single element', () => {
+            // A fragment made them two children of whatever contained them, so a grid or flex
+            // parent laid the input out beside its label instead of under it.
+            const form = createMockForm({file_name_format: ''});
+
+            renderWithProviders(
+                <div data-testid="grid">
+                    <InputForm
+                        form={form}
+                        name="file_name_format"
+                        label="Video File Format"
+                    />
+                </div>
+            );
+
+            const grid = screen.getByTestId('grid');
+            expect(grid.children).toHaveLength(1);
+            expect(grid.firstElementChild).toContainElement(screen.getByRole('textbox'));
+            expect(grid.firstElementChild).toContainElement(
+                screen.getByText(/Video File Format/).closest('label')
+            );
+        });
+
+        it('renders the label as a block above the input, with the gap FieldLabel uses', () => {
+            const form = createMockForm({name: ''});
+
+            renderWithProviders(
+                <InputForm
+                    form={form}
+                    name="name"
+                    label="Channel Name"
+                />
+            );
+
+            const label = screen.getByText(/Channel Name/).closest('label');
+            // Both halves of the alignment: without the margin, an InputForm beside a
+            // DestinationForm starts its input 4px higher.
+            expect(label).toHaveStyle({display: 'block', marginBottom: '4px'});
+        });
     });
 
     describe('NumberInputForm', () => {
@@ -1044,7 +1084,7 @@ describe('Form Components', () => {
                 />
             );
 
-            expect(screen.getByRole('checkbox')).toBeInTheDocument();
+            expect(screen.getByRole('switch')).toBeInTheDocument();
         });
     });
 

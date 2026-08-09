@@ -95,7 +95,7 @@ describe('DomainEditPage', () => {
 
             render(<DomainEditPage/>);
 
-            // Should show Semantic UI Loader with text
+            // Should show the Loading component with text
             expect(screen.getByText(/loading domain/i)).toBeInTheDocument();
 
             // Form should not be visible during initial load

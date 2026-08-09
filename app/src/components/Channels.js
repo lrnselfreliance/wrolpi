@@ -1,6 +1,5 @@
 import React, {useState} from "react";
 import {useHotkeys} from "react-hotkeys-hook";
-import {Grid, StatisticLabel, StatisticValue,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
@@ -18,11 +17,22 @@ import {
     WROLModeMessage
 } from "./Common";
 import {Link, useNavigate, useParams} from "react-router";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";
-import {Button, Form, Header, Loader, Modal, Segment, Statistic} from "./Theme";
-import {toast} from "react-semantic-toasts-2";
+import {
+    Button,
+    Grid,
+    Group,
+    Header,
+    Loading,
+    Message,
+    Modal,
+    Panel,
+    Stack,
+    Statistic,
+    StatisticGroup,
+    toast,
+} from "./ui";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {InputForm, ToggleForm} from "../hooks/useForm";
 import {ChannelDownloadForm, DestinationForm, DownloadTagsSelector} from "./Download";
@@ -58,29 +68,16 @@ function ChannelStatistics({statistics}) {
         return <></>
     }
 
-    return <Segment>
+    return <Panel>
         <Header as='h1'>Statistics</Header>
-        <Statistic>
-            <StatisticValue>{statistics.video_count}</StatisticValue>
-            <StatisticLabel>Videos</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
-            <StatisticLabel>Total Size</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanFileSize(statistics.largest_video, true)}</StatisticValue>
-            <StatisticLabel>Largest Video</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{secondsToFullDuration(statistics.length)}</StatisticValue>
-            <StatisticLabel>Total Duration</StatisticLabel>
-        </Statistic>
-        <Statistic>
-            <StatisticValue>{humanNumber(statistics.video_tags)}</StatisticValue>
-            <StatisticLabel>Video Tags</StatisticLabel>
-        </Statistic>
-    </Segment>
+        <StatisticGroup>
+            <Statistic value={statistics.video_count} label='Videos'/>
+            <Statistic value={humanFileSize(statistics.size, true)} label='Total Size'/>
+            <Statistic value={humanFileSize(statistics.largest_video, true)} label='Largest Video'/>
+            <Statistic value={secondsToFullDuration(statistics.length)} label='Total Duration'/>
+            <Statistic value={humanNumber(statistics.video_tags)} label='Video Tags'/>
+        </StatisticGroup>
+    </Panel>
 }
 
 
@@ -97,7 +94,7 @@ export function ChannelEditPage() {
     useTitle(_.isEmpty(channel) ? null : `${channel.name} Channel`);
 
     if (!form.ready) {
-        return <Loader active/>;
+        return <Loading/>;
     }
 
     const handleRefreshChannel = async (e) => {
@@ -169,39 +166,35 @@ export function ChannelEditPage() {
     };
 
     const deleteButton = <APIButton
-        color='red'
+        role='danger'
         size='small'
         confirmContent='Are you sure you want to delete this channel? No video files will be deleted.'
         confirmButton='Delete'
         confirmHeader='Delete Channel?'
         onClick={handleDelete}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Delete</APIButton>;
 
     const refreshButton = <APIButton
-        color='blue'
+        role='primary'
         size='small'
         onClick={handleRefreshChannel}
         obeyWROLMode={true}
-        style={{marginTop: '1em'}}
     >Refresh</APIButton>;
 
     const tagButton = <Button
         type="button"
         size='small'
         onClick={() => setTagEditModalOpen(true)}
-        color='violet'
-        style={{marginTop: '1em'}}
+        role='primary'
     >Tag</Button>;
 
     const reorganizeButton = (
         <APIButton
-            color='orange'
+            role='retry'
             size='small'
             onClick={() => setReorganizeModalOpen(true)}
             obeyWROLMode={true}
-            style={{marginTop: '1em'}}
         >Reorganize Files</APIButton>
     );
 
@@ -216,14 +209,15 @@ export function ChannelEditPage() {
     const downloadMissingDataLabel = <>Download Missing Data<InfoPopup content={downloadMissingDataInfo}/></>;
 
     return <>
-        <BackButton/>
-        <Link to={`/videos/channel/${channel.id}/video`}>
-            <Button>Videos</Button>
-        </Link>
+        <div className='wrolpi-button-row'>
+            <BackButton/>
+            <Link to={`/videos/channel/${channel.id}/video`}>
+                <Button>Videos</Button>
+            </Link>
+        </div>
 
         {channel?.needs_reorganization && (
-            <Message warning>
-                <Message.Header>File Format Changed</Message.Header>
+            <Message kind='warning' title='File Format Changed'>
                 <p>
                     The file name format has changed. Click "Reorganize Files" to move existing files
                     to match the new format.
@@ -239,8 +233,8 @@ export function ChannelEditPage() {
             appliedTagName={channel?.tag_name}
             onSubmit={handleSubmit}
         >
-            <Grid.Row>
-                <Grid.Column width={8}>
+            <Grid>
+                <Grid.Col span={{base: 12, sm: 6}}>
                     <InputForm
                         form={form}
                         label="Channel Name"
@@ -248,8 +242,8 @@ export function ChannelEditPage() {
                         placeholder="Short Channel Name"
                         required={true}
                     />
-                </Grid.Column>
-                <Grid.Column width={8}>
+                </Grid.Col>
+                <Grid.Col span={{base: 12, sm: 6}}>
                     <DestinationForm
                         form={form}
                         label='Directory'
@@ -257,38 +251,30 @@ export function ChannelEditPage() {
                         path='directory'
                         required={true}
                     />
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
+                </Grid.Col>
+                <Grid.Col span={12}>
                     <ToggleForm
                         form={form}
                         label={downloadMissingDataLabel}
                         path='download_missing_data'
                     />
-                </Grid.Column>
-            </Grid.Row>
-            {(channel.url || channel.rss_url) &&
-                <Grid.Row>
-                    <Grid.Column>
+                </Grid.Col>
+                {(channel.url || channel.rss_url) &&
+                    <Grid.Col span={12}>
                         <SimpleAccordion title='Details'>
-                            <Grid>
-                                {channel.url && <Grid.Row columns={1}>
-                                    <Grid.Column>
-                                        <Header as='h4'>URL</Header>
-                                        <a href={channel.url}>{channel.url}</a>
-                                    </Grid.Column>
-                                </Grid.Row>}
-                                {channel.rss_url && <Grid.Row columns={1}>
-                                    <Grid.Column>
-                                        <Header as='h4'>RSS URL</Header>
-                                        <a href={channel.rss_url}>{channel.rss_url}</a>
-                                    </Grid.Column>
-                                </Grid.Row>}
-                            </Grid>
+                            <Stack gap='sm'>
+                                {channel.url && <div>
+                                    <Header as='h4'>URL</Header>
+                                    <a href={channel.url}>{channel.url}</a>
+                                </div>}
+                                {channel.rss_url && <div>
+                                    <Header as='h4'>RSS URL</Header>
+                                    <a href={channel.rss_url}>{channel.rss_url}</a>
+                                </div>}
+                            </Stack>
                         </SimpleAccordion>
-                    </Grid.Column>
-                </Grid.Row>}
+                    </Grid.Col>}
+            </Grid>
         </CollectionEditForm>
 
         {/* Tag Modal */}
@@ -314,22 +300,14 @@ export function ChannelEditPage() {
         />
 
         {/* Downloads Segment */}
-        <Segment>
-            <Grid columns={2}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <Header as='h1'>Downloads</Header>
-                    </Grid.Column>
-                    <Grid.Column>
-                        <Button floated='right'
-                                onClick={() => setDownloadModalOpen(!downloadModalOpen)}
-                        >
-                            New Download
-                        </Button>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-            <Modal open={downloadModalOpen} closeIcon onClose={() => setDownloadModalOpen(false)}>
+        <Panel>
+            <Group justify='space-between' align='center' wrap='wrap'>
+                <Header as='h1'>Downloads</Header>
+                <Button onClick={() => setDownloadModalOpen(!downloadModalOpen)}>
+                    New Download
+                </Button>
+            </Group>
+            <Modal size='small' open={downloadModalOpen} onClose={() => setDownloadModalOpen(false)}>
                 <Modal.Content>
                     <Header as='h2'>New Channel Download</Header>
                     <ChannelDownloadForm
@@ -342,7 +320,7 @@ export function ChannelEditPage() {
             </Modal>
 
             <RecurringDownloadsTable downloads={channel?.downloads} fetchDownloads={fetchChannel} onDelete={onDelete}/>
-        </Segment>
+        </Panel>
 
         {channel && channel.statistics && <ChannelStatistics statistics={channel.statistics}/>}
     </>;
@@ -434,88 +412,74 @@ export function ChannelNewPage() {
 
     let messageRow;
     if (error || success) {
-        messageRow = <Grid.Row columns={1}>
-            <Grid.Column>
-                {error &&
-                    <Message negative
-                             header={messageHeader}
-                             content={messageContent}
-                    />}
-                {success &&
-                    <Message positive
-                             header={messageHeader}
-                             content={messageContent}
-                    />}
-            </Grid.Column>
-        </Grid.Row>
+        messageRow = <Grid.Col span={12}>
+            {error &&
+                <Message kind='error' title={messageHeader}>{messageContent}</Message>}
+            {success &&
+                <Message kind='success' title={messageHeader}>{messageContent}</Message>}
+        </Grid.Col>
     }
 
     return <>
-        <BackButton/>
+        <div className='wrolpi-button-row'><BackButton/></div>
 
-        <Segment>
+        <Panel>
             <Header as="h1">New Channel</Header>
             <WROLModeMessage content='Channel creation is disabled while WROL Mode is enabled.'/>
-            <Form
+            <form
                 id="newChannel"
-                error={error}
-                success={success}
                 autoComplete="off"
+                onSubmit={e => e.preventDefault()}
             >
-                <Grid stackable columns={2}>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <InputForm
-                                form={form}
-                                label="Channel Name"
-                                name="name"
-                                placeholder="Short Channel Name"
-                                required={true}
-                            />
-                        </Grid.Column>
-                        <Grid.Column>
-                            <DestinationForm
-                                form={form}
-                                label='Directory'
-                                name='directory'
-                                path='directory'
-                                required={true}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <ToggleForm
-                                form={form}
-                                label={downloadMissingDataLabel}
-                                path='download_missing_data'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
+                <Grid>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <InputForm
+                            form={form}
+                            label="Channel Name"
+                            name="name"
+                            placeholder="Short Channel Name"
+                            required={true}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <DestinationForm
+                            form={form}
+                            label='Directory'
+                            name='directory'
+                            path='directory'
+                            required={true}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                        <ToggleForm
+                            form={form}
+                            label={downloadMissingDataLabel}
+                            path='download_missing_data'
+                        />
+                    </Grid.Col>
                     {messageRow}
-                    <Grid.Row>
-                        <Grid.Column width={8}>
-                            <DownloadTagsSelector
-                                form={form}
-                                limit={1}
-                                path='tag_name'
-                                name='tag_name'
-                            />
-                        </Grid.Column>
-                        <Grid.Column>
+                    <Grid.Col span={{base: 12, sm: 8}}>
+                        <DownloadTagsSelector
+                            form={form}
+                            limit={1}
+                            path='tag_name'
+                            name='tag_name'
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 4}}>
+                        <div style={{textAlign: 'right'}}>
                             <APIButton
-                                color='violet'
+                                role='primary'
                                 size='big'
-                                floated='right'
                                 onClick={handleSubmit}
                                 disabled={form.disabled}
                                 obeyWROLMode={true}
                             >Save</APIButton>
-                        </Grid.Column>
-                    </Grid.Row>
+                        </div>
+                    </Grid.Col>
                 </Grid>
-            </Form>
-        </Segment>
+            </form>
+        </Panel>
     </>;
 }
 
@@ -533,38 +497,30 @@ export function ChannelsPage() {
         }
     }, {enableOnFormTags: false});
 
-    // Header section matching DomainsPage pattern
-    const header = <div style={{marginBottom: '1em'}}>
-        <Grid stackable columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <SearchInput
-                        placeholder='Name filter...'
-                        size='large'
-                        searchStr={searchStr}
-                        disabled={!Array.isArray(channels) || channels.length === 0}
-                        onClear={() => setSearchStr('')}
-                        onChange={setSearchStr}
-                        onSubmit={null}
-                        inputRef={searchInputRef}
-                    />
-                </Grid.Column>
-                <Grid.Column textAlign='right'>
-                    <Link to='/videos/channel/new'>
-                        <Button secondary>New Channel</Button>
-                    </Link>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </div>;
+    // Header section matching DomainsPage pattern.  No `mb`: this is a top-level block of the
+    // page, and the page's stack spaces it -- its own margin was added to that gap.
+    const header = <Group justify='space-between' align='flex-end' wrap='wrap'>
+        <SearchInput
+            placeholder='Name filter...'
+            size='large'
+            searchStr={searchStr}
+            disabled={!Array.isArray(channels) || channels.length === 0}
+            onClear={() => setSearchStr('')}
+            onChange={setSearchStr}
+            onSubmit={null}
+            inputRef={searchInputRef}
+        />
+        <Link to='/videos/channel/new'>
+            <Button role='primary'>New Channel</Button>
+        </Link>
+    </Group>;
 
     // Empty state
     if (channels && channels.length === 0) {
         return <>
             {header}
-            <Message>
-                <Message.Header>No channels exist yet!</Message.Header>
-                <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
+            <Message title='No channels exist yet!'>
+                <Link to='/videos/channel/new'>Create one.</Link>
             </Message>
         </>;
     }

@@ -1,7 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Button as SButton, Grid, Icon, Label, Progress} from 'semantic-ui-react';
-import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
-import {Button, Modal, Table} from '../Theme';
+import {Button, Icon, Label, Loading, Message, Modal, Progress, Stack, Table} from '../ui';
 import {APIButton} from '../Common';
 import {
     executeCollectionReorganization,
@@ -271,154 +269,124 @@ export function CollectionReorganizeModal({
         if (!preview) return null;
 
         return (
-            <Grid columns={1}>
+            <Stack>
                 {/* Warning when collection appears organized but has files to move */}
                 {preview.files_needing_move > 0 && !needsReorganization && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message warning>
-                                <Message.Header>Collection Appears Organized</Message.Header>
-                                <p>
-                                    This collection's format matches the current configuration, but
-                                    {' '}<strong>{preview.files_needing_move}</strong> files don't match the expected
-                                    layout.
-                                    This can happen if a previous reorganization was interrupted.
-                                </p>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='warning' title='Collection Appears Organized'>
+                        <p>
+                            This collection's format matches the current configuration, but
+                            {' '}<strong>{preview.files_needing_move}</strong> files don't match the expected
+                            layout.
+                            This can happen if a previous reorganization was interrupted.
+                        </p>
+                    </Message>
                 )}
-                <Grid.Row>
-                    <Grid.Column>
+                <div>
+                    <p>
+                        <strong>{preview.files_needing_move}</strong> of <strong>{preview.total_files}</strong> files
+                        will be reorganized.
+                    </p>
+                    {preview.current_file_format && (
                         <p>
-                            <strong>{preview.files_needing_move}</strong> of <strong>{preview.total_files}</strong> files
-                            will be reorganized.
+                            <strong>Current format:</strong> <code>{preview.current_file_format}</code>
                         </p>
-                        {preview.current_file_format && (
-                            <p>
-                                <strong>Current format:</strong> <code>{preview.current_file_format}</code>
-                            </p>
-                        )}
-                        <p>
-                            <strong>New format:</strong> <Label>{preview.new_file_format}</Label>
-                        </p>
-                    </Grid.Column>
-                </Grid.Row>
+                    )}
+                    <p>
+                        <strong>New format:</strong> <Label>{preview.new_file_format}</Label>
+                    </p>
+                </div>
 
                 {/* Conflict warning */}
                 {preview.has_conflicts && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message error>
-                                <Message.Header>
-                                    <Icon name='warning sign'/> Conflicts Detected
-                                </Message.Header>
-                                <p>
-                                    <strong>{preview.conflicts.length}</strong> destination{' '}
-                                    {preview.conflicts.length === 1 ? 'path has' : 'paths have'}{' '}
-                                    multiple files that would collide.
-                                    You must resolve these conflicts before reorganizing.
-                                </p>
-                                <SButton
-                                    color='yellow'
-                                    onClick={handleResolveConflicts}
-                                    loading={loadingConflicts}
-                                    disabled={loadingConflicts}
-                                >
-                                    <Icon name='wrench'/> Resolve Conflicts
-                                </SButton>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='error' icon='warning sign' title='Conflicts Detected'>
+                        <p>
+                            <strong>{preview.conflicts.length}</strong> destination{' '}
+                            {preview.conflicts.length === 1 ? 'path has' : 'paths have'}{' '}
+                            multiple files that would collide.
+                            You must resolve these conflicts before reorganizing.
+                        </p>
+                        <Button
+                            role='retry'
+                            icon='wrench'
+                            onClick={handleResolveConflicts}
+                            loading={loadingConflicts}
+                            disabled={loadingConflicts}
+                        >
+                            Resolve Conflicts
+                        </Button>
+                    </Message>
                 )}
 
                 {preview.sample_moves && preview.sample_moves.length > 0 && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <strong>Sample moves:</strong>
-                            <Table basic='very' compact size='small'>
-                                <Table.Header>
-                                    <Table.Row>
-                                        <Table.HeaderCell>Current Path</Table.HeaderCell>
-                                        <Table.HeaderCell/>
-                                        <Table.HeaderCell>New Path</Table.HeaderCell>
+                    <div>
+                        <strong>Sample moves:</strong>
+                        <Table>
+                            <Table.Header>
+                                <Table.Row>
+                                    <Table.HeaderCell>Current Path</Table.HeaderCell>
+                                    <Table.HeaderCell/>
+                                    <Table.HeaderCell>New Path</Table.HeaderCell>
+                                </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                                {preview.sample_moves.map((move, idx) => (
+                                    <Table.Row key={idx}>
+                                        <Table.Cell style={{wordBreak: 'break-all'}}>
+                                            {move.old_path}
+                                        </Table.Cell>
+                                        <Table.Cell>
+                                            <Icon name='arrow right'/>
+                                        </Table.Cell>
+                                        <Table.Cell style={{wordBreak: 'break-all'}}>
+                                            {move.new_path}
+                                        </Table.Cell>
                                     </Table.Row>
-                                </Table.Header>
-                                <Table.Body>
-                                    {preview.sample_moves.map((move, idx) => (
-                                        <Table.Row key={idx}>
-                                            <Table.Cell style={{wordBreak: 'break-all'}}>
-                                                {move.old_path}
-                                            </Table.Cell>
-                                            <Table.Cell>
-                                                <Icon name='arrow right'/>
-                                            </Table.Cell>
-                                            <Table.Cell style={{wordBreak: 'break-all'}}>
-                                                {move.new_path}
-                                            </Table.Cell>
-                                        </Table.Row>
-                                    ))}
-                                </Table.Body>
-                            </Table>
-                            {preview.files_needing_move > preview.sample_moves.length && (
-                                <p style={{fontStyle: 'italic'}}>
-                                    ...and {preview.files_needing_move - preview.sample_moves.length} more files
-                                </p>
-                            )}
-                        </Grid.Column>
-                    </Grid.Row>
+                                ))}
+                            </Table.Body>
+                        </Table>
+                        {preview.files_needing_move > preview.sample_moves.length && (
+                            <p style={{fontStyle: 'italic'}}>
+                                ...and {preview.files_needing_move - preview.sample_moves.length} more files
+                            </p>
+                        )}
+                    </div>
                 )}
 
                 {preview.files_needing_move === 0 && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message info>
-                                <Message.Header>No Files Need Reorganization</Message.Header>
-                                <p>
-                                    All files are already organized according to the current format.
-                                    {needsReorganization && ' Click "Mark as Organized" to dismiss the warning.'}
-                                </p>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='info' title='No Files Need Reorganization'>
+                        <p>
+                            All files are already organized according to the current format.
+                            {needsReorganization && ' Click "Mark as Organized" to dismiss the warning.'}
+                        </p>
+                    </Message>
                 )}
-            </Grid>
+            </Stack>
         );
     };
 
     const renderProgress = () => {
         if (!status) return null;
 
+        const progressColor = status.status === 'complete' ? 'green' : status.status === 'error' ? 'red' : 'blue';
+
         return (
-            <Grid columns={1}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <p>
-                            <strong>Status:</strong> {status.status}
-                        </p>
-                        <Progress
-                            percent={status.percent || 0}
-                            progress
-                            indicating={status.status !== 'complete'}
-                            success={status.status === 'complete'}
-                        />
-                        <p>
-                            {status.completed || 0} of {status.total || 0} files processed
-                        </p>
-                    </Grid.Column>
-                </Grid.Row>
+            <Stack>
+                <div>
+                    <p>
+                        <strong>Status:</strong> {status.status}
+                    </p>
+                    <Progress percent={status.percent || 0} color={progressColor}/>
+                    <p>
+                        {status.completed || 0} of {status.total || 0} files processed
+                    </p>
+                </div>
 
                 {status.status === 'complete' && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message success>
-                                <Message.Header>Reorganization Complete</Message.Header>
-                                <p>All files have been reorganized successfully.</p>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='success' title='Reorganization Complete'>
+                        <p>All files have been reorganized successfully.</p>
+                    </Message>
                 )}
-            </Grid>
+            </Stack>
         );
     };
 
@@ -433,7 +401,7 @@ export function CollectionReorganizeModal({
                 open={open}
                 onClose={handleClose}
                 closeIcon={true}
-                closeOnDimmerClick={!isInProgress}
+                closeOnClickOutside={!isInProgress}
                 closeOnEscape={!isInProgress}
                 size='fullscreen'
             >
@@ -441,19 +409,10 @@ export function CollectionReorganizeModal({
                     Reorganize Files: {collectionName}
                 </Modal.Header>
                 <Modal.Content>
-                    {loading && (
-                        <Message icon>
-                            <Icon name='circle notched' loading/>
-                            <Message.Content>
-                                <Message.Header>Loading Preview</Message.Header>
-                                Analyzing files...
-                            </Message.Content>
-                        </Message>
-                    )}
+                    {loading && <Loading>Analyzing files...</Loading>}
 
                     {error && (
-                        <Message negative>
-                            <Message.Header>Error</Message.Header>
+                        <Message kind='error' title='Error'>
                             <p style={{whiteSpace: 'pre-wrap'}}>{error}</p>
                         </Message>
                     )}
@@ -462,12 +421,12 @@ export function CollectionReorganizeModal({
                     {status && renderProgress()}
                 </Modal.Content>
                 <Modal.Actions>
-                    <Button onClick={handleClose}>
+                    <Button role='cancel' onClick={handleClose}>
                         {status?.status === 'complete' ? 'Close' : isInProgress ? 'Hide' : 'Cancel'}
                     </Button>
                     {canReorganize && (
                         <APIButton
-                            color='violet'
+                            role='primary'
                             onClick={handleReorganize}
                             obeyWROLMode={true}
                         >
@@ -476,7 +435,7 @@ export function CollectionReorganizeModal({
                     )}
                     {canMarkAsOrganized && (
                         <APIButton
-                            color='green'
+                            role='save'
                             onClick={handleReorganize}
                             obeyWROLMode={true}
                         >

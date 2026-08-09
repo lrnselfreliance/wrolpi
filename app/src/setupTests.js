@@ -18,7 +18,7 @@ jest.mock('react-stl-viewer', () => ({
     StlViewer: () => null,
 }));
 
-// Mock window.matchMedia (used by Semantic UI Media components)
+// Mock window.matchMedia (used by the responsive Media components)
 Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: jest.fn().mockImplementation(query => ({
@@ -46,6 +46,21 @@ global.IntersectionObserver = class IntersectionObserver {
 
     takeRecords() {
         return [];
+    }
+
+    unobserve() {
+    }
+};
+
+// Mock ResizeObserver (used by Mantine's ScrollArea, e.g. inside Select/Combobox dropdowns).
+global.ResizeObserver = class ResizeObserver {
+    constructor() {
+    }
+
+    disconnect() {
+    }
+
+    observe() {
     }
 
     unobserve() {

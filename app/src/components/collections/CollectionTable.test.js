@@ -26,23 +26,28 @@ jest.mock('../../contexts/contexts', () => ({
     },
 }));
 
-// Mock SortableTable to simplify testing
-jest.mock('../SortableTable', () => ({
-    SortableTable: ({data, rowFunc, tableHeaders}) => (
-        <table data-testid="sortable-table">
-            <thead>
-            <tr>
-                {tableHeaders.map(h => (
-                    <th key={h.key} data-width={h.width}>{h.text}</th>
-                ))}
-            </tr>
-            </thead>
-            <tbody>
-            {data.map(item => rowFunc(item))}
-            </tbody>
-        </table>
-    ),
-}));
+// Mock SortableTable to simplify testing.  Uses the real `Table` compound
+// components (rather than raw <table>/<tr>/<td>) because `rowFunc` returns
+// `Table.Row`/`Table.Cell` elements that read Mantine's table context.
+jest.mock('../SortableTable', () => {
+    const {Table} = jest.requireActual('../ui');
+    return {
+        SortableTable: ({data, rowFunc, tableHeaders}) => (
+            <Table data-testid="sortable-table">
+                <Table.Header>
+                    <Table.Row>
+                        {tableHeaders.map(h => (
+                            <Table.HeaderCell key={h.key} data-width={h.width}>{h.text}</Table.HeaderCell>
+                        ))}
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                    {data.map(item => rowFunc(item))}
+                </Table.Body>
+            </Table>
+        ),
+    };
+});
 
 // Test column and routes configurations
 const DOMAIN_COLUMNS = [
@@ -73,7 +78,7 @@ describe('CollectionTable', () => {
                 />
             );
 
-            expect(container.querySelector('.ui.placeholder')).toBeInTheDocument();
+            expect(container.querySelector('.mantine-Skeleton-root')).toBeInTheDocument();
         });
 
         it('renders error message when collections is undefined', () => {

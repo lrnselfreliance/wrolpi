@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Link, Outlet, useParams} from "react-router";
 import {useHotkeys} from "react-hotkeys-hook";
 import {
@@ -27,28 +27,25 @@ import {
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {
-    CardContent,
-    CardDescription,
-    CardHeader,
-    Container,
-    Form,
-    FormDropdown,
-    FormInput,
-    FormField,
-    TextArea,
-    Image,
-    Label,
-    PlaceholderHeader,
-    PlaceholderLine,
-    StatisticLabel,
-    StatisticValue,
-    TableCell
-} from "semantic-ui-react";
+    ActionInput,
+    Button,
+    Card,
+    Header,
+    Icon,
+    Loading,
+    Modal,
+    NumberInput,
+    Panel,
+    Placeholder,
+    Statistic,
+    StatisticGroup,
+    Table,
+    Textarea,
+    TextInput,
+    Tooltip,
+} from "./ui";
 import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {DeepSearchHint, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {
@@ -63,7 +60,7 @@ import {
     updateVideoDownloaderConfig,
     uploadCookies,
 } from "../api";
-import {QueryContext, ThemeContext} from "../contexts/contexts";
+import {QueryContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
@@ -143,11 +140,7 @@ export function VideosPage() {
             </Header>
         </>;
     } else if (channelId) {
-        header = <Placeholder style={{marginBottom: '1em'}}>
-            <PlaceholderHeader>
-                <PlaceholderLine/>
-            </PlaceholderHeader>
-        </Placeholder>;
+        header = <div style={{marginBottom: '1em'}}><Placeholder lines={1}/></div>;
     }
 
     const onSelect = (path, checked) => {
@@ -182,28 +175,28 @@ export function VideosPage() {
         setSelectedVideos([]);
     }
 
-    const selectElm = <div style={{marginTop: '0.5em'}}>
+    const selectElm = <div className='wrolpi-button-row' style={{marginTop: '0.5em'}}>
         <Button
-            color='violet'
+            role='primary'
             disabled={_.isEmpty(selectedVideos)}
             onClick={() => setBulkTagOpen(true)}
         >Tag</Button>
         <APIButton
-            color='red'
+            role='danger'
             disabled={_.isEmpty(selectedVideos)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these video files?  This cannot be undone.'
             onClick={() => onDelete(false)}
         >Delete</APIButton>
         <Button
-            color='grey'
+            role='cancel'
             onClick={() => invertSelection()}
             disabled={_.isEmpty(videos)}
         >
             Invert
         </Button>
         <Button
-            color='yellow'
+            role='cancel'
             onClick={() => clearSelection()}
             disabled={_.isEmpty(videos) || _.isEmpty(selectedVideos)}
         >
@@ -284,7 +277,6 @@ function VideoFileNameForm({form}) {
     const label = <InfoHeader
         headerSize='h5'
         headerContent='Video File Format'
-        popupProps={{wide: 'very', position: 'top left'}}
         popupContent={<>
             <p>Common yt-dlp variables:</p>
             <ul>
@@ -312,6 +304,13 @@ function VideoFileNameForm({form}) {
         message={message}
     />
 }
+
+const settingsGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: '1em',
+    marginBottom: '1em',
+};
 
 export function VideosSettingsPage() {
     useTitle('Videos Settings');
@@ -380,170 +379,140 @@ export function VideosSettingsPage() {
     />;
 
     return <>
-        <Segment>
+        <Panel>
             <Header as='h3'>Video Downloader Config</Header>
 
-            <Form>
-                <Grid>
-                    <Grid.Row columns={2}>
-                        <Grid.Column mobile={16} computer={8}>
-                            <VideoResolutionSelectorForm
-                                form={configForm}
-                                name='video_resolutions'
-                                path='video_resolutions'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={4}>
-                            <VideoFormatSelectorForm
-                                form={configForm}
-                                name='merge_output_format'
-                                path='yt_dlp_options.merge_output_format'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={4}>
-                            <VideoFileNameForm form={configForm}/>
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row columns={2}>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Do not overwrite existing files'
-                                name='nooverwrites'
-                                path='yt_dlp_options.nooverwrites'
-                                icon='file video'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Download automatic subtitles'
-                                name='writeautomaticsub'
-                                path='yt_dlp_options.writeautomaticsub'
-                                icon='closed captioning'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row columns={2}>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Download subtitles'
-                                name='writesubtitles'
-                                path='yt_dlp_options.writesubtitles'
-                                icon='closed captioning outline'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Download thumbnail'
-                                name='writethumbnail'
-                                path='yt_dlp_options.writethumbnail'
-                                icon='image'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row columns={2}>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Download info JSON'
-                                name='writeinfojson'
-                                path='yt_dlp_options.writeinfojson'
-                                icon='file code'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label='Continue partial downloads'
-                                name='continue_dl'
-                                path='yt_dlp_options.continue_dl'
-                                icon='play'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label={downloadMissingVideoCommentsLabel}
-                                name='download_missing_video_comments'
-                                path='download_missing_video_comments'
-                                icon='comments'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column mobile={16} computer={8}>
-                            <InputForm
-                                form={configForm}
-                                name='yt_dlp_extra_args'
-                                path='yt_dlp_extra_args'
-                                label='Extra yt-dlp Arguments'
-                                placeholder='--prefer-free-formats'
-                                icon='terminal'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={4}>
-                            <Form.Field>
-                                <InfoHeader
-                                    headerSize='h5'
-                                    headerContent='Sleep Between Requests'
-                                    popupContent='Seconds to sleep between yt-dlp API requests. Helps avoid rate limiting and bot detection. Set to 0 to disable. Does not affect video download speed.'
-                                />
-                                <FormInput
-                                    type='number'
-                                    step='0.25'
-                                    min='0'
-                                    max='10'
-                                    value={configForm.formData.sleep_requests ?? 0.75}
-                                    onChange={(e) => configForm.setValue('sleep_requests', parseFloat(e.target.value) || 0)}
-                                    placeholder='0.75'
-                                    label={{basic: true, content: 'seconds'}}
-                                    labelPosition='right'
-                                />
-                            </Form.Field>
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column mobile={16} computer={16}>
-                            <Form.Field>
-                                <InfoHeader
-                                    headerSize='h5'
-                                    headerContent='User Agent'
-                                    popupContent='Custom user-agent string for yt-dlp. Should match the browser used to export cookies. Click "Use Current Browser" to auto-fill with your browser&apos;s user-agent.'
-                                />
-                                <FormInput
-                                    value={configForm.formData.user_agent || ''}
-                                    onChange={(e) => configForm.setValue('user_agent', e.target.value)}
-                                    placeholder='Leave empty to use yt-dlp default'
-                                    action={{
-                                        content: 'Use Current Browser',
-                                        onClick: () => configForm.setValue('user_agent', suggestedUserAgent),
-                                    }}
-                                />
-                            </Form.Field>
-                        </Grid.Column>
-                    </Grid.Row>
+            <form onSubmit={e => e.preventDefault()}>
+                <div style={settingsGridStyle}>
+                    <VideoResolutionSelectorForm
+                        form={configForm}
+                        name='video_resolutions'
+                        path='video_resolutions'
+                    />
+                    <VideoFormatSelectorForm
+                        form={configForm}
+                        name='merge_output_format'
+                        path='yt_dlp_options.merge_output_format'
+                    />
+                    <VideoFileNameForm form={configForm}/>
+                </div>
+                <div style={settingsGridStyle}>
+                    <ToggleForm
+                        form={configForm}
+                        label='Do not overwrite existing files'
+                        name='nooverwrites'
+                        path='yt_dlp_options.nooverwrites'
+                        icon='file video'
+                    />
+                    <ToggleForm
+                        form={configForm}
+                        label='Download automatic subtitles'
+                        name='writeautomaticsub'
+                        path='yt_dlp_options.writeautomaticsub'
+                        icon='closed captioning'
+                    />
+                </div>
+                <div style={settingsGridStyle}>
+                    <ToggleForm
+                        form={configForm}
+                        label='Download subtitles'
+                        name='writesubtitles'
+                        path='yt_dlp_options.writesubtitles'
+                        icon='closed captioning outline'
+                    />
+                    <ToggleForm
+                        form={configForm}
+                        label='Download thumbnail'
+                        name='writethumbnail'
+                        path='yt_dlp_options.writethumbnail'
+                        icon='image'
+                    />
+                </div>
+                <div style={settingsGridStyle}>
+                    <ToggleForm
+                        form={configForm}
+                        label='Download info JSON'
+                        name='writeinfojson'
+                        path='yt_dlp_options.writeinfojson'
+                        icon='file code'
+                    />
+                    <ToggleForm
+                        form={configForm}
+                        label='Continue partial downloads'
+                        name='continue_dl'
+                        path='yt_dlp_options.continue_dl'
+                        icon='play'
+                    />
+                </div>
+                <div style={settingsGridStyle}>
+                    <ToggleForm
+                        form={configForm}
+                        label={downloadMissingVideoCommentsLabel}
+                        name='download_missing_video_comments'
+                        path='download_missing_video_comments'
+                        icon='comments'
+                    />
+                </div>
+                <div style={settingsGridStyle}>
+                    <InputForm
+                        form={configForm}
+                        name='yt_dlp_extra_args'
+                        path='yt_dlp_extra_args'
+                        label='Extra yt-dlp Arguments'
+                        placeholder='--prefer-free-formats'
+                        icon='terminal'
+                    />
+                    <div>
+                        <InfoHeader
+                            headerSize='h5'
+                            headerContent='Sleep Between Requests'
+                            popupContent='Seconds to sleep between yt-dlp API requests. Helps avoid rate limiting and bot detection. Set to 0 to disable. Does not affect video download speed.'
+                        />
+                        <NumberInput
+                            step={0.25}
+                            min={0}
+                            max={10}
+                            value={configForm.formData.sleep_requests ?? 0.75}
+                            onChange={(value) => configForm.setValue('sleep_requests', parseFloat(value) || 0)}
+                            placeholder='0.75'
+                            rightSection={<span style={{fontSize: '0.75rem', color: 'var(--muted)'}}>sec</span>}
+                            rightSectionWidth={36}
+                        />
+                    </div>
+                </div>
+                <div style={settingsGridStyle}>
+                    <div style={{gridColumn: '1 / -1'}}>
+                        <InfoHeader
+                            headerSize='h5'
+                            headerContent='User Agent'
+                            popupContent="Custom user-agent string for yt-dlp. Should match the browser used to export cookies. Click &quot;Use Current Browser&quot; to auto-fill with your browser's user-agent."
+                        />
+                        <ActionInput
+                            value={configForm.formData.user_agent || ''}
+                            onChange={(e) => configForm.setValue('user_agent', e.currentTarget.value)}
+                            placeholder='Leave empty to use yt-dlp default'
+                            action={<Button role='cancel'
+                                            onClick={() => configForm.setValue('user_agent', suggestedUserAgent)}>
+                                Use Current Browser
+                            </Button>}
+                        />
+                    </div>
+                </div>
 
-                    <Grid.Row columns={1}>
-                        <Grid.Column textAlign='right'>
-                            <APIButton
-                                disabled={configForm.disabled || !configForm.ready}
-                                type='submit'
-                                style={{marginTop: '0.5em'}}
-                                onClick={configForm.onSubmit}
-                                id='video_settings_save_button'
-                            >Save</APIButton>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </Form>
-        </Segment>
+                <div style={{textAlign: 'right'}}>
+                    <APIButton
+                        role='primary'
+                        disabled={configForm.disabled || !configForm.ready}
+                        type='submit'
+                        style={{marginTop: '0.5em'}}
+                        onClick={configForm.onSubmit}
+                        id='video_settings_save_button'
+                    >Save</APIButton>
+                </div>
+            </form>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <Header as='h4'>File Organization</Header>
             <p>
                 {fetchingReorgCount
@@ -557,15 +526,16 @@ export function VideosSettingsPage() {
                 }
             </p>
             <Button
-                color='orange'
+                role='retry'
+                icon='folder open outline'
                 onClick={() => setBatchModalOpen(true)}
                 id='reorganize_all_channels_button'
                 disabled={fetchingReorgCount || channelsNeedingReorg === 0}
                 loading={fetchingReorgCount}
             >
-                <Icon name='folder open outline'/> Reorganize All Channels
+                Reorganize All Channels
             </Button>
-        </Segment>
+        </Panel>
 
         <CookiesSettingsSection/>
 
@@ -644,14 +614,19 @@ function CookiesSettingsSection() {
         fetchStatus();
     };
 
+    // The two states that mean something take roles; the two that are just "nothing to
+    // report" stay --muted, which is dimmer than --neutral in night and amber and so keeps
+    // the least important states at the bottom.
     const getStatusLabel = () => {
-        if (loading) return <Label color='grey'>Loading...</Label>;
-        if (!status.cookies_exist) return <Label color='grey'>No cookies stored</Label>;
-        if (status.cookies_unlocked) return <Label color='green'>Unlocked</Label>;
-        return <Label color='yellow'>Locked</Label>;
+        if (loading) return <span style={{color: 'var(--muted)'}}>Loading...</span>;
+        if (!status.cookies_exist) return <span style={{color: 'var(--muted)'}}>No cookies stored</span>;
+        if (status.cookies_unlocked) return <span style={{color: 'var(--success)'}}>Unlocked</span>;
+        // Locked is not an error the user made, but cookie-requiring downloads fail until
+        // somebody enters the password after a reboot -- that is attention, not failure.
+        return <span style={{color: 'var(--warning)'}}>Locked</span>;
     };
 
-    return <Segment>
+    return <Panel>
         <HelpHeader
             headerSize='h4'
             headerContent='Encrypted Cookies'
@@ -665,59 +640,64 @@ function CookiesSettingsSection() {
             <strong>Status:</strong> {getStatusLabel()}
         </div>
 
-        <Button.Group>
+        <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
             {!status.cookies_exist && (
                 <Button
-                    color='blue'
+                    role='primary'
+                    icon='upload'
                     onClick={() => setUploadModalOpen(true)}
                     disabled={loading}
                 >
-                    <Icon name='upload'/> Upload Cookies
+                    Upload Cookies
                 </Button>
             )}
 
             {status.cookies_exist && !status.cookies_unlocked && (
                 <Button
-                    color='green'
+                    role='save'
+                    icon='unlock'
                     onClick={() => setUnlockModalOpen(true)}
                     disabled={loading}
                 >
-                    <Icon name='unlock'/> Unlock Cookies
+                    Unlock Cookies
                 </Button>
             )}
 
             {status.cookies_exist && status.cookies_unlocked && (
                 <Button
-                    color='yellow'
+                    role='retry'
+                    icon='lock'
                     onClick={handleLock}
                     loading={submitting}
                     disabled={loading || submitting}
                 >
-                    <Icon name='lock'/> Lock Cookies
+                    Lock Cookies
                 </Button>
             )}
 
             {status.cookies_exist && (
                 <>
                     <Button
-                        color='blue'
+                        role='primary'
+                        icon='refresh'
                         onClick={() => setUploadModalOpen(true)}
                         disabled={loading}
                     >
-                        <Icon name='refresh'/> Replace
+                        Replace
                     </Button>
                     <APIButton
-                        color='red'
+                        role='danger'
+                        icon='trash'
                         onClick={handleDelete}
                         confirmButton='Delete'
                         confirmContent='Are you sure you want to delete the stored cookies? This cannot be undone.'
                         disabled={loading || submitting}
                     >
-                        <Icon name='trash'/> Delete
+                        Delete
                     </APIButton>
                 </>
             )}
-        </Button.Group>
+        </div>
 
         {/* Upload Modal */}
         <Modal
@@ -727,39 +707,41 @@ function CookiesSettingsSection() {
         >
             <Modal.Header>Upload Cookies</Modal.Header>
             <Modal.Content>
-                <Form>
-                    <FormField>
-                        <label>Cookies Content</label>
-                        <TextArea
-                            ref={cookiesContentRef}
-                            placeholder='Paste your cookies.txt content here (Netscape/Mozilla format)'
-                            value={cookiesContent}
-                            onChange={(e) => setCookiesContent(e.target.value)}
-                            rows={10}
-                        />
-                    </FormField>
-                    <FormInput
-                        label='Encryption Password'
-                        type='password'
-                        placeholder='Minimum 8 characters'
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        error={password.length > 0 && password.length < 8 ? 'Password must be at least 8 characters' : null}
+                <form onSubmit={e => e.preventDefault()}>
+                    <Textarea
+                        ref={cookiesContentRef}
+                        label='Cookies Content'
+                        placeholder='Paste your cookies.txt content here (Netscape/Mozilla format)'
+                        value={cookiesContent}
+                        onChange={(e) => setCookiesContent(e.currentTarget.value)}
+                        minRows={10}
                     />
-                    <p style={{color: 'grey', fontSize: '0.9em'}}>
+                    <div style={{marginTop: '1em'}}>
+                        <TextInput
+                            label='Encryption Password'
+                            type='password'
+                            placeholder='Minimum 8 characters'
+                            value={password}
+                            onChange={(e) => setPassword(e.currentTarget.value)}
+                            error={password.length > 0 && password.length < 8
+                                ? 'Password must be at least 8 characters' : null}
+                        />
+                    </div>
+                    <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
                         Remember this password - you'll need it to unlock cookies after each restart.
                     </p>
-                </Form>
+                </form>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={() => setUploadModalOpen(false)}>Cancel</Button>
+                <Button role='cancel' onClick={() => setUploadModalOpen(false)}>Cancel</Button>
                 <Button
-                    color='blue'
+                    role='save'
+                    icon='lock'
                     onClick={handleUpload}
                     loading={submitting}
                     disabled={!cookiesContent || password.length < 8 || submitting}
                 >
-                    <Icon name='lock'/> Encrypt & Save
+                    Encrypt & Save
                 </Button>
             </Modal.Actions>
         </Modal>
@@ -769,7 +751,7 @@ function CookiesSettingsSection() {
             onClose={() => setUnlockModalOpen(false)}
             onSuccess={fetchStatus}
         />
-    </Segment>;
+    </Panel>;
 }
 
 export function VideosStatistics() {
@@ -779,7 +761,7 @@ export function VideosStatistics() {
 
     if (statistics === null) {
         // Request is pending.
-        return <Loader active inline='centered'/>
+        return <Loading/>
     } else if (statistics === undefined) {
         return <ErrorMessage>Unable to fetch Video Statistics</ErrorMessage>
     }
@@ -810,26 +792,23 @@ export function VideosStatistics() {
         {key: 'tagged_channels', label: 'Tagged Channels'},
     ];
 
-    const buildSegment = (title, names, stats) => {
-        return <Segment>
-            <Header textAlign='center' as='h1'>{title}</Header>
-            <Statistic.Group>
+    const buildPanel = (title, names, stats) => {
+        return <Panel>
+            <Header as='h1' style={{textAlign: 'center'}}>{title}</Header>
+            <StatisticGroup>
                 {names.map(
                     ({key, label}) =>
-                        <Statistic key={key} style={{margin: '2em'}}>
-                            <StatisticValue>{stats[key]}</StatisticValue>
-                            <StatisticLabel>{label}</StatisticLabel>
-                        </Statistic>
+                        <Statistic key={key} value={stats[key]} label={label}/>
                 )}
-            </Statistic.Group>
-        </Segment>
+            </StatisticGroup>
+        </Panel>
     }
 
     return <>
-        {buildSegment('Videos', videoNames, videos)}
-        {buildSegment('Video Comments', commentsNames, videos)}
-        {buildSegment('Historical Video', historicalNames, historical)}
-        {buildSegment('Channels', channelNames, channels)}
+        {buildPanel('Videos', videoNames, videos)}
+        {buildPanel('Video Comments', commentsNames, videos)}
+        {buildPanel('Historical Video', historicalNames, historical)}
+        {buildPanel('Channels', channelNames, channels)}
     </>
 }
 
@@ -849,7 +828,6 @@ export function VideosTabLayout() {
 
 export function VideoCard({file}) {
     const {video} = file;
-    const {s} = useContext(ThemeContext);
     const {sort} = useSearchOrder();
     const sortField = sort ? sort.replace(/^-/, '') : null;
 
@@ -863,53 +841,55 @@ export function VideoCard({file}) {
         channel_url = `/videos/channel/${channel.id}/video`;
     }
 
-    let poster = <CardPoster to={video_url} file={file}/>;
+    /*
+     * The duration goes through CardPoster's `overlay` rather than being pinned to a
+     * wrapper around it: the wrapper is the full width of the card, and a vertical video's
+     * poster is only about half that once the height cap applies, so the badge landed well
+     * clear of the frame it belongs to.
+     */
+    const media = <CardPoster to={video_url} file={file}
+                              overlay={<Duration totalSeconds={file.length}/>}/>;
 
     const title = file.title || file.name || video.stem || video.name;
-    let header = <span {...s} className='card-title-ellipsis'>{title}</span>;
+    let titleElm = <Tooltip label={title}>
+        <span className='card-title-ellipsis'>{title}</span>
+    </Tooltip>;
     if (video_url) {
         // Link to Channel-Video page or Video page.
-        header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;
+        titleElm = <Link to={video_url} className="no-link-underscore card-link">{titleElm}</Link>;
     } else {
         // Video is just a lone video file.
-        header = <PreviewLink file={file}>
-            {header}
+        titleElm = <PreviewLink file={file}>
+            {titleElm}
         </PreviewLink>;
     }
 
-    const color = mimetypeColor(file.mimetype);
-    return <Card color={color}>
-        {poster}
-        <Duration totalSeconds={file.length}/>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            <CardDescription>
-                <Container textAlign='left'>
-                    {channel && <Link to={channel_url} className="no-link-underscore card-link">
-                        <b {...s}>{channel.name}</b>
-                    </Link>}
-                    {sortField === 'length'
-                        ? <p {...s}>{secondsToFullDuration(file.length || 0)}</p>
-                        : sortField === 'size'
-                        ? <p {...s}>{humanFileSize(file.size)}</p>
-                        : sortField === 'view_count'
-                        ? <p {...s}>{humanNumber(video.view_count || 0)} views</p>
-                        : sortField === 'viewed'
-                        ? <p {...s}>{isoDatetimeToAgoPopup(file.viewed, false)}</p>
-                        : sortField === 'download_datetime'
-                        ? <p {...s}>{isoDatetimeToAgoPopup(file.download_datetime, false)}</p>
-                        : <p {...s}>{isoDatetimeToAgoPopup(file.published_datetime, false)}</p>
-                    }
-                </Container>
-            </CardDescription>
-        </CardContent>
-    </Card>
+    let detailLine;
+    if (sortField === 'length') {
+        detailLine = secondsToFullDuration(file.length || 0);
+    } else if (sortField === 'size') {
+        detailLine = humanFileSize(file.size);
+    } else if (sortField === 'view_count') {
+        detailLine = `${humanNumber(video.view_count || 0)} views`;
+    } else if (sortField === 'viewed') {
+        detailLine = isoDatetimeToAgoPopup(file.viewed, false);
+    } else if (sortField === 'download_datetime') {
+        detailLine = isoDatetimeToAgoPopup(file.download_datetime, false);
+    } else {
+        detailLine = isoDatetimeToAgoPopup(file.published_datetime, false);
+    }
+
+    const meta = <>
+        {channel && <div>
+            <Link to={channel_url} className="no-link-underscore card-link">
+                <b>{channel.name}</b>
+            </Link>
+        </div>}
+        <div>{detailLine}</div>
+    </>;
+
+    return <Card media={media} title={titleElm} meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}/>
 }
 
 export function VideoRowCells({file}) {
@@ -924,10 +904,7 @@ export function VideoRowCells({file}) {
     let poster;
     if (poster_url) {
         poster = <CardLink to={video_url}>
-            <Image wrapped
-                   src={poster_url}
-                   width='50px'
-            />
+            <img alt='' src={poster_url} style={{width: '50px', height: 'auto'}}/>
         </CardLink>
     } else {
         poster = <FileIcon file={file} size='large'/>;
@@ -946,17 +923,17 @@ export function VideoRowCells({file}) {
 
     // Fragment for SelectableRow
     return <React.Fragment>
-        <TableCell>
-            <center>
+        <Table.Cell>
+            <div style={{textAlign: 'center'}}>
                 {poster}
-            </center>
-        </TableCell>
-        <TableCell>
+            </div>
+        </Table.Cell>
+        <Table.Cell>
             <CardLink to={video_url}>
                 <FileRowTagIcon file={file}/>
                 {textEllipsis(file.title || video.stem || video.video_path)}
             </CardLink>
-        </TableCell>
-        <TableCell>{dataCell}</TableCell>
+        </Table.Cell>
+        <Table.Cell>{dataCell}</Table.Cell>
     </React.Fragment>
 }

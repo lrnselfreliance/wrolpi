@@ -1,19 +1,16 @@
 import {APIButton} from "../Common";
-import {Button, Header, Icon, Loader, Modal, Popup, Table} from "../Theme";
-import React, {useContext, useEffect, useState} from "react";
-import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {TableRowPlaceholder} from "../Placeholder";
+import {Button, Header, Icon, IconButton, Loader, Loading, Modal, Placeholder, Table, Tooltip} from "../ui";
+import React, {useEffect, useState} from "react";
 import {getConfigText, getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
-import {ThemeContext} from "../../contexts/contexts";
 
 function WarningIcon({ok}) {
     // null is empty, true is valid, false is invalid.
-    const trigger = <Icon
-        color={ok === true ? 'violet' : ok === false ? 'red' : 'grey'}
-        name={ok === true ? 'check' : ok === false ? 'close' : 'check'}
-    />;
     const content = ok === true ? 'Valid and can be imported.' : ok === false ? 'Invalid, can be overwritten.' : 'Empty config, can be overwritten.';
-    return <Popup trigger={trigger} content={content}/>
+    return <Tooltip label={content}>
+        <span style={{color: ok === true ? 'var(--success)' : ok === false ? 'var(--danger)' : 'var(--neutral)'}}>
+            <Icon name={ok === false ? 'close' : 'check'} label={content}/>
+        </span>
+    </Tooltip>
 }
 
 const TYPE_LABELS = {
@@ -51,22 +48,23 @@ function groupItemsByType(items) {
     }));
 }
 
-function PreviewItemTable({items, negative, inverted}) {
+function PreviewItemTable({items, negative}) {
     if (!items.length) return null;
     const columns = TYPE_COLUMNS[items[0].type] || [{key: 'type', header: 'Item'}];
-    return <Table compact basic='very' size='small' inverted={!!inverted} style={{marginBottom: '0.5em'}}>
-        <TableHeader>
-            <TableRow>
-                {columns.map(col => <TableHeaderCell key={col.key}>{col.header}</TableHeaderCell>)}
-            </TableRow>
-        </TableHeader>
-        <TableBody>
-            {items.map((item, i) => <TableRow key={i} negative={negative}>
+    return <Table style={{marginBottom: '0.5em'}}>
+        <Table.Header>
+            <Table.Row>
+                {columns.map(col => <Table.HeaderCell key={col.key}>{col.header}</Table.HeaderCell>)}
+            </Table.Row>
+        </Table.Header>
+        <Table.Body>
+            {/* Items being removed take the failed treatment: dashed, in every theme. */}
+            {items.map((item, i) => <Table.Row key={i} failed={negative}>
                 {columns.map(col =>
-                    <TableCell key={col.key}>{item[col.key] || ''}</TableCell>
+                    <Table.Cell key={col.key}>{item[col.key] || ''}</Table.Cell>
                 )}
-            </TableRow>)}
-        </TableBody>
+            </Table.Row>)}
+        </Table.Body>
     </Table>;
 }
 
@@ -82,41 +80,44 @@ function BackupDateRow({date, previews, previewsLoaded, onSelect}) {
     const mergeHasChanges = hasChanges(mergePreview);
     const overwriteHasChanges = hasChanges(overwritePreview);
 
+    const noChanges = <span style={{color: 'var(--muted)', fontStyle: 'italic'}}>No changes</span>;
+    const previewFailed = <Tooltip label='Failed to load preview'>
+        <span style={{color: 'var(--danger)'}}><Icon name='warning sign' label='Failed to load preview'/></span>
+    </Tooltip>;
+
     let mergeCell;
     if (!mergeLoaded) {
-        mergeCell = <Loader size='mini' active inline/>;
+        mergeCell = <Loader size='xs'/>;
     } else if (mergePreview === null) {
-        mergeCell = <Popup trigger={<Icon name='warning sign' color='red'/>} content='Failed to load preview'/>;
+        mergeCell = previewFailed;
     } else if (mergeHasChanges) {
-        mergeCell = <Button size='mini' color='green' onClick={() => onSelect(date, 'merge', mergePreview)}>
-            <Icon name='plus'/> Merge
-        </Button>;
+        mergeCell = <Button size='xs' role='save' icon='plus'
+                            onClick={() => onSelect(date, 'merge', mergePreview)}>Merge</Button>;
     } else {
-        mergeCell = <span style={{color: 'grey', fontStyle: 'italic'}}>No changes</span>;
+        mergeCell = noChanges;
     }
 
     let overwriteCell;
     if (!overwriteLoaded) {
-        overwriteCell = <Loader size='mini' active inline/>;
+        overwriteCell = <Loader size='xs'/>;
     } else if (overwritePreview === null) {
-        overwriteCell = <Popup trigger={<Icon name='warning sign' color='red'/>} content='Failed to load preview'/>;
+        overwriteCell = previewFailed;
     } else if (overwriteHasChanges) {
-        overwriteCell = <Button size='mini' color='orange' onClick={() => onSelect(date, 'overwrite', overwritePreview)}>
-            <Icon name='refresh'/> Overwrite
-        </Button>;
+        // Overwrite discards whatever is in the database, so it warns rather than saves.
+        overwriteCell = <Button size='xs' role='retry' icon='refresh'
+                                onClick={() => onSelect(date, 'overwrite', overwritePreview)}>Overwrite</Button>;
     } else {
-        overwriteCell = <span style={{color: 'grey', fontStyle: 'italic'}}>No changes</span>;
+        overwriteCell = noChanges;
     }
 
-    return <TableRow>
-        <TableCell>{formatDate(date)}</TableCell>
-        <TableCell>{mergeCell}</TableCell>
-        <TableCell>{overwriteCell}</TableCell>
-    </TableRow>;
+    return <Table.Row>
+        <Table.Cell>{formatDate(date)}</Table.Cell>
+        <Table.Cell>{mergeCell}</Table.Cell>
+        <Table.Cell>{overwriteCell}</Table.Cell>
+    </Table.Row>;
 }
 
 function BackupsModal({open, onClose, fileName, fetchConfigs}) {
-    const {inverted} = useContext(ThemeContext);
     const [dates, setDates] = useState([]);
     const [datesLoading, setDatesLoading] = useState(true);
     const [previews, setPreviews] = useState({});
@@ -202,52 +203,45 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
             </Modal.Header>
             <Modal.Content>
                 {applying
-                    ? <div style={{textAlign: 'center', padding: '2em'}}>
-                        <Loader active inline='centered'>Applying backup...</Loader>
-                    </div>
+                    ? <Loading>Applying backup...</Loading>
                     : <>
                         {preview.add.length > 0 && <>
-                            <Header as='h4' color='green'>
-                                <Icon name='plus'/> {preview.add.length} item{preview.add.length !== 1 ? 's' : ''} to add
+                            <Header as='h4' icon='plus' style={{color: 'var(--green)'}}>
+                                {preview.add.length} item{preview.add.length !== 1 ? 's' : ''} to add
                             </Header>
                             <div style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '1em'}}>
                                 {groupItemsByType(preview.add).map(group =>
                                     <React.Fragment key={group.type}>
-                                        <Header as='h5' inverted={!!inverted}
-                                                style={{marginBottom: '0.3em'}}>{group.label}</Header>
-                                        <PreviewItemTable items={group.items} inverted={inverted}/>
+                                        <Header as='h5' style={{marginBottom: '0.3em'}}>{group.label}</Header>
+                                        <PreviewItemTable items={group.items}/>
                                     </React.Fragment>
                                 )}
                             </div>
                         </>}
 
                         {preview.remove.length > 0 && <>
-                            <Header as='h4' color='red'>
-                                <Icon name='minus'/> {preview.remove.length} item{preview.remove.length !== 1 ? 's' : ''} to
-                                remove
+                            <Header as='h4' icon='minus' style={{color: 'var(--red)'}}>
+                                {preview.remove.length} item{preview.remove.length !== 1 ? 's' : ''} to remove
                             </Header>
                             <div style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '1em'}}>
                                 {groupItemsByType(preview.remove).map(group =>
                                     <React.Fragment key={group.type}>
-                                        <Header as='h5' inverted={!!inverted}
-                                                style={{marginBottom: '0.3em'}}>{group.label}</Header>
-                                        <PreviewItemTable items={group.items} negative inverted={inverted}/>
+                                        <Header as='h5' style={{marginBottom: '0.3em'}}>{group.label}</Header>
+                                        <PreviewItemTable items={group.items} negative/>
                                     </React.Fragment>
                                 )}
                             </div>
                         </>}
 
-                        <p style={{color: 'grey'}}>{preview.unchanged} unchanged
+                        <p style={{color: 'var(--muted)'}}>{preview.unchanged} unchanged
                             item{preview.unchanged !== 1 ? 's' : ''}</p>
                     </>
                 }
             </Modal.Content>
             <Modal.Actions>
                 {!applying && <>
-                    <Button onClick={handleBack}>Back</Button>
-                    <Button color='green' onClick={handleApply}>
-                        <Icon name='check'/> Apply
-                    </Button>
+                    <Button role='cancel' onClick={handleBack}>Back</Button>
+                    <Button role='save' icon='check' onClick={handleApply}>Apply</Button>
                 </>}
             </Modal.Actions>
         </Modal>;
@@ -258,21 +252,19 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
         <Modal.Header>Restore Backup: {fileName}</Modal.Header>
         <Modal.Content>
             {datesLoading
-                ? <div style={{textAlign: 'center', padding: '2em'}}>
-                    <Loader active inline='centered'>Loading backups...</Loader>
-                </div>
+                ? <Loading>Loading backups...</Loading>
                 : dates.length === 0
                     ? <p>No backups available for this config.</p>
                     : <div style={{maxHeight: '400px', overflowY: 'auto'}}>
-                        <Table compact unstackable>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHeaderCell>Date</TableHeaderCell>
-                                    <TableHeaderCell>Merge</TableHeaderCell>
-                                    <TableHeaderCell>Overwrite</TableHeaderCell>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                        <Table>
+                            <Table.Header>
+                                <Table.Row>
+                                    <Table.HeaderCell>Date</Table.HeaderCell>
+                                    <Table.HeaderCell>Merge</Table.HeaderCell>
+                                    <Table.HeaderCell>Overwrite</Table.HeaderCell>
+                                </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
                                 {dates.map(date =>
                                     <BackupDateRow
                                         key={date}
@@ -282,13 +274,13 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
                                         onSelect={handleSelect}
                                     />
                                 )}
-                            </TableBody>
+                            </Table.Body>
                         </Table>
                     </div>
             }
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={handleClose}>Close</Button>
+            <Button role='cancel' onClick={handleClose}>Close</Button>
         </Modal.Actions>
     </Modal>;
 }
@@ -318,14 +310,14 @@ function ConfigContentModal({open, onClose, fileName}) {
         <Modal.Header>{fileName}</Modal.Header>
         <Modal.Content scrolling>
             {loading
-                ? <Loader active inline='centered'/>
+                ? <Loading/>
                 : content
                     ? <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{content}</pre>
                     : <p>Failed to load config contents.</p>
             }
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Close</Button>
+            <Button role='cancel' onClick={onClose}>Close</Button>
         </Modal.Actions>
     </Modal>;
 }
@@ -369,20 +361,21 @@ function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
         />;
     }
 
-    return <TableRow>
-        <TableCell><span style={{cursor: 'pointer'}} onClick={() => setContentModalOpen(true)}>{file_name}</span></TableCell>
-        <TableCell><WarningIcon ok={successful_import}/></TableCell>
-        <TableCell><WarningIcon ok={valid}/></TableCell>
-        <TableCell className="hide-on-mobile">
+    return <Table.Row>
+        <Table.Cell>
+            <span style={{cursor: 'pointer'}} onClick={() => setContentModalOpen(true)}>{file_name}</span>
+        </Table.Cell>
+        <Table.Cell><WarningIcon ok={successful_import}/></Table.Cell>
+        <Table.Cell><WarningIcon ok={valid}/></Table.Cell>
+        <Table.Cell className="hide-on-mobile">
             {has_backup_import
-                ? <Button icon size='mini' onClick={() => setBackupsModalOpen(true)}>
-                    <Icon name='undo'/>
-                </Button>
+                ? <IconButton icon='undo' label='Restore a backup'
+                              onClick={() => setBackupsModalOpen(true)}/>
                 : null
             }
-        </TableCell>
-        <TableCell>{importButton}</TableCell>
-        <TableCell>{saveButton}</TableCell>
+        </Table.Cell>
+        <Table.Cell>{importButton}</Table.Cell>
+        <Table.Cell>{saveButton}</Table.Cell>
         {backupsModalOpen && <BackupsModal
             open={backupsModalOpen}
             onClose={() => setBackupsModalOpen(false)}
@@ -394,24 +387,24 @@ function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
             onClose={() => setContentModalOpen(false)}
             fileName={file_name}
         />}
-    </TableRow>
+    </Table.Row>
 }
 
 export function ConfigsTable({configs, loading, importConfig, saveConfig, fetchConfigs}) {
-    let body = <TableRow>
-        <TableCell colSpan={6}><TableRowPlaceholder/></TableCell>
-    </TableRow>
+    let body = <Table.Row>
+        <Table.Cell colSpan={6}><Placeholder lines={2}/></Table.Cell>
+    </Table.Row>
 
     if (loading) {
         // Configs are being fetched again.
     } else if (configs === undefined) {
-        body = <TableRow>
-            <TableCell colSpan={6}>Failed to fetch configs</TableCell>
-        </TableRow>;
+        body = <Table.Row>
+            <Table.Cell colSpan={6}>Failed to fetch configs</Table.Cell>
+        </Table.Row>;
     } else if (configs && Object.keys(configs).length === 0) {
-        body = <TableRow>
-            <TableCell colSpan={6}>No configs exist. Try tagging some files.</TableCell>
-        </TableRow>;
+        body = <Table.Row>
+            <Table.Cell colSpan={6}>No configs exist. Try tagging some files.</Table.Cell>
+        </Table.Row>;
     } else if (configs) {
         body = Object.entries(configs).map(([key, value]) =>
             <ConfigTableRow
@@ -424,20 +417,20 @@ export function ConfigsTable({configs, loading, importConfig, saveConfig, fetchC
         );
     }
 
-    return <Table unstackable striped compact>
-        <TableHeader>
-            <TableRow>
-                <TableHeaderCell width={8}>File Name</TableHeaderCell>
-                <TableHeaderCell width={1}>Imported</TableHeaderCell>
-                <TableHeaderCell width={1}>Valid</TableHeaderCell>
-                <TableHeaderCell width={3} className="hide-on-mobile">Restore</TableHeaderCell>
-                <TableHeaderCell width={1}>Import</TableHeaderCell>
-                <TableHeaderCell width={1}>Save</TableHeaderCell>
-            </TableRow>
-        </TableHeader>
+    return <Table>
+        <Table.Header>
+            <Table.Row>
+                <Table.HeaderCell>File Name</Table.HeaderCell>
+                <Table.HeaderCell>Imported</Table.HeaderCell>
+                <Table.HeaderCell>Valid</Table.HeaderCell>
+                <Table.HeaderCell className="hide-on-mobile">Restore</Table.HeaderCell>
+                <Table.HeaderCell>Import</Table.HeaderCell>
+                <Table.HeaderCell>Save</Table.HeaderCell>
+            </Table.Row>
+        </Table.Header>
 
-        <TableBody>
+        <Table.Body>
             {body}
-        </TableBody>
+        </Table.Body>
     </Table>
 }

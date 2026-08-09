@@ -28,6 +28,54 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>WROLPi: Create your own off-grid library</title>
+    <script>
+        /*
+          Stamp the saved theme, and the media filter it resolves to, on <html> before first
+          paint.  ThemeProvider sets the same attributes once React mounts, but the bundle can
+          take a while to arrive over a hotspot — without this the page would paint in the wrong
+          theme first, and in night mode a flash of unfiltered thumbnails would cost the user the
+          dark adaptation the theme exists to protect.
+
+          Keep the storage keys, theme names, and filter defaults in sync with
+          src/themes/names.ts.
+        */
+        (function () {
+            var theme = 'light';
+            var saved = null;
+            // Only the storage read can throw (blocked cookies/storage).  Keep the try
+            // around just that, so a device that prefers dark still gets dark.
+            try {
+                saved = localStorage.getItem('color-scheme');
+            } catch (e) {
+                saved = null;
+            }
+            if (saved === 'light' || saved === 'dark' || saved === 'night' || saved === 'amber') {
+                theme = saved;
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                // `system`, unset, or written by an older version.
+                theme = 'dark';
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+
+            // Which filter each theme uses, and whether it applies unless the user says otherwise.
+            var filters = {night: 'night-red', amber: 'amber-mono'};
+            var defaults = {night: true, amber: false};
+            if (filters[theme]) {
+                var enabled = defaults[theme];
+                try {
+                    var overrides = JSON.parse(localStorage.getItem('media-filter') || '{}');
+                    if (typeof overrides[theme] === 'boolean') {
+                        enabled = overrides[theme];
+                    }
+                } catch (e) {
+                    // Blocked storage or malformed JSON: fall back to the theme's default.
+                }
+                if (enabled) {
+                    document.documentElement.setAttribute('data-media-filter', filters[theme]);
+                }
+            }
+        })();
+    </script>
 </head>
 <body>
 <noscript>You need to enable JavaScript to run this app.</noscript>

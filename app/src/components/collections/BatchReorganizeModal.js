@@ -1,8 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Link} from 'react-router';
-import {Grid, Icon, Label, Progress, Button as SButton} from 'semantic-ui-react';
-import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
-import {Button, Modal, Table} from '../Theme';
+import {Button, Icon, Label, Loading, Message, Modal, Progress, Stack, Table} from '../ui';
 import {APIButton} from '../Common';
 import {
     executeBatchReorganization,
@@ -200,72 +198,63 @@ export function BatchReorganizeModal({
         if (!preview) return null;
 
         return (
-            <Grid columns={1}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <p>
-                            <strong>{preview.total_collections}</strong> {kindLabelPlural.toLowerCase()} need reorganization,
-                            with <strong>{preview.total_files_needing_move}</strong> total files to move.
-                        </p>
-                        <p>
-                            <strong>New format:</strong> <Label>{preview.new_file_format}</Label>
-                        </p>
-                    </Grid.Column>
-                </Grid.Row>
+            <Stack>
+                <div>
+                    <p>
+                        <strong>{preview.total_collections}</strong> {kindLabelPlural.toLowerCase()} need reorganization,
+                        with <strong>{preview.total_files_needing_move}</strong> total files to move.
+                    </p>
+                    <p>
+                        <strong>New format:</strong> <Label>{preview.new_file_format}</Label>
+                    </p>
+                </div>
 
                 {preview.collections && preview.collections.length > 0 && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <strong>{kindLabelPlural} to reorganize:</strong>
-                            <Table basic='very' compact size='small'>
-                                <Table.Header>
-                                    <Table.Row>
-                                        <Table.HeaderCell>{kindLabel}</Table.HeaderCell>
-                                        <Table.HeaderCell>Files to Move</Table.HeaderCell>
-                                        <Table.HeaderCell>Sample</Table.HeaderCell>
+                    <div>
+                        <strong>{kindLabelPlural} to reorganize:</strong>
+                        <Table>
+                            <Table.Header>
+                                <Table.Row>
+                                    <Table.HeaderCell>{kindLabel}</Table.HeaderCell>
+                                    <Table.HeaderCell>Files to Move</Table.HeaderCell>
+                                    <Table.HeaderCell>Sample</Table.HeaderCell>
+                                </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                                {preview.collections.slice(0, 10).map((collection, idx) => (
+                                    <Table.Row key={idx}>
+                                        <Table.Cell>{collection.collection_name}</Table.Cell>
+                                        <Table.Cell>
+                                            {collection.total_files}
+                                        </Table.Cell>
+                                        <Table.Cell style={{wordBreak: 'break-all', fontSize: '0.9em'}}>
+                                            {collection.sample_move ? (
+                                                <>
+                                                    <span style={{color: 'var(--muted)'}}>{collection.sample_move.old_path}</span>
+                                                    <br/>
+                                                    <Icon name='arrow right' size='small'/>
+                                                    <span>{collection.sample_move.new_path}</span>
+                                                </>
+                                            ) : '-'}
+                                        </Table.Cell>
                                     </Table.Row>
-                                </Table.Header>
-                                <Table.Body>
-                                    {preview.collections.slice(0, 10).map((collection, idx) => (
-                                        <Table.Row key={idx}>
-                                            <Table.Cell>{collection.collection_name}</Table.Cell>
-                                            <Table.Cell>
-                                                {collection.total_files}
-                                            </Table.Cell>
-                                            <Table.Cell style={{wordBreak: 'break-all', fontSize: '0.9em'}}>
-                                                {collection.sample_move ? (
-                                                    <>
-                                                        <span style={{color: '#888'}}>{collection.sample_move.old_path}</span>
-                                                        <br/>
-                                                        <Icon name='arrow right' size='small'/>
-                                                        <span>{collection.sample_move.new_path}</span>
-                                                    </>
-                                                ) : '-'}
-                                            </Table.Cell>
-                                        </Table.Row>
-                                    ))}
-                                </Table.Body>
-                            </Table>
-                            {preview.collections.length > 10 && (
-                                <p style={{fontStyle: 'italic'}}>
-                                    ...and {preview.collections.length - 10} more {kindLabelPlural.toLowerCase()}
-                                </p>
-                            )}
-                        </Grid.Column>
-                    </Grid.Row>
+                                ))}
+                            </Table.Body>
+                        </Table>
+                        {preview.collections.length > 10 && (
+                            <p style={{fontStyle: 'italic'}}>
+                                ...and {preview.collections.length - 10} more {kindLabelPlural.toLowerCase()}
+                            </p>
+                        )}
+                    </div>
                 )}
 
                 {preview.total_collections === 0 && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message info>
-                                <Message.Header>No {kindLabelPlural} Need Reorganization</Message.Header>
-                                <p>All {kindLabelPlural.toLowerCase()} are already organized according to the current format.</p>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='info' title={`No ${kindLabelPlural} Need Reorganization`}>
+                        <p>All {kindLabelPlural.toLowerCase()} are already organized according to the current format.</p>
+                    </Message>
                 )}
-            </Grid>
+            </Stack>
         );
     };
 
@@ -273,83 +262,60 @@ export function BatchReorganizeModal({
         if (!status) return null;
 
         const currentCollection = status.current_collection;
+        const overallColor = status.status === 'complete' ? 'green' : status.status === 'failed' ? 'red' : 'blue';
 
         return (
-            <Grid columns={1}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <p>
-                            <strong>Overall Status:</strong> {status.status}
-                        </p>
-                        <strong>Overall Progress:</strong>
-                        <Progress
-                            percent={status.overall_percent || 0}
-                            progress
-                            indicating={status.status !== 'complete' && status.status !== 'failed'}
-                            success={status.status === 'complete'}
-                            error={status.status === 'failed'}
-                        />
-                        <p>
-                            {status.completed_collections || 0} of {status.total_collections || 0} {kindLabelPlural.toLowerCase()} completed
-                        </p>
-                    </Grid.Column>
-                </Grid.Row>
+            <Stack>
+                <div>
+                    <p>
+                        <strong>Overall Status:</strong> {status.status}
+                    </p>
+                    <strong>Overall Progress:</strong>
+                    <Progress percent={status.overall_percent || 0} color={overallColor}/>
+                    <p>
+                        {status.completed_collections || 0} of {status.total_collections || 0} {kindLabelPlural.toLowerCase()} completed
+                    </p>
+                </div>
 
                 {currentCollection && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <strong>Currently Processing:</strong> {currentCollection.name}
-                            <Progress
-                                percent={currentCollection.percent || 0}
-                                progress
-                                indicating
-                                size='small'
-                                color='blue'
-                            />
-                            <p style={{fontSize: '0.9em'}}>
-                                {currentCollection.completed || 0} of {currentCollection.total || 0} files
-                            </p>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <div>
+                        <strong>Currently Processing:</strong> {currentCollection.name}
+                        <Progress percent={currentCollection.percent || 0} color='blue'/>
+                        <p style={{fontSize: '0.9em'}}>
+                            {currentCollection.completed || 0} of {currentCollection.total || 0} files
+                        </p>
+                    </div>
                 )}
 
                 {status.status === 'complete' && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message success>
-                                <Message.Header>Batch Reorganization Complete</Message.Header>
-                                <p>All {kindLabelPlural.toLowerCase()} have been reorganized successfully.</p>
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='success' title='Batch Reorganization Complete'>
+                        <p>All {kindLabelPlural.toLowerCase()} have been reorganized successfully.</p>
+                    </Message>
                 )}
 
                 {status.status === 'failed' && status.failed_collection && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Message negative>
-                                <Message.Header>Reorganization Failed</Message.Header>
-                                <p>
-                                    Failed on {kindLabel.toLowerCase()}: <strong>{status.failed_collection.name}</strong>
-                                </p>
-                                <SButton
-                                    as={Link}
-                                    to={kind === 'channel'
-                                        ? `/videos/channel/${status.failed_collection.channel_id || status.failed_collection.id}/edit`
-                                        : `/archives/domain/${status.failed_collection.id}/edit`
-                                    }
-                                    size='small'
-                                >
-                                    <Icon name='eye'/> View {kindLabel}
-                                </SButton>
-                                {status.error && (
-                                    <p style={{whiteSpace: 'pre-wrap'}}>Error: {status.error}</p>
-                                )}
-                            </Message>
-                        </Grid.Column>
-                    </Grid.Row>
+                    <Message kind='error' title='Reorganization Failed'>
+                        <p>
+                            Failed on {kindLabel.toLowerCase()}: <strong>{status.failed_collection.name}</strong>
+                        </p>
+                        <Button
+                            component={Link}
+                            to={kind === 'channel'
+                                ? `/videos/channel/${status.failed_collection.channel_id || status.failed_collection.id}/edit`
+                                : `/archives/domain/${status.failed_collection.id}/edit`
+                            }
+                            role='cancel'
+                            icon='eye'
+                            size='sm'
+                        >
+                            View {kindLabel}
+                        </Button>
+                        {status.error && (
+                            <p style={{whiteSpace: 'pre-wrap'}}>Error: {status.error}</p>
+                        )}
+                    </Message>
                 )}
-            </Grid>
+            </Stack>
         );
     };
 
@@ -361,7 +327,7 @@ export function BatchReorganizeModal({
             open={open}
             onClose={handleClose}
             closeIcon={true}
-            closeOnDimmerClick={!isInProgress}
+            closeOnClickOutside={!isInProgress}
             closeOnEscape={!isInProgress}
             size='large'
         >
@@ -369,19 +335,10 @@ export function BatchReorganizeModal({
                 Reorganize All {kindLabelPlural}
             </Modal.Header>
             <Modal.Content scrolling>
-                {loading && (
-                    <Message icon>
-                        <Icon name='circle notched' loading/>
-                        <Message.Content>
-                            <Message.Header>Loading Preview</Message.Header>
-                            Analyzing {kindLabelPlural.toLowerCase()}...
-                        </Message.Content>
-                    </Message>
-                )}
+                {loading && <Loading>Analyzing {kindLabelPlural.toLowerCase()}...</Loading>}
 
                 {error && !status?.failed_collection && (
-                    <Message negative>
-                        <Message.Header>Error</Message.Header>
+                    <Message kind='error' title='Error'>
                         <p>{error}</p>
                     </Message>
                 )}
@@ -390,12 +347,12 @@ export function BatchReorganizeModal({
                 {batchJobId && renderProgress()}
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={handleClose}>
+                <Button role='cancel' onClick={handleClose}>
                     {status?.status === 'complete' ? 'Close' : isInProgress ? 'Hide' : 'Cancel'}
                 </Button>
                 {canReorganize && (
                     <APIButton
-                        color='violet'
+                        role='primary'
                         onClick={handleReorganize}
                         obeyWROLMode={true}
                     >

@@ -9,10 +9,6 @@ jest.mock('../../api', () => ({
     deleteFileGroups: jest.fn(),
 }));
 
-// Mock react-semantic-toasts-2
-jest.mock('react-semantic-toasts-2', () => ({
-    toast: jest.fn(),
-}));
 
 describe('ConflictResolutionModal', () => {
     const mockConflicts = [
@@ -340,10 +336,9 @@ describe('ConflictResolutionModal', () => {
 
         // Confirming should re-call deleteFileGroups with force=true.
         api.deleteFileGroups.mockResolvedValueOnce({});
-        // The TaggedDeleteConfirmModal's Delete button has the trash icon.
-        const confirmButton = screen.getAllByRole('button')
-            .find(b => b.classList.contains('red') && b.textContent.includes('Delete')
-                && b.querySelector('.trash.icon'));
+        // The TaggedDeleteConfirmModal (a Confirm) names its destructive action "Delete",
+        // distinct from the "Delete this file" icon buttons queried above.
+        const confirmButton = screen.getByRole('button', {name: 'Delete'});
         fireEvent.click(confirmButton);
 
         await waitFor(() => {

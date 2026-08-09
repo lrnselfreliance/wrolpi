@@ -1,6 +1,8 @@
 import React, {useMemo, useState} from "react";
-import {Dropdown, Input, Select} from "semantic-ui-react";
-import {Button, Confirm, Header, Icon, Loader, Menu, Modal, Segment} from "../Theme";
+import {
+    Button, Confirm, Header, IconButton, Loading, Modal, Panel, SearchBox, Select, TabBar, tabClassName, Text,
+    TextInput,
+} from "../ui";
 import {PageContainer, useTitle} from "../Common";
 import {collectLocations, useCatalog, useInventories} from "../../hooks/customHooks";
 import {filterItems, InventoryTable} from "./InventoryTable";
@@ -13,18 +15,17 @@ import {defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey} from "./s
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
 import {InventoryImportModal} from "./InventoryImportModal";
-import {Media, ThemeContext} from "../../contexts/contexts";
+import {Media} from "../../contexts/contexts";
 
 const INVENTORY_TYPES = [
-    {key: 'food', value: 'food', text: 'Food Storage'},
-    {key: 'fuel', value: 'fuel', text: 'Fuel'},
-    {key: 'tool', value: 'tool', text: 'Tools'},
+    {value: 'food', label: 'Food Storage'},
+    {value: 'fuel', label: 'Fuel'},
+    {value: 'tool', label: 'Tools'},
 ];
 
 function NewInventoryModal({open, onClose, onCreate}) {
     const [name, setName] = useState('');
     const [type, setType] = useState('food');
-    const {t} = React.useContext(ThemeContext);
 
     const create = async () => {
         const inventory = await onCreate(name, type);
@@ -35,22 +36,22 @@ function NewInventoryModal({open, onClose, onCreate}) {
         }
     };
 
-    return <Modal open={open} onClose={onClose} closeIcon>
+    return <Modal size='small' open={open} onClose={onClose} closeIcon>
         <Modal.Header>New Inventory</Modal.Header>
         <Modal.Content>
-            <Input fluid autoFocus label='Name' value={name} onChange={e => setName(e.target.value)}
-                   placeholder='Food Storage' style={{marginBottom: '1em'}}/>
+            <TextInput autoFocus label='Name' value={name} onChange={e => setName(e.currentTarget.value)}
+                       placeholder='Food Storage' mb='1em'/>
             <div>
                 Type:{' '}
-                <Select options={INVENTORY_TYPES} value={type} onChange={(e, data) => setType(data.value)}/>
-                <p {...t} style={{...t.style, fontSize: '0.85em', opacity: 0.7, marginTop: '0.5em'}}>
+                <Select data={INVENTORY_TYPES} value={type} onChange={setType}/>
+                <Text size='sm' c='dimmed' mt='0.5em'>
                     The type seeds a starting set of fields — you can customize them afterward.
-                </p>
+                </Text>
             </div>
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button primary onClick={create} disabled={!name.trim()}>Create</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
+            <Button role='primary' onClick={create} disabled={!name.trim()}>Create</Button>
         </Modal.Actions>
     </Modal>;
 }
@@ -75,8 +76,6 @@ export function InventoryRoute() {
     const [exportSumKey, setExportSumKey] = useState(null);
     // Free-text filter applied to the active inventory's items across every column.
     const [search, setSearch] = useState('');
-
-    const {t} = React.useContext(ThemeContext);
 
     // Default to the first inventory once loaded.
     React.useEffect(() => {
@@ -134,62 +133,62 @@ export function InventoryRoute() {
     };
 
     if (inventories === null) {
-        return <PageContainer><Loader active inline='centered'/></PageContainer>;
+        return <PageContainer><Loading/></PageContainer>;
     }
 
-    const inventoryOptions = inventories.map(i => ({key: i.slug, value: i.slug, text: i.name}));
+    const inventoryOptions = inventories.map(i => ({value: i.slug, label: i.name}));
+
+    const tabs = [
+        {key: 'items', label: 'Items'},
+        {key: 'summary', label: 'Summary'},
+        ...(caloriesKey ? [{key: 'ration', label: 'Ration'}] : []),
+        {key: 'export', label: 'Export'},
+    ];
 
     return <PageContainer>
         <Header as='h1'>Inventory</Header>
 
-        <Segment>
+        <Panel>
             <div style={{display: 'flex', gap: '0.5em', alignItems: 'center', flexWrap: 'wrap'}}>
-                <Dropdown
-                    selection
+                <Select
                     placeholder='Select an inventory'
-                    options={inventoryOptions}
+                    data={inventoryOptions}
                     value={slug || ''}
-                    onChange={(e, data) => setSlug(data.value)}
+                    onChange={value => setSlug(value)}
                     style={{minWidth: '14em'}}
                 />
-                <Button primary icon onClick={() => setNewOpen(true)} aria-label='New inventory'>
-                    <Icon name='plus'/>
-                </Button>
-                <Button icon onClick={() => setCatalogOpen(true)} aria-label='Food catalog'>
-                    <Icon name='book'/> Catalog
-                </Button>
+                <IconButton role='primary' icon='plus' onClick={() => setNewOpen(true)} label='New inventory'/>
+                <Button icon='book' onClick={() => setCatalogOpen(true)}>Catalog</Button>
                 {current && <>
-                    <Button icon onClick={() => {
+                    <IconButton icon='edit' onClick={() => {
                         setRenameValue(current.name);
                         setRenaming(true);
-                    }} aria-label='Rename inventory'><Icon name='edit'/></Button>
-                    <Button icon onClick={() => setEditFieldsOpen(true)} aria-label='Customize fields'>
-                        <Icon name='columns'/> Fields
-                    </Button>
-                    <Button icon onClick={() => setImportOpen(true)} aria-label='Import or restore inventory'>
-                        <Icon name='history'/> Restore
-                    </Button>
-                    <Button color='red' icon onClick={() => setConfirmDelete(true)} aria-label='Delete inventory'>
-                        <Icon name='trash'/>
-                    </Button>
+                    }} label='Rename inventory'/>
+                    <Button icon='columns' onClick={() => setEditFieldsOpen(true)}>Fields</Button>
+                    <Button icon='history' onClick={() => setImportOpen(true)}>Restore</Button>
+                    <IconButton role='danger' icon='trash' onClick={() => setConfirmDelete(true)}
+                                label='Delete inventory'/>
                 </>}
             </div>
-        </Segment>
+        </Panel>
 
         {current ? <>
-            <Menu pointing secondary>
-                <Menu.Item name='Items' active={tab === 'items'} onClick={() => setTab('items')}/>
-                <Menu.Item name='Summary' active={tab === 'summary'} onClick={() => setTab('summary')}/>
-                {caloriesKey &&
-                    <Menu.Item name='Ration' active={tab === 'ration'} onClick={() => setTab('ration')}/>}
-                <Menu.Item name='Export' active={tab === 'export'} onClick={() => setTab('export')}/>
-            </Menu>
+            <TabBar>
+                {tabs.map(({key, label}) => <button
+                    key={key}
+                    type='button'
+                    className={tabClassName(tab === key)}
+                    onClick={() => setTab(key)}
+                >{label}</button>)}
+            </TabBar>
 
             {tab === 'items' && <>
-                {/* The search filter lives here so it clearly applies to the Items tab only, not Summary/Ration/Export. */}
-                <Input fluid icon='search' iconPosition='left' placeholder='Search items…' value={search}
-                       aria-label='Search items' clearable style={{marginBottom: '0.75em'}}
-                       onChange={(e, data) => setSearch(data.value)}/>
+                {/* The search filter lives here so it clearly applies to the Items tab only, not Summary/Ration/Export.
+                    No margin of its own: it is a top-level block and the page's stack spaces it. */}
+                <div>
+                    <SearchBox value={search} onChange={setSearch} clearable placeholder='Search items…'
+                               label='Search items'/>
+                </div>
                 {/* Portrait mobile: condensed, read-only.  Rotate to landscape (tablet+) for the full editor. */}
                 <Media at='mobile'>
                     <InventoryItemsMobile fields={fields} items={filteredItems}/>
@@ -221,7 +220,7 @@ export function InventoryRoute() {
 
             <InventoryImportModal open={importOpen} onClose={() => setImportOpen(false)}
                                   slug={slug} name={current.name} onChanged={fetchInventories}/>
-        </> : <p {...t}>Create an inventory to get started.</p>}
+        </> : <Text>Create an inventory to get started.</Text>}
 
         <NewInventoryModal open={newOpen} onClose={() => setNewOpen(false)} onCreate={onCreate}/>
 
@@ -231,21 +230,23 @@ export function InventoryRoute() {
         <Modal open={renaming} onClose={() => setRenaming(false)} closeIcon size='tiny'>
             <Modal.Header>Rename Inventory</Modal.Header>
             <Modal.Content>
-                <Input fluid autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}/>
+                <TextInput autoFocus value={renameValue} onChange={e => setRenameValue(e.currentTarget.value)}/>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={() => setRenaming(false)}>Cancel</Button>
-                <Button primary onClick={doRename} disabled={!renameValue.trim()}>Save</Button>
+                <Button role='cancel' onClick={() => setRenaming(false)}>Cancel</Button>
+                <Button role='save' onClick={doRename} disabled={!renameValue.trim()}>Save</Button>
             </Modal.Actions>
         </Modal>
 
         <Confirm
             open={confirmDelete}
-            header='Delete Inventory'
-            content={`Delete "${current?.name}" and all its items?  This cannot be undone.`}
-            confirmButton='Delete'
+            title='Delete Inventory'
+            destructive
+            confirmLabel='Delete'
             onCancel={() => setConfirmDelete(false)}
             onConfirm={doDelete}
-        />
+        >
+            {`Delete "${current?.name}" and all its items?  This cannot be undone.`}
+        </Confirm>
     </PageContainer>;
 }

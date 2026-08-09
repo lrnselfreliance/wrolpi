@@ -4,8 +4,13 @@ import {NavBar} from "./components/Nav";
 import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider} from "react-router";
 import {VideosTabLayout, VideosPage, VideosSettingsPage, VideosStatistics, VideoWrapper} from "./components/Videos";
 import AdminRoute from "./components/admin/AdminRoute";
-import {Container} from "semantic-ui-react";
-import 'semantic-ui-offline/semantic.min.css';
+import {Box, Header} from "./components/ui";
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+// Theme tokens load last so they win over both component libraries.
+import './themes/fonts.css';
+import './themes/tokens.css';
+import {MediaFilterDefs} from "./themes/MediaFilterDefs";
 import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/inventory/InventoryRoute";
 import {ArchiveRoute} from "./components/Archive";
@@ -14,12 +19,12 @@ import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./components/Channels";
 import {MapRoute} from "./components/Map";
-import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
-import {Header, ThemeProvider} from "./components/Theme";
+import {MediaContextProvider, mediaStyles, StatusContext} from "./contexts/contexts";
+import {ThemeProvider} from "./components/Theme";
 import {DashboardPage} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
+import {ThemeSamplePage} from "./components/ThemeSamplePage";
 import {useEventsInterval} from "./Events";
-import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
@@ -30,11 +35,10 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import {KeyboardShortcutsProvider} from "./components/KeyboardShortcutsProvider";
 
 function PageNotFound() {
-    const {t} = useContext(ThemeContext);
-    return <Container fluid>
+    return <Box>
         <Header as='h1'>Page Not Found!</Header>
-        <p {...t}>The page you requested cannot be found</p>
-    </Container>
+        <p>The page you requested cannot be found</p>
+    </Box>
 }
 
 function Dot() {
@@ -42,7 +46,6 @@ function Dot() {
 }
 
 function Footer() {
-    const {t} = useContext(ThemeContext);
     const {status} = useContext(StatusContext);
     let version;
     try {
@@ -50,18 +53,19 @@ function Footer() {
     } catch (e) {
         // Not logging because this is not that important.
     }
-    return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em', ...t}}>
-        <span {...t}>
+    return <Box style={{textAlign: 'center', marginTop: '1.5em', marginBottom: '1em'}}>
+        <span>
             WROLPi {version} <Dot/>
             <a href='https://wrolpi.org' target='_blank' rel='nofollow noreferrer'>WROLPi.org</a> <Dot/>
             <Link to='/donate'>Donate</Link>
             </span>
-    </Container>
+    </Box>
 }
 
 function Root() {
     return <QueryProvider>
         <ThemeProvider>
+            <MediaFilterDefs/>
             <TagsProvider>
                 <KeyboardShortcutsProvider>
                     <FilePreviewProvider>
@@ -87,6 +91,9 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='donate' element={<DonatePage/>}/>
+    {/* Component gallery: lets a user see a theme before committing to it, and lets us
+        review the design.  Linked from Settings. */}
+    <Route path='theme-sample' element={<ErrorBoundary><ThemeSamplePage/></ErrorBoundary>}/>
     <Route path='videos'>
         <Route element={<ErrorBoundary><VideosTabLayout/></ErrorBoundary>}>
             <Route index element={<ErrorBoundary><VideosPage/></ErrorBoundary>}/>
@@ -118,8 +125,7 @@ export default function App() {
         <FileWorkerStatusProvider>
             {/* Context and style to handle switching between mobile/computer. */}
             <style>{mediaStyles}</style>
-            {/* Toasts can be on any page. */}
-            <SemanticToastContainer position='top-right'/>
+            {/* Toasts (from components/ui) are mounted by ThemeProvider, which wraps every page. */}
             <MediaContextProvider>
                 <RouterProvider router={router}/>
             </MediaContextProvider>

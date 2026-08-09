@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useRef, useState} from "react";
 import {useNavigate} from "react-router";
 import {useHotkeys} from "react-hotkeys-hook";
 import {KeyboardShortcutsContext} from "../contexts/KeyboardShortcutsContext";
-import {Modal} from "./Theme";
+import {Modal} from "./ui";
 import {SearchResultsInput} from "./Common";
 import {useSearchSuggestions} from "./Search";
 import HelpModal from "./HelpModal";
@@ -64,7 +64,15 @@ function SearchModal({open, onClose}) {
     }, [open, setSearchStr]);
 
     useEffect(() => {
-        // Focus on the Search's <input/> when the modal is opened.
+        /*
+         * Focus the search input when the modal opens.
+         *
+         * `autoFocus` on the input below is what actually does it: the modal mounts its
+         * content on a later tick, so this effect runs while `inputRef.current` is still
+         * null.  The modal this replaced mounted synchronously, which is why focusing here used
+         * to be enough.  The ref call is kept for the case where the modal is already
+         * mounted and merely re-opened.
+         */
         if (open && inputRef.current) {
             inputRef.current.focus();
         }
@@ -73,8 +81,18 @@ function SearchModal({open, onClose}) {
     if (!open) return null;
 
     return (
-        <Modal open={open} onClose={onClose} centered={false}>
+        <Modal size='small' open={open} onClose={onClose} centered={false} title='Search'>
             <Modal.Content>
+                {/*
+                  * `wrolpi-search-modal` makes the suggestion list part of the panel rather
+                  * than an overlay on the page; see ui.css.  Everywhere else the list floats
+                  * over the page, which is right -- results that reflow the page while you
+                  * type are unusable.  Inside a modal it is wrong twice over: an absolutely
+                  * positioned list adds no height, so the panel stayed 114px tall, and the
+                  * panel's own `overflow: auto` then clipped the list at the panel's edge.
+                  * The modal showed a search box and the first word of the first result.
+                  */}
+                <div className='wrolpi-search-modal'>
                 <SearchResultsInput
                     clearable
                     searchStr={searchStr}
@@ -87,7 +105,9 @@ function SearchModal({open, onClose}) {
                     resultRenderer={resultRenderer}
                     loading={loading}
                     inputRef={inputRef}
+                    autoFocus
                 />
+                </div>
             </Modal.Content>
         </Modal>
     );

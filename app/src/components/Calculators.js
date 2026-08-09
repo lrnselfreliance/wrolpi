@@ -1,6 +1,6 @@
 import React from "react";
 import {Breadcrumbs, useTitle} from "./Common";
-import {Button, Header, Icon} from "./Theme";
+import {Button, Header, Icon} from "./ui";
 import {useCalcQuery} from "../hooks/customHooks";
 import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
 import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
@@ -18,7 +18,7 @@ import {VinDecoderCalculator} from "./calculators/VinDecoderCalculator";
 // `group` matching one of these names; any calculator whose group is missing/unknown falls
 // into a trailing "Other" section so a new calculator can never silently disappear.
 //
-// `color` is a Semantic UI named color (colorblind-friendly palette) used to tint the group's
+// `color` is one of the named palette colors (see `paletteColorNames`) used to tint the group's
 // buttons.  Violet is intentionally avoided — it is the default navbar color and would blend in.
 export const CALCULATOR_GROUPS = [
     {name: 'Preparedness & Storage', color: 'red'},

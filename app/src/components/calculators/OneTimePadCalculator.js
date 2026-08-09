@@ -1,5 +1,4 @@
-import React, {useContext, useState} from 'react';
-import {Checkbox, Divider, Icon, Input, Radio, SegmentGroup} from "semantic-ui-react";
+import React, {useState} from 'react';
 import {
     appendChecksum,
     decryptOTP,
@@ -12,21 +11,12 @@ import {
     validateCharset
 } from "../otp";
 import {ErrorMessage, SimpleAccordion} from "../Common";
-import {ThemeContext} from "../../contexts/contexts";
-import {Button, Form, Header, Segment, TextArea} from "../Theme";
+import {Button, Checkbox, Divider, Header, Panel, Radio, Stack, Status, Textarea, TextInput} from "../ui";
 
 function Encrypt({chars, checksum}) {
     // Encrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [plaintext, setPlaintext] = useState('');
-
-    const handleInputChange = (event, {name, value}) => {
-        if (name === 'otp') {
-            setOtp(value);
-        } else {
-            setPlaintext(value);
-        }
-    };
 
     let ciphertext = '';
     let error = '';
@@ -42,34 +32,34 @@ function Encrypt({chars, checksum}) {
 
     return <>
         <Header as='h2'>Encrypt</Header>
-        <SegmentGroup>
-            <Segment>
+        <Stack gap='sm'>
+            <Panel>
                 <h3>Key</h3>
-                <TextArea
+                <Textarea
                     name='otp'
-                    className='otp'
+                    style={{width: '100%'}}
                     value={otp}
-                    onChange={handleInputChange}
+                    onChange={e => setOtp(e.currentTarget.value)}
                     placeholder='The random letters from your One-Time Pad'
                 />
-            </Segment>
-            <Segment>
+            </Panel>
+            <Panel>
                 <h3>Plaintext</h3>
-                <TextArea
+                <Textarea
                     name='plaintext'
-                    className='otp'
+                    style={{width: '100%'}}
                     value={plaintext}
-                    onChange={handleInputChange}
+                    onChange={e => setPlaintext(e.currentTarget.value)}
                     placeholder='The message you want to send'
                 />
-            </Segment>
-            <Segment>
+            </Panel>
+            <Panel>
                 <h3>Ciphertext</h3>
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
                     : <pre>{ciphertext || (chars ? 'Enter your message above' : 'Set valid characters in Advanced options')}</pre>}
-            </Segment>
-        </SegmentGroup>
+            </Panel>
+        </Stack>
     </>
 }
 
@@ -77,14 +67,6 @@ function Decrypt({chars, checksum}) {
     // Decrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [ciphertext, setCiphertext] = useState('');
-
-    const handleInputChange = (event, {name, value}) => {
-        if (name === 'otp') {
-            setOtp(value);
-        } else {
-            setCiphertext(value);
-        }
-    };
 
     let plaintext = '';
     let error = '';
@@ -107,44 +89,42 @@ function Decrypt({chars, checksum}) {
 
     return <>
         <Header as='h2'>Decrypt</Header>
-        <SegmentGroup>
-            <Segment>
+        <Stack gap='sm'>
+            <Panel>
                 <h3>Key</h3>
-                <TextArea
+                <Textarea
                     name='otp'
-                    className='otp'
+                    style={{width: '100%'}}
                     value={otp}
-                    onChange={handleInputChange}
+                    onChange={e => setOtp(e.currentTarget.value)}
                     placeholder='The random letters from your One-Time Pad'
                 />
-            </Segment>
-            <Segment>
+            </Panel>
+            <Panel>
                 <h3>Ciphertext</h3>
-                <TextArea
+                <Textarea
                     name='ciphertext'
-                    className='otp'
+                    style={{width: '100%'}}
                     value={ciphertext}
-                    onChange={handleInputChange}
+                    onChange={e => setCiphertext(e.currentTarget.value)}
                     placeholder='The message you received'
                 />
-            </Segment>
-            <Segment>
+            </Panel>
+            <Panel>
                 <h3>Plaintext</h3>
-                {checksumValid !== null && <p>
-                    <Icon name={checksumValid ? 'check' : 'times'} color={checksumValid ? 'green' : 'red'}/>
-                    {checksumValid ? 'Checksum is valid' : 'Checksum is invalid'}
-                </p>}
+                {checksumValid !== null &&
+                    <Status kind={checksumValid ? 'complete' : 'failed'}>
+                        {checksumValid ? 'Checksum is valid' : 'Checksum is invalid'}
+                    </Status>}
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
                     : <pre>{plaintext || (chars ? 'Enter the encrypted message above' : 'Set valid characters in Advanced options')}</pre>}
-            </Segment>
-        </SegmentGroup>
+            </Panel>
+        </Stack>
     </>
 }
 
 export function OneTimePadCalculator() {
-    const {t} = useContext(ThemeContext);
-
     // The character set is a property of the pad: encrypt, decrypt, and generation all use the same alphabet.
     const [charsetKind, setCharsetKind] = useState('alphanumeric'); // 'alpha' | 'alphanumeric' | 'custom'
     const [customChars, setCustomChars] = useState('');
@@ -174,32 +154,30 @@ export function OneTimePadCalculator() {
         <Header as='h1'>One-Time Pad</Header>
         <Header as='h4'>One-Time Pads can be used to encrypt your communications. This can be done by hand
             (yes, really) or in this app.</Header>
-        <p {...t}>These messages are never stored and cannot be retrieved.</p>
-        <Button color='violet' disabled={!activeChars} onClick={handleGenerateNewPad}>Generate New Pad</Button>
-        <Button secondary href={cheatSheetURL}>Cheat Sheet PDF</Button>
+        <p>These messages are never stored and cannot be retrieved.</p>
+        <div className='wrolpi-button-row'>
+            <Button color='violet' disabled={!activeChars} onClick={handleGenerateNewPad}>
+                Generate New Pad
+            </Button>
+            <Button role='cancel' component='a' href={cheatSheetURL}>Cheat Sheet PDF</Button>
+        </div>
 
         <SimpleAccordion title='Advanced'>
             <Header as='h4'>Pad characters</Header>
-            <Form>
-                <Form.Field>
-                    <Radio label='A–Z' name='charset' value='alpha'
-                           checked={charsetKind === 'alpha'} onChange={() => setCharsetKind('alpha')}/>
-                </Form.Field>
-                <Form.Field>
-                    <Radio label='A–Z and 0–9' name='charset' value='alphanumeric'
-                           checked={charsetKind === 'alphanumeric'} onChange={() => setCharsetKind('alphanumeric')}/>
-                </Form.Field>
-                <Form.Field>
-                    <Radio label='Custom' name='charset' value='custom'
-                           checked={charsetKind === 'custom'} onChange={() => setCharsetKind('custom')}/>
-                </Form.Field>
-            </Form>
+            <Stack gap={4}>
+                <Radio label='A–Z' name='charset' value='alpha'
+                       checked={charsetKind === 'alpha'} onChange={() => setCharsetKind('alpha')}/>
+                <Radio label='A–Z and 0–9' name='charset' value='alphanumeric'
+                       checked={charsetKind === 'alphanumeric'} onChange={() => setCharsetKind('alphanumeric')}/>
+                <Radio label='Custom' name='charset' value='custom'
+                       checked={charsetKind === 'custom'} onChange={() => setCharsetKind('custom')}/>
+            </Stack>
             {charsetKind === 'custom' && <>
-                <Input
-                    fluid
+                <TextInput
+                    style={{width: '100%'}}
                     value={customChars}
                     placeholder='e.g. ABCDEF0123'
-                    onChange={(e, {value}) => setCustomChars(value)}
+                    onChange={e => setCustomChars(e.currentTarget.value)}
                 />
                 {charsetError && <ErrorMessage>{charsetError}</ErrorMessage>}
             </>}

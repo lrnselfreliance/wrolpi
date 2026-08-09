@@ -90,6 +90,17 @@ services:
     environment:
       # Force React to use Caddy port to connect to it's websocket.
       - WDS_SOCKET_PORT=0
+      # react-scripts lints in-process on every incremental rebuild, which costs time on each
+      # save and buries the compile result under a few hundred warnings the repo has carried
+      # for years.  This container only serves; linting still happens where it is acted on --
+      # `npm run build` and CI both run it, and both fail on a real error.
+      #
+      # NOT a memory fix, though it was tried as one after the dev server was OOM-killed three
+      # times in an afternoon.  Measured either way, the container settles anywhere between
+      # 3.0GB and 3.7GB and the spread between two runs of the SAME configuration is wider
+      # than the spread between configurations.  Raising Docker Desktop's VM limit is what
+      # actually stopped the kills.
+      - DISABLE_ESLINT_PLUGIN=true
 
   web: # Caddy reverse proxy - handles HTTPS for all services.
     depends_on:

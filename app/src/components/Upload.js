@@ -1,16 +1,11 @@
 import React from "react";
 import {useDropzone} from "react-dropzone";
-import {Form, Header, Icon, Progress, Segment} from "./Theme";
-import {DirectorySearch, mimetypeIconName, Toggle} from "./Common";
+import {Box, Group, Header, Icon, Panel, Progress, Stack} from "./ui";
+import {DirectorySearch, mimetypeIconName, RequiredAsterisk, Toggle} from "./Common";
 import {useUploadFile} from "../hooks/customHooks";
 import _ from "lodash";
-import {ThemeContext} from "../contexts/contexts";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Form as SForm} from "semantic-ui-react";
 
 export function Upload({disabled}) {
-    const {t} = React.useContext(ThemeContext);
-
     const {
         setFiles,
         progresses,
@@ -57,33 +52,29 @@ export function Upload({disabled}) {
                 color = 'orange';
                 statusString = 'Already Exists:';
             }
-            // Only indicating when upload is pending.
-            let indicating = status === 'pending';
 
-            return <Grid.Row key={name}>
-                <Grid.Column mobile={3} tablet={2} computer={1}>
-                    <Icon name={mimetypeIconName(type, name.toLowerCase())} size='big'/>
-                </Grid.Column>
-                <Grid.Column mobile={13} tablet={14} computer={15}>
-                    <Progress progress indicating={indicating} percent={percent} color={color}>
-                        <p {...t}>{statusString} {name}</p>
-                    </Progress>
-                </Grid.Column>
-            </Grid.Row>
+            return <Group key={name} align='center' wrap='nowrap' gap='sm'>
+                <Icon name={mimetypeIconName(type, name.toLowerCase())} size='large'/>
+                <Box style={{flex: 1}}>
+                    <Progress percent={percent} color={color} label={`${statusString} ${name}`}/>
+                </Box>
+            </Group>
         })
     }
 
     return <>
-        <Form>
-            <SForm.Field required>
-                <label>Destination</label>
+        <Stack gap='sm'>
+            <div>
+                <label style={{display: 'block', marginBottom: 4}}>
+                    <b>Destination</b> <RequiredAsterisk/>
+                </label>
                 <DirectorySearch
                     onSelect={i => setDestination(i)}
                     disabled={disabled || inProgress}
                     style={{marginBottom: '0.5em'}}
                 />
                 {tagsSelector}
-            </SForm.Field>
+            </div>
 
             <Toggle
                 checked={overwrite}
@@ -91,50 +82,30 @@ export function Upload({disabled}) {
                 onChange={() => setOverwrite(!overwrite)}
                 disabled={disabled || inProgress}
             />
-        </Form>
+        </Stack>
 
         {destination ?
-            <Segment>
-                <Grid columns={1}>
-                    <Grid.Row>
-                        <Grid.Column style={{padding: '1em'}}>
-                            <Form>
-                                <div {...getRootProps()}>
-                                    <input {...getInputProps()}/>
-                                    <Grid textAlign='center'>
-                                        <Grid.Row>
-                                            <Grid.Column>
-                                                <Header icon>
-                                                    <Icon name='file text'/>
-                                                    Click here, or drop files here to upload
-                                                </Header>
-                                            </Grid.Column>
-                                        </Grid.Row>
-                                    </Grid>
-                                </div>
-                            </Form>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </Segment>
+            <Panel style={{marginTop: '1em'}}>
+                <div {...getRootProps()} style={{padding: '1em', textAlign: 'center', cursor: 'pointer'}}>
+                    <input {...getInputProps()}/>
+                    <Header as='h3' icon='file text'>
+                        Click here, or drop files here to upload
+                    </Header>
+                </div>
+            </Panel>
             : <Header as='h3'>You must search for a directory to place your files</Header>
         }
 
         <br/>
 
-        <Grid>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    {progresses && Object.keys(progresses).length > 1 && <Progress progress
-                                                                                   percent={overallProgress}
-                                                                                   color='blue'
-                                                                                   label='Overall Progress'
-                    />}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-        <Grid columns={2}>
+        {progresses && Object.keys(progresses).length > 1 && <Progress
+            percent={overallProgress}
+            color='blue'
+            label='Overall Progress'
+        />}
+
+        <Stack gap='sm' mt='sm'>
             {progressBars}
-        </Grid>
+        </Stack>
     </>
 }

@@ -7,9 +7,9 @@ import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
 import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefaultLocation} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
-import {Checkbox, Icon, Segment} from "semantic-ui-react";
-import {Header} from "./Theme";
+import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
+import {mapFlavor, mapSprite} from "../themes/names";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -69,7 +69,10 @@ function initContourSource(filename) {
 // sources: [{name, url}] where name is used as the MapLibre source ID and url is the pmtiles:// URL.
 // hasTerrain: whether to include hillshade and contour layers.
 // scaleUnit: "metric" or "imperial" — affects contour intervals and labels.
-function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric") {
+// `sprite` is deliberately separate from `flavor`: we ship two sprite sets (light, dark)
+// and the monochrome themes draw a `black` basemap, which has no sprites of its own.
+function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric",
+                    sprite = "light") {
     const styleSources = {};
     const allLayers = [];
 
@@ -182,8 +185,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     "text-size": 10,
                 },
                 paint: {
-                    "text-color": flavor === "dark" ? "rgba(210,180,140,0.9)" : "rgba(150,100,50,0.8)",
-                    "text-halo-color": flavor === "dark" ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)",
+                    "text-color": flavor === "light" ? "rgba(150,100,50,0.8)" : "rgba(210,180,140,0.9)",
+                    "text-halo-color": flavor === "light" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)",
                     "text-halo-width": 1,
                 },
             },
@@ -193,7 +196,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
     return {
         version: 8,
         glyphs: "/map-assets/fonts/{fontstack}/{range}.pbf",
-        sprite: `${window.location.origin}/map-assets/sprites/${flavor}`,
+        sprite: `${window.location.origin}/map-assets/sprites/${sprite}`,
         sources: styleSources,
         layers: allLayers,
     };
@@ -256,30 +259,33 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         });
     }, [map, visibilityRef]);
 
+    // A floating control drawn over the map canvas: it is part of the app's interface,
+    // not map data, so it is never filtered — it stays plain, token-colored chrome in
+    // every theme, same as the nav bar.
     const panelStyle = {
         position: "absolute",
-        top: 10,
-        left: 10,
+        top: "0.625rem",
+        left: "0.625rem",
         zIndex: 1000,
-        background: "white",
-        borderRadius: 8,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-        maxHeight: "calc(100vh - 120px)",
+        background: "var(--panel)",
+        border: "1px solid var(--border)",
+        color: "var(--text)",
+        maxHeight: "calc(100vh - 7.5rem)",
         overflowY: "auto",
-        minWidth: iconOnly ? 0 : 200,
-        fontSize: 13,
+        minWidth: iconOnly ? 0 : "12.5rem",
+        fontSize: '0.8125rem',
     };
 
     const headerStyle = iconOnly
         ? {
             padding: 0, cursor: "pointer", userSelect: "none",
             display: "flex", alignItems: "center", justifyContent: "center",
-            width: 40, height: 40,
+            width: "2.5rem", height: "2.5rem",
         }
         : {
-            padding: "8px 12px", cursor: "pointer", fontWeight: 600,
+            padding: "0.5rem 0.75rem", cursor: "pointer", fontWeight: 600,
             display: "flex", justifyContent: "space-between", alignItems: "center",
-            borderBottom: collapsed ? "none" : "1px solid #eee", userSelect: "none",
+            borderBottom: collapsed ? "none" : "1px solid var(--border)", userSelect: "none",
         };
 
     return <div style={panelStyle}>
@@ -296,22 +302,21 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
                     <Icon name={collapsed ? "chevron right" : "chevron down"} size="small"/>
                 </>}
         </div>
-        {!collapsed && <div style={{padding: "4px 12px 8px"}}>
+        {!collapsed && <div style={{padding: "0.25rem 0.75rem 0.5rem"}}>
             {Object.keys(LAYER_GROUPS).map(name =>
-                <div key={name} style={{padding: "2px 0"}}>
+                <div key={name} style={{padding: "0.125rem 0"}}>
                     <Checkbox
                         label={name}
                         checked={visibility[name]}
-                        onChange={(e, {checked}) => toggleGroup(name, checked)}
+                        onChange={(e) => toggleGroup(name, e.currentTarget.checked)}
                     />
                 </div>
             )}
-            <div style={{borderTop: "1px solid #eee", marginTop: 6, paddingTop: 6}}>
-                <Checkbox
-                    toggle
+            <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
+                <Toggle
                     label={scaleUnit === "imperial" ? "Imperial" : "Metric"}
                     checked={scaleUnit === "imperial"}
-                    onChange={(e, {checked}) => onScaleUnitChange(checked ? "imperial" : "metric")}
+                    onChange={(e) => onScaleUnitChange(e.currentTarget.checked ? "imperial" : "metric")}
                 />
             </div>
         </div>}
@@ -324,43 +329,45 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
     const [label, setLabel] = useState("");
     const [color, setColor] = useState("red");
 
+    // A floating dialog over the canvas — page chrome, not map data, so it is never
+    // filtered and keeps flat, bordered surfaces like the rest of the app (no shadow).
     return <div style={{
         position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-        zIndex: 1002, background: "white", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
-        padding: 16, minWidth: 250,
+        zIndex: 1002, background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)",
+        padding: "1rem", minWidth: "15.625rem",
     }}>
-        <div style={{fontWeight: 600, marginBottom: 8}}>Add Pin</div>
-        <div style={{fontSize: 12, color: "#666", marginBottom: 8}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
-        <input
-            type="text"
+        <div style={{fontWeight: 600, marginBottom: "0.5rem"}}>Add Pin</div>
+        <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
+        <TextInput
             placeholder="Label"
             value={label}
             onChange={e => setLabel(e.target.value)}
             autoFocus
             onKeyDown={e => e.key === "Enter" && label.trim() && onSubmit(label.trim(), color)}
-            style={{width: "100%", padding: "6px 8px", marginBottom: 8, border: "1px solid #ccc", borderRadius: 4}}
+            style={{marginBottom: "0.5rem"}}
         />
-        <div style={{display: "flex", gap: 6, marginBottom: 12}}>
+        <div style={{display: "flex", gap: "0.375rem", marginBottom: "0.75rem"}}>
             {PIN_COLORS.map(c =>
                 <div
                     key={c}
                     onClick={() => setColor(c)}
                     style={{
-                        width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
-                        border: color === c ? "3px solid #333" : "2px solid #ccc",
+                        width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: c, cursor: "pointer",
+                        border: color === c ? "3px solid var(--text)" : "2px solid var(--border)",
                     }}
                 />
             )}
         </div>
-        <div style={{display: "flex", gap: 8, justifyContent: "flex-end"}}>
-            <button onClick={onCancel} style={{padding: "4px 12px", cursor: "pointer"}}>Cancel</button>
-            <button
+        <div style={{display: "flex", gap: "0.5rem", justifyContent: "flex-end"}}>
+            <Button role='cancel' size='sm' onClick={onCancel}>Cancel</Button>
+            <Button
+                role='primary'
+                size='sm'
                 onClick={() => label.trim() && onSubmit(label.trim(), color)}
                 disabled={!label.trim()}
-                style={{padding: "4px 12px", cursor: "pointer", background: "#6435c9", color: "white", border: "none", borderRadius: 4}}
             >
                 Add
-            </button>
+            </Button>
         </div>
     </div>;
 }
@@ -474,9 +481,11 @@ function MapSearch({map}) {
         return parts.join(" \u00b7 ");
     };
 
+    // Floating search chrome over the canvas — page interface, not map data, so it is
+    // never filtered.  Flat surfaces: bordered, no box-shadow, token colors only.
     return <div ref={containerRef} style={{
-        position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
-        zIndex: 5, width: 320, maxWidth: "calc(100% - 100px)",
+        position: "absolute", top: "0.625rem", left: "50%", transform: "translateX(-50%)",
+        zIndex: 5, width: "20rem", maxWidth: "calc(100% - 100px)",
     }}>
         <input
             type="text"
@@ -486,24 +495,23 @@ function MapSearch({map}) {
             onFocus={() => results.length > 0 && setShowResults(true)}
             onKeyDown={handleKeyDown}
             style={{
-                width: "100%", padding: "8px 12px", border: "1px solid #ccc", borderRadius: 4,
-                fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.2)", background: "white",
+                width: "100%", padding: "0.5rem 0.75rem", border: "1px solid var(--border)",
+                fontSize: '0.875rem', background: "var(--panel)", color: "var(--text)",
             }}
         />
         {showResults && results.length > 0 && <div style={{
-            background: "white", border: "1px solid #ccc", borderTop: "none",
-            borderRadius: "0 0 4px 4px", maxHeight: 300, overflowY: "auto",
-            boxShadow: "0 4px 8px rgba(0,0,0,0.2)",
+            background: "var(--panel)", border: "1px solid var(--border)", borderTop: "none",
+            maxHeight: "18.75rem", overflowY: "auto",
         }}>
             {results.map((r, i) => <div
                 key={i}
                 onClick={() => handleSelect(r)}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
-                onMouseLeave={e => e.target.style.background = "transparent"}
-                style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee"}}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--head)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", borderBottom: "1px solid var(--border)"}}
             >
                 <div style={{fontWeight: 500}}>{r.name}</div>
-                {resultSubtext(r) && <div style={{fontSize: 11, color: "#888"}}>{resultSubtext(r)}</div>}
+                {resultSubtext(r) && <div style={{fontSize: '0.6875rem', color: "var(--muted)"}}>{resultSubtext(r)}</div>}
             </div>)}
         </div>}
     </div>;
@@ -607,7 +615,7 @@ export default function MapViewer() {
             try {
                 map = new maplibregl.Map({
                     container: mapContainer.current,
-                    style: buildStyle(mapSources, theme, hasTerrain, scaleUnit),
+                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit, mapSprite(theme)),
                     center: [initialLon, initialLat],
                     zoom: initialZoom,
                     attributionControl: true,
@@ -753,7 +761,8 @@ export default function MapViewer() {
 
         const center = map.getCenter();
         const zoom = map.getZoom();
-        map.setStyle(buildStyle(activeFilesRef.current, theme, hasTerrainRef.current, scaleUnit));
+        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current,
+            scaleUnit, mapSprite(theme)));
         map.once("style.load", () => {
             map.setCenter(center);
             map.setZoom(zoom);
@@ -906,12 +915,12 @@ export default function MapViewer() {
     }, [addingPin, loadPins]);
 
     if (error) {
-        return <Segment>
+        return <Panel>
             <Header as="h3">Map failed to load</Header>
             <p>Your browser may not support WebGL. You can access the standalone map viewer
                 at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
             <p>Error: {error}</p>
-        </Segment>;
+        </Panel>;
     }
 
     return <div ref={mapContainer} style={{position: "relative", width: "100%", height: "85vh"}}>
@@ -924,14 +933,14 @@ export default function MapViewer() {
                 top: contextMenu.y,
                 zIndex: 1001,
                 background: "white",
-                borderRadius: 6,
+                borderRadius: "0.375rem",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                padding: "4px 0",
-                fontSize: 13,
-                minWidth: 180,
+                padding: "0.25rem 0",
+                fontSize: '0.8125rem',
+                minWidth: "11.25rem",
             }}
         >
-            <div style={{padding: "6px 12px", color: "#666", fontSize: 12, borderBottom: "1px solid #eee"}}>
+            <div style={{padding: "0.375rem 0.75rem", color: "#666", fontSize: '0.75rem', borderBottom: "1px solid #eee"}}>
                 {(() => {
                     const map = mapRef.current;
                     const zoom = map ? map.getZoom() : 10;
@@ -940,7 +949,7 @@ export default function MapViewer() {
                 })()}
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleCopyCoords}
@@ -948,7 +957,7 @@ export default function MapViewer() {
                 Copy GPS coordinates
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleExportPng}
@@ -956,7 +965,7 @@ export default function MapViewer() {
                 Export as PNG
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
@@ -964,7 +973,7 @@ export default function MapViewer() {
                 Add Pin Here
             </div>
             <div
-                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleSetDefaultLocation}

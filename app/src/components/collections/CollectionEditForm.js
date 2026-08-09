@@ -1,6 +1,5 @@
 import React from 'react';
-import {Button, Form, Grid, Message} from 'semantic-ui-react';
-import {Header, Segment} from '../Theme';
+import {Button, Header, Message, Panel} from '../ui';
 import {TagsContext} from '../../Tags';
 import {WROLModeMessage} from '../Common';
 
@@ -37,51 +36,61 @@ export function CollectionEditForm({
         }
     };
 
-    return <Segment>
+    return <Panel>
         {title && <Header as="h1">{title}</Header>}
         {wrolModeContent && <WROLModeMessage content={wrolModeContent}/>}
 
         {/* Display form-level errors */}
-        {form.error && <Message error>
-            <Message.Header>Error</Message.Header>
+        {form.error && <Message kind='error' title='Error'>
             <p>{form.error}</p>
         </Message>}
 
-        <Form onSubmit={handleSubmit} loading={form.loading} autoComplete="off">
-            <Grid stackable>
+        <form onSubmit={handleSubmit} autoComplete="off">
+            {/* Every caller passes library components, so this is a plain flex column. */}
+            <div
+                className='wrolpi-form-rows'
+                style={form.loading ? {opacity: 0.6, pointerEvents: 'none'} : undefined}
+            >
                 {children}
 
-                {appliedTagName && <Grid.Row>
-                    <Grid.Column>
-                        <SingleTag name={appliedTagName}/>
-                    </Grid.Column>
-                </Grid.Row>}
+                {appliedTagName && <div><SingleTag name={appliedTagName}/></div>}
 
-                <Grid.Row columns={2}>
-                    <Grid.Column>
-                        {actionButtons}
+                {/*
+                  * The shared row.  It was already a flex row at this gap, but it did not wrap, so
+                  * the pages that hand it four action buttons ran out of width on a phone -- which
+                  * is why each of those buttons, and the Cancel below, carried `margin-top: 1em`.
+                  * That margin is what made them sit lower than Save, `vertical-align: middle`
+                  * being measured on the margin box.  Wrapping plus a row gap covers the case the
+                  * margin was for, in the axis it actually happens in.
+                  */}
+                <div className='wrolpi-button-row'>
+                    {actionButtons}
+                    {/*
+                      * Cancel and Save travel together, in a row of their own pushed to the end.
+                      * `margin-left: auto` was on Save alone, which was right for a row that could
+                      * not wrap: now that it can, Save would drop onto a second line by itself,
+                      * flush right, with Cancel left behind among the action buttons.
+                      */}
+                    <div className='wrolpi-button-row' style={{marginInlineStart: 'auto'}}>
                         {onCancel && <Button
                             type='button'
+                            role='cancel'
                             onClick={onCancel}
                             disabled={form.disabled}
-                            className="action-button-spacing"
                         >
                             Cancel
                         </Button>}
-                    </Grid.Column>
-                    <Grid.Column>
                         <Button
                             type='submit'
-                            color='violet'
-                            size='big'
-                            floated='right'
+                            role='save'
+                            size='lg'
                             disabled={form.disabled}
                         >
                             Save
                         </Button>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Form>
-    </Segment>;
+                    </div>
+                </div>
+            </div>
+        </form>
+    </Panel>;
 }

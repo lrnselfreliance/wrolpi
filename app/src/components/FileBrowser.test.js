@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {FileBrowser, filterBrowseFiles} from './FileBrowser';
@@ -28,14 +30,23 @@ const mockUseUploadFile = {
     inProgress: false,
 };
 
-jest.mock('../hooks/customHooks', () => ({
-    useBrowseFiles: jest.fn(),
-    useMediaDirectory: jest.fn(() => '/media/wrolpi'),
-    useWROLMode: jest.fn(() => false),
-    useStatusFlag: jest.fn(() => false),
-    useUploadFile: () => mockUseUploadFile,
-    useElementWidth: jest.fn(() => [() => {}, 0]),
-}));
+/*
+ * Every other export of customHooks used to be dropped here -- the factory listed six hooks and
+ * returned only those, so the rest of the module was undefined for anything this spec rendered.
+ * mockModule spreads the real module first, so the next hook a component reaches for still
+ * exists.
+ */
+jest.mock('../hooks/customHooks', () => require('../test-utils').mockModule(
+    jest.requireActual('../hooks/customHooks'),
+    {
+        useBrowseFiles: jest.fn(),
+        useMediaDirectory: jest.fn(() => '/media/wrolpi'),
+        useWROLMode: jest.fn(() => false),
+        useStatusFlag: jest.fn(() => false),
+        useUploadFile: () => mockUseUploadFile,
+        useElementWidth: jest.fn(() => [() => {}, 0]),
+    },
+));
 
 // Mock react-dropzone
 jest.mock('react-dropzone', () => ({
@@ -155,7 +166,9 @@ describe('FileBrowser', () => {
 
             // Find the upload button
             const buttons = screen.getAllByRole('button');
-            const uploadButton = buttons.find(btn => btn.classList.contains('green'));
+            const uploadButton = buttons.find(btn =>
+                btn.classList.contains('green') || btn.querySelector('[class*="upload"]')
+            );
 
             expect(uploadButton).not.toBeDisabled();
         });
@@ -173,7 +186,9 @@ describe('FileBrowser', () => {
 
             // Find the upload button
             const buttons = screen.getAllByRole('button');
-            const uploadButton = buttons.find(btn => btn.classList.contains('green'));
+            const uploadButton = buttons.find(btn =>
+                btn.classList.contains('green') || btn.querySelector('[class*="upload"]')
+            );
 
             expect(uploadButton).toBeDisabled();
         });
@@ -409,7 +424,7 @@ describe('FileBrowser', () => {
             });
 
             // Click delete button (red trash button) - uses APIButton which has confirm modal
-            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            const deleteButton = document.querySelector('.tabler-icon-trash').closest('button');
             await act(async () => {
                 fireEvent.click(deleteButton);
             });
@@ -454,7 +469,7 @@ describe('FileBrowser', () => {
             });
 
             // Click delete button
-            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            const deleteButton = document.querySelector('.tabler-icon-trash').closest('button');
             await act(async () => {
                 fireEvent.click(deleteButton);
             });
@@ -479,6 +494,28 @@ describe('FileBrowser', () => {
     });
 
     describe('Filter', () => {
+        it('joins the clear button to the input, and keeps the row aligned', () => {
+            /*
+             * The clear button belongs INSIDE ActionInput's wrapper, which is what removes
+             * the input's right border so the pair reads as one control -- the same joined
+             * look the Videos and Archives filters have.
+             *
+             * It used to carry `search-clear`, a class left over from Semantic whose
+             * `margin: 0.625rem` did three things at once: opened a gap so the button read
+             * as detached, pushed it 11px below the input, and stretched the wrapper to
+             * 62px against a 40px field, which threw the collapse-all button out of line
+             * too.  jsdom applies no stylesheet, so the guard is that no rule reintroduces
+             * a margin on a control inside the wrapper.
+             */
+            renderFileBrowser(<FileBrowser browseFiles={mockBrowseFiles}/>);
+
+            const clear = screen.getByRole('button', {name: 'Clear filter'});
+            expect(clear.closest('.wrolpi-action-input')).not.toBeNull();
+
+            const css = fs.readFileSync(path.join(__dirname, '..', 'App.css'), 'utf8');
+            expect(css).not.toMatch(/\.search-clear\s*{/);
+        });
+
         // foo/ and bar/ are open, their children are loaded.
         const nestedBrowseFiles = [
             {

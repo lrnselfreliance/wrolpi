@@ -6,8 +6,12 @@
     "@acalcutt/maplibre-contour-pmtiles": "^0.1.2",
     "@artsy/fresnel": "^8.5.0",
     "@cypress/react18": "^2.0.1",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
+    "@mantine/notifications": "^8.3.18",
+    "@tabler/icons-react": "^3.46.0",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
+    "@testing-library/user-event": "^14.6.1",
     "cypress": "^15.20.0",
     "esptool-js": "^0.6.0",
     "lodash": "^4.18.1",
@@ -24,10 +28,7 @@
     "react-qr-code": "^2.2.0",
     "react-router": "^7.18.2",
     "react-scripts": "5.0.1",
-    "react-semantic-toasts-2": "^0.6.7",
     "react-stl-viewer": "^2.5.0",
-    "semantic-ui-offline": "^2.5.1",
-    "semantic-ui-react": "^2.1.5",
     "three": "^0.185",
     "web-vitals": "^5.3.0"
   },
@@ -63,7 +64,7 @@
     "@types/node": "^26.1.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
-    "typescript": "^4.9.5"
+    "typescript": "^5.9.3"
   },
   "jest": {
     "transformIgnorePatterns": [
@@ -86,6 +87,10 @@
     "@babel/parser": "7.29.3",
     "@babel/template": "7.28.6",
     "@babel/traverse": "7.29.0",
-    "@babel/types": "7.29.0"
+    "@babel/types": "7.29.0",
+    "react-scripts": {
+      "typescript": "$typescript"
+    },
+    "fork-ts-checker-webpack-plugin": "^6.5.3"
   }
 }

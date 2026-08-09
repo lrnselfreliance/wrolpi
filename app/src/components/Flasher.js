@@ -1,27 +1,30 @@
-import React, {useContext, useEffect, useLayoutEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Route, Routes} from "react-router";
-import {Checkbox, Label, Message, Select, Button as SButton, Icon as SIcon} from "semantic-ui-react";
 import {ESPLoader, Transport} from "esptool-js";
 import {useDropzone} from "react-dropzone";
 import _ from "lodash";
 import {encodeMediaPath, humanFileSize, PageContainer, useTitle} from "./Common";
 import {
     Button,
-    darkTheme,
+    Checkbox,
     Divider,
-    Form,
+    Group,
     Header,
     Icon,
-    List,
-    Loader,
+    IconButton,
+    Label,
+    Loading,
+    Message,
     Modal,
+    Panel,
     Progress,
-    Segment,
-    Tab,
+    Select,
+    Stack,
     Table,
-    TextArea
-} from "./Theme";
-import {ThemeContext} from "../contexts/contexts";
+    Tabs,
+    Textarea,
+    TextInput,
+} from "./ui";
 import {deleteFlasherConfig, flasherSearch, getFlasherConfigs, saveFlasherConfig} from "../api";
 
 // The suffix used to find flashable ESP32 firmware in the media directory.
@@ -50,6 +53,10 @@ const KNOWN_ESP_CHIPS = [
 // colors when they render at the same width.  The first eight cover today's largest same-width group (the eight
 // 8-character ESP32-* names); the extras let a same-width group grow past eight before colors would repeat.
 // (Truly colorblind-distinct qualitative colors top out around ten, so beyond that distinctness is best-effort.)
+//
+// These are deliberately NOT theme tokens: this is a fixed categorical palette used to visually tell many ESP
+// chip families apart, the same way a chart's series colors stay fixed regardless of theme.  See the report to
+// the user for the resulting night-mode tension (non-red hues on these chips, unlike the rest of the UI).
 const CHIP_COLORS = [
     '#4477aa', '#ee6677', '#228833', '#ccbb44', '#66ccee', '#aa3377', '#bbbbbb', '#000000',
     '#ee7733', '#332288', '#999933', '#882255',
@@ -115,10 +122,10 @@ export function espImageChipId(header) {
 // bundled into the frontend build, so this works fully offline once the page has loaded.
 
 const BAUD_OPTIONS = [
-    {key: '115200', value: 115200, text: '115200 (safe)'},
-    {key: '230400', value: 230400, text: '230400'},
-    {key: '460800', value: 460800, text: '460800'},
-    {key: '921600', value: 921600, text: '921600 (fast)'},
+    {value: 115200, text: '115200 (safe)'},
+    {value: 230400, text: '230400'},
+    {value: 460800, text: '460800'},
+    {value: 921600, text: '921600 (fast)'},
 ];
 
 // Web Serial is only available in a secure context (HTTPS or localhost) on Chromium-based browsers.
@@ -218,10 +225,10 @@ export function withTimeout(promise, ms, message) {
 // How long to wait for a device to connect before giving up (esptool-js retries can otherwise stall the UI).
 const CONNECT_TIMEOUT_MS = 30_000;
 
-// A read-only log TextArea that auto-scrolls to the newest output — but only when the user is already at the
+// A read-only log Textarea that auto-scrolls to the newest output — but only when the user is already at the
 // bottom, so scrolling up to read earlier lines isn't yanked back down.  Starts at the bottom on mount (e.g. when
 // a modal opens).
-function AutoScrollLog({value, ...props}) {
+function AutoScrollLog({value, style, ...props}) {
     const containerRef = useRef(null);
     const atBottomRef = useRef(true);
 
@@ -241,13 +248,18 @@ function AutoScrollLog({value, ...props}) {
     }, [value]);
 
     return <div ref={containerRef}>
-        <TextArea readOnly value={value} onScroll={handleScroll} {...props}/>
+        <Textarea readOnly value={value} onScroll={handleScroll} styles={{input: style}} {...props}/>
     </div>;
 }
 
+// Tab keys for the firmware-source picker, in display order: saved sets first, then the media picker, then a
+// local file.
+const TAB_SAVED = 'saved';
+const TAB_WROLPI = 'wrolpi';
+const TAB_COMPUTER = 'computer';
+
 export function FlasherPage() {
     useTitle('Flasher');
-    const {t, theme} = useContext(ThemeContext);
 
     // Each entry is {name, size, address, file?: File, mediaPath?: string}.  A local file has `file`; a media
     // firmware has `mediaPath`.  Default offset 0x0 suits a single merged firmware image.
@@ -283,7 +295,7 @@ export function FlasherPage() {
     const [flashError, setFlashError] = useState('');
 
     // Which firmware-source tab is active (controlled so a file drop can switch to "Add from computer").
-    const [activeTab, setActiveTab] = useState(0);
+    const [activeTab, setActiveTab] = useState(TAB_SAVED);
 
     // Saved firmware configurations (flasher.yaml).
     const [savedConfigs, setSavedConfigs] = useState([]);
@@ -331,15 +343,14 @@ export function FlasherPage() {
         }
     };
 
-    // The "Add from computer" tab (index 2 in firmwarePanes) hosts the dropzone; a drop anywhere on the page or a
-    // click on the zone lands here.
-    const COMPUTER_TAB_INDEX = 2;
+    // The "Add from computer" tab hosts the dropzone; a drop anywhere on the page or a click on the zone lands
+    // here.
     const onDrop = React.useCallback((droppedFiles) => {
         // Only take .bin firmware; anything else dropped is ignored.
         const bins = (droppedFiles || []).filter(file => file.name.toLowerCase().endsWith(FIRMWARE_SUFFIX));
         if (bins.length > 0) {
             addFiles(bins);
-            setActiveTab(COMPUTER_TAB_INDEX);
+            setActiveTab(TAB_COMPUTER);
         }
     }, []);  // eslint-disable-line react-hooks/exhaustive-deps
     // The dropzone root wraps the whole page so firmware can be dropped anywhere.  noClick/noKeyboard because the
@@ -354,7 +365,7 @@ export function FlasherPage() {
     // While the user drags a file over the page, jump to the "Add from computer" tab so the drop target is shown.
     useEffect(() => {
         if (isDragActive) {
-            setActiveTab(COMPUTER_TAB_INDEX);
+            setActiveTab(TAB_COMPUTER);
         }
     }, [isDragActive]);
 
@@ -644,15 +655,11 @@ export function FlasherPage() {
     if (!webSerialSupported()) {
         return <PageContainer>
             <Header as='h1'>Flasher</Header>
-            <Message icon warning>
-                <SIcon name='warning sign'/>
-                <Message.Content>
-                    <Message.Header>Web Serial is not available</Message.Header>
-                    <p>Flashing requires the Web Serial API, which is only available in Chromium-based browsers
-                        (Chrome, Edge, Brave) served over a secure connection (HTTPS or <code>localhost</code>).</p>
-                    <p>Open this page in Chrome or Edge over <code>https://</code> to flash your device. Firefox
-                        and iOS are not supported.</p>
-                </Message.Content>
+            <Message kind='warning' icon='warning sign' title='Web Serial is not available'>
+                <p>Flashing requires the Web Serial API, which is only available in Chromium-based browsers
+                    (Chrome, Edge, Brave) served over a secure connection (HTTPS or <code>localhost</code>).</p>
+                <p>Open this page in Chrome or Edge over <code>https://</code> to flash your device. Firefox
+                    and iOS are not supported.</p>
             </Message>
         </PageContainer>;
     }
@@ -664,409 +671,417 @@ export function FlasherPage() {
     const totalFlashBytes = files.reduce((sum, item) => sum + (item.size || 0), 0);
     const flashEtaText = humanDuration(estimateFlashSeconds(totalFlashBytes, baudrate));
 
-    // The nested tab menu isn't inverted automatically; give it the inverted style in dark mode so it matches.
-    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
-
     // A connect failure needs a download-mode reminder shown right where the user acted — both in the Connect
-    // segment and next to the "Filter files by detecting device" button so it isn't missed off-screen.
+    // panel and next to the "Filter files by detecting device" button so it isn't missed off-screen.
     const connectErrorMessage = () => (error && bootHint) &&
-        <Message error onDismiss={() => {
-            setError('');
-            setBootHint(false);
-        }} style={{marginTop: '1em'}}>
-            <Message.Header>Could not connect to the device</Message.Header>
-            <p>{error}</p>
-            <p>
-                Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
-                {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
-                BOOT and try again. Also check the USB cable is a data cable and no other tab has the port open.
-            </p>
-        </Message>;
+        <div style={{marginTop: '1em'}}>
+            <Message
+                kind='error'
+                title='Could not connect to the device'
+                onDismiss={() => {
+                    setError('');
+                    setBootHint(false);
+                }}
+            >
+                <p>{error}</p>
+                <p>
+                    Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
+                    {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
+                    BOOT and try again. Also check the USB cable is a data cable and no other tab has the port open.
+                </p>
+            </Message>
+        </div>;
 
-    // The firmware source is chosen via three tabs (see the ordered array below).
-    const computerPane = {
-            menuItem: 'Add from computer',
-            render: () => <Tab.Pane>
-                {/* Clickable drop target (files may also be dropped anywhere on the page, which routes here). */}
-                <Segment
-                    placeholder
-                    onClick={busy ? undefined : open}
+    // The firmware source is chosen via three tabs, in this order: saved sets, the media picker, then a local
+    // file.
+    const computerPaneContent = <>
+        {/* Clickable drop target (files may also be dropped anywhere on the page, which routes here). */}
+        <Panel
+            onClick={busy ? undefined : open}
+            style={{
+                cursor: busy ? 'default' : 'pointer',
+                textAlign: 'center',
+                ...(isDragActive ? {borderColor: 'var(--blue)', borderWidth: 2} : {}),
+            }}
+        >
+            <Header as='h4' icon='microchip'>
+                {isDragActive
+                    ? <>Drop <code>.bin</code> firmware to add it</>
+                    : <>Click here, or drop <code>.bin</code> firmware here</>}
+            </Header>
+        </Panel>
+        <p style={{marginTop: '1em', opacity: 0.8}}>
+            A single merged image is flashed at offset <code>0x0</code>. For multi-part firmware, add each
+            part and set its offset (e.g. bootloader <code>0x1000</code>, partitions <code>0x8000</code>,
+            app <code>0x10000</code>).
+        </p>
+    </>;
+
+    const wrolpiPaneContent = <>
+        <p style={{opacity: 0.8}}>
+            Not sure which file you need? Plug in your device and let WROLPi show only the firmware that
+            matches it.
+        </p>
+        {/* Always available so a user who swaps to a different ESP device can re-detect it. */}
+        <Button
+            icon='usb'
+            loading={connecting}
+            disabled={busy}
+            onClick={handleFilterByDevice}
+        >
+            {deviceChip ? 'Detect a different device' : 'Filter files by detecting device'}
+        </Button>
+        {/* Show a connect failure here too, so the user doesn't have to scroll to the Connect panel. */}
+        {connectErrorMessage()}
+        {deviceChip &&
+            <Message kind='info' icon='microchip'>
+                Showing firmware for <b>{deviceChip}</b>.
+                <Button role='cancel' size='xs' onClick={() => applyDeviceChip(null)}
+                        disabled={busy} style={{marginLeft: '1em'}}>
+                    Show all firmware
+                </Button>
+            </Message>}
+        <TextInput
+            style={{marginTop: '1em'}}
+            leftSection={<Icon name='search'/>}
+            placeholder='Filter firmware by path (e.g. a folder name)...'
+            value={mediaFilter}
+            disabled={busy}
+            onChange={(e) => handleMediaFilterChange(e.currentTarget.value)}
+        />
+        <div style={{marginTop: '1em', overflowX: 'auto'}}>
+            {mediaLoading
+                ? <Loading/>
+                : (mediaResults.length === 0
+                    ? <p style={{opacity: 0.7}}>
+                        No <code>.bin</code> firmware found
+                        {deviceChip ? ` for ${deviceChip}` : ' in your media directory'}
+                        {mediaFilter ? ' matching that filter.' : '.'}
+                    </p>
+                    : <Table>
+                        <Table.Header>
+                            <Table.Row>
+                                <Table.HeaderCell>File</Table.HeaderCell>
+                                <Table.HeaderCell>Path</Table.HeaderCell>
+                                <Table.HeaderCell>Size</Table.HeaderCell>
+                                <Table.HeaderCell>Chip</Table.HeaderCell>
+                                <Table.HeaderCell>Kind</Table.HeaderCell>
+                                <Table.HeaderCell style={{width: '1%'}}/>
+                            </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                            {mediaResults.map(result => {
+                                const name = result.name || (result.primary_path || '').split('/').pop();
+                                // esp_kind is 'not_esp_image' for parts with no chip (partitions, littlefs).
+                                const kind = result.esp_kind && result.esp_kind !== 'not_esp_image'
+                                    ? result.esp_kind : null;
+                                return <Table.Row key={result.primary_path}>
+                                    <Table.Cell>{name}</Table.Cell>
+                                    <Table.Cell style={{opacity: 0.7, wordBreak: 'break-all'}}>
+                                        {result.primary_path}
+                                    </Table.Cell>
+                                    <Table.Cell>{humanFileSize(result.size)}</Table.Cell>
+                                    <Table.Cell>
+                                        {result.esp_chip
+                                            // `--label-text` rather than `color`: an inline
+                                            // `color` cannot be overridden, and night and
+                                            // amber replace the chip's fill with their own.
+                                            ? <span className='wrolpi-label' style={{
+                                                '--label-color': chipColor(result.esp_chip),
+                                                '--label-text': chipTextColor(chipColor(result.esp_chip)),
+                                            }}>{result.esp_chip}</span>
+                                            : <span style={{opacity: 0.5}}>—</span>}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                        {kind || <span style={{opacity: 0.5}}>—</span>}
+                                    </Table.Cell>
+                                    <Table.Cell style={{textAlign: 'center'}}>
+                                        <IconButton icon='plus' label='Add to selected firmware' role='primary'
+                                                    size='xs' disabled={busy}
+                                                    onClick={() => handleAddMediaFile(result)}/>
+                                    </Table.Cell>
+                                </Table.Row>;
+                            })}
+                        </Table.Body>
+                    </Table>)}
+        </div>
+    </>;
+
+    const savedPaneContent = <>
+        <p style={{opacity: 0.8}}>
+            Configure the firmware files and offsets, then save them as a named set to re-flash later
+            (e.g. a Meshtastic T-Deck: firmware at <code>0x0</code>, littlefs at <code>0xc90000</code>).
+        </p>
+        {savedConfigs.length > 0
+            ? <Panel style={{padding: 0}}>
+                {savedConfigs.map((configuration, index) => <div
+                    key={configuration.name}
                     style={{
-                        cursor: busy ? 'default' : 'pointer',
-                        textAlign: 'center',
-                        ...(isDragActive ? {outline: '2px dashed #2185d0', outlineOffset: '-2px'} : {}),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        padding: '10px 12px',
+                        borderBottom: index === savedConfigs.length - 1 ? undefined : '1px solid var(--border)',
                     }}
                 >
-                    <Header icon {...t}>
-                        <Icon name='microchip'/>
-                        {isDragActive
-                            ? <>Drop <code>.bin</code> firmware to add it</>
-                            : <>Click here, or drop <code>.bin</code> firmware here</>}
-                    </Header>
-                </Segment>
-                <p {...t} style={{marginTop: '1em', opacity: 0.8}}>
-                    A single merged image is flashed at offset <code>0x0</code>. For multi-part firmware, add each
-                    part and set its offset (e.g. bootloader <code>0x1000</code>, partitions <code>0x8000</code>,
-                    app <code>0x10000</code>).
-                </p>
-            </Tab.Pane>,
-    };
-    const wrolpiPane = {
-            menuItem: 'Choose from your WROLPi',
-            render: () => <Tab.Pane>
-                <p {...t} style={{opacity: 0.8}}>
-                    Not sure which file you need? Plug in your device and let WROLPi show only the firmware that
-                    matches it.
-                </p>
-                {/* Always available so a user who swaps to a different ESP device can re-detect it. */}
-                <Button
-                    icon labelPosition='left'
-                    loading={connecting}
-                    disabled={busy}
-                    onClick={handleFilterByDevice}
-                >
-                    <Icon name='usb'/>
-                    {deviceChip ? 'Detect a different device' : 'Filter files by detecting device'}
-                </Button>
-                {/* Show a connect failure here too, so the user doesn't have to scroll to the Connect segment. */}
-                {connectErrorMessage()}
-                {deviceChip &&
-                    <Message info>
-                        {/* Plain (non-inverted) icon: Message backgrounds are light, so a themed white icon
-                            vanishes. */}
-                        <SIcon name='microchip'/>
-                        Showing firmware for <b>{deviceChip}</b>.
-                        <SButton size='tiny' compact onClick={() => applyDeviceChip(null)}
-                                 disabled={busy} style={{marginLeft: '1em'}}>
-                            Show all firmware
-                        </SButton>
-                    </Message>}
-                <Form style={{marginTop: '1em'}}>
-                    <Form.Input
-                        fluid
-                        icon='search'
-                        placeholder='Filter firmware by path (e.g. a folder name)...'
-                        value={mediaFilter}
-                        disabled={busy}
-                        onChange={(e, {value}) => handleMediaFilterChange(value)}
-                    />
-                </Form>
-                <div style={{marginTop: '1em', overflowX: 'auto'}}>
-                    {mediaLoading
-                        ? <Loader active inline='centered'/>
-                        : (mediaResults.length === 0
-                            ? <p {...t} style={{opacity: 0.7}}>
-                                No <code>.bin</code> firmware found
-                                {deviceChip ? ` for ${deviceChip}` : ' in your media directory'}
-                                {mediaFilter ? ' matching that filter.' : '.'}
-                            </p>
-                            : <Table compact selectable unstackable>
-                                <Table.Header>
-                                    <Table.Row>
-                                        <Table.HeaderCell>File</Table.HeaderCell>
-                                        <Table.HeaderCell>Path</Table.HeaderCell>
-                                        <Table.HeaderCell>Size</Table.HeaderCell>
-                                        <Table.HeaderCell>Chip</Table.HeaderCell>
-                                        <Table.HeaderCell>Kind</Table.HeaderCell>
-                                        <Table.HeaderCell width={1}/>
-                                    </Table.Row>
-                                </Table.Header>
-                                <Table.Body>
-                                    {mediaResults.map(result => {
-                                        const name = result.name || (result.primary_path || '').split('/').pop();
-                                        // esp_kind is 'not_esp_image' for parts with no chip (partitions, littlefs).
-                                        const kind = result.esp_kind && result.esp_kind !== 'not_esp_image'
-                                            ? result.esp_kind : null;
-                                        return <Table.Row key={result.primary_path}>
-                                            <Table.Cell>{name}</Table.Cell>
-                                            <Table.Cell {...t} style={{opacity: 0.7, wordBreak: 'break-all'}}>
-                                                {result.primary_path}
-                                            </Table.Cell>
-                                            <Table.Cell>{humanFileSize(result.size)}</Table.Cell>
-                                            <Table.Cell>
-                                                {result.esp_chip
-                                                    ? <Label size='tiny' style={{
-                                                        backgroundColor: chipColor(result.esp_chip),
-                                                        color: chipTextColor(chipColor(result.esp_chip)),
-                                                        borderColor: 'transparent',
-                                                    }}>{result.esp_chip}</Label>
-                                                    : <span style={{opacity: 0.5}}>—</span>}
-                                            </Table.Cell>
-                                            <Table.Cell>
-                                                {kind || <span style={{opacity: 0.5}}>—</span>}
-                                            </Table.Cell>
-                                            <Table.Cell textAlign='center'>
-                                                <Button icon='plus' size='mini' primary disabled={busy}
-                                                        title='Add to selected firmware'
-                                                        onClick={() => handleAddMediaFile(result)}/>
-                                            </Table.Cell>
-                                        </Table.Row>;
-                                    })}
-                                </Table.Body>
-                            </Table>)}
-                </div>
-            </Tab.Pane>,
-    };
-    const savedPane = {
-            menuItem: 'Saved Firmwares',
-            render: () => <Tab.Pane>
-                <p {...t} style={{opacity: 0.8}}>
-                    Configure the firmware files and offsets, then save them as a named set to re-flash later
-                    (e.g. a Meshtastic T-Deck: firmware at <code>0x0</code>, littlefs at <code>0xc90000</code>).
-                </p>
-                {savedConfigs.length > 0
-                    ? <List divided relaxed selection>
-                        {savedConfigs.map(configuration => <List.Item key={configuration.name}>
-                            <List.Content floated='right'>
-                                <Button icon='trash' size='mini' color='red' disabled={busy}
-                                        onClick={() => handleDeleteConfig(configuration.name)}/>
-                            </List.Content>
-                            <List.Icon name='save' verticalAlign='middle'/>
-                            <List.Content onClick={busy ? undefined : () => handleLoadConfig(configuration)}
-                                          style={busy ? {} : {cursor: 'pointer'}}>
-                                <List.Header>{configuration.name}</List.Header>
-                                <List.Description {...t}>
-                                    {(configuration.files || []).length} file(s)
-                                    {configuration.erase_all ? ' — erases flash' : ''}
-                                </List.Description>
-                            </List.Content>
-                        </List.Item>)}
-                    </List>
-                    : <p {...t} style={{opacity: 0.7}}>No saved configurations yet.</p>}
-            </Tab.Pane>,
-    };
-    // Tab order: saved sets first, then the media picker, then a local file.
-    const firmwarePanes = [savedPane, wrolpiPane, computerPane];
+                    <div
+                        onClick={busy ? undefined : () => handleLoadConfig(configuration)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 10, flex: 1,
+                            cursor: busy ? 'default' : 'pointer',
+                        }}
+                    >
+                        <Icon name='save'/>
+                        <div>
+                            <div style={{fontWeight: 600}}>{configuration.name}</div>
+                            <div style={{fontSize: '0.75rem', opacity: 0.8}}>
+                                {(configuration.files || []).length} file(s)
+                                {configuration.erase_all ? ' — erases flash' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <IconButton icon='trash' label={`Delete ${configuration.name}`} role='danger' size='xs'
+                                disabled={busy}
+                                onClick={() => handleDeleteConfig(configuration.name)}/>
+                </div>)}
+            </Panel>
+            : <p style={{opacity: 0.7}}>No saved configurations yet.</p>}
+    </>;
 
     return <div {...getRootProps()}>
         {/* The dropzone root wraps the whole page: firmware .bin files can be dropped anywhere and are routed to
             the "Add from computer" tab.  noClick is set, so this wrapper never opens the file dialog itself. */}
         <input {...getInputProps()}/>
         <PageContainer>
-        <Header as='h1'>Flasher</Header>
-        <p {...t}>
-            Flash firmware onto an ESP32/ESP8266 device directly from your browser over USB. Choose one or more
-            firmware <code>.bin</code> files &mdash; from your computer or from your WROLPi's media directory &mdash;
-            connect your device, then flash. The flash happens entirely in your browser and is written straight to
-            the device over USB.
-        </p>
+            <Header as='h1'>Flasher</Header>
+            <p>
+                Flash firmware onto an ESP32/ESP8266 device directly from your browser over USB. Choose one or
+                more firmware <code>.bin</code> files &mdash; from your computer or from your WROLPi's media
+                directory &mdash; connect your device, then flash. The flash happens entirely in your browser and
+                is written straight to the device over USB.
+            </p>
 
-        {/* Connection errors render inside the Connect segment (below), where the user just clicked.  Other
-            errors show here at the top. */}
-        {error && !bootHint && <Message error onDismiss={() => setError('')}>
-            <Message.Header>Error</Message.Header>
-            <p>{error}</p>
-        </Message>}
+            {/* Connection errors render inside the Connect panel (below), where the user just clicked.  Other
+                errors show here at the top. */}
+            {error && !bootHint && <Message kind='error' title='Error' onDismiss={() => setError('')}>
+                <p>{error}</p>
+            </Message>}
 
-        <Segment>
-            <Header as='h3'>1. Firmware files</Header>
-            <Tab
-                menu={tabMenu}
-                panes={firmwarePanes}
-                activeIndex={activeTab}
-                onTabChange={(e, {activeIndex}) => setActiveTab(activeIndex)}
-            />
+            <Panel>
+                <Header as='h3'>1. Firmware files</Header>
+                <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
+                    <Tabs.List>
+                        <Tabs.Tab value={TAB_SAVED}>Saved Firmwares</Tabs.Tab>
+                        <Tabs.Tab value={TAB_WROLPI}>Choose from your WROLPi</Tabs.Tab>
+                        <Tabs.Tab value={TAB_COMPUTER}>Add from computer</Tabs.Tab>
+                    </Tabs.List>
+                    <Tabs.Panel value={TAB_SAVED} pt='md'>{savedPaneContent}</Tabs.Panel>
+                    <Tabs.Panel value={TAB_WROLPI} pt='md'>{wrolpiPaneContent}</Tabs.Panel>
+                    <Tabs.Panel value={TAB_COMPUTER} pt='md'>{computerPaneContent}</Tabs.Panel>
+                </Tabs>
 
-            {/* The selected firmware is shown below the source tabs so it stays visible regardless of which tab
-                (computer / WROLPi / saved) the user is on. */}
-            {files.length > 0 && <>
-                <Divider/>
-                <Header as='h4'>Selected firmware</Header>
-                <Table compact unstackable>
-                    <Table.Header>
-                        <Table.Row>
-                            <Table.HeaderCell>File</Table.HeaderCell>
-                            <Table.HeaderCell width={4}>Flash offset</Table.HeaderCell>
-                            <Table.HeaderCell width={1}/>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {files.map((item, index) => {
-                            // Flag (but never block) a file whose image targets a different chip than the device.
-                            const fileChipId = fileChipIds[index];
-                            const chipMismatch = deviceChipId !== null && fileChipId != null
-                                && fileChipId !== deviceChipId;
-                            return <Table.Row key={`${item.name}-${index}`} warning={chipMismatch}>
-                            <Table.Cell>
-                                <Icon name={item.mediaPath ? 'database' : 'file'}/>
-                                {item.name} <span style={{opacity: 0.6}}>({humanFileSize(item.size)})</span>
-                                {chipMismatch &&
-                                    <Label color='red' size='tiny' style={{marginLeft: '0.5em'}}>
-                                        <SIcon name='warning sign'/>
-                                        Built for {chipIdName(fileChipId)}, not {chipIdName(deviceChipId)}
-                                    </Label>}
-                            </Table.Cell>
-                            <Table.Cell>
-                                <Form.Input
-                                    fluid
-                                    size='small'
-                                    placeholder='0x10000'
-                                    value={item.address}
-                                    disabled={busy}
-                                    error={!isValidHexOffset(item.address)}
-                                    onChange={(e, {value}) => handleAddressChange(index, value)}
-                                />
-                            </Table.Cell>
-                            <Table.Cell textAlign='center'>
-                                <Button icon='trash' size='mini' color='red' disabled={busy}
-                                        onClick={() => handleRemoveFile(index)}/>
-                            </Table.Cell>
-                        </Table.Row>;
-                        })}
-                    </Table.Body>
-                </Table>
-                {/* Save lives here (not in the Saved Firmwares tab) so the current selection can be saved from
-                    any source tab. */}
-                <Button icon labelPosition='left' disabled={busy || saveableFiles.length === 0}
-                        onClick={() => setSaveModalOpen(true)}>
-                    <Icon name='save'/>
-                    Save current firmware
-                </Button>
-            </>}
-        </Segment>
+                {/* The selected firmware is shown below the source tabs so it stays visible regardless of which
+                    tab (computer / WROLPi / saved) the user is on. */}
+                {files.length > 0 && <>
+                    <Divider/>
+                    <Header as='h4'>Selected firmware</Header>
+                    <Table>
+                        <Table.Header>
+                            <Table.Row>
+                                <Table.HeaderCell>File</Table.HeaderCell>
+                                <Table.HeaderCell style={{width: '30%'}}>Flash offset</Table.HeaderCell>
+                                <Table.HeaderCell style={{width: '1%'}}/>
+                            </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                            {files.map((item, index) => {
+                                // Flag (but never block) a file whose image targets a different chip than the
+                                // device.
+                                const fileChipId = fileChipIds[index];
+                                const chipMismatch = deviceChipId !== null && fileChipId != null
+                                    && fileChipId !== deviceChipId;
+                                return <Table.Row key={`${item.name}-${index}`}>
+                                    <Table.Cell>
+                                        <Icon name={item.mediaPath ? 'disk' : 'file'}/>
+                                        {' '}{item.name} <span style={{opacity: 0.6}}>
+                                            ({humanFileSize(item.size)})
+                                        </span>
+                                        {chipMismatch &&
+                                            <span style={{marginLeft: '0.5em'}}>
+                                                <Label color='warning' icon='warning sign'>
+                                                    Built for {chipIdName(fileChipId)}, not{' '}
+                                                    {chipIdName(deviceChipId)}
+                                                </Label>
+                                            </span>}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                        <TextInput
+                                            size='xs'
+                                            placeholder='0x10000'
+                                            value={item.address}
+                                            disabled={busy}
+                                            error={!isValidHexOffset(item.address)}
+                                            onChange={(e) => handleAddressChange(index, e.currentTarget.value)}
+                                        />
+                                    </Table.Cell>
+                                    <Table.Cell style={{textAlign: 'center'}}>
+                                        <IconButton icon='trash' label={`Remove ${item.name}`} role='danger'
+                                                    size='xs' disabled={busy}
+                                                    onClick={() => handleRemoveFile(index)}/>
+                                    </Table.Cell>
+                                </Table.Row>;
+                            })}
+                        </Table.Body>
+                    </Table>
+                    {/* Save lives here (not in the Saved Firmwares tab) so the current selection can be saved
+                        from any source tab. */}
+                    <Button icon='save' role='save' disabled={busy || saveableFiles.length === 0}
+                            onClick={() => setSaveModalOpen(true)}>
+                        Save current firmware
+                    </Button>
+                </>}
+            </Panel>
 
-        <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} size='tiny'>
-            <Modal.Header>Save firmware configuration</Modal.Header>
-            <Modal.Content>
-                <Form onSubmit={handleSaveConfig}>
-                    <Form.Input
+            <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} size='tiny'>
+                <Modal.Header>Save firmware configuration</Modal.Header>
+                <Modal.Content>
+                    <TextInput
                         autoFocus
                         label='Name'
                         placeholder='e.g. T-Deck Meshtastic UI'
                         value={saveName}
-                        onChange={(e, {value}) => setSaveName(value)}
+                        onChange={(e) => setSaveName(e.currentTarget.value)}
                     />
-                    <p {...t} style={{opacity: 0.8}}>
+                    <p style={{opacity: 0.8, marginTop: '0.75em'}}>
                         Saving {saveableFiles.length} firmware file(s) from your WROLPi. An existing configuration
                         with the same name will be replaced.
                     </p>
-                </Form>
-            </Modal.Content>
-            <Modal.Actions>
-                <SButton onClick={() => setSaveModalOpen(false)}>Cancel</SButton>
-                <Button primary disabled={!saveName.trim()} onClick={handleSaveConfig}>Save</Button>
-            </Modal.Actions>
-        </Modal>
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button role='cancel' onClick={() => setSaveModalOpen(false)}>Cancel</Button>
+                    <Button role='save' disabled={!saveName.trim()} onClick={handleSaveConfig}>Save</Button>
+                </Modal.Actions>
+            </Modal>
 
-        <Segment>
-            <Header as='h3'>2. Connect</Header>
-            <Form>
-                <Form.Field>
-                    <label>Baud rate</label>
-                    <Select
-                        options={BAUD_OPTIONS}
-                        value={baudrate}
-                        disabled={connected || busy}
-                        onChange={(e, {value}) => setBaudrate(value)}
-                    />
-                </Form.Field>
-                {connected &&
-                    <Message positive>
-                        <SIcon name='usb'/> Connected to <b>{chip}</b>
-                    </Message>}
-                {connected
-                    ? <Button color='grey' disabled={busy} onClick={disconnect}>Disconnect</Button>
-                    : <Button primary loading={connecting} disabled={busy} onClick={handleConnect}>
-                        Connect Device
-                    </Button>}
-                <Button icon labelPosition='left' disabled={!log} onClick={() => setLogOpen(true)}>
-                    <Icon name='terminal'/> Logs
-                </Button>
-            </Form>
-            {/* Rendered outside <Form> so Semantic's ".ui.form .error.message { display:none }" rule doesn't
-                hide it, and here (not at the top) so it is visible right where the user clicked Connect. */}
-            {connectErrorMessage()}
-        </Segment>
+            <Panel>
+                <Header as='h3'>2. Connect</Header>
+                <Stack gap={12} style={{maxWidth: 320}}>
+                    <div>
+                        <div style={{marginBottom: 4, fontSize: '0.8125rem', fontWeight: 500}}>Baud rate</div>
+                        <Select
+                            data={BAUD_OPTIONS.map(o => ({value: String(o.value), label: o.text}))}
+                            value={String(baudrate)}
+                            disabled={connected || busy}
+                            allowDeselect={false}
+                            onChange={(value) => value && setBaudrate(Number(value))}
+                        />
+                    </div>
+                    {connected &&
+                        <Message kind='success' icon='usb'>Connected to <b>{chip}</b></Message>}
+                    <Group>
+                        {connected
+                            ? <Button role='cancel' disabled={busy} onClick={disconnect}>Disconnect</Button>
+                            : <Button role='primary' loading={connecting} disabled={busy} onClick={handleConnect}>
+                                Connect Device
+                            </Button>}
+                        <Button icon='terminal' disabled={!log} onClick={() => setLogOpen(true)}>
+                            Logs
+                        </Button>
+                    </Group>
+                </Stack>
+                {/* Rendered outside the fields above, and here (not at the top) so it is visible right where
+                    the user clicked Connect. */}
+                {connectErrorMessage()}
+            </Panel>
 
-        <Segment>
-            <Header as='h3'>3. Flash</Header>
-            <Form>
-                <Form.Field>
+            <Panel danger>
+                <Header as='h3'>3. Flash</Header>
+                <Stack gap={12}>
                     <Checkbox
                         label='Erase all flash before writing'
                         checked={eraseAll}
                         disabled={busy}
-                        onChange={(e, {checked}) => setEraseAll(checked)}
+                        onChange={(e) => setEraseAll(e.currentTarget.checked)}
                     />
-                </Form.Field>
-                <Button
-                    color='red'
-                    loading={flashing}
-                    disabled={!connected || flashing || files.length === 0 || !offsetsValid}
-                    onClick={handleFlash}
-                >
-                    <Icon name='lightning'/> Flash Device
-                </Button>
-                {offsetsValid && flashEtaText &&
-                    <span {...t} style={{marginLeft: '1em', opacity: 0.8}}>
-                        Estimated time: ~{flashEtaText} at {baudrate.toLocaleString()} baud
-                    </span>}
-                {files.length > 0 && !offsetsValid &&
-                    <p {...t} style={{marginTop: '0.5em', opacity: 0.8}}>
-                        Every firmware file needs a valid hex flash offset (e.g. <code>0x0</code> or{' '}
-                        <code>0x10000</code>).
-                    </p>}
-            </Form>
-        </Segment>
+                    <div>
+                        <Button
+                            role='danger'
+                            icon='lightning'
+                            loading={flashing}
+                            disabled={!connected || flashing || files.length === 0 || !offsetsValid}
+                            onClick={handleFlash}
+                        >
+                            Flash Device
+                        </Button>
+                        {offsetsValid && flashEtaText &&
+                            <span style={{marginLeft: '1em', opacity: 0.8}}>
+                                Estimated time: ~{flashEtaText} at {baudrate.toLocaleString()} baud
+                            </span>}
+                    </div>
+                    {files.length > 0 && !offsetsValid &&
+                        <p style={{opacity: 0.8}}>
+                            Every firmware file needs a valid hex flash offset (e.g. <code>0x0</code> or{' '}
+                            <code>0x10000</code>).
+                        </p>}
+                </Stack>
+            </Panel>
 
-        <Modal
-            open={flashOpen}
-            onClose={() => !flashing && setFlashOpen(false)}
-            closeOnDimmerClick={!flashing}
-            size='fullscreen'
-        >
-            <Modal.Header>{flashing ? 'Flashing device…' : (flashError ? 'Flash failed' : 'Flash complete')}</Modal.Header>
-            <Modal.Content scrolling>
-                {progress !== null &&
-                    <Progress percent={progress.percent} progress indicating={flashing}
-                              error={!!flashError} autoSuccess={!flashError}>
-                        {flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}`
-                            : (flashError ? 'Failed' : 'Done')}
-                    </Progress>}
-                {flashing && flashEtaText &&
-                    <p {...t} style={{opacity: 0.8}}>
-                        Estimated total time: ~{flashEtaText} at {baudrate.toLocaleString()} baud. Keep this tab
-                        open and do not unplug the device.
-                    </p>}
-                {/* Surface a failure right here — otherwise a failed flash looks identical to a frozen one. */}
-                {flashError &&
-                    <Message error>
-                        <SIcon name='warning circle'/>
-                        <Message.Content>
-                            <Message.Header>Flashing failed</Message.Header>
+            <Modal
+                open={flashOpen}
+                onClose={() => !flashing && setFlashOpen(false)}
+                closeOnClickOutside={!flashing}
+                closeOnEscape={!flashing}
+                size='fullscreen'
+            >
+                <Modal.Header>
+                    {flashing ? 'Flashing device…' : (flashError ? 'Flash failed' : 'Flash complete')}
+                </Modal.Header>
+                <Modal.Content>
+                    {progress !== null &&
+                        <Progress
+                            percent={progress.percent}
+                            color={flashError ? 'red' : (flashing ? 'blue' : 'green')}
+                            label={flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}`
+                                : (flashError ? 'Failed' : 'Done')}
+                        />}
+                    {flashing && flashEtaText &&
+                        <p style={{opacity: 0.8}}>
+                            Estimated total time: ~{flashEtaText} at {baudrate.toLocaleString()} baud. Keep this
+                            tab open and do not unplug the device.
+                        </p>}
+                    {/* Surface a failure right here — otherwise a failed flash looks identical to a frozen
+                        one. */}
+                    {flashError &&
+                        <Message kind='error' icon='warning circle' title='Flashing failed'>
                             <p>{flashError}</p>
-                        </Message.Content>
-                    </Message>}
-                {!flashing && !flashError && progress !== null &&
-                    <Message success>
-                        <SIcon name='check circle'/>
-                        <Message.Content>
-                            <Message.Header>Flashing complete</Message.Header>
+                        </Message>}
+                    {!flashing && !flashError && progress !== null &&
+                        <Message kind='success' icon='check circle' title='Flashing complete'>
                             <p>Unplug the device and power it back on to run the new firmware.</p>
-                        </Message.Content>
-                    </Message>}
-                <AutoScrollLog
-                    value={log || 'Starting…'}
-                    style={{fontFamily: 'monospace', width: '100%', minHeight: '60vh', whiteSpace: 'pre'}}
-                />
-            </Modal.Content>
-            <Modal.Actions>
-                <Button onClick={() => setFlashOpen(false)} disabled={flashing}>Close</Button>
-            </Modal.Actions>
-        </Modal>
+                        </Message>}
+                    <AutoScrollLog
+                        value={log || 'Starting…'}
+                        style={{fontFamily: 'var(--font-mono)', width: '100%', minHeight: '60vh', whiteSpace: 'pre'}}
+                    />
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button role='cancel' onClick={() => setFlashOpen(false)} disabled={flashing}>Close</Button>
+                </Modal.Actions>
+            </Modal>
 
-        <Modal open={logOpen} onClose={() => setLogOpen(false)} size='fullscreen'>
-            <Modal.Header>Flasher Log</Modal.Header>
-            <Modal.Content scrolling>
-                <AutoScrollLog
-                    value={log || 'No activity yet.'}
-                    style={{fontFamily: 'monospace', width: '100%', minHeight: '70vh', whiteSpace: 'pre'}}
-                />
-            </Modal.Content>
-            <Modal.Actions>
-                <Button onClick={() => setLogOpen(false)}>Close</Button>
-            </Modal.Actions>
-        </Modal>
+            <Modal open={logOpen} onClose={() => setLogOpen(false)} size='fullscreen'>
+                <Modal.Header>Flasher Log</Modal.Header>
+                <Modal.Content>
+                    <AutoScrollLog
+                        value={log || 'No activity yet.'}
+                        style={{fontFamily: 'var(--font-mono)', width: '100%', minHeight: '70vh', whiteSpace: 'pre'}}
+                    />
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button role='cancel' onClick={() => setLogOpen(false)}>Close</Button>
+                </Modal.Actions>
+            </Modal>
         </PageContainer>
     </div>;
 }

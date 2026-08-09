@@ -11,10 +11,6 @@ jest.mock('../../api', () => ({
     getBatchReorganizationStatus: jest.fn(),
 }));
 
-// Mock react-semantic-toasts-2
-jest.mock('react-semantic-toasts-2', () => ({
-    toast: jest.fn(),
-}));
 
 // Mock the FileWorkerStatusContext
 jest.mock('../../contexts/FileWorkerStatusContext', () => ({
@@ -68,7 +64,7 @@ describe('BatchReorganizeModal', () => {
         renderWithProviders(<BatchReorganizeModal {...defaultProps} />);
 
         // Should show loading initially
-        expect(screen.getByText(/Loading Preview/i)).toBeInTheDocument();
+        expect(screen.getByText(/Analyzing channels/i)).toBeInTheDocument();
 
         // Wait for preview to load
         await waitFor(() => {

@@ -1,0 +1,25 @@
+/*
+ * Bundled font registry.
+ *
+ * Fonts are exposed to themes as ROLES (--font-body, --font-mono), never as
+ * families.  A theme assigns one of the bundled `--font-<name>` stacks to a
+ * role; it may not name an arbitrary family, because a theme config file
+ * cannot ship font files and an unknown family would silently fall back —
+ * offline, with no error.
+ *
+ * Every face here must be available offline.  The system stacks cost nothing.
+ * Additional faces are added as `@fontsource/*` npm packages (woff2 bundled at
+ * build time) — NEVER a fonts CDN <link>.
+ */
+
+:root {
+    /* Available faces. */
+    --font-system-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans', sans-serif;
+    --font-system-mono: 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+
+    /* Role assignments.  Themes override these. */
+    --font-body: var(--font-system-sans);
+    --font-mono: var(--font-system-mono);
+}

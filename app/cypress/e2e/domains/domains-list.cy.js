@@ -88,11 +88,17 @@ describe('Domains List Page', () => {
         });
     });
 
-    it('Edit button has correct styling', () => {
+    it('Edit control is a link to that domain\'s edit page', () => {
+        /*
+         * This used to assert the old `ui button secondary` classes.  Framework class
+         * names say nothing a user can perceive and they broke the moment the button
+         * changed libraries, so it now checks what actually matters: the control is a real
+         * link, and it points at the edit route rather than relying on a click handler.
+         */
         cy.get('table tbody tr').first().within(() => {
-            cy.get('a').contains('Edit').should('have.class', 'ui');
-            cy.get('a').contains('Edit').should('have.class', 'button');
-            cy.get('a').contains('Edit').should('have.class', 'secondary');
+            cy.contains('a', 'Edit')
+                .should('have.attr', 'href')
+                .and('match', /\/archives\/domain\/\d+\/edit$/);
         });
     });
 

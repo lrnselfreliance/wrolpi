@@ -1,6 +1,23 @@
 import React from 'react';
-import {Checkbox, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
-import {Button, Confirm, Header, Loader, Modal, Segment, Table} from "../Theme";
+import {IconInfoCircle, IconPlayerEject} from '@tabler/icons-react';
+import {
+    Button,
+    Checkbox,
+    Confirm,
+    Group,
+    Header,
+    Icon,
+    IconButton,
+    Loading,
+    Message,
+    Modal,
+    Panel,
+    Select,
+    Status,
+    Table,
+    TextInput,
+    toast,
+} from "../ui";
 import {APIButton, BluetoothToggle, DesktopToggle, DirectorySearch, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle, VncToggle,} from "../Common";
 import {useDockerized, useMediaDirectory} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
@@ -29,18 +46,18 @@ import {
     updateHotspotSettings,
 } from "../../api/controller";
 import QRCode from "react-qr-code";
-import {toast} from "react-semantic-toasts-2";
 import {RestartButton, ShutdownButton} from "./Settings";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {CONTROLLER_URI} from "../Vars";
 
 
-// Service status color mapping
-const statusColors = {
-    running: 'green',
-    stopped: 'red',
-    failed: 'red',
-    unknown: 'yellow',
+// Service status kind mapping. Status only knows complete/active/pending/failed,
+// so "stopped" and "unknown" both land on pending -- the Start/Stop button and
+// service name still tell them apart, this dot only carries running vs. failed.
+const statusKinds = {
+    running: 'complete',
+    stopped: 'pending',
+    failed: 'failed',
+    unknown: 'pending',
 };
 
 // Sort order within a group: problems first so they stay visible.
@@ -69,11 +86,11 @@ export const groupServices = (services) => {
 
 
 const linesOptions = [
-    {key: 100, text: '100 lines', value: 100},
-    {key: 250, text: '250 lines', value: 250},
-    {key: 500, text: '500 lines', value: 500},
-    {key: 1000, text: '1000 lines', value: 1000},
-    {key: 5000, text: '5000 lines', value: 5000},
+    {value: '100', label: '100 lines'},
+    {value: '250', label: '250 lines'},
+    {value: '500', label: '500 lines'},
+    {value: '1000', label: '1000 lines'},
+    {value: '5000', label: '5000 lines'},
 ];
 
 // Custom hook for service row state and handlers
@@ -157,9 +174,10 @@ function useServiceRow(service, onAction) {
         fetchLogs(linesCount, true); // Show loading on initial open
     };
 
-    const handleLinesChange = (e, {value}) => {
-        setLinesCount(value);
-        fetchLogs(value);
+    const handleLinesChange = (value) => {
+        const lines = parseInt(value, 10);
+        setLinesCount(lines);
+        fetchLogs(lines);
     };
 
     const handleDownloadLogs = () => {
@@ -175,7 +193,7 @@ function useServiceRow(service, onAction) {
     };
 
     const isRunning = service.status === 'running';
-    const statusColor = statusColors[service.status] || 'grey';
+    const statusKind = statusKinds[service.status] || 'pending';
 
     // Build view URL if service is viewable
     let viewUrl = null;
@@ -191,7 +209,7 @@ function useServiceRow(service, onAction) {
     return {
         loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
         handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
-        isRunning, statusColor, viewUrl
+        isRunning, statusKind, viewUrl
     };
 }
 
@@ -205,7 +223,6 @@ function ServiceLogsModal({
                               logsRef,
                               linesCount,
                               countdown,
-                              handleViewLogs,
                               handleLinesChange,
                               handleDownloadLogs,
                               fetchLogs
@@ -214,24 +231,22 @@ function ServiceLogsModal({
         <Modal
             open={logsOpen}
             onClose={() => setLogsOpen(false)}
-            onOpen={handleViewLogs}
-            trigger={<Button size='small' icon='file text' color='blue'/>}
             size='fullscreen'
         >
             <Modal.Header>Logs: {service.name}</Modal.Header>
             <Modal.Content scrolling>
                 {logsLoading ? (
-                    <Loader active inline='centered'/>
+                    <Loading/>
                 ) : (
                     <pre ref={logsRef} style={{
                         whiteSpace: 'pre-wrap',
                         wordWrap: 'break-word',
                         maxHeight: '400px',
                         overflow: 'auto',
-                        backgroundColor: '#1a1a1a',
-                        color: '#00ff00',
+                        background: 'var(--panel)',
+                        color: 'var(--text)',
                         padding: '1em',
-                        fontFamily: 'monospace',
+                        fontFamily: 'var(--font-mono)',
                         fontSize: '0.85em',
                     }}>
                         {logs}
@@ -239,17 +254,16 @@ function ServiceLogsModal({
                 )}
             </Modal.Content>
             <Modal.Actions>
-                <span style={{marginRight: '0.5em', color: '#888'}}>{countdown}s</span>
-                <Dropdown
-                    selection
-                    options={linesOptions}
-                    value={linesCount}
+                <span style={{marginRight: '0.5em', color: 'var(--muted)'}}>{countdown}s</span>
+                <Select
+                    data={linesOptions}
+                    value={String(linesCount)}
                     onChange={handleLinesChange}
                     style={{marginRight: 'auto'}}
                 />
-                <Button onClick={() => fetchLogs(linesCount)} color='blue' icon='refresh' content='Refresh'/>
-                <Button onClick={handleDownloadLogs} color='yellow' icon='download' content='Download'/>
-                <Button onClick={() => setLogsOpen(false)}>Close</Button>
+                <Button onClick={() => fetchLogs(linesCount)} role='primary' icon='refresh'>Refresh</Button>
+                <Button onClick={handleDownloadLogs} color='yellow' icon='download'>Download</Button>
+                <Button role='cancel' onClick={() => setLogsOpen(false)}>Close</Button>
             </Modal.Actions>
         </Modal>
     );
@@ -260,44 +274,53 @@ function MobileServiceRow({service, onAction}) {
     const {
         loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
         handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
-        isRunning, statusColor, viewUrl
+        isRunning, statusKind, viewUrl
     } = useServiceRow(service, onAction);
 
     return (
-        <Table.Row>
+        <Table.Row failed={service.status === 'failed'}>
             <Table.Cell>
-                <Icon name='circle' color={statusColor}/>
+                <Status kind={statusKind} plain/>
                 <strong>{service.name}</strong>
-                {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
+                {service.description &&
+                    <div style={{fontSize: '0.9em', color: 'var(--muted)'}}>{service.description}</div>}
             </Table.Cell>
-            <Table.Cell textAlign='right'>
+            <Table.Cell numeric>
+                <div className='wrolpi-button-row' style={{justifyContent: 'flex-end'}}>
                 {isRunning ? (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='stop'
-                        color='red'
+                        label={`Stop ${service.name}`}
+                        role='danger'
                         disabled={loading}
                         loading={loading}
                         onClick={() => handleAction('Stop', stopService)}
                     />
                 ) : (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='play'
-                        color='green'
+                        label={`Start ${service.name}`}
+                        role='save'
                         disabled={loading}
                         loading={loading}
                         onClick={() => handleAction('Start', startService)}
                     />
                 )}
-                <Button
-                    size='small'
+                <IconButton
                     icon='refresh'
-                    color='yellow'
+                    label={`Restart ${service.name}`}
+                    role='retry'
                     disabled={loading}
                     loading={loading}
                     onClick={() => handleAction('Restart', restartService)}
                 />
+                <IconButton
+                    icon='file text'
+                    label={`View logs for ${service.name}`}
+                    role='primary'
+                    onClick={handleViewLogs}
+                />
+                </div>
                 <ServiceLogsModal
                     service={service}
                     logsOpen={logsOpen}
@@ -307,20 +330,19 @@ function MobileServiceRow({service, onAction}) {
                     logsRef={logsRef}
                     linesCount={linesCount}
                     countdown={countdown}
-                    handleViewLogs={handleViewLogs}
                     handleLinesChange={handleLinesChange}
                     handleDownloadLogs={handleDownloadLogs}
                     fetchLogs={fetchLogs}
                 />
                 {viewUrl && (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='external'
-                        as='a'
+                        label={`Open ${service.name}`}
+                        color='violet'
+                        component='a'
                         href={viewUrl}
                         target='_blank'
                         rel='noopener noreferrer'
-                        color='violet'
                     />
                 )}
             </Table.Cell>
@@ -333,45 +355,54 @@ function DesktopServiceRow({service, onAction, dockerized}) {
     const {
         loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
         handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
-        isRunning, statusColor, viewUrl
+        isRunning, statusKind, viewUrl
     } = useServiceRow(service, onAction);
 
     return (
-        <Table.Row>
+        <Table.Row failed={service.status === 'failed'}>
             <Table.Cell>
-                <Icon name='circle' color={statusColor}/>
+                <Status kind={statusKind} plain/>
                 <strong>{service.name}</strong>
-                {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
+                {service.description &&
+                    <div style={{fontSize: '0.9em', color: 'var(--muted)'}}>{service.description}</div>}
             </Table.Cell>
             <Table.Cell>{service.port || '-'}</Table.Cell>
             <Table.Cell>
+                <div className='wrolpi-button-row'>
                 {isRunning ? (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='stop'
-                        color='red'
+                        label={`Stop ${service.name}`}
+                        role='danger'
                         disabled={loading}
                         loading={loading}
                         onClick={() => handleAction('Stop', stopService)}
                     />
                 ) : (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='play'
-                        color='green'
+                        label={`Start ${service.name}`}
+                        role='save'
                         disabled={loading}
                         loading={loading}
                         onClick={() => handleAction('Start', startService)}
                     />
                 )}
-                <Button
-                    size='small'
+                <IconButton
                     icon='refresh'
-                    color='yellow'
+                    label={`Restart ${service.name}`}
+                    role='retry'
                     disabled={loading}
                     loading={loading}
                     onClick={() => handleAction('Restart', restartService)}
                 />
+                <IconButton
+                    icon='file text'
+                    label={`View logs for ${service.name}`}
+                    role='primary'
+                    onClick={handleViewLogs}
+                />
+                </div>
                 <ServiceLogsModal
                     service={service}
                     logsOpen={logsOpen}
@@ -381,20 +412,19 @@ function DesktopServiceRow({service, onAction, dockerized}) {
                     logsRef={logsRef}
                     linesCount={linesCount}
                     countdown={countdown}
-                    handleViewLogs={handleViewLogs}
                     handleLinesChange={handleLinesChange}
                     handleDownloadLogs={handleDownloadLogs}
                     fetchLogs={fetchLogs}
                 />
                 {viewUrl && (
-                    <Button
-                        size='small'
+                    <IconButton
                         icon='external'
-                        as='a'
+                        label={`Open ${service.name}`}
+                        color='violet'
+                        component='a'
                         href={viewUrl}
                         target='_blank'
                         rel='noopener noreferrer'
-                        color='violet'
                     />
                 )}
             </Table.Cell>
@@ -472,18 +502,18 @@ function ServicesSection() {
     }, []);
 
     if (loading && services.length === 0) {
-        return <Segment>
+        return <Panel>
             <Header as='h3'>Services</Header>
-            <Loader active inline='centered'/>
-        </Segment>;
+            <Loading/>
+        </Panel>;
     }
 
     if (error) {
-        return <Segment>
+        return <Panel>
             <Header as='h3'>Services</Header>
-            <p style={{color: 'red'}}>Error loading services: {error}</p>
-            <Button onClick={fetchServices}>Retry</Button>
-        </Segment>;
+            <Message kind='error'>Error loading services: {error}</Message>
+            <Button role='retry' icon='refresh' onClick={fetchServices}>Retry</Button>
+        </Panel>;
     }
 
     const restartButton = (colSpan) => (
@@ -491,13 +521,13 @@ function ServicesSection() {
             <Table.Row>
                 <Table.HeaderCell colSpan={colSpan}>
                     <APIButton
-                        color='yellow'
+                        role='retry'
+                        icon='refresh'
                         onClick={handleRestartServices}
                         confirmContent='Are you sure you want to restart all WROLPi services?'
                         confirmButton='Restart Services'
                         disabled={restarting}
                     >
-                        <Icon name='refresh'/>
                         {restarting ? 'Restarting...' : 'Restart All Services'}
                     </APIButton>
                 </Table.HeaderCell>
@@ -536,14 +566,11 @@ function ServicesSection() {
     };
 
     return (
-        <Segment>
-            <Header as='h3'>
-                <Icon name='server'/>
-                Services
-            </Header>
+        <Panel>
+            <Header as='h3' icon='server'>Services</Header>
             {/* Mobile table - 2 columns */}
             <Media at='mobile'>
-                <Table unstackable striped size='small'>
+                <Table>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Service</Table.HeaderCell>
@@ -558,7 +585,7 @@ function ServicesSection() {
             </Media>
             {/* Desktop table - full columns */}
             <Media greaterThanOrEqual='tablet'>
-                <Table unstackable striped>
+                <Table>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Service</Table.HeaderCell>
@@ -576,20 +603,38 @@ function ServicesSection() {
             {services.length === 0 && (
                 <p>No services found. Services may not be available in this environment.</p>
             )}
-        </Segment>
+        </Panel>
     );
 }
 
 
 // Helper to get health status color from SMART assessment
-const getHealthColor = (assessment) => {
-    if (!assessment) return 'grey';
-    const upper = assessment.toUpperCase();
-    if (upper === 'PASS') return 'green';
-    if (upper === 'WARN') return 'yellow';
-    if (upper === 'FAIL') return 'red';
-    return 'grey';
+/**
+ * The severity of a SMART assessment.
+ *
+ * Roles, not hues: a drive's health is a severity and has to rank as one.  All four
+ * branches together -- a helper where PASS and FAIL rank but WARN is an unranked hue is
+ * worse than either choice, and in night `--amber` is byte-identical to `--yellow`, so WARN
+ * would stop sitting between them.
+ *
+ * Exported and pure so the mapping can be tested as a mapping rather than scraped out of
+ * the source, which is what this needed before it was separated from the CSS wrapper.
+ */
+export const healthRole = (assessment) => {
+    if (!assessment) return 'neutral';
+    switch (assessment.toUpperCase()) {
+        case 'PASS':
+            return 'success';
+        case 'WARN':
+            return 'warning';
+        case 'FAIL':
+            return 'danger';
+        default:
+            return 'neutral';
+    }
 };
+
+const getHealthColor = (assessment) => `var(--${healthRole(assessment)})`;
 
 // Helper to format power-on hours
 const formatPowerOnHours = (hours) => {
@@ -610,11 +655,10 @@ function SmartDetailsModal({drive, open, onClose}) {
     return (
         <Modal open={open} onClose={onClose} size='small'>
             <Modal.Header>
-                <Icon name='heartbeat'/>
-                SMART Details: {drive.device}
+                <Icon name='heartbeat'/> SMART Details: {drive.device}
             </Modal.Header>
             <Modal.Content>
-                <Table definition unstackable>
+                <Table>
                     <Table.Body>
                         <Table.Row>
                             <Table.Cell width={6}>Model</Table.Cell>
@@ -631,7 +675,7 @@ function SmartDetailsModal({drive, open, onClose}) {
                         <Table.Row>
                             <Table.Cell>Assessment</Table.Cell>
                             <Table.Cell>
-                                <Icon name='circle' color={healthColor}/>
+                                <span style={{color: healthColor}}>&#9679;</span>{' '}
                                 {drive.assessment || drive.health || 'Unknown'}
                                 {drive.smart_limited
                                     ? ' (limited — USB enclosure reports health only, no attributes)'
@@ -652,7 +696,7 @@ function SmartDetailsModal({drive, open, onClose}) {
                         </Table.Row>
                         <Table.Row>
                             <Table.Cell>Reallocated Sectors</Table.Cell>
-                            <Table.Cell style={{color: drive.reallocated_sectors > 0 ? 'orange' : 'inherit'}}>
+                            <Table.Cell style={{color: drive.reallocated_sectors > 0 ? 'var(--amber)' : 'inherit'}}>
                                 {drive.reallocated_sectors !== null && drive.reallocated_sectors !== undefined
                                     ? drive.reallocated_sectors
                                     : '-'}
@@ -660,7 +704,7 @@ function SmartDetailsModal({drive, open, onClose}) {
                         </Table.Row>
                         <Table.Row>
                             <Table.Cell>Pending Sectors</Table.Cell>
-                            <Table.Cell style={{color: drive.pending_sectors > 0 ? 'orange' : 'inherit'}}>
+                            <Table.Cell style={{color: drive.pending_sectors > 0 ? 'var(--amber)' : 'inherit'}}>
                                 {drive.pending_sectors !== null && drive.pending_sectors !== undefined
                                     ? drive.pending_sectors
                                     : '-'}
@@ -668,7 +712,7 @@ function SmartDetailsModal({drive, open, onClose}) {
                         </Table.Row>
                         <Table.Row>
                             <Table.Cell>Uncorrectable Sectors</Table.Cell>
-                            <Table.Cell style={{color: drive.offline_uncorrectable > 0 ? 'orange' : 'inherit'}}>
+                            <Table.Cell style={{color: drive.offline_uncorrectable > 0 ? 'var(--amber)' : 'inherit'}}>
                                 {drive.offline_uncorrectable !== null && drive.offline_uncorrectable !== undefined
                                     ? drive.offline_uncorrectable
                                     : '-'}
@@ -682,7 +726,7 @@ function SmartDetailsModal({drive, open, onClose}) {
                 </Table>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={onClose}>Close</Button>
+                <Button role='cancel' onClick={onClose}>Close</Button>
             </Modal.Actions>
         </Modal>
     );
@@ -797,8 +841,7 @@ function MountModal({disk, open, onClose, onMount}) {
         return (
             <Modal open={open} onClose={handleCancel} size='small'>
                 <Modal.Header>
-                    <Icon name='warning sign' color='yellow'/>
-                    Existing Files Detected
+                    <Icon name='warning sign'/> Existing Files Detected
                 </Modal.Header>
                 <Modal.Content>
                     <p>
@@ -808,7 +851,9 @@ function MountModal({disk, open, onClose, onMount}) {
                     <p>
                         Found <strong>{entries}</strong> ({formatBytes(shadowed.size_bytes)}) at the mount target.
                     </p>
-                    <p style={{color: '#a00'}}>
+                    {/* A caution about a consequence, not a failure -- the destructive
+                        weight is already carried by the confirm button below. */}
+                    <p style={{color: 'var(--warning)'}}>
                         Those files will continue to consume space on the underlying filesystem
                         (typically the SD card on a Raspberry Pi) and can fill it up.
                     </p>
@@ -817,9 +862,9 @@ function MountModal({disk, open, onClose, onMount}) {
                     </p>
                 </Modal.Content>
                 <Modal.Actions>
-                    <Button onClick={handleCancel} disabled={loading}>Cancel</Button>
-                    <Button color='yellow' onClick={handleForceMount} loading={loading} disabled={loading}>
-                        <Icon name='exclamation triangle'/>
+                    <Button role='cancel' onClick={handleCancel} disabled={loading}>Cancel</Button>
+                    <Button role='retry' icon='exclamation triangle' onClick={handleForceMount} loading={loading}
+                            disabled={loading}>
                         Mount Anyway
                     </Button>
                 </Modal.Actions>
@@ -830,41 +875,34 @@ function MountModal({disk, open, onClose, onMount}) {
     return (
         <Modal open={open} onClose={onClose} size='small'>
             <Modal.Header>
-                <Icon name='disk'/>
-                Mount Disk: {disk.name}
+                <Icon name='disk'/> Mount Disk: {disk.name}
             </Modal.Header>
             <Modal.Content>
-                <Form>
-                    <Form.Field>
-                        <label>Mount Point</label>
-                        <Input
-                            autoFocus
-                            value={mountPoint}
-                            onChange={(e) => setMountPoint(e.target.value)}
-                            placeholder="/media/..."
-                            fluid
-                        />
-                    </Form.Field>
-                    <Form.Field>
-                        <Checkbox
-                            label="Persistent (survive reboots)"
-                            checked={persist}
-                            onChange={(e, {checked}) => setPersist(checked)}
-                        />
-                    </Form.Field>
-                    {disk.fstype && (
-                        <p style={{color: '#888', fontSize: '0.9em'}}>
-                            Filesystem: {disk.fstype}
-                            {disk.label && ` | Label: ${disk.label}`}
-                            {disk.size && ` | Size: ${formatSize(disk.size)}`}
-                        </p>
-                    )}
-                </Form>
+                <TextInput
+                    autoFocus
+                    label='Mount Point'
+                    value={mountPoint}
+                    onChange={(e) => setMountPoint(e.target.value)}
+                    placeholder="/media/..."
+                />
+                <div style={{marginTop: '0.8em'}}>
+                    <Checkbox
+                        label="Persistent (survive reboots)"
+                        checked={persist}
+                        onChange={(e) => setPersist(e.currentTarget.checked)}
+                    />
+                </div>
+                {disk.fstype && (
+                    <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
+                        Filesystem: {disk.fstype}
+                        {disk.label && ` | Label: ${disk.label}`}
+                        {disk.size && ` | Size: ${formatSize(disk.size)}`}
+                    </p>
+                )}
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={onClose} disabled={loading}>Cancel</Button>
-                <Button color='green' onClick={handleMount} loading={loading} disabled={loading}>
-                    <Icon name='check'/>
+                <Button role='cancel' onClick={onClose} disabled={loading}>Cancel</Button>
+                <Button role='save' icon='check' onClick={handleMount} loading={loading} disabled={loading}>
                     Mount
                 </Button>
             </Modal.Actions>
@@ -1009,35 +1047,29 @@ function DiskSection() {
 
     if (dockerized) {
         return (
-            <Segment>
-                <Header as='h3'>
-                    <Icon name='disk'/>
-                    Disk Management
-                </Header>
+            <Panel>
+                <Header as='h3' icon='disk'>Disk Management</Header>
                 <p>Disk management is not available in Docker environments.</p>
-            </Segment>
+            </Panel>
         );
     }
 
     if (loading) {
-        return <Segment>
+        return <Panel>
             <Header as='h3'>Disk Management</Header>
-            <Loader active inline='centered'/>
-        </Segment>;
+            <Loading/>
+        </Panel>;
     }
 
     return (
-        <Segment>
-            <Header as='h3'>
-                <Icon name='disk'/>
-                Disk Management
-            </Header>
+        <Panel>
+            <Header as='h3' icon='disk'>Disk Management</Header>
 
-            {error && <p style={{color: 'orange'}}>Some disk information unavailable: {error}</p>}
+            {error && <Message kind='warning'>Some disk information unavailable: {error}</Message>}
 
             <Header as='h4'>Disks</Header>
             {disks.length > 0 ? (
-                <Table unstackable striped compact>
+                <Table>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Name</Table.HeaderCell>
@@ -1067,7 +1099,7 @@ function DiskSection() {
                                         {isMounted ? (
                                             <span>{disk.mountpoint}</span>
                                         ) : (
-                                            <span style={{color: '#888'}}>-</span>
+                                            <span style={{color: 'var(--muted)'}}>-</span>
                                         )}
                                     </Table.Cell>
                                     <Table.Cell>
@@ -1078,28 +1110,30 @@ function DiskSection() {
                                                 label={persistent ? 'Enabled' : 'Disabled'}
                                             />
                                         ) : (
-                                            <span style={{color: '#888'}}>-</span>
+                                            <span style={{color: 'var(--muted)'}}>-</span>
                                         )}
                                     </Table.Cell>
                                     <Table.Cell>
                                         {isMounted && isSystemMount ? (
-                                            <span style={{color: '#888'}}>System</span>
+                                            <span style={{color: 'var(--muted)'}}>System</span>
                                         ) : isMounted ? (
                                             <Button
-                                                size='small'
-                                                color='red'
-                                                icon='eject'
-                                                content='Unmount'
+                                                size='sm'
+                                                role='danger'
+                                                icon={IconPlayerEject}
                                                 onClick={() => handleUnmountClick(disk.mountpoint)}
-                                            />
+                                            >
+                                                Unmount
+                                            </Button>
                                         ) : (
                                             <Button
-                                                size='small'
-                                                color='green'
+                                                size='sm'
+                                                role='save'
                                                 icon='plug'
-                                                content='Mount'
                                                 onClick={() => handleOpenMountModal(disk)}
-                                            />
+                                            >
+                                                Mount
+                                            </Button>
                                         )}
                                     </Table.Cell>
                                 </Table.Row>
@@ -1113,9 +1147,10 @@ function DiskSection() {
 
             <Header as='h4'>SMART Health</Header>
             {!smartAvailable ? (
-                <p style={{color: '#888'}}>SMART monitoring not available (pySMART not installed or not supported)</p>
+                <p style={{color: 'var(--muted)'}}>SMART monitoring not available (pySMART not installed or not
+                    supported)</p>
             ) : smartDrives.length > 0 ? (
-                <Table unstackable striped compact>
+                <Table>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Device</Table.HeaderCell>
@@ -1129,10 +1164,9 @@ function DiskSection() {
                             <Table.Row key={drive.device}>
                                 <Table.Cell>{drive.device}</Table.Cell>
                                 <Table.Cell>
-                                    <Icon
-                                        name='circle'
-                                        color={getHealthColor(drive.health || drive.assessment)}
-                                    />
+                                    <span style={{color: getHealthColor(drive.health || drive.assessment)}}>
+                                        &#9679;
+                                    </span>{' '}
                                     {drive.health || drive.assessment || 'Unknown'}
                                     {drive.smart_limited ? ' (limited)' : ''}
                                 </Table.Cell>
@@ -1143,11 +1177,13 @@ function DiskSection() {
                                 </Table.Cell>
                                 <Table.Cell>
                                     <Button
-                                        size='small'
-                                        icon='info'
-                                        content='Details'
+                                        size='sm'
+                                        role='cancel'
+                                        icon={IconInfoCircle}
                                         onClick={() => handleShowDetails(drive)}
-                                    />
+                                    >
+                                        Details
+                                    </Button>
                                 </Table.Cell>
                             </Table.Row>
                         ))}
@@ -1172,12 +1208,19 @@ function DiskSection() {
 
             <Confirm
                 open={unmountConfirmOpen}
-                header='Unmount Disk'
-                content={unmountTarget === PRIMARY_MOUNT ? (
-                    <div className='content'>
+                title='Unmount Disk'
+                destructive
+                confirmLabel='Unmount'
+                onCancel={() => {
+                    setUnmountConfirmOpen(false);
+                    setUnmountTarget(null);
+                }}
+                onConfirm={handleUnmountConfirm}
+            >
+                {unmountTarget === PRIMARY_MOUNT ? (
+                    <div>
                         <p>Are you sure you want to unmount <code>{unmountTarget}</code>?</p>
                         <p>
-                            <Icon name='warning sign' color='yellow'/>
                             This is the primary WROLPi drive. The WROLPi API service will
                             be <strong>stopped</strong> before unmounting, and your media will be
                             unavailable until a drive is mounted at <code>{PRIMARY_MOUNT}</code> and
@@ -1185,19 +1228,12 @@ function DiskSection() {
                         </p>
                     </div>
                 ) : `Are you sure you want to unmount ${unmountTarget}?`}
-                onCancel={() => {
-                    setUnmountConfirmOpen(false);
-                    setUnmountTarget(null);
-                }}
-                onConfirm={handleUnmountConfirm}
-                confirmButton='Unmount'
-            />
+            </Confirm>
 
-            <Button onClick={fetchDiskInfo} style={{marginTop: '1em'}}>
-                <Icon name='refresh'/>
+            <Button role='cancel' icon='refresh' onClick={fetchDiskInfo} style={{marginTop: '1em'}}>
                 Refresh
             </Button>
-        </Segment>
+        </Panel>
     );
 }
 
@@ -1271,35 +1307,29 @@ function SambaSection() {
     };
 
     if (loading) {
-        return <Segment><Loader active inline='centered'/></Segment>;
+        return <Panel><Loading/></Panel>;
     }
 
     if (!status || !status.available) {
         if (dockerized) return null;
         return (
-            <Segment>
-                <Header as='h3'>
-                    <Icon name='folder open'/>
-                    Network Shares (Samba)
-                </Header>
-                <Message info>Samba is not available on this system.</Message>
-            </Segment>
+            <Panel>
+                <Header as='h3' icon='folder open'>Network Shares (Samba)</Header>
+                <Message kind='info'>Samba is not available on this system.</Message>
+            </Panel>
         );
     }
 
     const shares = status.shares || [];
 
     return (
-        <Segment>
-            <Header as='h3'>
-                <Icon name='folder open'/>
-                Network Shares (Samba)
-            </Header>
+        <Panel>
+            <Header as='h3' icon='folder open'>Network Shares (Samba)</Header>
 
             <p>Configure directories to share over the local network. Start the smbd service to activate sharing.</p>
 
             {shares.length > 0 && (
-                <Table celled style={{marginTop: '1em'}}>
+                <Table style={{marginTop: '1em'}}>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Name</Table.HeaderCell>
@@ -1317,10 +1347,11 @@ function SambaSection() {
                                 <Table.Cell>{share.read_only ? 'Yes' : 'No'}</Table.Cell>
                                 <Table.Cell>{share.comment}</Table.Cell>
                                 <Table.Cell>
-                                    <Button
-                                        size='tiny'
-                                        color='red'
+                                    <IconButton
                                         icon='trash'
+                                        label={`Remove share "${share.name}"`}
+                                        role='danger'
+                                        size='xs'
                                         disabled={actionLoading}
                                         onClick={() => setRemoveConfirmName(share.name)}
                                     />
@@ -1333,80 +1364,83 @@ function SambaSection() {
 
             <Confirm
                 open={removeConfirmName !== null}
-                header='Remove Share'
-                content={`Remove the share "${removeConfirmName}"?`}
-                confirmButton='Remove'
+                title='Remove Share'
+                confirmLabel='Remove'
+                destructive
                 onCancel={() => setRemoveConfirmName(null)}
                 onConfirm={() => handleRemoveShare(removeConfirmName)}
-            />
+            >
+                {`Remove the share "${removeConfirmName}"?`}
+            </Confirm>
 
             <div style={{marginTop: '1em'}}>
                 <Button
+                    role='primary'
                     icon='plus'
-                    content='Add Share'
                     onClick={() => setAddOpen(true)}
                     disabled={actionLoading}
-                />
+                >
+                    Add Share
+                </Button>
             </div>
 
-            <Modal open={addOpen} onClose={() => { setAddOpen(false); setShareAll(true); }} size='small'>
+            <Modal open={addOpen} onClose={() => {
+                setAddOpen(false);
+                setShareAll(true);
+            }} size='large'>
                 <Modal.Header>Add Samba Share</Modal.Header>
                 <Modal.Content>
-                    <Form>
-                        <Form.Field>
-                            <label>Share Name</label>
-                            <Input
-                                placeholder='e.g. Documents'
-                                value={newName}
-                                onChange={(e, {value}) => setNewName(value)}
+                    <TextInput
+                        label='Share Name'
+                        placeholder='e.g. Documents'
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                    />
+                    <div style={{marginTop: '0.8em'}}>
+                        <Checkbox
+                            label='Share all files'
+                            checked={shareAll}
+                            onChange={(e) => setShareAll(e.currentTarget.checked)}
+                        />
+                    </div>
+                    {!shareAll && (
+                        <div style={{marginTop: '0.8em'}}>
+                            <label>Path</label>
+                            <DirectorySearch
+                                onSelect={setNewPath}
+                                value={newPath}
                             />
-                        </Form.Field>
-                        <Form.Field>
-                            <Checkbox
-                                label='Share all files'
-                                checked={shareAll}
-                                onChange={(e, {checked}) => setShareAll(checked)}
-                            />
-                        </Form.Field>
-                        {!shareAll && (
-                            <Form.Field>
-                                <label>Path</label>
-                                <DirectorySearch
-                                    onSelect={setNewPath}
-                                    value={newPath}
-                                />
-                            </Form.Field>
-                        )}
-                        <Form.Field>
-                            <Checkbox
-                                label='Read Only'
-                                checked={newReadOnly}
-                                onChange={(e, {checked}) => setNewReadOnly(checked)}
-                            />
-                        </Form.Field>
-                        <Form.Field>
-                            <label>Comment (optional)</label>
-                            <Input
-                                placeholder='Description of this share'
-                                value={newComment}
-                                onChange={(e, {value}) => setNewComment(value)}
-                            />
-                        </Form.Field>
-                    </Form>
+                        </div>
+                    )}
+                    <div style={{marginTop: '0.8em'}}>
+                        <Checkbox
+                            label='Read Only'
+                            checked={newReadOnly}
+                            onChange={(e) => setNewReadOnly(e.currentTarget.checked)}
+                        />
+                    </div>
+                    <TextInput
+                        style={{marginTop: '0.8em'}}
+                        label='Comment (optional)'
+                        placeholder='Description of this share'
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                    />
                 </Modal.Content>
                 <Modal.Actions>
-                    <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+                    <Button role='cancel' onClick={() => setAddOpen(false)}>Cancel</Button>
                     <Button
-                        color='green'
+                        role='save'
                         icon='plus'
-                        content='Add Share'
                         disabled={!newName.trim() || actionLoading}
                         loading={actionLoading}
                         onClick={handleAddShare}
-                    />
+                    >
+                        Add Share
+                    </Button>
                 </Modal.Actions>
             </Modal>
-        </Segment>
+        </Panel>
     );
 }
 
@@ -1493,99 +1527,92 @@ function HotspotSettingsForm() {
     };
 
     if (loading) {
-        return <Segment>
-            <Header as='h4'>
-                <Icon name='wifi'/>
-                Hotspot Settings
-            </Header>
-            <Loader active inline size='small'/>
-        </Segment>;
+        return <Panel>
+            <Header as='h4' icon='wifi'>Hotspot Settings</Header>
+            <Loading size='xs'/>
+        </Panel>;
     }
 
     // Keep the saved device selectable even if it is not currently present
     // (e.g. a USB WiFi dongle is unplugged).
     const deviceOptions = [...new Set([...devices, form.device].filter(Boolean))]
-        .map(device => ({key: device, value: device, text: device}));
+        .map(device => ({value: device, label: device}));
 
     // Keep the saved protocol selectable even if the device does not report it.
     const protocolOptions = [...new Set([...protocols, form.protocol].filter(Boolean))]
-        .map(protocol => ({key: protocol, value: protocol, text: hotspotProtocolLabels[protocol] || protocol}));
+        .map(protocol => ({value: protocol, label: hotspotProtocolLabels[protocol] || protocol}));
 
     // Special string which allows a mobile device to connect to a specific Wi-Fi.
     // The WPA QR format requires backslash-escaping of \ ; , " in the SSID and password.
     const escapeWifi = (s) => s.replace(/([\\;,"])/g, '\\$1');
     const qrCodeValue = `WIFI:S:${escapeWifi(form.ssid)};T:WPA;P:${escapeWifi(form.password)};;`;
 
-    return <Segment>
-        <Header as='h4'>
-            <Icon name='wifi'/>
-            Hotspot Settings
-        </Header>
-        <Form>
-            <Form.Group widths='equal'>
-                <Form.Input
-                    label='Hotspot SSID'
-                    value={form.ssid}
-                    disabled={dockerized || saving}
-                    onChange={(e, {value}) => setForm({...form, ssid: value})}
-                />
-                <Form.Input
-                    label='Hotspot Password'
-                    value={form.password}
-                    disabled={dockerized || saving}
-                    onChange={(e, {value}) => setForm({...form, password: value})}
-                />
-                <Form.Dropdown
-                    selection
-                    label='Hotspot Device'
-                    placeholder='No WiFi devices found'
-                    options={deviceOptions}
-                    value={form.device}
-                    disabled={dockerized || saving}
-                    onChange={(e, {value}) => setForm({...form, device: value})}
-                />
-                <Form.Dropdown
-                    selection
-                    label='Hotspot Protocol'
-                    placeholder='No protocols supported'
-                    options={protocolOptions}
-                    value={form.protocol}
-                    disabled={dockerized || saving}
-                    onChange={(e, {value}) => setForm({...form, protocol: value})}
-                />
-            </Form.Group>
+    return <Panel>
+        <Header as='h4' icon='wifi'>Hotspot Settings</Header>
+        <Group grow align='flex-start'>
+            <TextInput
+                label='Hotspot SSID'
+                value={form.ssid}
+                disabled={dockerized || saving}
+                onChange={(e) => setForm({...form, ssid: e.target.value})}
+            />
+            <TextInput
+                label='Hotspot Password'
+                value={form.password}
+                disabled={dockerized || saving}
+                onChange={(e) => setForm({...form, password: e.target.value})}
+            />
+            <Select
+                label='Hotspot Device'
+                placeholder='No WiFi devices found'
+                data={deviceOptions}
+                value={form.device}
+                disabled={dockerized || saving}
+                onChange={(value) => setForm({...form, device: value})}
+            />
+            <Select
+                label='Hotspot Protocol'
+                placeholder='No protocols supported'
+                data={protocolOptions}
+                value={form.protocol}
+                disabled={dockerized || saving}
+                onChange={(value) => setForm({...form, protocol: value})}
+            />
+        </Group>
+        <div className='wrolpi-button-row' style={{marginTop: '0.8em'}}>
             <Button
                 color='violet'
                 disabled={dockerized}
                 loading={saving}
                 onClick={handleSave}
             >Save</Button>
-            <Modal closeIcon
-                   onClose={() => setQrOpen(false)}
-                   onOpen={() => setQrOpen(true)}
-                   open={qrOpen}
-                   trigger={<Button icon='qrcode' color='violet'/>}
-            >
+            <IconButton
+                icon='qrcode'
+                label='Scan this code to join the hotspot'
+                color='violet'
+                onClick={() => setQrOpen(true)}
+            />
+            <Modal size='small' open={qrOpen} onClose={() => setQrOpen(false)} closeIcon>
                 <Modal.Header>Scan this code to join the hotspot</Modal.Header>
                 <Modal.Content>
-                    <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                    {/* `media`: filtered as a unit by night mode; a QR code needs real black-on-white
+                        contrast to scan, so it is exempted the same way DonatePage's and Share's are. */}
+                    <div className='media'
+                         style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
                         <QRCode value={qrCodeValue} size={300}/>
                     </div>
                 </Modal.Content>
             </Modal>
-        </Form>
-    </Segment>;
+        </div>
+    </Panel>;
 }
 
 function AdminControlsSection() {
     const dockerized = useDockerized();
 
     return (
-        <Segment>
-            <Header as='h3'>
-                <Icon name='settings'/>
-                Hardware Controls
-            </Header>
+        <Panel>
+            <Header as='h3' icon='settings'>Hardware Controls</Header>
 
             <HotspotToggle/>
             <BluetoothToggle/>
@@ -1596,23 +1623,25 @@ function AdminControlsSection() {
             <HotspotSettingsForm/>
 
             {!dockerized && (
-                <div style={{marginTop: '1em'}}>
+                <div className='wrolpi-button-row' style={{marginTop: '1em'}}>
                     <RestartButton/>
                     <ShutdownButton/>
                 </div>
             )}
-        </Segment>
+        </Panel>
     );
 }
 
 export function ControllerPage() {
     return (
-        <Container fluid>
+        // `wrolpi-stack`: these four sections are panels held in a wrapper of this page's own,
+        // so the stack on PageContainer does not reach them -- the same hole Settings had.
+        <div className='wrolpi-stack'>
             <AdminControlsSection/>
             <ServicesSection/>
             <SambaSection/>
             <DiskSection/>
-        </Container>
+        </div>
     );
 }
 

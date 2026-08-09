@@ -27,17 +27,27 @@ class SettingsResponse:
     hotspot_on_startup: bool
     hotspot_password: str
     hotspot_ssid: str
-    hotspot_status: str
-    ignore_outdated_zims: str
-    ignored_directories: str
-    log_level: str
+    # `hotspot_status` and `throttle_status` were declared here long after the handler stopped
+    # returning them -- both moved to the Controller (/controller/api/hotspot/status and
+    # /controller/api/throttle/status).  This is what /docs publishes, so a field it names and
+    # the endpoint never sends is a promise to a caller that cannot be kept;
+    # test/test_api_fixtures.py now holds the two together.
+    check_for_upgrades: bool
+    ignore_outdated_zims: bool
+    ignored_directories: List[str]
+    # A Python logging integer (INFO is 20), not a name.  Declared `str` here while
+    # SettingsRequest.log_level already said int, and the frontend converts it numerically --
+    # so the fixture was carrying 'info', which fromApiLogLevel() maps to undefined.
+    log_level: int
+    map_default_location: Optional[dict]
     nav_color: str
     media_directory: str
     require_cookies_unlocked: bool
     require_media_mounted: bool
+    save_ffprobe_json: bool
     tags_directory: bool
     throttle_on_startup: bool
-    throttle_status: str
+    timezone: Optional[str]
     version: str
     wrol_mode: bool
     archive_destination: str = 'archive/%(domain_tag)s/%(domain)s'
@@ -47,7 +57,13 @@ class SettingsResponse:
     zims_destination: str = 'zims'
 
 
-class SemanticUIColors(enum.StrEnum):
+class NavColors(enum.StrEnum):
+    """The colors a user may choose for the navigation bar.
+
+    The same twelve as `navColorHexMap` in app/src/components/Vars.js, which holds the hex
+    each one is drawn as, and as `navColorNames` in app/src/themes/navColors.ts.  A color
+    not on this list has no favicon file to go with it.
+    """
     red = enum.auto()
     orange = enum.auto()
     yellow = enum.auto()
@@ -97,7 +113,7 @@ class SettingsRequest:
 
     def __post_init__(self):
         self.nav_color = self.nav_color.lower() if self.nav_color else None
-        if self.nav_color and self.nav_color not in SemanticUIColors.__members__:
+        if self.nav_color and self.nav_color not in NavColors.__members__:
             raise ValidationError('Nav color is invalid')
 
 
@@ -187,27 +203,57 @@ class DiskBandwidthStatusStat:
 
 
 @dataclass
+class DownloadsSummaryResponse:
+    """`DownloadManager.get_summary()`, which /api/status returns as `downloads`.
+
+    It is an empty object while the database is down.
+    """
+    pending: int
+    recurring: int
+    disabled: bool
+    stopped: bool
+    outside_download_window: bool
+    daily_limit_reached: bool
+
+
+@dataclass
 class StatusResponse:
+    """The response of GET /api/status.
+
+    Half of this is assembled from `shared_ctx.status`, which the status worker fills in.  Its
+    keys are not open-ended: `initialize_configs_contexts` seeds exactly the stats and upgrade
+    keys below and the worker only ever updates those, which is what makes this declarable at
+    all.  Add a key to that seed and it belongs here too -- test/test_api_fixtures.py compares
+    the two.
+
+    `hotspot_ssid`, `hotspot_status`, `throttle_status`, `last_status`, `drive_status`,
+    `disk_bandwidth_stats` and `nic_bandwidth_stats` were declared here after the handler had
+    stopped returning them; hotspot and throttle moved to the Controller.
+    """
     cpu_stats: CPUStatusResponse
-    disk_bandwidth_stats: dict[str, DiskBandwidthStatusStat]
     dockerized: bool
-    downloads: int
-    drive_status: List[DriveStatusStat]
+    # Declared `int` for a long time while the handler sent the summary object, so the published
+    # contract promised a generated client a number where it gets a dict.
+    downloads: DownloadsSummaryResponse
+    drives_stats: List[DriveStatusStat]
     flags: FlagsStatusResponse
-    hotspot_ssid: str
-    hotspot_status: str
     is_rpi4: bool
     is_rpi5: bool
     is_rpi: bool
-    last_status: str
     load_stats: LoadStatusStat
+    local_time: str
     memory_stats: MemoryStatusStat
-    nic_bandwidth_stats: dict[str, NicBandwidthStatusStat]
     processes_stats: List[ProcessStatusStat]
     sanic_workers: dict
-    throttle_status: str
     version: str
-    wrol_mode: str
+    # `str` here was wrong too; wrol_mode_enabled() returns a bool.
+    wrol_mode: bool
+    # Upgrade info, seeded in contexts.py and refreshed by the upgrade check.
+    commits_behind: int
+    current_commit: Optional[str]
+    git_branch: Optional[str]
+    latest_commit: Optional[str]
+    update_available: bool
 
 
 @dataclass

@@ -1,12 +1,9 @@
 import React from "react";
-import {GridColumn, Input, Label, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Button, Form, Header, Icon, Table} from "../Theme";
+import {Button, ColoredInput, Grid, Header, Table} from "../ui";
 import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 import {formatDuration} from "./WaterCalculator";
 import {findNameKey, planSupplyPurchase} from "../inventory/summarize";
 import {downloadCSV, inventoryExportFilename, shoppingListCSV} from "../inventory/inventoryExport";
-import {ThemeContext} from "../../contexts/contexts";
 // Field-role detection lives in inventory/summarize.js (single source of truth); re-exported here for back-compat.
 export {findCaloriesKey, findCountKey} from "../inventory/summarize";
 
@@ -81,10 +78,12 @@ export const RATION_PRESETS = {
 
 const DEFAULT_PRESET = 'moderate';
 
+// Category colors are theme tokens (not hex) so the tags stay legible — and become outlines instead of fills — in
+// night mode.
 const CATEGORY_META = [
-    {key: 'men', label: 'Men', color: '#4477aa'},
-    {key: 'women', label: 'Women', color: '#aa3377'},
-    {key: 'children', label: 'Children', color: '#228833'},
+    {key: 'men', label: 'Men', color: 'blue'},
+    {key: 'women', label: 'Women', color: 'pink'},
+    {key: 'children', label: 'Children', color: 'green'},
 ];
 
 const DEMAND_INFO = 'Per-person daily calorie needs come from the Dietary Guidelines for Americans 2020-2025 '
@@ -92,13 +91,6 @@ const DEMAND_INFO = 'Per-person daily calorie needs come from the Dietary Guidel
     + 'children figure is a mid-childhood approximation since needs vary widely with age (1,000-3,200 kcal/day). '
     + 'The Survival preset is a short-term emergency ration floor, below maintenance. All values are editable — '
     + 'adjust the household and activity level to see how long the stored food lasts.';
-
-function textColorFor(hex) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff';
-}
 
 function fmt(value, unit) {
     if (!Number.isFinite(value) || value <= 0) {
@@ -130,61 +122,55 @@ export function RationEstimatePanel({name, items, fields, caloriesKey, countKey}
     const inputProps = {fluid: true, type: 'number', onSelect: e => e.target.select(), autoComplete: 'off'};
 
     const countInput = ({key, label, color}) =>
-        <Input {...inputProps} min={0} step={1} name={`count-${key}`} labelPosition='left' value={counts[key]}
-               onChange={e => setCounts({...counts, [key]: e.target.value})}
-               label={<Label style={{backgroundColor: color, color: textColorFor(color), borderColor: color}}>
-                   {label}</Label>}/>;
+        <ColoredInput {...inputProps} min={0} step={1} name={`count-${key}`} label={label} color={color}
+                      value={counts[key]} onChange={e => setCounts({...counts, [key]: e.target.value})}/>;
 
     const rateInput = ({key, label, color}) =>
-        <Input {...inputProps} min={0} step={50} name={`rate-${key}`} labelPosition='left' value={rates[key]}
-               onChange={e => setRates({...rates, [key]: e.target.value})}
-               label={<Label style={{backgroundColor: color, color: textColorFor(color), borderColor: color}}>
-                   {label}</Label>}/>;
+        <ColoredInput {...inputProps} min={0} step={50} name={`rate-${key}`} label={label} color={color}
+                      value={rates[key]} onChange={e => setRates({...rates, [key]: e.target.value})}/>;
 
-    return <Form>
+    return <div>
         <Header as='h3'>People</Header>
-        <Grid stackable columns={3}>
-            {CATEGORY_META.map(meta => <GridColumn key={meta.key}>{countInput(meta)}</GridColumn>)}
+        <Grid>
+            {CATEGORY_META.map(meta =>
+                <Grid.Col key={meta.key} span={{base: 12, sm: 4}}>{countInput(meta)}</Grid.Col>)}
         </Grid>
 
         <Header as='h3' style={{marginTop: '1em'}}>
             Daily Calories (per person) <InfoPopup content={DEMAND_INFO}/>
         </Header>
-        <div style={{marginBottom: '1em'}}>
+        <div style={{marginBottom: '1em', display: 'flex', flexWrap: 'wrap', gap: '0.5em'}}>
             {Object.entries(RATION_PRESETS).map(([key, p]) => (
-                <button key={key} type='button' onClick={() => setPreset(key)} style={{
-                    marginRight: '0.5em', padding: '0.4em 0.8em',
-                    border: preset === key ? '2px solid #2185d0' : '1px solid #ccc',
-                    background: preset === key ? '#e8f4fc' : 'white', borderRadius: '4px', cursor: 'pointer',
-                }}>
+                <Button key={key} role={preset === key ? 'primary' : 'cancel'} onClick={() => setPreset(key)}>
                     <strong>{p.label}</strong> — {p.description}
-                </button>
+                </Button>
             ))}
         </div>
-        <Grid stackable columns={3}>
-            {CATEGORY_META.map(meta => <GridColumn key={meta.key}>{rateInput(meta)}</GridColumn>)}
+        <Grid>
+            {CATEGORY_META.map(meta =>
+                <Grid.Col key={meta.key} span={{base: 12, sm: 4}}>{rateInput(meta)}</Grid.Col>)}
         </Grid>
 
-        <Table definition unstackable style={{marginTop: '1em'}}>
-            <TableBody>
-                <TableRow>
-                    <TableCell width={6}>Total Stored Calories</TableCell>
-                    <TableCell>{fmt(total, 'kcal')}</TableCell>
-                </TableRow>
-                <TableRow>
-                    <TableCell>Daily Demand</TableCell>
-                    <TableCell>{fmt(daily, 'kcal/day')}</TableCell>
-                </TableRow>
-                <TableRow>
-                    <TableCell>Food Lasts</TableCell>
-                    <TableCell>{days ? formatDuration(days) : '—'}</TableCell>
-                </TableRow>
-            </TableBody>
+        <Table style={{marginTop: '1em'}}>
+            <Table.Body>
+                <Table.Row>
+                    <Table.Cell>Total Stored Calories</Table.Cell>
+                    <Table.Cell>{fmt(total, 'kcal')}</Table.Cell>
+                </Table.Row>
+                <Table.Row>
+                    <Table.Cell>Daily Demand</Table.Cell>
+                    <Table.Cell>{fmt(daily, 'kcal/day')}</Table.Cell>
+                </Table.Row>
+                <Table.Row>
+                    <Table.Cell>Food Lasts</Table.Cell>
+                    <Table.Cell>{days ? formatDuration(days) : '—'}</Table.Cell>
+                </Table.Row>
+            </Table.Body>
         </Table>
 
         <SupplyPlan name={name} items={items} fields={fields} caloriesKey={caloriesKey} countKey={countKey}
                     currentDays={days} total={total} daily={daily}/>
-    </Form>;
+    </div>;
 }
 
 // Print only the supply-plan shopping list (not the whole-inventory print block): toggle a body class that the
@@ -218,7 +204,6 @@ const PLAN_INFO = 'Drag the slider to a target duration longer than your current
  * the additional packages to buy to reach it (the inventory scaled up proportionally — see planSupplyPurchase).
  */
 function SupplyPlan({name, items, fields, caloriesKey, countKey, currentDays, total, daily}) {
-    const {t} = React.useContext(ThemeContext);
     const nameKey = findNameKey(fields);
 
     const currentMonths = (currentDays || 0) / PLAN_MONTH_DAYS;
@@ -252,63 +237,63 @@ function SupplyPlan({name, items, fields, caloriesKey, countKey, currentDays, to
     });
     const sortDir = (key) => sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined;
     const headerCell = (key, label) =>
-        <TableHeaderCell sorted={sortDir(key)} onClick={() => toggleSort(key)} style={{cursor: 'pointer'}}>
-            {label}
-        </TableHeaderCell>;
+        <Table.HeaderCell sorted={sortDir(key)} onSort={() => toggleSort(key)}>{label}</Table.HeaderCell>;
 
     return <div style={{marginTop: '2em'}}>
         <Header as='h3'>Plan More Supply <InfoPopup content={PLAN_INFO}/></Header>
         {!countKey
-            ? <p {...t}>Add a <strong>Count</strong> field to this inventory to plan purchases.</p>
+            ? <p>Add a <strong>Count</strong> field to this inventory to plan purchases.</p>
             : <>
                 <div style={{padding: '0 0.5em'}}>
                     <input type='range' min={minMonths} max={maxMonths} step={1} value={targetMonths}
                            aria-label='Target duration (months)' style={{width: '100%'}}
                            onChange={e => setTargetMonths(Number(e.target.value))}/>
-                    <Header as='h2' textAlign='center' style={{marginTop: '0.25em'}}>
+                    <Header as='h2' style={{marginTop: '0.25em', textAlign: 'center'}}>
                         Target: {formatDuration(targetDays)}
                     </Header>
-                    <p {...t} style={{...t.style, textAlign: 'center', opacity: 0.8}}>
+                    <p style={{textAlign: 'center', opacity: 0.8}}>
                         Currently {formatDuration(currentDays)}
                     </p>
                 </div>
 
                 {rows.length === 0
-                    ? <p {...t}>Drag the slider above your current estimate to see a shopping list.</p>
+                    ? <p>Drag the slider above your current estimate to see a shopping list.</p>
                     : <>
-                        <Table celled unstackable sortable>
-                            <TableHeader>
-                                <TableRow>
+                        <Table className='shopping-list-table'>
+                            <Table.Header>
+                                <Table.Row>
                                     {headerCell('name', 'Item')}
                                     {headerCell('current', 'Have')}
                                     {headerCell('additional', 'Buy')}
                                     {headerCell('target', 'New Total')}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedRows.map((r, i) => <TableRow key={`${r.name}-${i}`}>
-                                    <TableCell>{r.name}</TableCell>
-                                    <TableCell>{r.current}</TableCell>
-                                    <TableCell><strong>+{r.additional}</strong></TableCell>
-                                    <TableCell>{r.target}</TableCell>
-                                </TableRow>)}
-                            </TableBody>
+                                </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                                {sortedRows.map((r, i) => <Table.Row key={`${r.name}-${i}`}>
+                                    <Table.Cell>{r.name}</Table.Cell>
+                                    <Table.Cell>{r.current}</Table.Cell>
+                                    <Table.Cell><strong>+{r.additional}</strong></Table.Cell>
+                                    <Table.Cell>{r.target}</Table.Cell>
+                                </Table.Row>)}
+                            </Table.Body>
                         </Table>
-                        <p {...t}>
+                        <p>
                             Buy <strong>{totalToBuy.toLocaleString()}</strong> additional package{totalToBuy === 1 ? '' : 's'}
                             {' '}across <strong>{rows.length}</strong> item{rows.length === 1 ? '' : 's'}
                             {projectedDays ? <> to reach about <strong>{formatDuration(projectedDays)}</strong> of food.</> : '.'}
                         </p>
 
-                        <Button primary
-                                onClick={() => downloadCSV(
-                                    inventoryExportFilename(`${name || 'inventory'} shopping list`, 'csv'),
-                                    shoppingListCSV(sortedRows))}>
-                            <Icon name='download'/> Download CSV
-                        </Button>
-                        <Button onClick={printShoppingList}>
-                            <Icon name='print'/> Print / Save as PDF
-                        </Button>
+                        <div className='wrolpi-button-row'>
+                            <Button role='primary' icon='download'
+                                    onClick={() => downloadCSV(
+                                        inventoryExportFilename(`${name || 'inventory'} shopping list`, 'csv'),
+                                        shoppingListCSV(sortedRows))}>
+                                Download CSV
+                            </Button>
+                            <Button icon='print' onClick={printShoppingList}>
+                                Print / Save as PDF
+                            </Button>
+                        </div>
 
                         {/* Hidden printable block — `printShoppingList` makes this the only thing printed. */}
                         <ShoppingListPrint name={name} rows={sortedRows}

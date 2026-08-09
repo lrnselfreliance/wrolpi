@@ -1,14 +1,12 @@
 import React from "react";
 import _ from "lodash";
-import {Button as SButton, Dropdown, Header as SHeader, Icon, Image,} from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
 import {encodeMediaPath, isSupportedArchive, useLocalStorage} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
-import {Button, Modal} from "./Theme";
-import {toast} from "react-semantic-toasts-2";
+import {Button, ButtonGroup, Header, Icon, IconButton, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 import {AddToPlaylistButton} from "./AddToPlaylist";
@@ -63,25 +61,31 @@ function OpenInSlicerButton({previewFile}) {
     // Browsers cannot report which slicers are installed, so remember the last one used.
     const [slicerKey, setSlicerKey] = useLocalStorage('preferredSlicer', SLICERS[0].key);
     const slicer = SLICERS.find(s => s.key === slicerKey) || SLICERS[0];
-    return <SButton.Group color='violet' size='small'>
-        <Button color='violet' as='a' href={getSlicerURL(previewFile, slicer.scheme)} icon labelPosition='left'>
-            <Icon name='cube'/>Open in {slicer.text}
+    return <ButtonGroup>
+        <Button color='violet' component='a' href={getSlicerURL(previewFile, slicer.scheme)} icon='cube' size='small'>
+            Open in {slicer.text}
         </Button>
-        <Dropdown className='button icon' floating trigger={<></>}>
-            <Dropdown.Menu>
+        <Menu position='bottom-end' withinPortal>
+            <Menu.Target>
+                <IconButton color='violet' icon='dropdown' label='Choose a different slicer' size='small'/>
+            </Menu.Target>
+            <Menu.Dropdown>
                 {SLICERS.map(s =>
-                    <Dropdown.Item key={s.key} text={`Open in ${s.text}`}
-                                   as='a' href={getSlicerURL(previewFile, s.scheme)}
-                                   onClick={(e) => {
-                                       // Navigate programmatically so keyboard activation (which may not
-                                       // follow the href) still launches the slicer.
-                                       if (e) e.preventDefault();
-                                       setSlicerKey(s.key);
-                                       window.location.assign(getSlicerURL(previewFile, s.scheme));
-                                   }}/>)}
-            </Dropdown.Menu>
-        </Dropdown>
-    </SButton.Group>
+                    <Menu.Item key={s.key}
+                               component='a' href={getSlicerURL(previewFile, s.scheme)}
+                               onClick={(e) => {
+                                   // Navigate programmatically so keyboard activation (which may not
+                                   // follow the href) still launches the slicer.
+                                   if (e) e.preventDefault();
+                                   setSlicerKey(s.key);
+                                   window.location.assign(getSlicerURL(previewFile, s.scheme));
+                               }}
+                    >
+                        Open in {s.text}
+                    </Menu.Item>)}
+            </Menu.Dropdown>
+        </Menu>
+    </ButtonGroup>
 }
 
 function getEpubViewerURL(previewFile) {
@@ -115,7 +119,7 @@ function getImagePreviewModal(previewFile) {
         <Modal.Content>
             <div className='preview-fit'>
                 <a href={url}>
-                    <Image src={url} style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}}/>
+                    <img src={url} alt={name} style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}}/>
                 </a>
             </div>
         </Modal.Content>
@@ -131,7 +135,7 @@ function getVideoPreviewModal(previewFile) {
             {name}
         </Modal.Header>
         <Modal.Content>
-            <SHeader as='h5'>{path['path']}</SHeader>
+            <Header as='h5'>{path['path']}</Header>
             <div className='preview-fit'>
                 <video controls
                        autoPlay={true}
@@ -416,14 +420,13 @@ export function FilePreviewProvider({children}) {
         setErrorModalOpen(false);
     }
 
-    const errorModal = <Modal closeIcon
-                              open={errorModalOpen}
+    const errorModal = <Modal size='large' open={errorModalOpen}
                               onClose={handleErrorModalClose}
     >
         <Modal.Header>Unknown File</Modal.Header>
         <Modal.Content>Cannot display preview, no such file exists: {previewQuery}</Modal.Content>
         <Modal.Actions>
-            <Button onClick={handleErrorModalClose}>Close</Button>
+            <Button role='cancel' onClick={handleErrorModalClose}>Close</Button>
         </Modal.Actions>
     </Modal>
 
@@ -500,21 +503,21 @@ export function FilePreviewProvider({children}) {
 
     function setModalContent(content, url, downloadURL, path, taggable = true, extraButtons = null) {
         // All action buttons share `size='small'` and `icon` for consistent height across viewports.
-        // Close is handled by the Modal's `closeIcon` (X in the top-right corner) — no dedicated button.
+        // Close is handled by the Modal's close button (X in the top-right corner) — no dedicated button.
         const openButton = url
-            ? <Button color='blue' as='a' href={url} size='small' icon labelPosition='left'>
-                <Icon name='external'/>Open
-            </Button>
+            ? <Button role='primary' component='a' href={url} size='small' icon='external'>Open</Button>
             : null;
         const tagsDisplay = taggable ?
             <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
                           onRemove={localRemoveTag}/>
             : null;
         const downloadButton = downloadURL
-            ? <Button color='yellow' as='a' href={downloadURL} size='small' icon='download'/>
+            ? <IconButton color='yellow' component='a' href={downloadURL} size='small' icon='download' label='Download'/>
             : null;
         const directoryURL = path ? `/files?folders=${encodeURIComponent(pathDirectory(path))}` : null;
-        const directoryButton = path ? <Button as='a' href={directoryURL} size='small' icon='folder'/> : null;
+        const directoryButton = path
+            ? <IconButton component='a' href={directoryURL} size='small' icon='folder' label='Open containing folder'/>
+            : null;
         const pathContent = path ? <Modal.Content>
                 <pre>{path}</pre>
             </Modal.Content>
@@ -526,8 +529,7 @@ export function FilePreviewProvider({children}) {
         // Single flex toolbar — same button order at every viewport size.
         // `flex-wrap: wrap` lets the tags selector drop to a second line on narrow screens
         // while the button groups stay together and in order: [file actions] [tags] [open/close].
-        setPreviewModal(<Modal closeIcon
-                               size='fullscreen'
+        setPreviewModal(<Modal size='fullscreen'
                                open={true}
                                onClose={e => handleClose(e)}
         >

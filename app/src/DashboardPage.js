@@ -12,19 +12,21 @@ import {useHotkeys} from "react-hotkeys-hook";
 import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
+    ActionInput,
     Button,
     Divider,
-    Form,
     Header,
+    Icon,
+    Message,
     Modal,
-    Segment,
-    Statistic
-} from "./components/Theme";
+    Panel,
+    Stack,
+    Statistic,
+    StatisticGroup,
+} from "./components/ui";
 import {Link, useNavigate, useSearchParams} from "react-router";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {GridColumn, GridRow, Icon, Input, Message} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
@@ -36,6 +38,9 @@ import {ExtensionInstallSuggestion} from "./components/admin/ExtensionInstallSug
 import {fileMimetypeFilterOptions, FileCards, SearchFilterButton} from "./components/Files";
 import {useCalculators} from "./components/Calculators";
 import {classifyAndEvaluate} from "./components/calculators/mathConfig";
+
+// A spinning refresh glyph, used as the `icon` for the "files are being refreshed" Message.
+const RefreshingIcon = (props) => <Icon name='circle notched' loading {...props}/>;
 
 export function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
@@ -53,47 +58,44 @@ export function FlagsMessages() {
     // Do not tell the maintainer to refresh the files if the FileWorker is busy.
     if (flags.file_worker_busy) {
         // FileWorker is busy.
-        refreshingMessage = <Message icon>
-            <Icon name='circle notched' loading/>
-            <Message.Content>
-                <Message.Header>Your files are being refreshed.</Message.Header>
-                <p><Link to='/files'>Click here to view the progress</Link></p>
-            </Message.Content>
+        refreshingMessage = <Message kind='info' icon={RefreshingIcon} title='Your files are being refreshed.'>
+            <p><Link to='/files'>Click here to view the progress</Link></p>
         </Message>;
     } else if (!flags.refresh_complete) {
         // `refresh_complete` flag is not set.  Tell the maintainer to refresh the files.
-        refreshRequiredMessage = <Message icon warning onClick={refreshFiles}>
-            <Icon name='hand point right'/>
-            <Message.Content>
-                <Message.Header>Refresh required</Message.Header>
-                <a href='#'>Click here</a> to refresh all your files.
-            </Message.Content>
+        refreshRequiredMessage = <Message kind='warning' icon='hand point right' title='Refresh required'>
+            <a href='#' onClick={(e) => {
+                e.preventDefault();
+                refreshFiles();
+            }}>Click here</a> to refresh all your files.
         </Message>;
     }
 
     let dbDownMessage;
     if (!flags.db_up) {
         dbDownMessage = <ErrorMessage>
-            <Message.Header>Database is down</Message.Header>
-            API is unable to connect to the database. Check the server logs.
+            <strong>Database is down</strong>
+            <p>API is unable to connect to the database. Check the server logs.</p>
         </ErrorMessage>
     }
 
     let internetDownMessage;
     if (!flags.have_internet && !settings.wrol_mode) {
         internetDownMessage = <ErrorMessage icon='globe'>
-            <Message.Header>No Internet</Message.Header>
-            WROLPi has no Internet. Downloads will not start.
+            <strong>No Internet</strong>
+            <p>WROLPi has no Internet. Downloads will not start.</p>
         </ErrorMessage>;
     }
 
     let mediaUnmountedMessage;
     if (flags.media_mounted === false) {
-        mediaUnmountedMessage = <ErrorMessage icon='hdd outline'>
-            <Message.Header>No drive mounted</Message.Header>
-            WROLPi has no media drive mounted for one or more storage locations.
-            Downloads would write to the root filesystem and can fill it.
-            {' '}<Link to='/admin/controller'>Open the Controller</Link> to mount a drive.
+        mediaUnmountedMessage = <ErrorMessage icon='hdd'>
+            <strong>No drive mounted</strong>
+            <p>
+                WROLPi has no media drive mounted for one or more storage locations.
+                Downloads would write to the root filesystem and can fill it.
+                {' '}<Link to='/admin/controller'>Open the Controller</Link> to mount a drive.
+            </p>
         </ErrorMessage>;
     }
 
@@ -140,7 +142,6 @@ function EvaluateForm() {
         <pre>2 Tb to Gb</pre>
     </span>
 
-    const inputRef = React.useRef();
     const [showMessage, setShowMessage] = React.useState(false);
     const [inputValue, setInputValue] = React.useState('');
     const [evaluatedValue, setEvaluatedValue] = React.useState(helpContents);
@@ -166,45 +167,36 @@ function EvaluateForm() {
         }
     }
 
-    return <Form onSubmit={doEvaluate}>
-        <Input fluid
-               ref={inputRef}
-               value={inputValue}
-               label='𝒇'
-               type='text'
-               onFocus={() => setShowMessage(true)}
-               onChange={(e, {value}) => setInputValue(value)}
-               action={<Button type='submit'>Evaluate</Button>}
+    return <form onSubmit={(e) => {
+        e.preventDefault();
+        doEvaluate();
+    }}>
+        <ActionInput
+            value={inputValue}
+            leftSection='𝒇'
+            type='text'
+            onFocus={() => setShowMessage(true)}
+            onChange={(e) => setInputValue(e.currentTarget.value)}
+            action={<Button type='submit' role='primary'>Evaluate</Button>}
         />
         {showMessage &&
-            <Message>
-                <Message.Header>Result</Message.Header>
-                <Message.Content>
-                    {evaluatedValue}
-                </Message.Content>
+            <Message kind='info' title='Result'>
+                {evaluatedValue}
             </Message>
         }
-    </Form>
+    </form>
 }
 
 function DashboardCalculators() {
     const {calculatorLinks} = useCalculators();
 
-    return <Segment>
+    return <Panel>
         <Header as='h2'>Calculators</Header>
-        <Grid columns={1}>
-            <Grid.Row>
-                <Grid.Column>
-                    <EvaluateForm/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    {calculatorLinks}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Segment>
+        <Stack>
+            <EvaluateForm/>
+            <div>{calculatorLinks}</div>
+        </Stack>
+    </Panel>
 }
 
 export function Getters() {
@@ -244,29 +236,25 @@ export function Getters() {
         }
     }
 
-    const getter = <Segment>
-        <Grid columns={2} textAlign='center'>
-            <Divider vertical>Or</Divider>
-            <GridRow verticalAlign='middle'>
-                <GridColumn>
-                    <Button color='violet' onClick={e => handleSetGetter(e, 'downloads')}>
-                        <Icon name='download'/>
-                        Download
-                    </Button>
-                </GridColumn>
-                <GridColumn>
-                    <Button color='green' onClick={e => handleSetGetter(e, 'upload')}>
-                        <Icon name='upload'/>
-                        Upload
-                    </Button>
-                </GridColumn>
-            </GridRow>
-        </Grid>
-    </Segment>;
+    const getter = <Panel>
+        <div className='wrolpi-or-split'>
+            <div>
+                <Button role='primary' icon='download' onClick={e => handleSetGetter(e, 'downloads')}>
+                    Download
+                </Button>
+            </div>
+            <div>
+                <Button role='save' icon='upload' onClick={e => handleSetGetter(e, 'upload')}>
+                    Upload
+                </Button>
+            </div>
+            <span className='wrolpi-or-label'>Or</span>
+        </div>
+    </Panel>;
 
     let getterModal;
     if (selectedGetter === 'downloads') {
-        getterModal = <Modal closeIcon
+        getterModal = <Modal size='large' closeIcon
                              open={true}
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}
@@ -281,7 +269,7 @@ export function Getters() {
             </Modal.Content>
         </Modal>;
     } else if (selectedGetter === 'upload') {
-        getterModal = <Modal closeIcon
+        getterModal = <Modal size='large' closeIcon
                              open={true}
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}
@@ -304,7 +292,7 @@ export function Getters() {
 }
 
 
-function DashboardStatus() {
+export function DashboardStatus() {
     const {status} = useContext(StatusContext);
 
     let percent = 0;
@@ -330,16 +318,25 @@ function DashboardStatus() {
         bandwidths = null;
     }
 
-    return <Segment>
-        <Link to='/admin/status'>
+    return <Panel>
+        {/*
+          * The panel is a link, but it should not read as one.
+          *
+          * `a` takes `color: var(--blue)` and an underline on hover from tokens.css, and a
+          * statistic's value sets no color of its own -- so the three load figures inherited
+          * the link color, and crossing the panel underlined them together.  The same pair
+          * every card title uses says "this text belongs to what contains it": the pointer
+          * cursor still comes from the UA stylesheet, which is the affordance that matters.
+          */}
+        <Link to='/admin/status' className='no-link-underscore card-link'>
             <Header as='h2'>Status</Header>
             <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-            <Statistic.Group size='mini'>
+            <StatisticGroup>
                 <LoadStatistic label='1 Min. Load' value={load['minute_1']} cores={cores}/>
                 <LoadStatistic label='5 Min. Load' value={load['minute_5']} cores={cores}/>
                 <LoadStatistic label='15 Min. Load' value={load['minute_15']} cores={cores}/>
-            </Statistic.Group>
+            </StatisticGroup>
 
             <Header as='h3'>Bandwidth</Header>
             {bandwidths}
@@ -347,26 +344,26 @@ function DashboardStatus() {
 
         <Divider style={{marginTop: '3em'}}/>
 
-        <Link to='/admin'>
-            <Statistic.Group size='mini'>
+        <Link to='/admin' className='no-link-underscore card-link'>
+            <StatisticGroup>
                 <Statistic label='Downloading' value={pending_downloads}/>
-            </Statistic.Group>
+            </StatisticGroup>
         </Link>
 
-    </Segment>;
+    </Panel>;
 }
 
 function DashboardRecentFiles() {
     const {searchFiles, loading, fetchFiles} = useSearchRecentFiles();
 
-    return <Segment>
+    return <Panel>
         <RefreshHeader
             header='Recently Viewed Files'
             popupContents='Fetch the most recent files again'
             onRefresh={fetchFiles}
         />
         <FileCards files={searchFiles} loading={loading}/>
-    </Segment>
+    </Panel>
 }
 
 export function DashboardPage() {
@@ -467,7 +464,13 @@ export function DashboardPage() {
         if (big) {
             inputProps.size = 'big';
         }
-        return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '2em'}}>
+        /*
+         * No `marginBottom`.  This row is a top-level block of the dashboard, so its own 2em was
+         * added to the page stack's gap -- 52.8px below the search box against 17.6px between
+         * every other pair of blocks, on the most-looked-at page in the app.  One source of
+         * spacing, and it is the stack.
+         */
+        return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em'}}>
             {getSearchResultsInput(inputProps)}
             <SearchFilterButton fileFilterOptions={fileMimetypeFilterOptions} showDates={true} showDeep={true}
                                 size={big ? 'big' : undefined}/>

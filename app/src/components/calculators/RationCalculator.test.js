@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, render, screen, within} from "@testing-library/react";
+import {fireEvent, render, screen, within} from "../../test-utils";
 import {
     dailyCalorieDemand, daysOfFood, findCaloriesKey, findCountKey, RationEstimatePanel, totalCalories,
 } from "./RationCalculator";
@@ -102,7 +102,7 @@ describe('RationEstimatePanel supply plan', () => {
         fireEvent.change(screen.getByLabelText(/target duration/i), {target: {value: '2'}});
 
         // Scope to the on-screen table (the hidden print block duplicates these texts in the DOM).
-        const plan = within(document.querySelector('table.sortable'));
+        const plan = within(document.querySelector('table.shopping-list-table'));
         expect(plan.getByText('Beans')).toBeTruthy();
         expect(plan.getByText('+100')).toBeTruthy();
         // Summary line reports the total to buy.
@@ -118,13 +118,13 @@ describe('RationEstimatePanel supply plan', () => {
         fireEvent.change(screen.getByLabelText(/target duration/i), {target: {value: '2'}});
 
         const itemNames = () =>
-            [...document.querySelectorAll('table.sortable tbody tr td:first-child')].map(td => td.textContent);
+            [...document.querySelectorAll('table.shopping-list-table tbody tr td:first-child')].map(td => td.textContent);
         // Default sort is largest purchase first (Beans buys far more than Apples).
         expect(itemNames()).toEqual(['Beans', 'Apples']);
 
         // Sorting by Item ascending flips to alphabetical (scope to the sortable table; the print block also has an
         // "Item" header).
-        fireEvent.click(within(document.querySelector('table.sortable')).getByText('Item'));
+        fireEvent.click(within(document.querySelector('table.shopping-list-table')).getByText('Item'));
         expect(itemNames()).toEqual(['Apples', 'Beans']);
     });
 

@@ -1,0 +1,440 @@
+/*
+ * WROLPi theme tokens.
+ *
+ * Every color in the interface resolves through these custom properties, so a
+ * theme is a table of values and components never branch on the current mode.
+ * See ui-design.md for the design rules and ui-migration-plan.md for the
+ * migration this is part of.
+ *
+ * Four built-in themes:
+ *   light  - default
+ *   dark   - default when the OS prefers dark
+ *   night  - night-vision preserving; red hues ONLY.  Status is encoded by
+ *            brightness, danger by dashed borders.  Explicit choice only.
+ *   amber  - monochrome amber terminal palette.  Explicit choice only.
+ *
+ * `data-theme` is stamped on <html> by an inline script in index.html before
+ * first paint, then maintained by ThemeProvider.
+ */
+
+/* Light is also the fallback when `data-theme` is missing or unrecognized. */
+:root,
+html[data-theme="light"] {
+    --bg: #f3f4f3;
+    --panel: #ffffff;
+    --head: #e4e6e5;
+    --border: #8f9698;
+    /* The rule between table rows: softer than --border, which reads as a grid. */
+    --table-line: #eceeed;
+    --text: #22282a;
+    --muted: #5f686a;
+
+    --red: #b23a3a;
+    --amber: #95661a;
+    --orange: #b05a24;
+    --yellow: #96821c;
+    --olive: #6f7a24;
+    --green: #3f7a2e;
+    --teal: #2a7d78;
+    --blue: #20629c;
+    --violet: #5c4fa8;
+    --purple: #7b3f9c;
+    --pink: #b03a72;
+    --brown: #7a5233;
+    --grey: #6a7072;
+    --black: #22282a;
+    --white: #ffffff;
+
+    /* Text drawn on top of a filled color button. */
+    --btn-text: #ffffff;
+
+    /* Switch thumbs and slider handles. */
+    --knob: #ffffff;
+
+    /* Roles: light has hues to spend, so each role is simply the hue that means it. */
+    --neutral: var(--grey);
+    --info: var(--blue);
+    --success: var(--green);
+    --warning: var(--amber);
+    --danger: var(--red);
+}
+
+/*
+ * Semantic roles.
+ *
+ * What a color MEANS, separate from what hue it happens to be.  A call site asks
+ * for `--danger`, not `--red`, and each theme decides how danger looks.
+ *
+ * This matters because two of the four themes have no hues to spend.  Night is red
+ * and nothing else; amber is amber and nothing else.  There, a role is a step on a
+ * BRIGHTNESS ramp -- and it has to be, because `--orange` in night is byte-identical
+ * to `--text` and `--yellow` is byte-identical to `--amber`, so a call site choosing
+ * between hue names there is choosing between synonyms.  That is why all four toast
+ * kinds looked the same in night, and why a warning and an error were the same pixel.
+ *
+ * In EVERY theme:
+ *   - the five roles resolve to five distinct colors;
+ *   - every role except neutral clears 3:1 against the panel.  Neutral sits below the
+ *     rest deliberately -- for `pending` and disabled, being dim IS the signal.
+ *
+ * In the MONOCHROME themes only (night and amber):
+ *   - the order neutral < info < success < warning < danger is strictly increasing in
+ *     contrast against the panel, so severity reads as brightness with no hue to help;
+ *   - BOTH warning and danger reach that theme's own `--text` brightness.  Anything that
+ *     means "look at this" has to be louder than the prose around it, and with no hue to
+ *     carry the signal, louder means brighter.  Warning used to sit just under `--text`
+ *     (4.91 against 4.98 in night), so a machine under load rendered marginally quieter
+ *     than a healthy one.
+ *
+ * Getting warning and danger above `--text` costs a little saturation, and it is worth
+ * knowing exactly how little: red contributes only 21% of luminance, so in night nothing
+ * above ~4.9:1 can be a pure hue -- `#ff0000` itself is only 4.99:1 there.  `--text` is
+ * already `#e04a4a`, carrying 74 of green and blue.  The new `--warning` `#f54040` carries
+ * 64, LESS than the text beside it; only `--danger` `#ff5757` goes further, at 87.  The
+ * theme's red-only character survives; a pure-hue ramp was never available.
+ *
+ * Those last two are NOT true of light and dark and must not be made true.  There a role
+ * is a hue, and the contrast order is an accident of which hues were chosen -- blue is
+ * darker than green on white, so light "fails" a brightness ramp while looking perfectly
+ * correct.  Reordering light's hues to satisfy a ramp would be changing the design to
+ * satisfy a test.
+ *
+ * `ui-layout.cy.js` asserts exactly this split, per theme, in a real browser.
+ *
+ * `--primary` is deliberately NOT one of these.  "The color of a primary button" and
+ * "the color that means informational" are different jobs, and a user who recolors
+ * their buttons should not thereby recolor their messages.
+ */
+:root {
+    --primary: var(--blue);
+}
+
+html[data-theme="dark"] {
+    --bg: #1c1f21;
+    --panel: #26292b;
+    --head: #141617;
+    --border: #4a5052;
+    /* The rule between table rows: softer than --border, which reads as a grid. */
+    --table-line: #343a3c;
+    --text: #e6e8e6;
+    --muted: #93999b;
+
+    --red: #e06c6c;
+    --amber: #d6a656;
+    --orange: #dd8a55;
+    --yellow: #d6c156;
+    --olive: #b5bd63;
+    --green: #7fb069;
+    --teal: #63bdb6;
+    --blue: #5c9dd6;
+    --violet: #9a8fe0;
+    --purple: #b884d6;
+    --pink: #dd7fae;
+    --brown: #b08a68;
+    --grey: #93999b;
+    --black: #0d0f10;
+    --white: #e6e8e6;
+
+    --btn-text: #1c1f21;
+    --knob: var(--text);
+
+    /* Roles: as light -- a hue each.  See the note above the :root block. */
+    --neutral: var(--grey);
+    --info: var(--blue);
+    --success: var(--green);
+    --warning: var(--amber);
+    --danger: var(--red);
+}
+
+/*
+ * Night: red hues only.  A single non-red pixel defeats the purpose of the
+ * mode, so the whole palette collapses onto one red ramp ordered by
+ * brightness — dim for structural roles, brightest reserved for danger.
+ */
+html[data-theme="night"] {
+    --bg: #0a0000;
+    --panel: #160404;
+    --head: #000000;
+    --border: #5c1010;
+    /* The rule between table rows: softer than --border, which reads as a grid. */
+    --table-line: #3a0d0d;
+    --text: #e04a4a;
+    --muted: #7a2525;
+
+    --red: #ff3b3b;
+    --amber: #d94040;
+    --orange: #e04a4a;
+    --yellow: #d94040;
+    --olive: #5c1a1a;
+    --green: #b03030;
+    --teal: #963030;
+    --blue: #8a2828;
+    --violet: #7a2929;
+    --purple: #6e2020;
+    --pink: #c04848;
+    --brown: #451212;
+    --grey: #7a2525;
+    --black: #2a0808;
+    --white: #ff8a8a;
+
+    --btn-text: #0a0000;
+    --knob: var(--text);
+
+    /* Roles: one hue, five brightnesses; saturation climbs with severity too. */
+    --neutral: #992c2c;
+    --info: #c02929;
+    --success: #e02323;
+    --warning: #f54040;
+    --danger: #ff5757;
+}
+
+/* Amber: a monochrome amber terminal palette, same flat style as the rest. */
+html[data-theme="amber"] {
+    --bg: #0d0600;
+    --panel: #1a0f00;
+    --head: #000000;
+    --border: #5c3a08;
+    /* The rule between table rows: softer than --border, which reads as a grid. */
+    --table-line: #3d2708;
+    --text: #ff9500;
+    --muted: #8a5810;
+
+    --red: #ffc040;
+    --amber: #e08a20;
+    --orange: #f09428;
+    --yellow: #e08a20;
+    --olive: #6e4610;
+    --green: #c97a10;
+    --teal: #8a581c;
+    --blue: #a86618;
+    --violet: #7a4c14;
+    --purple: #6e4410;
+    --pink: #d08430;
+    --brown: #452708;
+    --grey: #8a5810;
+    --black: #241504;
+    --white: #ffc875;
+
+    --btn-text: #0d0600;
+    --knob: var(--text);
+
+    /* Amber assigns the mono face to the body role; that is its character. */
+    --font-body: var(--font-system-mono);
+
+    /* Roles: scaled to amber's own headroom (--text is 8.6:1, night's is 5.0:1). */
+    --neutral: #815825;
+    --info: #b06e1f;
+    --success: #d37c11;
+    --warning: #fa9f31;
+    --danger: #ffb760;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Shell                                                                      */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Base element styling.
+ *
+ * A framework stylesheet used to supply all of this, and removing it took the lot with
+ * it -- links lost their color and gained the browser's underline and visited purple, and
+ * every padded element silently changed size when `box-sizing: border-box` went away.
+ * None of it belonged to a framework; it belongs here, expressed in tokens.
+ */
+
+/* ------------------------------------------------------------------------- */
+/* Interface scale                                                            */
+/* ------------------------------------------------------------------------- */
+/*
+ * How large the interface is, overall.
+ *
+ * Measured against the build users had before this library, at 1280px, the drift was not
+ * one number: its headings were h1 28 / h2 24 / h3 18 / h4 15 / h5 14 against our
+ * 26 / 21 / 17 / 14 / 13, and its video card a fixed 290px with an 18px title against
+ * our 238px with a 13px one -- while our BODY text and chrome went the other way,
+ * a 16px base against its 14 and 42px buttons against 36.  No per-component nudge
+ * reproduces what a user comparing the two sees, which is the whole page.
+ *
+ * Ten percent is not a fudge factor: our heading scale times 1.1 is
+ * 28.6 / 23.1 / 18.7 / 15.4 / 14.3, which is the old scale to within a pixel at
+ * every step.
+ *
+ * The lever is the root font-size, and everything that should grow with it is written
+ * in `rem`.  That is Mantine's own mechanism -- its size declarations are
+ * `calc(Xrem * var(--mantine-scale))`, and `theme.scale` exists to CANCEL a customised
+ * root font-size, so it must stay at 1 here.
+ *
+ * A percentage rather than a px value, so a user who has set a larger default font in
+ * their browser keeps it, scaled, instead of having it silently overridden.
+ *
+ * `zoom: 1.1` on the root was tried first and rejected.  It is one line and it works,
+ * but it scales at paint time: every 1px hairline becomes 1.1px and softens on a 1x
+ * display, and viewport units do not shrink to compensate, so `100vh` paints 110% of
+ * the screen -- a 95vw modal overflowed sideways and the CBZ viewer's fullscreen
+ * overflowed downwards.  Rem scales real lengths, leaves borders crisp and leaves
+ * viewport units alone.
+ *
+ * Borders, outlines and shadows are deliberately NOT in rem.  A hairline is a hairline
+ * at any text size; ui-scale.test.js enforces both halves of that.
+ */
+:root {
+    --ui-scale: 1.1;
+}
+
+html {
+    box-sizing: border-box;
+    font-size: calc(100% * var(--ui-scale));
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+}
+
+/*
+ * Links take the primary token rather than the browser's blue, and carry no underline
+ * until hovered -- a great many of them wrap cards, posters, statistics and icons, where
+ * a permanent underline is noise.  `--blue` remaps per theme, so night gets a dim red
+ * link and amber an amber one without another rule.
+ */
+a {
+    color: var(--blue);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* A link wrapping a card, poster or icon carries no text of its own to underline. */
+a:has(img, svg, .wrolpi-card-icon):hover {
+    text-decoration: none;
+}
+
+/*
+ * Native controls the browser paints itself.
+ *
+ * A range slider is drawn by the UA, and with nothing said about it the UA uses its own
+ * accent -- a fixed blue no theme can reach.  Four are in the product: the log level on
+ * Settings, and the duration sliders in the food, water and ration calculators.
+ *
+ * Night is where that is not merely inconsistent.  The theme exists so a user reading in
+ * the dark keeps their adaptation and every token is a red, so a slider arriving in the
+ * browser's blue was the brightest non-red thing on the page -- on a control the user drags
+ * back and forth while watching it.
+ *
+ * `--blue` for the same reason links take it: it remaps per theme, so night gets the dim
+ * red and amber the amber without a second rule.
+ *
+ * Checkbox, radio and `progress` are the other three types `accent-color` paints, and are
+ * listed for completeness rather than because they are on screen: the app's checkboxes and
+ * radios are Mantine's, which draw their own box from tokens, and `Progress` is a div.  So
+ * those three are a guard for the day a native one appears, not a fix for anything visible
+ * today -- the slider is the one that was actually wrong.
+ *
+ * `accent-color` reaches the thumb and the FILLED half of the track and nothing else.  The
+ * rest of the track comes from the UA palette that `color-scheme` selects -- which is
+ * already dark on the dark themes, because Mantine's stylesheet puts
+ * `color-scheme: var(--mantine-color-scheme)` on `:root` and ThemeProvider drives it with
+ * `forceColorScheme`.  That property is inherited, so a control needs nothing of its own; a
+ * rule here restating it was verified to change no pixel and is not present.
+ *
+ * Progressive enhancement: `accent-color` wants Safari 15.4+ / Chrome 93+ / Firefox 92+, and
+ * an older client keeps the UA blue, which is what it had before this rule.  A complete fix
+ * would mean `::-webkit-slider-runnable-track` and `::-moz-range-track` rules of our own.
+ */
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"],
+progress {
+    accent-color: var(--blue);
+}
+
+a:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+html[data-theme="night"] a:focus-visible,
+html[data-theme="amber"] a:focus-visible {
+    outline-color: var(--text);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Media filtering                                                            */
+/* ------------------------------------------------------------------------- */
+/*
+ * Videos, images, PDFs, embedded pages, and the map canvas cannot consume
+ * tokens, so a theme can pass them through an SVG color matrix instead.  Night
+ * maps luminance onto the red channel so nothing a user opens can break their
+ * dark adaptation; amber tints media to match the interface.
+ *
+ * These rules key on `data-media-filter`, not `data-theme`, because filtering is
+ * a per-theme setting the user controls rather than a property of the theme's
+ * palette: night is filtered unless turned off, amber is unfiltered unless
+ * turned on.  An empty or absent attribute filters nothing, so light and dark —
+ * which offer no filter — match no rule at all.  ThemeProvider stamps the
+ * attribute, and index.html stamps it before first paint (an unfiltered flash of
+ * thumbnails would cost the user their dark adaptation before React even loads).
+ *
+ * The selectors target element types rather than an opt-in class on purpose:
+ * filtering has to fail safe.  A library of thousands of files reaches the
+ * screen through many components, and one that forgot to opt in would undo half
+ * an hour of dark adaptation.  `.media` stays available for a wrapper that needs
+ * filtering as a unit (a player with custom controls, say), and
+ * `.night-unfiltered` opts a single element out — for media whose real colors
+ * are the point, like the side-by-side comparison on /theme-sample.
+ *
+ * Only leaf media is filtered, never an app-level ancestor: a CSS filter
+ * creates a containing block, which would break `position: fixed` descendants
+ * like modals and the nav bar.  These elements have no such descendants — an
+ * iframe's contents are a separate document with their own viewport.
+ *
+ * Filter definitions live in <MediaFilterDefs/> (mounted once by App).
+ */
+html[data-media-filter="night-red"] :is(img, video, canvas, iframe, embed, object, .media):not(.night-unfiltered) {
+    filter: url(#wrolpi-night-red);
+}
+
+html[data-media-filter="amber-mono"] :is(img, video, canvas, iframe, embed, object, .media):not(.night-unfiltered) {
+    filter: url(#wrolpi-amber-mono);
+}
+
+/*
+ * A `.media` wrapper filters its whole subtree as one unit, so the leaf media inside
+ * it must not be filtered a second time.  Two passes of a luminance-to-red matrix is
+ * not the same as one: the second pass takes the luminance of an already-red pixel
+ * (0.2126 of it) and the image comes out markedly darker than everything around it.
+ *
+ * The audio player's poster is the case that found this — the poster sits under
+ * custom control glyphs, so the wrapper is filtered to keep the two tinted together.
+ *
+ * The trailing `:not(.night-unfiltered)` is here for specificity, not for its meaning.
+ * The rule above scores (0,3,1) — an attribute, a `.media` inside `:is()`, and a `:not()`
+ * — so this reset had to reach three class-level components to win it; without the extra
+ * one it scored (0,2,2) and silently lost every time, which is exactly what it did until
+ * a browser test measured the leaf and found it filtered twice.  jsdom cannot catch this:
+ * it never resolves `filter` at all.
+ */
+html[data-media-filter] .media :is(img, video, canvas, iframe, embed, object):not(.night-unfiltered) {
+    filter: none;
+}
+
+/*
+ * A filter on an ancestor stops applying once the browser promotes a video to
+ * native fullscreen, so the filter is restated on the fullscreened element.
+ */
+html[data-media-filter="night-red"] :fullscreen:not(.night-unfiltered) {
+    filter: url(#wrolpi-night-red);
+}
+
+html[data-media-filter="amber-mono"] :fullscreen:not(.night-unfiltered) {
+    filter: url(#wrolpi-amber-mono);
+}

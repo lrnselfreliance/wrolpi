@@ -1,10 +1,13 @@
 name: Controller Tests
 
+# `pull_request` is unfiltered for the same reason as jest-tests.yml: `branches: [master]` meant
+# this never ran on a pull request into any other branch.  It is why Controller Tests is absent
+# from the checks on the pull request that moved this job to Python 3.13 -- the change to this
+# file could not be verified by the run that contained it.
 on:
   push:
     branches: [master, feature/*]
   pull_request:
-    branches: [master]
 
 jobs:
   controller-tests:
@@ -21,6 +24,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
+          # Trixie ships 3.13, and docker/controller/Dockerfile is python:3.13-slim-trixie.
           python-version: '3.13'
           cache: 'pip'
           cache-dependency-path: controller/requirements.txt

@@ -1,15 +1,12 @@
 import React, {useState} from "react";
-import {
-    Checkbox, Input, Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow
-} from "semantic-ui-react";
-import {Button, Icon, Modal, Table} from "../Theme";
+import {Button, Icon, IconButton, Modal, Select, Table, TextInput, Toggle} from "../ui";
 import {ALL_UNITS} from "./units";
 import {addCountByWeightFields, isCountByWeight} from "./computeFields";
 
 const FIELD_TYPE_OPTIONS = ['text', 'number', 'quantity', 'date', 'select', 'location', 'calories']
-    .map(t => ({key: t, value: t, text: t}));
+    .map(t => ({value: t, label: t}));
 
-const UNIT_OPTIONS = ALL_UNITS.map(u => ({key: u, value: u, text: u}));
+const UNIT_OPTIONS = ALL_UNITS.map(u => ({value: u, label: u}));
 
 function slugifyKey(label) {
     return (label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field';
@@ -67,74 +64,76 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
     return <Modal open={open} onClose={onClose} closeIcon size='large'>
         <Modal.Header>Customize Fields</Modal.Header>
         <Modal.Content scrolling>
-            {/* NOTE: do NOT use `fixed` here — semantic gives fixed-table cells `overflow:hidden`, which clips the
-                Type/Unit dropdown menus to the cell height.  The `width` props below size the columns without it. */}
-            <Table celled unstackable>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell width={2}>Order</TableHeaderCell>
-                        <TableHeaderCell width={3}>Label</TableHeaderCell>
-                        <TableHeaderCell width={3}>Type</TableHeaderCell>
-                        <TableHeaderCell width={5}>Unit / Options</TableHeaderCell>
-                        <TableHeaderCell width={2} textAlign='center'
-                                         title='Show this field in the read-only portrait-mobile view'>
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Order</Table.HeaderCell>
+                        <Table.HeaderCell>Label</Table.HeaderCell>
+                        <Table.HeaderCell>Type</Table.HeaderCell>
+                        <Table.HeaderCell>Unit / Options</Table.HeaderCell>
+                        <Table.HeaderCell style={{textAlign: 'center'}}
+                                           title='Show this field in the read-only portrait-mobile view'>
                             Mobile
-                        </TableHeaderCell>
-                        <TableHeaderCell width={1}/>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {draft.map((f, index) => <TableRow key={index}>
-                        <TableCell collapsing>
-                            <Button icon size='mini' onClick={() => move(index, -1)} disabled={index === 0}
-                                    aria-label='Move up'><Icon name='arrow up'/></Button>
-                            <Button icon size='mini' onClick={() => move(index, 1)}
-                                    disabled={index === draft.length - 1}
-                                    aria-label='Move down'><Icon name='arrow down'/></Button>
-                        </TableCell>
-                        <TableCell>
-                            <Input fluid value={f.label || ''} placeholder='Label'
-                                   onChange={e => update(index, {label: e.target.value})}/>
-                        </TableCell>
-                        <TableCell>
-                            <Select fluid options={FIELD_TYPE_OPTIONS} value={f.type}
-                                    onChange={(e, data) => update(index, {type: data.value})}/>
-                        </TableCell>
-                        <TableCell>
+                        </Table.HeaderCell>
+                        <Table.HeaderCell/>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                    {draft.map((f, index) => <Table.Row key={index}>
+                        <Table.Cell>
+                            <div className='wrolpi-button-row'>
+                                <IconButton size='xs' icon='arrow up' onClick={() => move(index, -1)}
+                                            disabled={index === 0} label='Move up'/>
+                                <IconButton size='xs' icon='arrow down' onClick={() => move(index, 1)}
+                                            disabled={index === draft.length - 1} label='Move down'/>
+                            </div>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <TextInput value={f.label || ''} placeholder='Label'
+                                       onChange={e => update(index, {label: e.currentTarget.value})}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <Select data={FIELD_TYPE_OPTIONS} value={f.type}
+                                    onChange={value => update(index, {type: value})}/>
+                        </Table.Cell>
+                        <Table.Cell>
                             {f.type === 'quantity' &&
-                                <Select fluid search options={UNIT_OPTIONS} value={f.unit || ''}
+                                <Select searchable data={UNIT_OPTIONS} value={f.unit || ''}
                                         placeholder='Default unit'
-                                        onChange={(e, data) => update(index, {unit: data.value})}/>}
+                                        onChange={value => update(index, {unit: value})}/>}
                             {f.type === 'select' &&
                                 /* Keep the raw split (no trim/filter) so typing a comma to start the next option
                                    isn't swallowed mid-edit; options are trimmed/cleaned on save(). */
-                                <Input fluid placeholder='comma,separated,options'
-                                       value={(f.options || []).join(',')}
-                                       onChange={e => update(index, {options: e.target.value.split(',')})}/>}
+                                <TextInput placeholder='comma,separated,options'
+                                           value={(f.options || []).join(',')}
+                                           onChange={e => update(index, {options: e.currentTarget.value.split(',')})}/>}
                             {isCountByWeight(f) &&
                                 <span style={{opacity: 0.7, fontSize: '0.9em'}}>
                                     <Icon name='calculator'/> Auto-counted: Total Weight ÷ Unit Weight
                                 </span>}
-                        </TableCell>
-                        <TableCell collapsing textAlign='center'>
-                            <Checkbox toggle checked={!!f.mobile} aria-label={`Show ${f.label || f.key} on mobile`}
-                                      onChange={(e, data) => update(index, {mobile: data.checked})}/>
-                        </TableCell>
-                        <TableCell collapsing>
-                            <Button color='red' icon size='mini' onClick={() => remove(index)}
-                                    aria-label='Remove field'><Icon name='trash'/></Button>
-                        </TableCell>
-                    </TableRow>)}
-                </TableBody>
+                        </Table.Cell>
+                        <Table.Cell style={{textAlign: 'center'}}>
+                            <Toggle checked={!!f.mobile} aria-label={`Show ${f.label || f.key} on mobile`}
+                                    onChange={e => update(index, {mobile: e.currentTarget.checked})}/>
+                        </Table.Cell>
+                        <Table.Cell>
+                            <IconButton role='danger' size='xs' icon='trash' onClick={() => remove(index)}
+                                        label='Remove field'/>
+                        </Table.Cell>
+                    </Table.Row>)}
+                </Table.Body>
             </Table>
-            <Button onClick={add}><Icon name='plus'/>Add Field</Button>
-            <Button onClick={addCountByWeight} title='Add Unit Weight, Total Weight, and an auto-counted Count'>
-                <Icon name='balance scale'/>Count by Weight
-            </Button>
+            <div className='wrolpi-button-row'>
+                <Button icon='plus' onClick={add}>Add Field</Button>
+                <Button icon='balance scale' onClick={addCountByWeight}
+                        title='Add Unit Weight, Total Weight, and an auto-counted Count'>
+                    Count by Weight
+                </Button>
+            </div>
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button primary onClick={save}>Save Fields</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
+            <Button role='save' onClick={save}>Save Fields</Button>
         </Modal.Actions>
     </Modal>;
 }

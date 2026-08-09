@@ -1,11 +1,9 @@
 import React, {useMemo, useState} from "react";
-import {Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Header, Table} from "../Theme";
+import {Group, Header, Select, Table, Text} from "../ui";
 import {
     defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey, groupFieldsOf, sortSummaryRows,
     summableFieldsOf, summarizeInventory,
 } from "./summarize";
-import {ThemeContext} from "../../contexts/contexts";
 
 // Aggregate the inventory client-side: group items by a chosen text/select field and sum a chosen quantity, number,
 // or calories field.  The grouping math lives in summarize.js (shared with the PDF export).  The ration estimate
@@ -15,7 +13,6 @@ export function InventorySummary({fields, items}) {
     const summableFields = summableFieldsOf(fields);
     const caloriesKey = findCaloriesKey(fields);
     const countKey = findCountKey(fields);
-    const {t} = React.useContext(ThemeContext);
 
     // Default to grouping by Category (easier to see grains/dairy/etc.), falling back to the first group field.
     const [groupKey, setGroupKey] = useState(defaultGroupKey(fields));
@@ -35,50 +32,53 @@ export function InventorySummary({fields, items}) {
     const sortDir = (key) => sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined;
 
     if (!items || items.length === 0) {
-        return <p {...t}>No items to summarize yet.</p>;
+        return <Text>No items to summarize yet.</Text>;
     }
 
-    const fieldOptions = (fs) => fs.map(f => ({key: f.key, value: f.key, text: f.label}));
+    const fieldOptions = (fs) => fs.map(f => ({value: f.key, label: f.label}));
 
     return <>
         <Header as='h3'>Summary</Header>
-        <div style={{marginBottom: '1em', display: 'flex', gap: '1em', flexWrap: 'wrap'}}>
-            <span {...t}>
+        <Group mb='1em' gap='1em' wrap='wrap'>
+            <span>
                 Group by:{' '}
-                <Select options={fieldOptions(groupFields)} value={groupKey}
-                        onChange={(e, data) => setGroupKey(data.value)}/>
+                <Select data={fieldOptions(groupFields)} value={groupKey}
+                        onChange={value => setGroupKey(value)}/>
             </span>
             {summableFields.length > 0 &&
                 <span>
                     Sum:{' '}
-                    <Select clearable options={fieldOptions(summableFields)} value={sumKey || ''}
-                            onChange={(e, data) => setSumKey(data.value || undefined)}/>
+                    <Select clearable data={fieldOptions(summableFields)} value={sumKey || ''}
+                            onChange={value => setSumKey(value || undefined)}/>
                 </span>}
-        </div>
-        <Table celled unstackable sortable>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell sorted={sortDir('name')} onClick={() => toggleSort('name')}
-                                     style={{cursor: 'pointer'}}>
+        </Group>
+        <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell sorted={sortDir('name')} onSort={() => toggleSort('name')}>
                         {groupFields.find(f => f.key === groupKey)?.label || 'Group'}
-                    </TableHeaderCell>
-                    <TableHeaderCell sorted={sortDir('count')} onClick={() => toggleSort('count')}
-                                     style={{cursor: 'pointer'}}>Items</TableHeaderCell>
-                    {sumKey && <TableHeaderCell sorted={sortDir('total')} onClick={() => toggleSort('total')}
-                                                style={{cursor: 'pointer'}}>Total</TableHeaderCell>}
-                    {caloriesKey && <TableHeaderCell sorted={sortDir('calories')} onClick={() => toggleSort('calories')}
-                                                     style={{cursor: 'pointer'}}>Calories</TableHeaderCell>}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {rows.map(row => <TableRow key={row.name}>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell>{row.count}</TableCell>
-                    {sumKey && <TableCell>{row.total}</TableCell>}
+                    </Table.HeaderCell>
+                    <Table.HeaderCell sorted={sortDir('count')} onSort={() => toggleSort('count')}>
+                        Items
+                    </Table.HeaderCell>
+                    {sumKey && <Table.HeaderCell sorted={sortDir('total')} onSort={() => toggleSort('total')}>
+                        Total
+                    </Table.HeaderCell>}
+                    {caloriesKey && <Table.HeaderCell sorted={sortDir('calories')}
+                                                       onSort={() => toggleSort('calories')}>
+                        Calories
+                    </Table.HeaderCell>}
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
+                {rows.map(row => <Table.Row key={row.name}>
+                    <Table.Cell>{row.name}</Table.Cell>
+                    <Table.Cell>{row.count}</Table.Cell>
+                    {sumKey && <Table.Cell>{row.total}</Table.Cell>}
                     {caloriesKey &&
-                        <TableCell>{row.calories > 0 ? `${row.calories.toLocaleString()} kcal` : '—'}</TableCell>}
-                </TableRow>)}
-            </TableBody>
+                        <Table.Cell>{row.calories > 0 ? `${row.calories.toLocaleString()} kcal` : '—'}</Table.Cell>}
+                </Table.Row>)}
+            </Table.Body>
         </Table>
     </>;
 }

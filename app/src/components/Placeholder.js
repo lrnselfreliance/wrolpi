@@ -1,61 +1,38 @@
-import {CardContent, CardGroup, PlaceholderImage, PlaceholderLine} from "semantic-ui-react";
-import React, {useContext} from "react";
-import {ThemeContext} from "../contexts/contexts";
-import {Card, Placeholder} from "./Theme";
+import React from "react";
+import {Card, CardGroup, Placeholder, Skeleton} from "./ui";
 
 export function CardPlaceholder() {
-    const {s} = useContext(ThemeContext);
-
-    return <Card>
-        <Placeholder>
-            <PlaceholderImage rectangular/>
-        </Placeholder>
-        <CardContent {...s}>
-            <Placeholder>
-                <PlaceholderLine/>
-                <PlaceholderLine/>
-                <PlaceholderLine/>
-            </Placeholder>
-        </CardContent>
+    return <Card media={<Skeleton height={140} radius={0} animate/>}>
+        <Placeholder lines={3}/>
     </Card>
 }
 
 export function VideoPlaceholder() {
-    return <CardGroup doubling stackable>
+    return <CardGroup>
         <CardPlaceholder/>
     </CardGroup>
 }
 
 export function ChannelPlaceholder() {
-    return <Placeholder>
-        <PlaceholderLine length='long'/>
-        <PlaceholderLine length='short'/>
-    </Placeholder>
+    return <Placeholder lines={2}/>
 }
 
 export function ProgressPlaceholder() {
-    return <Placeholder style={{marginBottom: '1em'}}>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <div style={{marginBottom: '1em'}}>
+        <Placeholder lines={2}/>
+    </div>
 }
 
 export function TextPlaceholder() {
-    return <Placeholder style={{marginBottom: '1em'}}>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <div style={{marginBottom: '1em'}}>
+        <Placeholder lines={3}/>
+    </div>
 }
 
 export function TagPlaceholder() {
-    return <Placeholder style={{height: 30, width: 80}}>
-        <PlaceholderImage/>
-    </Placeholder>
+    return <Skeleton height={30} width={80} radius={0} animate/>
 }
 
 export function TableRowPlaceholder() {
-    return <Placeholder>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <Placeholder lines={1}/>
 }

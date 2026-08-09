@@ -1,82 +1,53 @@
 import React, {useContext, useEffect, useState} from "react";
-import {
-    AccordionContent,
-    AccordionTitle,
-    BreadcrumbSection,
-    Button as SButton,
-    ButtonGroup,
-    Card,
-    Container,
-    Dimmer,
-    DimmerDimmable,
-    GridColumn,
-    GridRow,
-    Icon as SIcon,
-    IconGroup,
-    Input,
-    Label,
-    Pagination,
-    Search,
-    Transition
-} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
-import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
-    Breadcrumb,
+    Breadcrumbs as UIBreadcrumbs,
     Button,
-    Card as ThemedCard,
+    ButtonGroup,
+    CardGroup,
     Confirm,
-    darkTheme,
-    Form,
     Header,
     Icon,
-    lightTheme,
-    Loader,
+    IconButton,
+    IconStack,
+    Label,
+    Loading,
     Menu,
+    Message,
     Modal,
-    Popup,
-    Segment,
-    Statistic
-} from "./Theme";
+    Pagination,
+    Panel,
+    SearchBox,
+    Statistic,
+    TabBar,
+    tabClassName,
+    TextInput,
+    Toggle as UIToggle,
+    Tooltip,
+} from "./ui";
+import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
+import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
+import {themeChoices} from "../themes/names";
+import {contrastRatio as measureContrast} from "../themes/contrast";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads, unlockCookies} from "../api";
-import {allFrequencyOptions, HELP_VIEWER_URI, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {allFrequencyOptions, HELP_VIEWER_URI, NAME, validUrlRegex} from "./Vars";
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
-    const handlePageChange = (e, {activePage}) => {
-        onPageChange(activePage);
-    }
+    // Fewer page numbers on a phone: the strip has to fit without wrapping.
+    const pager = (siblingRange) => <Pagination
+        activePage={activePage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        siblingRange={siblingRange}
+        showFirstAndLast={showFirstAndLast}
+    />;
 
     return <>
-        <Media at='mobile'>
-            <Pagination
-                activePage={activePage}
-                boundaryRange={1}
-                onPageChange={handlePageChange}
-                size={size}
-                siblingRange={2}
-                totalPages={totalPages || 1}
-                firstItem={showFirstAndLast ? undefined : null}
-                lastItem={showFirstAndLast ? undefined : null}
-            />
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Pagination
-                activePage={activePage}
-                boundaryRange={1}
-                onPageChange={handlePageChange}
-                size={size}
-                siblingRange={5}
-                totalPages={totalPages || 1}
-                firstItem={showFirstAndLast ? undefined : null}
-                lastItem={showFirstAndLast ? undefined : null}
-            />
-        </Media>
+        <Media at='mobile'>{pager(1)}</Media>
+        <Media greaterThanOrEqual='tablet'>{pager(3)}</Media>
     </>
 }
 
@@ -141,11 +112,9 @@ export function secondsToElapsedPopup(seconds) {
     if (!elapsed) {
         return <></>;
     }
-    return <Popup
-        content={secondsToTimestamp(seconds)}
-        on='hover'
-        trigger={<span>{elapsed}</span>}
-    />
+    return <Tooltip label={secondsToTimestamp(seconds)}>
+        <span>{elapsed}</span>
+    </Tooltip>
 }
 
 export function isoDatetimeToElapsedPopup(dt) {
@@ -160,12 +129,9 @@ export function isoDatetimeToAgoPopup(dt, short = true) {
     if (seconds === 0 || !elapsed) {
         return <></>;
     }
-    const trigger = <span>{isoDatetimeToString(dt)}</span>;
-    return <Popup
-        content={<span>{elapsed} ago</span>}
-        on='hover'
-        trigger={trigger}
-    />
+    return <Tooltip label={`${elapsed} ago`}>
+        <span>{isoDatetimeToString(dt)}</span>
+    </Tooltip>
 }
 
 export function secondsToHMS(totalSeconds) {
@@ -209,24 +175,30 @@ export function isoDatetimeToString(dt, time = false) {
     return d;
 }
 
-export function CardLink({to, newTab = false, ...props}) {
-    const {t} = useContext(ThemeContext);
-    props = {...props, ...t};
+/*
+ * Both card links COMPOSE the caller's className rather than being overwritten by it.
+ * Written as `className='...' {...props}`, the spread put the caller's class last and it
+ * replaced the pair outright -- so every archive title, which passes
+ * `card-title-ellipsis`, lost `card-link` and rendered in the link color instead of the
+ * card's text color.  The one card type whose classes are set this way, and the one whose
+ * title looked wrong.
+ */
+const cardLinkClass = (className) =>
+    ['no-link-underscore', 'card-link', className].filter(Boolean).join(' ');
 
+export function CardLink({to, newTab = false, className, ...props}) {
     props = newTab === true ? {...props, target: '_blank', rel: 'noopener noreferrer'} : props;
-    return <Link to={to} className="no-link-underscore card-link" {...props}>
+    return <Link to={to} className={cardLinkClass(className)} {...props}>
         {props.children}
     </Link>
 }
 
-export function ExternalCardLink({to, children, ...props}) {
-    const {t} = useContext(ThemeContext);
+export function ExternalCardLink({to, children, className, ...props}) {
     return <a
         href={to}
         target='_blank'
         rel='noopener noreferrer'
-        className='no-link-underscore card-link'
-        {...t}
+        className={cardLinkClass(className)}
         {...props}
     >
         {children}
@@ -234,10 +206,9 @@ export function ExternalCardLink({to, children, ...props}) {
 }
 
 export function PreviewLink({file, children, className, ...props}) {
-    const {t} = useContext(ThemeContext);
     const {setPreviewFile} = React.useContext(FilePreviewContext);
     className = className ? `clickable ${className}` : `clickable `;
-    return <span className={className} onClick={() => setPreviewFile(file)} {...props} {...t}>
+    return <span className={className} onClick={() => setPreviewFile(file)} {...props}>
         {children}
     </span>
 }
@@ -430,86 +401,37 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', clearDisabled = null, inputRef = null) => {
+/**
+ * Shared behaviour for the search inputs: keep a local value so typing is not
+ * throttled by the parent, but follow `searchStr` when it changes underneath.
+ */
+const useSearchValue = (searchStr, onChange) => {
     const [value, setValue] = useState(searchStr || '');
-    const [submitted, setSubmitted] = useState(false);
 
     React.useEffect(() => {
-        // `searchStr` is the source of truth from the parent (often an async URL query param).
-        // Depend ONLY on `searchStr` -- never on `value` -- otherwise a transient render where the
-        // local `value` has advanced (e.g. "ex") but `searchStr` still trails ("e") fires this
-        // effect and reverts `value`, garbling fast typing (flaky filter test).
+        // `searchStr` is the source of truth from the parent (often an async URL query
+        // param).  Depend ONLY on `searchStr` -- never on `value` -- otherwise a transient
+        // render where the local `value` has advanced ("ex") but `searchStr` still trails
+        // ("e") fires this effect and reverts `value`, garbling fast typing.
         if ((searchStr || '') !== value) {
             setValue(searchStr || '');
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchStr]);
 
-    const handleChange = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setValue(e.target.value);
-        setSubmitted(false);
+    const handleChange = (newValue) => {
+        setValue(newValue);
         if (onChange) {
             // Try to call the remote function, don't let its failure break this.
             try {
-                onChange(e.target.value);
+                onChange(newValue);
             } catch (e) {
-                console.error(`Call to ${onChange} failed`);
+                console.error('Call to onChange failed', e);
             }
         }
     }
 
-    const handleClearSearch = (e) => {
-        e.preventDefault();
-        // Clear the input when the "clear" button is clicked, search again.
-        setValue('');
-        setSubmitted(false);
-        if (onSubmit) {
-            onSubmit('');
-        }
-        if (onClear) {
-            onClear();
-        }
-    }
-
-    const localOnSubmit = (e) => {
-        // Send the value up when submitting.
-        e.preventDefault();
-        setSubmitted(true);
-        if (onSubmit) {
-            onSubmit(value);
-        } else {
-            console.debug('No onSubmit defined');
-        }
-    }
-
-    const clearButton = <Button
-        icon='close'
-        size={size}
-        onClick={handleClearSearch}
-        type='button'
-        // If `clearDisabled` is provided, use it to disable the clear button.  Fallback to disabling if there is no
-        // search value.
-        disabled={clearDisabled !== null ? clearDisabled : !!!value}
-        className='search-clear'
-    />;
-
-    // Can only clear after submitting.
-    let action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
-
-    const input = <Input fluid
-                         placeholder={placeholder}
-                         type='text'
-                         onChange={handleChange}
-                         value={value}
-                         size={size}
-                         className='search-input'
-                         action={action}
-                         ref={inputRef}
-    />;
-
-    return {value, submitted, clearButton, input, localOnSubmit, handleChange}
+    return {value, setValue, handleChange};
 }
 
 export function SearchInput({
@@ -517,18 +439,30 @@ export function SearchInput({
                                 onSubmit,
                                 onChange,
                                 onClear,
-                                size = 'small',
                                 placeholder = 'Search...',
-                                icon = 'search',
                                 inputRef = null,
                                 ...props
                             }) {
-    // A Semantic <Input> with a Clear button as the action.
-    let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, null, inputRef);
+    const {value, setValue, handleChange} = useSearchValue(searchStr, onChange);
 
-    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
-        {input}
-    </Form>
+    const handleClear = () => {
+        setValue('');
+        if (onClear) {
+            onClear();
+        }
+    }
+
+    return <div className='search-container' {...props}>
+        <SearchBox
+            value={value}
+            onChange={handleChange}
+            onSubmit={onSubmit}
+            onClear={handleClear}
+            placeholder={placeholder}
+            inputRef={inputRef}
+            clearable
+        />
+    </div>
 }
 
 export function SearchResultsInput({
@@ -536,11 +470,7 @@ export function SearchResultsInput({
                                        onSubmit,
                                        onClear = null,
                                        onChange = null,
-                                       size = 'small',
                                        placeholder = 'Search...',
-                                       icon = 'search',
-                                       action,
-                                       actionIcon,
                                        clearable = false,
                                        clearDisabled = null,
                                        results = undefined,
@@ -548,54 +478,53 @@ export function SearchResultsInput({
                                        resultRenderer = undefined,
                                        loading = false,
                                        inputRef = null,
+                                       autoFocus = false,
                                        ...props
                                    }) {
-    // A Semantic <Search> input with a Clear button.
-    let {
-        value,
-        clearButton,
-        localOnSubmit,
-        handleChange,
-    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, clearDisabled);
+    const {value, setValue, handleChange} = useSearchValue(searchStr, onChange);
 
-    // Show a "Loading" message rather than "No results" while results are pending.
-    const loadingResults = {'loading': {name: 'Loading', results: [{title: 'Results are pending...'}]}};
-
-    const localHandleResultSelect = (e, data) => {
-        if (e) {
-            e.preventDefault();
+    const handleClear = () => {
+        setValue('');
+        if (onClear) {
+            onClear();
         }
+    }
+
+    const localHandleResultSelect = (result) => {
         if (handleResultSelect) {
-            console.debug(`Selected result`, data);
-            handleResultSelect(data);
+            // Callers destructure `{result}` from this -- passing the
+            // bare result silently broke navigation from the search suggestions.  The shape
+            // stays until the call sites are ready to change together.
+            handleResultSelect({result});
         } else {
             console.error('No handleResultSelect defined!');
         }
     }
 
-    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
-        <Search category
-                input={{fluid: true, icon: icon, ref: inputRef}}
-                placeholder={placeholder}
-                type='text'
-                onSearchChange={handleChange}
-                onResultSelect={localHandleResultSelect}
-                value={value}
-                size={size}
-                results={_.isEmpty(results) ? loadingResults : results}
-                resultRenderer={resultRenderer}
-                className='search-input'
-                loading={loading}
+    return <div className='search-container' {...props}>
+        <SearchBox
+            value={value}
+            onChange={handleChange}
+            onSubmit={onSubmit}
+            onResultSelect={localHandleResultSelect}
+            onClear={handleClear}
+            results={results}
+            resultRenderer={resultRenderer}
+            loading={loading}
+            placeholder={placeholder}
+            clearable={clearable}
+            clearDisabled={clearDisabled}
+            inputRef={inputRef}
+            autoFocus={autoFocus}
         />
-        {clearable === true && <div style={{marginLeft: '1em'}}>{clearButton}</div>}
-    </Form>
+    </div>
 }
 
 export function WROLModeMessage({content}) {
     const wrolModeEnabled = useWROLMode();
 
     if (wrolModeEnabled) {
-        return <Message icon='lock' header='WROL Mode Enabled' content={content}/>
+        return <Message kind='warning' icon='lock' title='WROL Mode Enabled'>{content}</Message>
     }
     return null;
 }
@@ -605,8 +534,9 @@ export function DownloadWindowMessage() {
     const downloads = status ? status.downloads : null;
 
     if (downloads && downloads.outside_download_window) {
-        return <Message icon='clock outline' header='Outside Download Window'
-                        content='Downloads are paused because the current time is outside the configured download window.'/>
+        return <Message kind='info' icon='history' title='Outside Download Window'>
+            Downloads are paused because the current time is outside the configured download window.
+        </Message>
     }
     return null;
 }
@@ -616,8 +546,10 @@ export function DailyLimitMessage() {
     const downloads = status ? status.downloads : null;
 
     if (downloads && downloads.daily_limit_reached && !downloads.disabled && !downloads.stopped) {
-        return <Message icon='pause circle outline' header='Max Daily Downloads Reached'
-                        content='Downloads are paused because the daily download limit has been reached. Downloads will resume tomorrow.'/>
+        return <Message kind='info' icon='stop' title='Max Daily Downloads Reached'>
+            Downloads are paused because the daily download limit has been reached. Downloads will
+            resume tomorrow.
+        </Message>
     }
     return null;
 }
@@ -652,27 +584,26 @@ export function CookiesUnlockModal({open, onClose, onSuccess}) {
     return <Modal open={open} onClose={onClose} size='tiny'>
         <Modal.Header>Unlock Cookies</Modal.Header>
         <Modal.Content>
-            <Form>
-                <Form.Input
-                    input={{ref: passwordRef}}
-                    label='Password'
-                    type='password'
-                    placeholder='Enter your encryption password'
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
-                />
-            </Form>
+            <TextInput
+                ref={passwordRef}
+                label='Password'
+                type='password'
+                placeholder='Enter your encryption password'
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+            />
         </Modal.Content>
         <Modal.Actions>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
             <Button
-                color='green'
+                role='save'
+                icon='unlock'
                 onClick={handleUnlock}
                 loading={submitting}
                 disabled={!password || submitting}
             >
-                <SIcon name='unlock'/> Unlock
+                Unlock
             </Button>
         </Modal.Actions>
     </Modal>;
@@ -690,16 +621,12 @@ export function CookiesLockedMessage() {
     }
 
     return <>
-        <Message warning icon>
-            <SIcon name='lock'/>
-            <Message.Content>
-                <Message.Header>Cookies Locked</Message.Header>
-                You have encrypted cookies stored, but they are currently locked.
-                <a style={{marginLeft: '0.5em', cursor: 'pointer'}}
-                   onClick={() => setModalOpen(true)}>
-                    <SIcon name='unlock'/> Unlock Cookies
-                </a>
-            </Message.Content>
+        <Message kind='warning' icon='lock' title='Cookies Locked'>
+            You have encrypted cookies stored, but they are currently locked.
+            <Button role='cancel' icon='unlock' size='xs' style={{marginLeft: '0.7em'}}
+                    onClick={() => setModalOpen(true)}>
+                Unlock Cookies
+            </Button>
         </Message>
 
         <CookiesUnlockModal open={modalOpen} onClose={() => setModalOpen(false)}/>
@@ -721,53 +648,53 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links, right}) {
-    return <Menu tabular>
+    return <TabBar right={right}>
         {links.map((link) => <NavLink
             to={link.to}
-            style={{padding: '1em'}}
             key={link.to}
             end={link.end === true ? true : null}
-            className={({isActive}) => {
-                const active = link.isActive ? link.isActive() : isActive;
-                return active ? 'item active' : 'item';
-            }}
+            className={({isActive}) => tabClassName(link.isActive ? link.isActive() : isActive)}
         >
             {link.text}
         </NavLink>)}
-        {right &&
-            <Menu.Menu position='right'>
-                <Menu.Item style={{padding: '0.5em'}}>{right}</Menu.Item>
-            </Menu.Menu>}
-    </Menu>
+    </TabBar>
 }
 
+/**
+ * The outer wrapper of a page, and the thing that decides how far apart its blocks sit.
+ *
+ * A page is a stack of panels -- the dashboard is five, Status six, Settings six -- and they used
+ * to share edges, because nothing anywhere put space between them.  The space belongs here rather
+ * than on the panel: how far a panel sits from its neighbour is a property of the two being
+ * stacked, not of the panel, which also appears inside modals and grids that space it themselves.
+ *
+ * `.wrolpi-stack` spaces every top-level block of the page, whatever it is -- which is why it
+ * works through the `Media` wrappers that several pages put around a panel.  It spaces the
+ * wrapper, and the wrapper is the sibling.
+ */
 export function PageContainer(props) {
     return <>
         <Media at='mobile'>
-            <Container style={{marginTop: '1em', padding: 0}}>
+            <div className='wrolpi-stack' style={{marginTop: '1em', padding: 0}}>
                 {props.children}
-            </Container>
+            </div>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
+            <div className='wrolpi-stack' style={{marginTop: '1em', padding: '1em'}}>
                 {props.children}
-            </Container>
+            </div>
         </Media>
     </>;
 }
 
 export function CardGroupCentered(props) {
-    return <div style={{marginTop: '1em'}}>
-        <Media at='mobile'>
-            <Card.Group centered>
-                {props.children}
-            </Card.Group>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Card.Group>
-                {props.children}
-            </Card.Group>
-        </Media>
+    // One responsive grid; it centres what it cannot fill, so the two viewports no
+    // longer need separate markup.
+    //
+    // No `marginTop`: this is a top-level block on every module page, and the page's stack
+    // spaces it.  Carrying one added to that gap.
+    return <div>
+        <CardGroup>{props.children}</CardGroup>
     </div>
 }
 
@@ -830,15 +757,11 @@ export function findPosterPath(file) {
     }
 }
 
-export function CardPoster({to, file}) {
-    const {s} = useContext(ThemeContext);
-    // Used to center posters in CardIcon.
-    const style = {display: 'flex', justifyContent: 'center', ...s['style']};
+export function CardPoster({to, file, overlay}) {
     const navigate = useNavigate();
 
-    const cardTagIcon = <div className="ui green left corner label">
-        <i aria-hidden="true" className="tag icon"></i>
-    </div>;
+    // Marks a tagged file, pinned to the poster's corner.
+    const cardTagIcon = <div className='wrolpi-card-tag'><Icon name='tag' size={14} label='Tagged'/></div>;
     let imageLabel = !_.isEmpty(file.tags) ? cardTagIcon : null;
 
     let posterPath = findPosterPath(file);
@@ -847,42 +770,47 @@ export function CardPoster({to, file}) {
         // FileGroup has a poster (screenshot/thumbnail) file.
         posterPath = `/media/${encodeMediaPath(posterPath)}`;
 
-        const image = <>
-            {/* Replicate <Image label/> but with maxHeight applied to image */}
+        /*
+         * Sized by `.wrolpi-card-poster`: as wide as the card allows, capped in height,
+         * natural ratio.  The corner chrome goes INSIDE the link, beside the image:
+         *
+         *   - the frame shrink-wraps the painted image, so a mark pinned to its corner
+         *     tracks the poster rather than the letterbox space beside it.  A height-capped
+         *     poster is a good deal narrower than its band -- 155px inside a 233px card for
+         *     a book cover, less for a vertical video;
+         *   - and the mark stays part of the poster's hit target, rather than a dead spot
+         *     on the corner of an otherwise clickable image.
+         */
+        const inner = <>
             {imageLabel}
-            <img alt='poster' src={posterPath} style={{maxHeight: '163px', maxWidth: '290px', width: 'auto'}}/>
+            <img alt='poster' src={posterPath}/>
+            {overlay}
         </>;
 
-        if (to) {
-            // Link within this App.
-            return <Link to={to} style={style}>
-                {image}
-            </Link>
-        } else {
-            // Preview the file.
-            return <div style={style}>
-                <PreviewLink file={file}>
-                    {image}
-                </PreviewLink>
-            </div>
-        }
+        return <div className='wrolpi-card-poster'>
+            {to
+                // Link within this App.
+                ? <Link to={to} className='wrolpi-card-poster-frame'>{inner}</Link>
+                // Preview the file.
+                : <PreviewLink file={file} className='wrolpi-card-poster-frame'>{inner}</PreviewLink>}
+        </div>
     } else {
         // FileGroup has no poster.
         if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {
             // "to" is a downloadable file outside the app, preview the file.
             return <PreviewLink file={file}>
-                <ThemedCard.Icon>
+                <div className='wrolpi-card-icon'>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </ThemedCard.Icon>
+                </div>
             </PreviewLink>
         } else if (!posterPath && to) {
             // Link to the full page in this App.
             return <Link to={to}>
-                <ThemedCard.Icon onClick={() => navigate(to)}>
+                <div className='wrolpi-card-icon' onClick={() => navigate(to)}>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </ThemedCard.Icon>
+                </div>
             </Link>
         }
     }
@@ -898,16 +826,10 @@ export function InfoPopup({
                               iconStyle = { margin: '0.5em'},
                               ...props
                           }) {
-    const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;
-    return <Popup
-        content={content}
-        size={size}
-        position={position}
-        header={header || null}
-        trigger={trigger}
-        hoverable={true}
-        {...props}
-    />
+    return <Tooltip label={header ? <><strong>{header}</strong><br/>{content}</> : content}
+                    multiline w={260} {...props}>
+        <span style={iconStyle}><Icon name={icon} size={iconSize || 'small'}/></span>
+    </Tooltip>
 }
 
 export function InfoHeader({
@@ -922,14 +844,35 @@ export function InfoHeader({
                                required = false,
                                ...props
                            }) {
-    return <div className='inline-header' {...props}>
-        <label htmlFor={for_}>
-            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
-        </label>
-        <span>
-            <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition} {...popupProps}/>
-        </span>
-    </div>
+    /*
+     * The icon goes in the heading's own `after` slot.  It used to be a sibling `<span>`
+     * beside a `<label>`, held on one line by `.inline-header h1..h5 {display: inline-block}`
+     * -- which worked while these headings were a bare `<h2>` and stopped working the moment
+     * they gained a block wrapper: the label's block child forced a break and every help icon
+     * in the app dropped to its own line.
+     *
+     * The label stays, now inside the heading, because `for_` associates the text with a
+     * field on three of these call sites.
+     */
+    /*
+     * A `<label>` ONLY when `for_` names a field.  Several call sites pass an InfoHeader as
+     * the `label` prop of InputForm/ToggleForm, which wraps whatever it is given in a
+     * `<label>` of its own -- an unconditional label here nests one inside another, which is
+     * invalid HTML and confuses what clicking the text does.  That predates this change; it
+     * is fixed here rather than carried forward.
+     *
+     * `margin: 0` on the icon because the row's `gap` does the spacing now.  The 0.5em
+     * default was there to separate a free-floating sibling, and inside the row it adds to
+     * the gap on every side.
+     */
+    return <Header as={headerSize} {...props} after={
+        <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}
+                   iconStyle={{margin: 0}} {...popupProps}/>
+    }>
+        {for_
+            ? <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+            : <>{headerContent} {required && <RequiredAsterisk/>}</>}
+    </Header>
 }
 
 export function HelpModal({
@@ -945,7 +888,8 @@ export function HelpModal({
     const style = {position: 'relative', height: '75vh', width: '100%', border: 'none'};
 
     return <>
-        <Icon link name={icon} size={iconSize} style={iconStyle} onClick={() => setOpen(true)}/>
+        <IconButton icon={icon} label={title || 'Help'} variant='subtle'
+                    style={iconStyle} onClick={() => setOpen(true)}/>
         <Modal open={open} onClose={() => setOpen(false)} size={modalSize} closeIcon>
             {title && <Modal.Header>{title}</Modal.Header>}
             <Modal.Content>
@@ -967,14 +911,16 @@ export function HelpHeader({
                                 required = false,
                                 ...props
                             }) {
-    return <div className='inline-header' {...props}>
-        <label htmlFor={for_}>
-            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
-        </label>
-        <span>
-            <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle} {...helpModalProps}/>
-        </span>
-    </div>
+    // See the notes in InfoHeader: the control belongs in the heading's row, a label only
+    // when it names a field, and the row's gap is the spacing.
+    return <Header as={headerSize} {...props} after={
+        <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle}
+                   iconStyle={{margin: 0}} {...helpModalProps}/>
+    }>
+        {for_
+            ? <label htmlFor={for_}>{headerContent} {required && <RequiredAsterisk/>}</label>
+            : <>{headerContent} {required && <RequiredAsterisk/>}</>}
+    </Header>
 }
 
 // All the hardware toggles share this shape: a Toggle whose state comes from a
@@ -1006,12 +952,13 @@ function SubsystemToggle({label, on, onChange, unsupportedMessage, info = null, 
         {confirmStop && <Confirm
             open={confirmOpen}
             onCancel={() => setConfirmOpen(false)}
-            onClose={() => setConfirmOpen(false)}
             onConfirm={handleConfirm}
-            header={confirmStop.header}
-            content={confirmStop.content}
-            confirmButton={confirmStop.button}
-        />}
+            title={confirmStop.header}
+            confirmLabel={confirmStop.button}
+            destructive
+        >
+            {confirmStop.content}
+        </Confirm>}
         <Toggle
             label={label}
             disabled={disabled === null ? unsupported : disabled}
@@ -1094,58 +1041,24 @@ export function VncToggle() {
 }
 
 export function Toggle({label, checked, disabled, onChange, icon, popupContent = null, info = null}) {
-    // Custom toggle because Semantic UI does not handle inverted labels correctly.
-    const {t, inverted} = useContext(ThemeContext);
-
-    let style = {marginLeft: '1em'};
-    if (t && t.style) {
-        style = {...t.style, ...style};
-    }
-
-    disabled = disabled === true ? 'disabled' : '';
-
-    let inputClassName = `${disabled} ${inverted}`;
-    let sliderClassName = `${disabled} ${inverted} slider`;
-    if (inverted) {
-        style['color'] = '#dddddd';
-    }
-    if (disabled && inverted) {
-        style['color'] = '#888888';
-    }
-
-    let onMouseUp = () => {
-    };
-    if (onChange) {
-        onMouseUp = (e) => {
-            if (disabled) {
-                return;
-            }
-            e.preventDefault();
-            if (onChange) {
-                onChange(!checked);
-            }
-        }
-    }
-
-    if (icon) {
-        icon = <Icon name={icon}/>
-    }
-
-    const body = <span>
-        <div className='toggle' onMouseUp={onMouseUp}>
-            <input type="checkbox" className={inputClassName} checked={checked} onChange={onMouseUp}
-                   data-testid='toggle'/>
-            <span className={sliderClassName}></span>
-        </div>
-        <span style={style} data-testid='toggle-label'>
-            {icon}
-            {label}
-            {info && <InfoPopup content={info}/>}
-        </span>
-    </span>
+    // Keeps this call signature -- `onChange` receives the new boolean, not an event --
+    // because a dozen call sites are written against it.
+    const body = <span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+        <UIToggle
+            label={<span style={{display: 'inline-flex', alignItems: 'center', gap: 6}}>
+                {icon && <Icon name={icon}/>}
+                {label}
+            </span>}
+            checked={checked === true}
+            disabled={disabled === true}
+            onChange={(e) => onChange && onChange(e.currentTarget.checked)}
+            data-testid='toggle'
+        />
+        {info && <InfoPopup content={info}/>}
+    </span>;
 
     if (popupContent) {
-        return <Popup on='hover' trigger={body} content={popupContent}/>
+        return <Tooltip label={popupContent}>{body}</Tooltip>
     }
     return body
 }
@@ -1169,14 +1082,12 @@ export function DisableDownloadsToggle() {
     }
 
     const on = downloads && downloads['disabled'] === false && downloads['stopped'] === false;
-    return <Form>
-        <Toggle
-            label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
-            disabled={wrolModeEnabled || pending || downloads === null}
-            checked={on === true}
-            onChange={setDownloads}
-        />
-    </Form>;
+    return <Toggle
+        label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
+        disabled={wrolModeEnabled || pending || downloads === null}
+        checked={on === true}
+        onChange={setDownloads}
+    />;
 }
 
 export function emptyToNull(obj) {
@@ -1355,43 +1266,73 @@ export function fileSuffixIconName(filename) {
     return 'file';
 }
 
-export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
-    // Default to a grey file icon.
+export function FileIcon({file, disabled = true, size = 48, ...props}) {
     const {mimetype, path, primary_path} = file;
     // `file` may be a file_group or a file.
     const lowerPath = primary_path ? primary_path.toLocaleString() : path.toLowerCase();
-    props['name'] = mimetypeIconName(mimetype, lowerPath);
-    props['color'] = mimetypeColor(mimetype, lowerPath);
-    return <Icon disabled={disabled} size={size} {...props}/>
+    const name = mimetypeIconName(mimetype, lowerPath);
+    // The mimetype picks a hue; the token picks what that hue is in this theme.
+    const color = mimetypeColor(mimetype, lowerPath);
+    return <Icon
+        name={name}
+        size={size}
+        style={{color: `var(--${color})`, opacity: disabled ? 0.75 : 1}}
+        {...props}
+    />
 }
 
-export function LoadStatistic({label, value, cores, ...props}) {
+/**
+ * The severity of a load average: a warning above half the cores, a problem above three
+ * quarters, and nothing to say below that or when the core count is unknown.
+ *
+ * Exported and pure so the branches can be tested as branches.  Reading the color back off
+ * a rendered Statistic cannot do it -- jsdom rejects `color: var(--danger)` as an invalid
+ * declaration and drops it, so every value comes back as the empty string.
+ */
+export const loadRole = (value, cores) => {
+    if (!cores) return undefined;
     const quarter = cores / 4;
-    if (cores && value >= (quarter * 3)) {
-        props['color'] = 'red';
-    } else if (cores && value >= (quarter * 2)) {
-        props['color'] = 'orange';
-    }
+    if (value >= quarter * 3) return 'danger';
+    if (value >= quarter * 2) return 'warning';
+    return undefined;
+};
+
+export function LoadStatistic({label, value, cores, ...props}) {
+    const color = loadRole(value, cores);
     return <Statistic
         label={label}
         value={value ? parseFloat(value).toFixed(1) : '?'}
+        color={color}
         {...props}/>;
 }
 
 export function DarkModeToggle() {
-    const {savedTheme, cycleSavedTheme} = useContext(ThemeContext);
-    let iconName = 'lightbulb outline';
-    if (savedTheme === darkTheme) {
-        iconName = 'moon';
-    } else if (savedTheme === lightTheme) {
-        iconName = 'sun';
-    }
+    const {savedTheme, setTheme} = useContext(ThemeContext);
+    const active = themeChoices.find(i => i.value === savedTheme) || themeChoices[0];
 
-    return <Icon
-        name={iconName}
-        onClick={cycleSavedTheme}
-        style={{cursor: 'pointer', marginRight: '0.8em'}}
-    />
+    return <Menu position='bottom-end' withinPortal>
+        <Menu.Target>
+            <IconButton
+                icon={active.icon}
+                label={`Theme: ${active.text}`}
+                variant='subtle'
+                style={{marginRight: '0.8em'}}
+            />
+        </Menu.Target>
+        <Menu.Dropdown>
+            <Menu.Label>Theme</Menu.Label>
+            {themeChoices.map(choice => <Menu.Item
+                key={choice.value}
+                leftSection={<Icon name={choice.icon}/>}
+                onClick={() => setTheme(choice.value)}
+                // The chosen theme is marked by weight as well as color, so the mark
+                // survives in the monochrome themes.
+                style={choice.value === active.value ? {fontWeight: 700} : undefined}
+            >
+                {choice.text}
+            </Menu.Item>)}
+        </Menu.Dropdown>
+    </Menu>
 }
 
 
@@ -1400,26 +1341,34 @@ export function UnsupportedModal(header, message, icon) {
     const onOpen = () => setOpen(true);
     const onClose = () => setOpen(false);
 
-    const modal = <Modal basic closeIcon
-                         onOpen={onOpen}
-                         onClose={onClose}
-                         open={open}
-    >
-        <Header>
-            <Icon name={icon || 'exclamation triangle'}/>
-            {header || 'Unsupported'}
-        </Header>
-        <Modal.Content>
-            <Modal.Description>
-                {message}
-            </Modal.Description>
-        </Modal.Content>
+    const modal = <Modal open={open} onClose={onClose} size='tiny'>
+        <Modal.Header>
+            <span style={{display: 'inline-flex', alignItems: 'center', gap: 8}}>
+                <Icon name={icon || 'exclamation triangle'}/>
+                {header || 'Unsupported'}
+            </span>
+        </Modal.Header>
+        <Modal.Content>{message}</Modal.Content>
         <Modal.Actions>
-            <Button basic inverted onClick={onClose}>Ok</Button>
+            <Button role='cancel' onClick={onClose}>Ok</Button>
         </Modal.Actions>
     </Modal>;
 
     return {modal, doClose: onClose, doOpen: onOpen};
+}
+
+/**
+ * The hotspot glyph in the nav bar: a wifi icon with a corner mark for the state.
+ * A button, not an anchor -- every one of these opens a dialog or toggles the
+ * hotspot, and `<a href='#'>` was neither keyboard-honest nor navigable.
+ */
+function HotspotButton({label, corner, on, onClick}) {
+    const wifi = <Icon name='wifi' size='large' style={{opacity: on ? 1 : 0.55}}/>;
+    return <IconButton label={label} variant='subtle' onClick={onClick} icon={() =>
+        corner
+            ? <IconStack corner={<Icon name={corner} size={12}/>} label={label}>{wifi}</IconStack>
+            : wifi
+    }/>
 }
 
 export function HotspotStatusIcon() {
@@ -1451,55 +1400,39 @@ export function HotspotStatusIcon() {
         return <>
             <Confirm open={inUseOpen}
                      onCancel={() => setInUseOpen(false)}
-                     onClose={() => setInUseOpen(false)}
                      onConfirm={handleConfirmInUse}
-                     header='Wifi is in-use'
-                     content={content}
-                     confirmButton='Start Hotspot'
-            />
-            <a href='#' onClick={() => setInUseOpen(true)}>
-                <IconGroup size='large'>
-                    <Icon name='wifi' disabled/>
-                    <Icon corner name='exclamation'/>
-                </IconGroup>
-            </a>
+                     title='Wifi is in-use'
+                     confirmLabel='Start Hotspot'
+            >
+                {content}
+            </Confirm>
+            <HotspotButton label='Wifi is in use; start the hotspot' corner='exclamation'
+                           onClick={() => setInUseOpen(true)}/>
         </>
     } else if (dockerized === false && on === true) {
         return <>
             <Confirm
                 open={stopHotspotOpen}
                 onCancel={() => setStopHotspotOpen(false)}
-                onClose={() => setStopHotspotOpen(false)}
                 onConfirm={handleConfirmStop}
-                header='Stop the hotspot'
-                content='You will be disconnected when using the hotspot. Are you sure?'
-                confirmButton='Stop'
-            />
-            <a href='#' onClick={() => setStopHotspotOpen(true)}>
-                <IconGroup size='large'>
-                    <Icon name='wifi' disabled={on !== true}/>
-                    {on === false && <Icon corner name='x'/>}
-                    {on === null && <Icon corner name='question'/>}
-                </IconGroup>
-            </a>
+                title='Stop the hotspot'
+                confirmLabel='Stop'
+                destructive
+            >
+                You will be disconnected when using the hotspot. Are you sure?
+            </Confirm>
+            <HotspotButton label='Hotspot is on; stop it' on
+                           onClick={() => setStopHotspotOpen(true)}/>
         </>
     } else if (dockerized === false && on === false) {
-        return <a href='#' onClick={() => setHotspot(true)}>
-            <IconGroup size='large'>
-                <Icon name='wifi' disabled/>
-                <Icon corner name='x'/>
-            </IconGroup>
-        </a>
+        return <HotspotButton label='Hotspot is off; start it' corner='x'
+                              onClick={() => setHotspot(true)}/>
     }
 
     // Hotspot is not available, or, status has not yet been fetched.
     return <>
-        <a href='#' onClick={openUnsupportedModal}>
-            <IconGroup size='large'>
-                <Icon name='wifi' disabled/>
-                <Icon corner name='question'/>
-            </IconGroup>
-        </a>
+        <HotspotButton label='Hotspot status is unknown' corner='question'
+                       onClick={openUnsupportedModal}/>
         {unsupportedModal}
     </>
 }
@@ -1558,8 +1491,6 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
             const newDirectory = isDir ? {} : {
                 newDirectory: {
                     name: 'New Directory',
-                    // title must not be null; an unset form field passes a null value and
-                    // Semantic UI's Search crashes reading null.length.
                     results: [{title: directoryName || ''}],
                 }
             };
@@ -1593,21 +1524,15 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         loading,
     ]);
 
-    const handleSearchChange = (e, data) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setDirectoryName(data.value);
+    const handleSearchChange = (value) => {
+        setDirectoryName(value);
     }
 
-    const handleResultSelect = (e, data) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setDirectoryName(data.result.title);
+    const handleResultSelect = (result) => {
+        setDirectoryName(result.title);
         // title is the relative path.
         if (onSelect) {
-            onSelect(data.result.title);
+            onSelect(result.title);
         }
     }
 
@@ -1618,22 +1543,23 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         }
     }
 
-    return <Search category
-                   placeholder='Search directory names...'
-                   onSearchChange={handleSearchChange}
-                   onResultSelect={handleResultSelect}
-                   onBlur={handleBlur}
-                   loading={loading}
-                   value={directoryName || ''}
-                   results={results}
-                   disabled={disabled}
-                   {...props}
+    return <SearchBox
+        placeholder='Search directory names...'
+        onChange={handleSearchChange}
+        onResultSelect={handleResultSelect}
+        onBlur={handleBlur}
+        loading={loading}
+        value={directoryName || ''}
+        results={results}
+        disabled={disabled}
+        required={required}
+        {...props}
     />
 }
 
 export const BackButton = ({...props}) => {
     const navigate = useNavigate();
-    return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
+    return <Button role='cancel' icon='arrow left' onClick={() => navigate(-1)} {...props}>Back</Button>;
 }
 
 export const filterToMimetypes = (filter) => {
@@ -1669,26 +1595,45 @@ export const toLocaleString = (num, locale = 'en-US') => {
     return num.toLocaleString(locale);
 }
 
-function luma(color) {
-    let rgb = (typeof color === 'string') ? hexToRGBArray(color) : color;
-    return (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]); // SMPTE C, Rec. 709 weightings
+/*
+ * The WCAG primitives now live in themes/contrast, so the theme code can measure a color
+ * without importing this module -- Common.js pulls in half the component library, and
+ * `themes/` importing it is how an import cycle starts.  Forwarded because a good many call
+ * sites and tests already take `contrastRatio` from here.
+ *
+ * It is forwarded by a function that delegates rather than by `export {contrastRatio}`, and
+ * that is load-bearing.  A bare re-export compiles to a getter that dereferences the imported
+ * module, and six specs mock this module with `{...jest.requireActual('./Common')}` -- a
+ * spread invokes every getter, and those spreads run re-entrantly while Common.js is still
+ * evaluating (Common -> customHooks -> Common, both mocked that way).  The getter fires
+ * before the import binding is assigned, throws `Cannot read properties of undefined`, and
+ * takes the whole suite with it.  A function is read by the spread but not called, so it
+ * dereferences nothing until evaluation has finished.
+ *
+ * The hex parser accepting the `#rgb` shorthand matters and is not incidental: tag colors
+ * are not only chosen in the color picker, they live in a config file a user edits by hand
+ * -- configs are the source of truth in WROLPi.  Rejecting `#fff` left the luminance at zero,
+ * so a near-white tag was treated as black and handed light text.
+ */
+export function contrastRatio(a, b) {
+    return measureContrast(a, b);
 }
 
-function hexToRGBArray(color) {
-    if (color.length === 7) {
-        color = color.slice(1);
-    }
-    if (color.length !== 6) {
-        console.error('Invalid hex color: ' + color);
-        return;
-    }
-    let rgb = [];
-    for (let i = 0; i <= 2; i++) rgb[i] = parseInt(color.substr(i * 2, 2), 16);
-    return rgb;
-}
+export const TAG_TEXT_DARK = '#000000';
+export const TAG_TEXT_LIGHT = '#dddddd';
 
+/**
+ * Dark or light text, whichever a user's chosen tag color actually reads better against.
+ *
+ * Measures both instead of comparing a brightness figure to a threshold.  The threshold
+ * version put light text on the palette blue (`#2185d0`) at 2.9:1 when dark text on the same
+ * fill gives 5.3:1 -- it had picked the worse of the only two options.  Every mid-tone blue,
+ * teal and purple a user might choose sat in that band.
+ */
 export function contrastingColor(color) {
-    return (luma(color) >= 120) ? '#000000' : '#dddddd';
+    return contrastRatio(TAG_TEXT_DARK, color) >= contrastRatio(TAG_TEXT_LIGHT, color)
+        ? TAG_TEXT_DARK
+        : TAG_TEXT_LIGHT;
 }
 
 export const encodeMediaPath = (path) => {
@@ -1742,12 +1687,13 @@ export function SortButton({sorts = []}) {
     let sortFields;
     if (sorts && sorts.length) {
         sortFields = sorts.map((i) => {
-            return <Button key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</Button>
+            return <Button key={i['value']} role='cancel' fullWidth
+                           onClick={() => handleSortButton(i['value'])}>{i['text']}</Button>
         })
     }
 
     return <>
-        <Modal closeIcon
+        <Modal size='small' closeIcon
                open={open}
                onClose={() => setOpen(false)}
         >
@@ -1756,17 +1702,21 @@ export function SortButton({sorts = []}) {
                 {sortFields}
             </Modal.Content>
         </Modal>
-        <ButtonGroup icon>
-            <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>
-            <Button content={selectedSort['short'] || selectedSort['text']} onClick={() => setOpen(true)}/>
+        <ButtonGroup>
+            <IconButton
+                icon={desc ? 'arrow down' : 'arrow up'}
+                label={desc ? 'Sort descending' : 'Sort ascending'}
+                onClick={() => toggleDesc()}
+            />
+            <Button role='cancel' onClick={() => setOpen(true)}>
+                {selectedSort['short'] || selectedSort['text']}
+            </Button>
         </ButtonGroup>
     </>
 }
 
 export function TagIcon() {
-    return <Label circular color='green' style={{padding: '0.5em', marginRight: '0.5em'}}>
-        <Icon name='tag' style={{margin: 0}}/>
-    </Label>
+    return <Label color='green' icon='tag' className='wrolpi-tag-icon'/>
 }
 
 export function normalizeEstimate(estimate) {
@@ -1778,7 +1728,19 @@ export function normalizeEstimate(estimate) {
 
 export function useAPIButton(
     color = 'violet',
-    size = 'medium',
+    /*
+     * Undefined, not 'medium'.  `size` was never put into `buttonArgs` below, so every
+     * APIButton in the app rendered at Mantine's default no matter what its call site asked
+     * for -- seventeen of them pass a size, from `xs` on the map's pin actions to `huge` on
+     * Settings, and all seventeen were ignored.  The map's pin row is where it showed: three
+     * buttons meant to be `xs`, one of them 36px tall next to two 30px ones.
+     *
+     * Defaulting to 'medium' and passing that through would have fixed the bug by breaking
+     * everything else -- every APIButton that names no size would have grown from `sm` to
+     * `md`.  Undefined lets Button's own default stand, so only the call sites that asked for
+     * something see a change.
+     */
+    size,
     floated,
     onClick,
     disabled,
@@ -1797,8 +1759,6 @@ export function useAPIButton(
 
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
-    const [animation, setAnimation] = React.useState('jiggle');
-    const [animationVisible, setAnimationVisible] = React.useState(true);
     const [showSuccess, setShowSuccess] = React.useState(false);
     const [showFailure, setShowFailure] = React.useState(false);
 
@@ -1816,15 +1776,11 @@ export function useAPIButton(
 
     const setSuccess = () => {
         setShowSuccess(true);
-        setAnimation('pulse');
-        setAnimationVisible(!animationVisible);
         setTimeout(reset, 2000);
     }
 
     const setFailure = () => {
         setShowFailure(true);
-        setAnimation('shake');
-        setAnimationVisible(!animationVisible);
         setTimeout(reset, 2000);
     }
 
@@ -1867,50 +1823,52 @@ export function useAPIButton(
         }
     }
 
-    // Create button with or without theme.  Pass all props to the <Button/> (except props.children).
+    // `color` was a bare color name; a role carries the meaning instead, and a
+    // caller that really wants a color can still pass one through `props`.
     const buttonArgs = {
-        color, onClick: localOnClick, disabled, loading, size, floated, type,
-        ...props
+        onClick: localOnClick, disabled, loading, type, size,
+        ...props,
     };
-
     if (id) {
         buttonArgs['id'] = id;
+    }
+    if (!props.color && !props.role) {
+        buttonArgs['role'] = 'primary';
+    }
+
+    // The result is shown as the icon rather than an animation: the outcome should be
+    // legible at a glance, and in night mode a moving element is the last thing wanted.
+    const outcomeIcon = showSuccess ? 'check' : showFailure ? 'close' : null;
+    // Roles are registered as Mantine colors, so these reach `color` the same way a hue
+    // would.  This is the plainest success/failure in the app: the call worked, or it did not.
+    const outcomeColor = showSuccess ? 'success' : showFailure ? 'danger' : undefined;
+    if (outcomeColor) {
+        buttonArgs['color'] = outcomeColor;
     }
 
     let buttonContent = props.children || null;
     if (icon) {
-        // Send Icon as Button properties.
-        buttonContent = null;
-        buttonArgs['icon'] = showSuccess ? 'check' : showFailure ? 'close' : icon;
-    } else if (showSuccess || showFailure) {
-        // Show ✔ or ✖ overtop the contents after API call has completed.
-        buttonContent = <>
-            <Icon style={{position: 'absolute'}} name={showSuccess ? 'check' : 'close'}/>
-            {/* Keep contents to avoid resizing button */}
-            <div style={{opacity: 0}}>{buttonContent}</div>
-        </>
+        // Icon-only: swap the glyph for the outcome.
+        buttonArgs['icon'] = outcomeIcon || icon;
+    } else if (outcomeIcon) {
+        buttonArgs['icon'] = outcomeIcon;
     }
 
-    let button = themed ?
-        <Button ref={ref} {...buttonArgs}>{buttonContent}</Button>
-        : <SButton ref={ref} {...buttonArgs}>{buttonContent}</SButton>;
-    // Wrap button in <Transition/> to show success or failure animations.
-    button = <Transition animation={animation} duration={500} visible={animationVisible}>
-        {button}
-    </Transition>;
+    let button = <Button ref={ref} {...buttonArgs}>{buttonContent}</Button>;
 
     if (confirmContent) {
         // Wrap button with <Confirm/>
         button = <>
             {button}
             <Confirm open={confirmOpen}
-                     content={confirmContent}
-                     onClose={() => setConfirmOpen(false)}
                      onCancel={() => setConfirmOpen(false)}
                      onConfirm={localOnConfirm}
-                     confirmButton={confirmButton}
-                     header={confirmHeader}
-            />
+                     confirmLabel={confirmButton}
+                     title={confirmHeader}
+                     destructive
+            >
+                {confirmContent}
+            </Confirm>
         </>
     }
 
@@ -1963,65 +1921,45 @@ export const useMessageDismissal = (messageName) => {
     }
 }
 
-export function InfoMessage({children, size = null, storageName = null, icon = 'info circle'}) {
+/** A dismissible note.  `storageName` makes the dismissal stick across reloads. */
+function DismissibleMessage({kind, icon, children, storageName}) {
     const {dismissed, setDismissed} = useMessageDismissal(storageName);
 
     if (dismissed) {
         return <React.Fragment/>
     }
 
-    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
+    return <Message
+        kind={kind}
+        icon={icon}
+        onDismiss={storageName ? () => setDismissed(true) : undefined}
+    >
+        {children}
     </Message>
+}
+
+export function InfoMessage({children, size = null, storageName = null, icon = 'warning circle'}) {
+    return <DismissibleMessage kind='info' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function HandPointMessage({children, size = null, storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name='hand point right'/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='info' icon='hand point right' storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function WarningMessage({children, size = null, icon = 'exclamation', storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    // Use color='yellow' because "warning" does not work.
-    return <Message color='yellow' icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='warning' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 export function ErrorMessage({children, size = null, icon = 'exclamation', storageName = null}) {
-    const {dismissed, setDismissed} = useMessageDismissal(storageName);
-
-    if (dismissed) {
-        return <React.Fragment/>
-    }
-
-    return <Message negative icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
-        <SIcon name={icon}/>
-        <Message.Content>
-            {children}
-        </Message.Content>
-    </Message>
+    return <DismissibleMessage kind='error' icon={icon} storageName={storageName}>
+        {children}
+    </DismissibleMessage>
 }
 
 function levenshteinDistance(a, b) {
@@ -2108,8 +2046,7 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
     const [contentAvailable, setContentAvailable] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    const {s} = React.useContext(ThemeContext);
-    fallback = fallback || <pre {...s}>Frame could not load.</pre>;
+    fallback = fallback || <pre>Frame could not load.</pre>;
 
     useEffect(() => {
         const controller = new AbortController();  // To manage fetch timeout
@@ -2140,7 +2077,7 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
         width: '100%',
         border: 'none',
         padding: 0,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'var(--panel)',
     };
     // Allow provided `style` to overwrite.
     mobileStyle = style ? {...mobileStyle, ...style} : mobileStyle;
@@ -2156,9 +2093,8 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
         </Media>
     </>;
 
-    const dimmer = <DimmerDimmable as={Segment} dimmed={true}><Dimmer active><Loader/></Dimmer></DimmerDimmable>;
     return <>
-        {loading ? dimmer
+        {loading ? <Panel><Loading/></Panel>
             : contentAvailable ? iframeMedia
                 : fallback
         }
@@ -2171,26 +2107,21 @@ export function roundDigits(value, decimals = 2) {
 
 
 export function Breadcrumbs({crumbs, size = undefined}) {
-    function getSection(crumb) {
+    function getSection(crumb, index) {
         const {text, link, icon} = crumb;
-        let contents = text;
         if (link) {
-            contents = <Link to={link}>
+            return <Link key={index} to={link} style={{display: 'inline-flex', alignItems: 'center', gap: 4}}>
                 {icon && <Icon name={icon}/>}
                 {text}
             </Link>;
         }
-        return <BreadcrumbSection>{contents}</BreadcrumbSection>
+        return <span key={index}>{text}</span>
     }
 
-    return <Breadcrumb size={size}>
-        {crumbs.map((crumb, index) => (
-            <React.Fragment key={index}>
-                {getSection(crumb)}
-                {index < crumbs.length - 1 && <Breadcrumb.Divider icon='right chevron'/>}
-            </React.Fragment>
-        ))}
-    </Breadcrumb>
+    // The separator is a chevron rather than a slash, matching the icon set.
+    return <UIBreadcrumbs separator={<Icon name='chevron right' size={14}/>}>
+        {crumbs.map(getSection)}
+    </UIBreadcrumbs>
 }
 
 export function validURL(url) {
@@ -2253,19 +2184,11 @@ export function useLocalStorageInt(key, initialValue) {
 }
 
 export function SimpleAccordion({title = 'Advanced', ...props}) {
-    const [active, setActive] = React.useState(false);
-
-    return <Accordion>
-        <AccordionTitle
-            active={active}
-            onClick={() => setActive(!active)}
-        >
-            <Icon name='dropdown'/>
-            {title}
-        </AccordionTitle>
-        <AccordionContent active={active}>
-            {props.children}
-        </AccordionContent>
+    return <Accordion chevronPosition='left'>
+        <Accordion.Item value='content'>
+            <Accordion.Control>{title}</Accordion.Control>
+            <Accordion.Panel>{props.children}</Accordion.Panel>
+        </Accordion.Item>
     </Accordion>
 }
 
@@ -2373,18 +2296,12 @@ export const RefreshHeader = ({header, headerSize = 'h2', onRefresh, popupConten
     const refreshButton = <APIButton icon='refresh' onClick={onRefresh}/>;
     let popup;
     if (popupContents) {
-        popup = <Popup
-            content={popupContents}
-            on='hover'
-            trigger={refreshButton}
-        />;
+        popup = <Tooltip label={popupContents}>{refreshButton}</Tooltip>;
     }
-    return <Grid columns={2}>
-        <GridRow>
-            <GridColumn>
-                <Header as={headerSize}>{header}</Header>
-            </GridColumn>
-            <GridColumn textAlign='right'>{popup || refreshButton}</GridColumn>
-        </GridRow>
-    </Grid>
+    return <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    }}>
+        <Header as={headerSize}>{header}</Header>
+        {popup || refreshButton}
+    </div>
 }

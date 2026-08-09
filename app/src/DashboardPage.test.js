@@ -1,8 +1,7 @@
 import React from 'react';
-import {render, screen} from '@testing-library/react';
-import {MemoryRouter} from 'react-router';
-import {Getters, FlagsMessages} from './DashboardPage';
-import {SettingsContext, StatusContext, ThemeContext} from './contexts/contexts';
+import {render, screen} from './test-utils';
+import {DashboardStatus, Getters, FlagsMessages} from './DashboardPage';
+import {SettingsContext, StatusContext} from './contexts/contexts';
 
 // Replace DownloadMenu with a stub that records its props. The deep-link
 // behavior under test is just "Getters reads URL params and forwards them
@@ -23,18 +22,14 @@ jest.mock('./hooks/customHooks', () => ({
 }));
 
 function renderAtUrl(url) {
+    // test-utils' render() wraps content in a BrowserRouter (not MemoryRouter),
+    // so point the jsdom location at the desired URL before rendering.
+    window.history.pushState({}, '', url);
     const status = {flags: {refresh_complete: true}};
-    const theme = {
-        i: {}, s: {}, t: {}, theme: 'light', inverted: false, setInverted: () => {},
-    };
     return render(
-        <MemoryRouter initialEntries={[url]}>
-            <ThemeContext.Provider value={theme}>
-                <StatusContext.Provider value={{status}}>
-                    <Getters/>
-                </StatusContext.Provider>
-            </ThemeContext.Provider>
-        </MemoryRouter>
+        <StatusContext.Provider value={{status}}>
+            <Getters/>
+        </StatusContext.Provider>
     );
 }
 
@@ -80,13 +75,11 @@ describe('DashboardPage Getters deep-link', () => {
 function renderFlagsMessages({flags = {}, settings = {}} = {}) {
     const status = {flags: {refresh_complete: true, db_up: true, have_internet: true, ...flags}};
     return render(
-        <MemoryRouter>
-            <SettingsContext.Provider value={{settings, fetchSettings: () => {}}}>
-                <StatusContext.Provider value={{status}}>
-                    <FlagsMessages/>
-                </StatusContext.Provider>
-            </SettingsContext.Provider>
-        </MemoryRouter>
+        <SettingsContext.Provider value={{settings, fetchSettings: () => {}}}>
+            <StatusContext.Provider value={{status}}>
+                <FlagsMessages/>
+            </StatusContext.Provider>
+        </SettingsContext.Provider>
     );
 }
 
@@ -106,5 +99,67 @@ describe('DashboardPage no-drive-mounted banner', () => {
     it('hides the banner when media_mounted is undefined (status not yet loaded)', () => {
         renderFlagsMessages();
         expect(screen.queryByText(/No drive mounted/i)).toBeNull();
+    });
+});
+
+function renderDashboardStatus() {
+    const status = {
+        cpu_stats: {percent: 12, cores: 4},
+        load_stats: {minute_1: 0.4, minute_5: 0.5, minute_15: 0.6},
+        downloads: {pending: 3, disabled: false},
+        nic_bandwidth_stats: {},
+    };
+    return render(
+        <StatusContext.Provider value={{status}}>
+            <DashboardStatus/>
+        </StatusContext.Provider>
+    );
+}
+
+describe('the dashboard status panel links without looking like a link', () => {
+    /*
+     * The whole panel is wrapped in a <Link> to /admin/status, which makes it an anchor --
+     * and `a` takes `color: var(--blue)` with an underline on hover from tokens.css.  A
+     * statistic's value sets no color of its own, so the load figures inherited that: three
+     * blue numbers on a panel where nothing else is blue, underlining as a group when the
+     * pointer crossed any part of the panel.
+     *
+     * `no-link-underscore card-link` is the pair already used wherever a link IS the
+     * element's own text rather than a link through it -- every card title and meta line.
+     * The pointer cursor is untouched: it comes from the UA stylesheet for `a[href]`, and
+     * the affordance is the point of wrapping the panel at all.
+     *
+     * Colors are asserted in ui-layout.cy.js; jsdom does not resolve the custom property
+     * these classes rely on.
+     */
+    it('dresses the status link as the panel\'s own text', () => {
+        const {container} = renderDashboardStatus();
+
+        const link = container.querySelector('a[href="/admin/status"]');
+        expect(link).toBeInTheDocument();
+        expect(link).toHaveClass('card-link');
+        expect(link).toHaveClass('no-link-underscore');
+    });
+
+    it('does the same for the downloads link beneath it', () => {
+        const {container} = renderDashboardStatus();
+
+        const link = container.querySelector('a[href="/admin"]');
+        expect(link).toBeInTheDocument();
+        expect(link).toHaveClass('card-link');
+        expect(link).toHaveClass('no-link-underscore');
+    });
+
+    it('leaves the load figures inside it, which is what went blue', () => {
+        // The premise for the two assertions above: this link really does wrap statistics
+        // whose value carries no color of its own, so it decides theirs.
+        const {container} = renderDashboardStatus();
+
+        const link = container.querySelector('a[href="/admin/status"]');
+        const values = [...link.querySelectorAll('.wrolpi-statistic-value')];
+
+        expect(values.length).toBeGreaterThanOrEqual(3);
+        expect(values.map(value => value.textContent)).toEqual(
+            expect.arrayContaining(['0.4', '0.5', '0.6']));
     });
 });

@@ -1,20 +1,5 @@
 import React, {useContext, useState} from "react";
 import {
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardMeta,
-    Checkbox,
-    Container,
-    Form,
-    Image,
-    Label,
-    PlaceholderLine,
-    Step,
-    TableCell,
-    TableHeaderCell,
-} from "semantic-ui-react";
-import {
     CardGroupCentered,
     CardPoster,
     encodeMediaPath,
@@ -25,7 +10,6 @@ import {
     HandPointMessage,
     humanFileSize,
     isoDatetimeToAgoPopup,
-    mimetypeColor,
     PageContainer,
     Paginator,
     PreviewLink,
@@ -33,7 +17,8 @@ import {
     TagIcon,
     Toggle,
     textEllipsis,
-    useTitle
+    mimetypeColor,
+    useTitle,
 } from "./Common";
 import {
     usePages,
@@ -48,23 +33,29 @@ import {
     useWROLMode
 } from "../hooks/customHooks";
 import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
+import {IconArticle, IconLayoutList, IconSortAscending, IconSortDescending} from "@tabler/icons-react";
 import {Link, Route, Routes, useSearchParams} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {QueryContext, ThemeContext} from "../contexts/contexts";
+import {QueryContext} from "../contexts/contexts";
 import {
     Button,
     Card,
     Divider,
+    Group,
     Header,
     Icon,
+    IconButton,
+    Label,
     Modal,
+    Panel,
     Placeholder,
-    Popup,
     Progress,
-    Segment
-} from "./Theme";
+    Radio,
+    Stack,
+    Table,
+    Tooltip,
+} from "./ui";
 import {DateRangeForm, dateRangeIsEmpty, MonthsForm} from "./DatesSelector";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
@@ -78,14 +69,13 @@ import {FILES_MEDIA_URI} from "./Vars";
 // Split a ts_headline snippet on our sentinel markers and wrap each match in <b>.
 // We use sentinels instead of ts_headline's default <b> tags so the snippet can be
 // safely rendered as React children without dangerouslySetInnerHTML.
-function renderHighlightedSnippet(snippet, s) {
+function renderHighlightedSnippet(snippet) {
     const parts = snippet.split(/\[\[WROLPI_HL\]\]|\[\[\/WROLPI_HL\]\]/);
     // Even indices are plain text, odd indices are highlighted matches.
-    return parts.map((part, i) => i % 2 === 1 ? <b key={i} {...s}>{part}</b> : <span key={i} {...s}>{part}</span>);
+    return parts.map((part, i) => i % 2 === 1 ? <b key={i}>{part}</b> : <span key={i}>{part}</span>);
 }
 
 function EbookCard({file, sortField}) {
-    const {s, t} = useContext(ThemeContext);
     const [searchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
 
@@ -105,70 +95,52 @@ function EbookCard({file, sortField}) {
         detailUrl = `${detailUrl}?${params.toString()}`;
     }
 
-    const color = mimetypeColor(file.mimetype, file.primary_path);
     const title = file.title || file.stem || file.name;
     const header = detailUrl
-        ? <Link to={detailUrl} className='no-link-underscore card-link card-title-ellipsis' {...t}>{title}</Link>
+        ? <Link to={detailUrl} className='no-link-underscore card-link card-title-ellipsis'>{title}</Link>
         : <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
-    return <Card color={color}>
-        <CardPoster file={file} to={detailUrl}/>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            <CardMeta>
-                {file.author ? <b {...s}>{file.author}</b> : null}
-                {sortField === 'published_datetime'
-                    ? <p {...s}>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</p>
-                    : file.size && <p {...s}>{humanFileSize(file.size)}</p>
-                }
-                {hint && <p {...s} style={{fontSize: '0.85em', marginTop: '0.3em'}}>
-                    <b {...s}>{hint.label}</b>
-                    {hint.snippet && <span style={{...s, marginLeft: '0.4em', opacity: 0.8}}>
-                        {renderHighlightedSnippet(hint.snippet, s)}
-                    </span>}
-                </p>}
-            </CardMeta>
-        </CardContent>
-    </Card>
 
+    const meta = <>
+        {file.author ? <div><b>{file.author}</b></div> : null}
+        {sortField === 'published_datetime'
+            ? <div>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</div>
+            : file.size && <div>{humanFileSize(file.size)}</div>
+        }
+        {hint && <div style={{fontSize: '0.85em', marginTop: '0.3em'}}>
+            <b>{hint.label}</b>
+            {hint.snippet && <span style={{marginLeft: '0.4em', opacity: 0.8}}>
+                {renderHighlightedSnippet(hint.snippet)}
+            </span>}
+        </div>}
+    </>;
+
+    return <Card media={<CardPoster file={file} to={detailUrl}/>}
+                 title={<Tooltip label={title}>{header}</Tooltip>}
+                 meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}
+    />
 }
 
 function ImageCard({file}) {
-    const {s} = useContext(ThemeContext);
     const url = `/media/${encodeMediaPath(file.primary_path)}`;
 
     const title = file.title || file.stem || file.primary_path;
     const header = <ExternalCardLink to={url} className='no-link-underscore card-link'>
-        <p>{textEllipsis(title)}</p>
+        <span>{textEllipsis(title)}</span>
     </ExternalCardLink>;
     const dt = file.published_datetime || file.published_modified_datetime || file.modified;
-    return <Card color={mimetypeColor(file.mimetype)}>
-        <PreviewLink file={file}>
-            <CardPoster file={file}/>
-        </PreviewLink>
-        <CardContent {...s}>
-            <CardHeader>
-                <Popup on='hover'
-                       trigger={header}
-                       content={title}/>
-            </CardHeader>
-            <CardMeta {...s}>
-                <p>{isoDatetimeToAgoPopup(dt, false)}</p>
-            </CardMeta>
-            <CardDescription {...s}>
-                <p>{humanFileSize(file.size)}</p>
-            </CardDescription>
-        </CardContent>
-    </Card>
+    const meta = <>
+        <div>{isoDatetimeToAgoPopup(dt, false)}</div>
+        <div>{humanFileSize(file.size)}</div>
+    </>;
+    return <Card media={<PreviewLink file={file}><CardPoster file={file}/></PreviewLink>}
+                 title={<Tooltip label={title}>{header}</Tooltip>}
+                 meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}
+    />
 }
 
 function FileCard({file}) {
-    const {s} = useContext(ThemeContext);
     const {sort} = useSearchOrder();
     const sortField = sort ? sort.replace(/^-/, '') : null;
 
@@ -189,31 +161,25 @@ function FileCard({file}) {
     }
 
     const author = file.author;
-    const color = mimetypeColor(file.mimetype, file.primary_path);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
     const title = file.title || file.name || file.primary_path;
     const dt = file.published_datetime || file.published_modified_datetime || file.modified;
-    return <Card color={color}>
-        <CardPoster file={file}/>
-        <CardContent {...s}>
-            <CardHeader>
-                <PreviewLink file={file}>
-                    <Popup on='hover'
-                           trigger={<span className='card-title-ellipsis'>{title}</span>}
-                           content={title}/>
-                </PreviewLink>
-            </CardHeader>
-            {author && <b {...s}>{author}</b>}
-            {sortField === 'published_datetime'
-                ? <p>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</p>
-                : <>
-                    <p>{isoDatetimeToAgoPopup(dt, false)}</p>
-                    <p>{size}</p>
-                </>
-            }
-        </CardContent>
-    </Card>
+    const header = <PreviewLink file={file}>
+        <Tooltip label={title}><span className='card-title-ellipsis'>{title}</span></Tooltip>
+    </PreviewLink>;
+    const meta = <>
+        {author && <div><b>{author}</b></div>}
+        {sortField === 'published_datetime'
+            ? <div>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</div>
+            : <>
+                <div>{isoDatetimeToAgoPopup(dt, false)}</div>
+                <div>{size}</div>
+            </>
+        }
+    </>;
+    return <Card media={<CardPoster file={file}/>} title={header} meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}/>
 }
 
 export function FileCards({files}) {
@@ -222,7 +188,7 @@ export function FileCards({files}) {
             {files.map(i => <FileCard key={i['primary_path']} file={i}/>)}
         </CardGroupCentered>
     } else if (files && files.length === 0) {
-        return <Segment>No results!</Segment>
+        return <Panel>No results!</Panel>
     } else if (files === undefined) {
         return <ErrorMessage>Could not search!</ErrorMessage>
     }
@@ -236,22 +202,22 @@ function ImageRowCells({file}) {
     let poster = <FileIcon file={file} size='large'/>;
     if (file.size && file.size < 50000000) {
         // Image is less than 5mb, use it.
-        poster = <Image wrapped src={url} width='50px'/>;
+        poster = <img alt='' src={url} width='50'/>;
     }
 
     // Fragment for SelectableRow
     return <React.Fragment>
-        <TableCell>
+        <Table.Cell>
             <center>
                 {poster}
             </center>
-        </TableCell>
-        <TableCell>
+        </Table.Cell>
+        <Table.Cell>
             <PreviewLink file={file}>
                 <p>{textEllipsis(file.title || file.stem || file.primary_path)}</p>
             </PreviewLink>
-        </TableCell>
-        <TableCell>{humanFileSize(file.size)}</TableCell>
+        </Table.Cell>
+        <Table.Cell>{humanFileSize(file.size)}</Table.Cell>
     </React.Fragment>
 }
 
@@ -260,21 +226,21 @@ export function EbookRowCells({file}) {
     const posterPath = findPosterPath(file);
     if (posterPath) {
         const coverSrc = `/media/${encodeMediaPath(posterPath)}`;
-        cover = <Image wrapped src={coverSrc} width='50px'/>;
+        cover = <img alt='' src={coverSrc} width='50'/>;
     }
 
     // Fragment for SelectableRow
     return <React.Fragment>
-        <TableCell>
+        <Table.Cell>
             <center>{cover}</center>
-        </TableCell>
-        <TableCell>
+        </Table.Cell>
+        <Table.Cell>
             <PreviewLink file={file}>
                 <FileRowTagIcon file={file}/>
                 {textEllipsis(file.title || file.stem)}
             </PreviewLink>
-        </TableCell>
-        <TableCell>{humanFileSize(file.size)}</TableCell>
+        </Table.Cell>
+        <Table.Cell>{humanFileSize(file.size)}</Table.Cell>
     </React.Fragment>
 }
 
@@ -295,14 +261,14 @@ function FileRow({file}) {
 
     // Fragment for SelectableRow
     return <React.Fragment>
-        <TableCell>
+        <Table.Cell>
             <center><FileIcon file={file} size='large'/></center>
-        </TableCell>
-        <TableCell>
+        </Table.Cell>
+        <Table.Cell>
             <FileRowTagIcon file={file}/>
             <PreviewLink file={file}>{textEllipsis(file.title || file.name || file.stem)}</PreviewLink>
-        </TableCell>
-        <TableCell/>
+        </Table.Cell>
+        <Table.Cell/>
     </React.Fragment>
 }
 
@@ -319,16 +285,12 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
             rows={rows}
         />;
     } else if (files) {
-        return <Segment>No results!</Segment>
+        return <Panel>No results!</Panel>
     } else if (files === undefined) {
         return <ErrorMessage>Could not search!</ErrorMessage>
     }
 
-    return <Placeholder>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>
+    return <Placeholder lines={3}/>
 }
 
 export function FileRowTagIcon({file}) {
@@ -343,18 +305,18 @@ export function SearchViewButton({headlines}) {
     if (headlines) {
         // Cycle: cards -> headline -> list
         if (view === 'headline') {
-            return <Button icon='list' onClick={() => setView('list')}/>;
+            return <IconButton icon='list' label='Switch to list view' onClick={() => setView('list')}/>;
         } else if (view === 'list') {
-            return <Button icon='th' onClick={() => setView('cards')}/>;
+            return <IconButton icon='th' label='Switch to cards view' onClick={() => setView('cards')}/>;
         }
-        return <Button icon='searchengin' onClick={() => setView('headline')}/>;
+        return <IconButton icon={IconArticle} label='Switch to headline view' onClick={() => setView('headline')}/>;
     }
 
     // Cycle: cards -> list
     if (view === 'list') {
-        return <Button icon='th' onClick={() => setView('cards')}/>;
+        return <IconButton icon='th' label='Switch to cards view' onClick={() => setView('cards')}/>;
     }
-    return <Button icon='browser' onClick={() => setView('list')}/>;
+    return <IconButton icon={IconLayoutList} label='Switch to list view' onClick={() => setView('list')}/>;
 }
 
 export function FilesView(
@@ -371,15 +333,22 @@ export function FilesView(
 ) {
     const {view} = useSearchView();
 
-    const paginator = <center style={{marginTop: '2em'}}>
+    /*
+     * No margin of its own.  Videos, Archives, Docs and Files all render this as a top-level block
+     * of the page, and the page spaces its blocks (see `wrolpi-stack`) -- so a `marginTop: 2em`
+     * here added to that and put the pager twice as far from the results as anything else on the
+     * page sits from its neighbour.  Zim keeps its own paginator, inside an accordion panel that
+     * does not stack, and is untouched.
+     */
+    const paginator = <div>
         <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
-    </center>;
+    </div>;
 
     let body;
     if (view === 'list') {
         const footer = selectElem ?
             <>
-                <TableHeaderCell colSpan='3'>{selectElem}</TableHeaderCell>
+                <Table.HeaderCell colSpan='3'>{selectElem}</Table.HeaderCell>
             </> : null;
         body = <FileTable
             files={files}
@@ -423,15 +392,12 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
     }
 
     const filterFields = filters.map(
-        i => <Form.Field key={i['text']}>
-            <Checkbox radio
-                      label={i['text']}
-                      name='searchFilterRadioGroup'
-                      checked={filter === i['value']}
-                      value={i['value']}
-                      onChange={() => setFilter(i['value'])}
-            />
-        </Form.Field>
+        i => <Radio
+            key={i['text']}
+            label={i['text']}
+            checked={filter === i['value']}
+            onChange={() => setFilter(i['value'])}
+        />
     );
 
     // Use violet color when filter has been applied.
@@ -439,24 +405,20 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
 
     if (filters && filters.length > 0) {
         return <>
-            <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
+            {/* Audited: unchanged at `small` (440px), recorded so the default cannot move it. */}
+            <Modal size='small' open={open} onClose={() => setOpen(false)} closeIcon>
                 {modalHeader || <Modal.Header>Filter</Modal.Header>}
                 <Modal.Content>
-                    <Form>
+                    <Stack gap='xs'>
                         {filterFields}
-                    </Form>
+                    </Stack>
                 </Modal.Content>
                 <Modal.Actions>
-                    <Button onClick={handleClear} secondary>Clear</Button>
-                    <Button onClick={() => setOpen(false)}>Close</Button>
+                    <Button role='cancel' onClick={handleClear}>Clear</Button>
+                    <Button role='cancel' onClick={() => setOpen(false)}>Close</Button>
                 </Modal.Actions>
             </Modal>
-            <Button
-                icon='filter'
-                onClick={handleOpen}
-                color={buttonColor}
-                size={size}
-            />
+            <IconButton icon='filter' label='Filter' onClick={handleOpen} color={buttonColor} size={size}/>
         </>
     }
 
@@ -523,7 +485,7 @@ export function DocSearchFilterButton({size = 'medium'}) {
 const DEFAULT_SEARCH_LIMIT = 24;
 
 // A single section within the comprehensive SearchFilterModal.  Vertical spacing between sections is
-// provided by the surrounding Grid rows.
+// provided by the surrounding Stack.
 function SearchFilterSection({header, children}) {
     return <>
         <Header as='h4' style={{marginBottom: '0.6em'}}>{header}</Header>
@@ -662,29 +624,22 @@ export function SearchFilterModal(
                 style={{margin: '0.2em'}}
         >{o['text']}</Button>
     );
-    const directionToggle = <Button icon labelPosition='left'
+    const directionToggle = <Button icon={desc ? IconSortDescending : IconSortAscending}
                                     onClick={() => {
                                         const base = sortKey || sorts[0]['value'];
                                         setDraftSort(desc ? base : `-${base}`);
                                     }}>
-        <Icon name={desc ? 'sort amount down' : 'sort amount up'}/>
         {desc ? 'Descending' : 'Ascending'}
     </Button>;
 
-    // File-type filter section (single-select radios; clicking the active one clears it).  Laid out in
-    // columns so more options fit on each line.
+    // File-type filter section (single-select radios; clicking the active one clears it).  Wraps so more
+    // options fit on each line.
     const filterFields = fileFilterOptions && fileFilterOptions.map(i =>
-        <Grid.Column mobile={8} tablet={5} computer={4} key={i['value']}>
-            <Form.Field>
-                <Checkbox radio
-                          label={i['text']}
-                          name='searchFilterRadioGroup'
-                          checked={draftFilter === i['value']}
-                          value={i['value']}
-                          onChange={() => setDraftFilter(draftFilter === i['value'] ? null : i['value'])}
-                />
-            </Form.Field>
-        </Grid.Column>
+        <Radio key={i['value']}
+               label={i['text']}
+               checked={draftFilter === i['value']}
+               onChange={() => setDraftFilter(draftFilter === i['value'] ? null : i['value'])}
+        />
     );
 
     // Results-per-page as buttons (matches the Sort By buttons and avoids a dropdown menu being clipped by
@@ -697,33 +652,25 @@ export function SearchFilterModal(
         >{i}</Button>
     );
 
-    return <Modal open={open} onClose={handleClose} closeIcon size='small'>
+    return <Modal open={open} onClose={handleClose} closeIcon size='large'>
         <Modal.Header>Search Filters</Modal.Header>
-        <Modal.Content scrolling>
-            <Grid>
+        <Modal.Content>
+            <Stack gap='lg'>
                 {sorts &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='Sort By'>
-                                <div style={{marginBottom: '1em'}}>{directionToggle}</div>
-                                <div>{sortButtons}</div>
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
+                    <SearchFilterSection header='Sort By'>
+                        <div style={{marginBottom: '1em'}}>{directionToggle}</div>
+                        <div>{sortButtons}</div>
+                    </SearchFilterSection>}
 
                 {fileFilterOptions &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='File Type'>
-                                <Form><Grid>{filterFields}</Grid></Form>
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
+                    <SearchFilterSection header='File Type'>
+                        <Group gap='md'>{filterFields}</Group>
+                    </SearchFilterSection>}
 
                 {(showTags || showLimit) &&
-                    <Grid.Row columns={2}>
+                    <Group align='flex-start' grow wrap='wrap'>
                         {showTags &&
-                            <Grid.Column>
+                            <div style={{minWidth: 220}}>
                                 <SearchFilterSection header='Tags'>
                                     <TagsSelector hideGroup hideEdit showAny
                                                   active={draftAnyTag || (draftTags && draftTags.length > 0)}
@@ -742,54 +689,42 @@ export function SearchFilterModal(
                                                   style={{marginLeft: '0.3em', marginTop: '0.3em'}}
                                     />
                                 </SearchFilterSection>
-                            </Grid.Column>}
+                            </div>}
                         {showLimit &&
-                            <Grid.Column>
+                            <div style={{minWidth: 160}}>
                                 <SearchFilterSection header='Results Per Page'>
                                     <div>{limitButtons}</div>
                                 </SearchFilterSection>
-                            </Grid.Column>}
-                    </Grid.Row>}
+                            </div>}
+                    </Group>}
 
                 {showCensored &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='Availability'>
-                                <Toggle label='Only censored (no longer available to download)'
-                                        checked={draftCensored}
-                                        onChange={setDraftCensored}
-                                />
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
+                    <SearchFilterSection header='Availability'>
+                        <Toggle label='Only censored (no longer available to download)'
+                                checked={draftCensored}
+                                onChange={setDraftCensored}
+                        />
+                    </SearchFilterSection>}
 
                 {showDeep &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='Search Depth'>
-                                <Toggle label='Deep search (captions, document text; slower)'
-                                        checked={draftDeep}
-                                        onChange={setDraftDeep}
-                                />
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
+                    <SearchFilterSection header='Search Depth'>
+                        <Toggle label='Deep search (captions, document text; slower)'
+                                checked={draftDeep}
+                                onChange={setDraftDeep}
+                        />
+                    </SearchFilterSection>}
 
                 {showDates &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='Published Date'>
-                                <MonthsForm monthsSelected={draftMonths} setMonthsSelected={setDraftMonths}/>
-                                <Divider/>
-                                <DateRangeForm dateRange={draftRange} setDateRange={setDraftRange}/>
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
-            </Grid>
+                    <SearchFilterSection header='Published Date'>
+                        <MonthsForm monthsSelected={draftMonths} setMonthsSelected={setDraftMonths}/>
+                        <Divider/>
+                        <DateRangeForm dateRange={draftRange} setDateRange={setDraftRange}/>
+                    </SearchFilterSection>}
+            </Stack>
         </Modal.Content>
         <Modal.Actions>
-            <Button secondary floated='left' onClick={handleClearAll}>Clear All</Button>
-            <Button primary onClick={handleClose}>Done</Button>
+            <Button role='cancel' onClick={handleClearAll} style={{marginRight: 'auto'}}>Clear All</Button>
+            <Button role='primary' onClick={handleClose}>Done</Button>
         </Modal.Actions>
     </Modal>
 }
@@ -840,11 +775,10 @@ export function SearchFilterButton(
     const active = count > 0;
 
     return <>
-        <Button color={active ? 'violet' : 'grey'} size={size} onClick={() => setOpen(true)}>
-            <Icon name='filter'/>
+        <Button icon='filter' color={active ? 'violet' : 'grey'} size={size} onClick={() => setOpen(true)}>
             {content}
             {count > 0 &&
-                <Label circular size='tiny' style={{marginLeft: '0.7em'}}>{count}</Label>}
+                <Label style={{marginLeft: '0.7em'}}>{count}</Label>}
         </Button>
         <SearchFilterModal
             open={open}
@@ -890,7 +824,9 @@ export function SearchControlBar(
         inputRef={inputRef}
     />;
 
-    return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '1em'}}>
+    // No `marginBottom`: this is a top-level block on Videos, Archives and Docs, and the page
+    // spaces its own blocks.  Carrying one here added to that gap.
+    return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em'}}>
         {viewButton}
         <div style={{flexGrow: 1, minWidth: 0}}>{searchInput}</div>
         <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}
@@ -909,13 +845,13 @@ export function DeepSearchHint({searchStr, files}) {
         return null;
     }
 
-    return <Segment>
+    return <Panel>
         {files.length === 0 ? 'Not finding what you need?' : 'More results may be available in deep search.'}
-        <Button primary
+        <Button role='primary'
                 onClick={() => updateQuery({deep: 'true', o: 0})}
                 style={{marginLeft: '1em'}}
         >Try deep search</Button>
-    </Segment>
+    </Panel>
 }
 
 export function FilesSearchView({
@@ -951,27 +887,28 @@ export function FilesSearchView({
             ? deepEstimate - total : null;
         // Enable deep search and reset pagination in a single update (like the filter modal does), so the
         // user starts at page 1 of the deep results.
-        const deepButton = <Button primary
+        const deepButton = <Button role='primary'
                                    onClick={() => updateQuery({deep: 'true', o: 0})}
                                    style={{marginLeft: '1em'}}
         >Try deep search</Button>;
         if (searchFiles.length === 0 && (moreCount === null || moreCount > 0)) {
-            deepHint = <Segment>
+            deepHint = <Panel>
                 {moreCount > 0
                     ? `No results in fast search.  ${moreCount} result${moreCount === 1 ? '' : 's'} available in deep search.`
                     : 'Not finding what you need?'}
                 {deepButton}
-            </Segment>;
+            </Panel>;
         } else if (searchFiles.length > 0 && moreCount > 0) {
-            deepHint = <Segment>
+            deepHint = <Panel>
                 {`${moreCount} more result${moreCount === 1 ? '' : 's'} available in deep search.`}
                 {deepButton}
-            </Segment>;
+            </Panel>;
         }
     }
 
     return <>
-        {showView && <div style={{marginBottom: '1em'}}>{viewButton}</div>}
+        {/* No margin: another top-level block, spaced by the page. */}
+        {showView && <div>{viewButton}</div>}
         {body}
         {deepHint}
         {paginator}
@@ -1041,11 +978,30 @@ function isGlobalRefresh(progress) {
 
 const REFRESH_PHASES = [
     {key: 1, icon: 'search', title: 'Counting', description: 'Finding files'},
-    {key: 2, icon: 'database', title: 'Inserting', description: 'Updating database'},
-    {key: 3, icon: 'cogs', title: 'Modeling', description: 'Extracting metadata'},
+    {key: 2, icon: 'disk', title: 'Inserting', description: 'Updating database'},
+    {key: 3, icon: 'settings', title: 'Modeling', description: 'Extracting metadata'},
     {key: 4, icon: 'book', title: 'Indexing', description: 'Building search index'},
     {key: 5, icon: 'check circle', title: 'Cleanup', description: 'Finalizing'},
 ];
+
+// A row of phase markers, brightness/weight (via the active
+// border) carrying the current stage rather than a bespoke component from the shared library.
+function RefreshStepItem({phase, isActive, isCompleted, isDisabled, description}) {
+    return <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 160px', padding: '0.5em 0.75em',
+        opacity: isDisabled ? 0.5 : 1,
+        borderBottom: isActive ? '2px solid var(--info)' : '2px solid transparent',
+    }}>
+        {/* The same three roles Status maps complete/active/pending onto.  Not the Status
+            component itself: these rows carry a per-phase glyph, which is the point of them. */}
+        <Icon name={phase.icon} size='large'
+              style={{color: isCompleted ? 'var(--success)' : isActive ? 'var(--info)' : 'var(--neutral)'}}/>
+        <div>
+            <div style={{fontWeight: 600, fontSize: '0.8125rem'}}>{phase.title}</div>
+            <div style={{fontSize: '0.75rem', color: 'var(--muted)'}}>{isActive || isCompleted ? description : ''}</div>
+        </div>
+    </div>
+}
 
 export function RefreshSteps({progress}) {
     const currentPhase = getRefreshPhase(progress?.status);
@@ -1055,44 +1011,30 @@ export function RefreshSteps({progress}) {
         return null;
     }
 
-    return (
-        <Step.Group size='mini' fluid>
-            {REFRESH_PHASES.map(phase => {
-                const isCompleted = phase.key < currentPhase;
-                const isActive = phase.key === currentPhase;
-                const isDisabled = phase.key > currentPhase;
+    return <div style={{display: 'flex', flexWrap: 'wrap', border: '1px solid var(--border)'}}>
+        {REFRESH_PHASES.map(phase => {
+            const isCompleted = phase.key < currentPhase;
+            const isActive = phase.key === currentPhase;
+            const isDisabled = phase.key > currentPhase;
 
-                // Determine description for active phase
-                let description = phase.description;
-                if (isActive) {
-                    if (operation_total > 0) {
-                        description = `${operation_processed?.toLocaleString()} / ${operation_total?.toLocaleString()}`;
-                    } else if (status === 'comparing') {
-                        description = 'Comparing files...';
-                    } else if (status === 'upserting') {
-                        description = 'Updating files...';
-                    } else if (status === 'deleting') {
-                        description = 'Removing deleted...';
-                    }
+            // Determine description for active phase
+            let description = phase.description;
+            if (isActive) {
+                if (operation_total > 0) {
+                    description = `${operation_processed?.toLocaleString()} / ${operation_total?.toLocaleString()}`;
+                } else if (status === 'comparing') {
+                    description = 'Comparing files...';
+                } else if (status === 'upserting') {
+                    description = 'Updating files...';
+                } else if (status === 'deleting') {
+                    description = 'Removing deleted...';
                 }
+            }
 
-                return (
-                    <Step
-                        key={phase.key}
-                        active={isActive}
-                        completed={isCompleted}
-                        disabled={isDisabled}
-                    >
-                        <Icon name={phase.icon}/>
-                        <Step.Content>
-                            <Step.Title>{phase.title}</Step.Title>
-                            <Step.Description>{isActive || isCompleted ? description : ''}</Step.Description>
-                        </Step.Content>
-                    </Step>
-                );
-            })}
-        </Step.Group>
-    );
+            return <RefreshStepItem key={phase.key} phase={phase} isActive={isActive} isCompleted={isCompleted}
+                                    isDisabled={isDisabled} description={description}/>
+        })}
+    </div>
 }
 
 function RefreshProgressBar({status, operation_total, operation_processed, operation_percent, error}) {
@@ -1104,7 +1046,7 @@ function RefreshProgressBar({status, operation_total, operation_processed, opera
 
     // Show error state
     if (status === 'error' && error) {
-        return <Progress error percent={100}>{`Error: ${error}`}</Progress>;
+        return <Progress percent={100} color='danger' label={`Error: ${error}`}/>;
     }
 
     let label = `${phaseLabel}`;
@@ -1112,7 +1054,7 @@ function RefreshProgressBar({status, operation_total, operation_processed, opera
         label = `${label} (${operation_processed.toLocaleString()} / ${operation_total.toLocaleString()})`;
     }
 
-    return <Progress active color='violet' percent={operation_percent || 0} progress>{label}</Progress>;
+    return <Progress percent={operation_percent || 0} color='violet' label={label}/>;
 }
 
 export function FilesRefreshProgress() {
@@ -1214,12 +1156,13 @@ const useRefresh = () => {
 
 export function FilesRefreshButton({paths, showLabel}) {
     const {globalRefreshing, loading, wrolModeEnabled, refreshFiles} = useRefresh();
+    const disabled = wrolModeEnabled || globalRefreshing;
+    const busy = loading || globalRefreshing;
 
-    return <Button icon='refresh'
-                   content={showLabel ? 'Refresh' : undefined}
-                   labelPosition={showLabel ? 'left' : undefined}
-                   loading={loading || globalRefreshing}
-                   onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || globalRefreshing}/>
-        ;
+    if (showLabel) {
+        return <Button role='cancel' icon='refresh' loading={busy} disabled={disabled}
+                       onClick={() => refreshFiles(paths)}>Refresh</Button>;
+    }
+    return <IconButton role='cancel' icon='refresh' label='Refresh' loading={busy} disabled={disabled}
+                       onClick={() => refreshFiles(paths)}/>;
 }

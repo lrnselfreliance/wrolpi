@@ -23,13 +23,21 @@ export const useIsTouchDevice = () => {
 };
 
 /** @type {React.Context<import('../types/theme').ThemeContextValue>} */
+/*
+ * The default is the declared shape of this context, and test-fixtures.test.js holds the
+ * fixtures to it key for key.  It used to carry `i`, `s`, `t` and `inverted` -- the old
+ * compatibility props holding hardcoded greys -- long after ThemeProvider stopped supplying
+ * them, so the context advertised four properties that were always undefined in a real tree.
+ * FileBrowser was still reading one of them.
+ */
 export const ThemeContext = React.createContext({
     theme: 'light',
-    i: {},
-    s: {},
-    t: {},
-    inverted: '',
     savedTheme: null,
+    isDark: false,
+    mediaFilter: undefined,
+    mediaFilterEnabled: false,
+    setMediaFilterEnabled: () => {},
+    setTheme: () => {},
     setDarkTheme: () => {},
     setLightTheme: () => {},
     cycleSavedTheme: () => {},

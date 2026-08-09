@@ -33,6 +33,33 @@ jobs:
           command: './venv/bin/pytest -nauto --junitxml=test-results.xml'
       - store_test_results:
           path: test-results.xml
+  # Do the API and the frontend's test fixtures still agree?
+  #
+  # `api-tests` runs these too, as part of the whole suite.  This job exists for the
+  # signal: fixture drift is silent by nature -- the frontend suite passes against a body the
+  # API stopped sending -- so it is worth a check whose name says what broke, failing in under a
+  # minute rather than somewhere inside seventeen hundred results.
+  #
+  # It needs no ffmpeg or catdoc (verified), and shares the dependency cache key with the other
+  # Python jobs, so it costs a venv restore and one test file.
+  api-contract-tests:
+    docker:
+      - image: cimg/python:3.13
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+      - run:
+          name: Install Requirements
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - run:
+          name: Fixtures match the OpenAPI spec, and the spec matches the handlers
+          command: './venv/bin/pytest wrolpi/test/test_api_fixtures.py -v'
+
   api-alembic-migrations:
     docker:
       - image: cimg/python:3.13
@@ -167,6 +194,7 @@ workflows:
     jobs:
       - sanic-api-start
       - api-tests
+      - api-contract-tests
       - api-alembic-migrations
   wrolpi-app-test:
     jobs:

@@ -1,7 +1,8 @@
 import React from 'react';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, screen, waitFor} from '@testing-library/react';
 import {BulkTagModal} from './BulkTagModal';
 import {TagsContext} from '../Tags';
+import {renderWithProviders} from '../test-utils';
 
 // Mock the API functions
 jest.mock('../api', () => ({
@@ -9,42 +10,6 @@ jest.mock('../api', () => ({
     applyBulkTags: jest.fn(),
     getBulkTagProgress: jest.fn(),
 }));
-
-// Mock Theme components with compound patterns
-jest.mock('./Theme', () => {
-    const MockModal = ({open, onClose, children, closeIcon}) => {
-        if (!open) return null;
-        return (
-            <div data-testid="modal">
-                {closeIcon && <button data-testid="close-icon" onClick={onClose}>x</button>}
-                {children}
-            </div>
-        );
-    };
-    MockModal.Header = ({children}) => <div data-testid="modal-header">{children}</div>;
-    MockModal.Content = ({children}) => <div data-testid="modal-content">{children}</div>;
-    MockModal.Actions = ({children}) => <div data-testid="modal-actions">{children}</div>;
-    MockModal.Description = ({children}) => <div data-testid="modal-description">{children}</div>;
-
-    return {
-        ...jest.requireActual('./Theme'),
-        Modal: MockModal,
-        Button: ({children, onClick, disabled, color, ...props}) => (
-            <button onClick={onClick} disabled={disabled} data-testid={`button-${children}`} {...props}>{children}</button>
-        ),
-        Header: ({children, as}) => <div data-testid="header">{children}</div>,
-        Divider: () => <hr data-testid="divider"/>,
-        Loader: ({children}) => <div data-testid="loader">{children}</div>,
-        Message: ({children, warning, negative, positive}) => (
-            <div data-testid={`message-${warning ? 'warning' : negative ? 'negative' : positive ? 'positive' : 'info'}`}>
-                {children}
-            </div>
-        ),
-        Progress: ({percent, children}) => (
-            <div data-testid="progress" data-percent={percent}>{children}</div>
-        ),
-    };
-});
 
 // Import mocked API functions
 import {getBulkTagPreview, applyBulkTags, getBulkTagProgress} from '../api';
@@ -60,22 +25,17 @@ const MockTagsGroup = ({tagNames, onClick}) => (
     </div>
 );
 
-// Create a wrapper with TagsContext
-const TagsContextWrapper = ({children}) => {
+// Render with the real ui library components (Mantine-backed) plus TagsContext.
+const renderWithTags = (ui, options) => {
     const tagsValue = {
         tagNames: ['tag1', 'tag2', 'tag3'],
         TagsGroup: MockTagsGroup,
     };
-    return (
-        <TagsContext.Provider value={tagsValue}>
-            {children}
-        </TagsContext.Provider>
+    return renderWithProviders(
+        <TagsContext.Provider value={tagsValue}>{ui}</TagsContext.Provider>,
+        options,
     );
 };
-
-// Custom render function with TagsContext
-const renderWithTags = (ui, options) =>
-    render(ui, {wrapper: TagsContextWrapper, ...options});
 
 describe('BulkTagModal', () => {
     const defaultProps = {
@@ -102,17 +62,17 @@ describe('BulkTagModal', () => {
     describe('Modal Rendering', () => {
         it('renders modal when open is true', async () => {
             renderWithTags(<BulkTagModal {...defaultProps} />);
-            expect(screen.getByTestId('modal')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
 
         it('does not render modal when open is false', () => {
             renderWithTags(<BulkTagModal {...defaultProps} open={false}/>);
-            expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         });
 
         it('shows header', async () => {
             renderWithTags(<BulkTagModal {...defaultProps} />);
-            expect(screen.getByTestId('modal-header')).toHaveTextContent('Bulk Tag Files');
+            expect(screen.getByText('Bulk Tag Files')).toBeInTheDocument();
         });
     });
 
@@ -121,7 +81,7 @@ describe('BulkTagModal', () => {
             getBulkTagPreview.mockImplementation(() => new Promise(() => {
             })); // Never resolves
             renderWithTags(<BulkTagModal {...defaultProps} />);
-            expect(screen.getByTestId('loader')).toBeInTheDocument();
+            expect(screen.getByText('Loading preview...')).toBeInTheDocument();
         });
     });
 
@@ -142,7 +102,7 @@ describe('BulkTagModal', () => {
             await waitFor(() => {
                 expect(screen.getByText(/10 files will be affected/i)).toBeInTheDocument();
             });
-            expect(screen.queryByTestId('message-warning')).not.toBeInTheDocument();
+            expect(screen.queryByText(/Tagging over 50 files/i)).not.toBeInTheDocument();
         });
 
         it('Apply button is disabled when no changes', async () => {
@@ -150,7 +110,7 @@ describe('BulkTagModal', () => {
             await waitFor(() => {
                 expect(screen.getByText(/2 files will be affected/i)).toBeInTheDocument();
             });
-            const applyButton = screen.getByTestId('button-Apply Tags');
+            const applyButton = screen.getByRole('button', {name: 'Apply Tags'});
             expect(applyButton).toBeDisabled();
         });
     });
@@ -183,7 +143,7 @@ describe('BulkTagModal', () => {
             await waitFor(() => {
                 expect(screen.getByText(/2 files will be affected/i)).toBeInTheDocument();
             });
-            const cancelButton = screen.getByTestId('button-Cancel');
+            const cancelButton = screen.getByRole('button', {name: 'Cancel'});
             act(() => {
                 cancelButton.click();
             });
@@ -197,7 +157,7 @@ describe('BulkTagModal', () => {
             getBulkTagPreview.mockResolvedValue(undefined);
             renderWithTags(<BulkTagModal {...defaultProps} />);
             // Modal should still be visible
-            expect(screen.getByTestId('modal')).toBeInTheDocument();
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
         });
     });
 });

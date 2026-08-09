@@ -1,7 +1,6 @@
 import React, {useState} from "react";
 import {PageContainer, useTitle} from "./Common";
-import {Button, Header, Modal, Segment, Table} from "./Theme";
-import {Icon, TableBody, TableCell, TableRow} from "semantic-ui-react";
+import {Button, Header, IconButton, Modal, Panel, Table} from "./ui";
 import QRCode from "react-qr-code";
 
 const bitcoinAddress = '1mi1ddLSd6LmkuwJd1ttZsKuED724vYjS';
@@ -17,18 +16,19 @@ function CoinQRButton({qrCodeValue, header, buttonColor}) {
     const [open, setOpen] = useState(false);
 
     return <>
-        <Button icon color={buttonColor}
-                onClick={() => setOpen(true)}>
-            <Icon name='qrcode' size='big'/>
-        </Button>
-        <Modal closeIcon
+        <IconButton icon='qrcode' label={`Show ${header} QR code`} color={buttonColor}
+                    onClick={() => setOpen(true)}/>
+        <Modal size='small' closeIcon
                open={open}
                onClose={() => setOpen(false)}
                onOpen={() => setOpen(true)}
         >
             <Modal.Header>{header}</Modal.Header>
             <Modal.Content>
-                <div style={{backgroundColor: '#FFFFFF', display: 'inline-block', padding: '1em'}}>
+                {/* `media`: the white field a scanner needs is filtered as a unit by night mode,
+                    rather than sitting on screen as a lit panel. */}
+                <div className='media'
+                     style={{backgroundColor: '#FFFFFF', display: 'inline-block', padding: '1em'}}>
                     <QRCode value={qrCodeValue} size={300}/>
                 </div>
             </Modal.Content>
@@ -39,17 +39,17 @@ function CoinQRButton({qrCodeValue, header, buttonColor}) {
 function CoinRow({header, qrCodeValue, address, buttonColor}) {
     return <>
         <Header as='h3'>{header}</Header>
-        <Table stackable>
-            <TableBody>
-                <TableRow>
-                    <TableCell width={1}>
+        <Table>
+            <Table.Body>
+                <Table.Row>
+                    <Table.Cell style={{width: '1%', whiteSpace: 'nowrap'}}>
                         <CoinQRButton qrCodeValue={qrCodeValue} header={header} buttonColor={buttonColor}/>
-                    </TableCell>
-                    <TableCell width={15} textAlign='left'>
+                    </Table.Cell>
+                    <Table.Cell style={{textAlign: 'left'}}>
                         <pre>{address}</pre>
-                    </TableCell>
-                </TableRow>
-            </TableBody>
+                    </Table.Cell>
+                </Table.Row>
+            </Table.Body>
         </Table>
     </>
 }
@@ -58,31 +58,28 @@ export function DonatePage() {
     useTitle('Donate');
 
     return <PageContainer>
-        <Segment>
+        <Panel>
             <Header as='h1'>Donate</Header>
             <Header as='h3'>We appreciate any support you can provide to WROLPi!</Header>
 
             <p>
                 <Button
-                    size='huge'
+                    size='xl'
                     icon='paypal'
-                    as='a'
-                    color='blue'
+                    component='a'
+                    role='primary'
                     href='https://www.paypal.com/donate/?hosted_button_id=ZH2CN92SMJ66N'
                     rel='noopener noreferrer'
                     target='_blank'
-                    label={{
-                        basic: true,
-                        content: 'Donate on PayPal',
-                        color: 'blue'
-                    }}
-                />
+                >
+                    Donate on PayPal
+                </Button>
             </p>
 
             <CoinRow header='Monero' qrCodeValue={moneroContent} address={moneroAddress} buttonColor='orange'/>
             <CoinRow header='Litecoin' qrCodeValue={litecoinContent} address={litecoinAddress} buttonColor='grey'/>
             <CoinRow header='Ethereum' qrCodeValue={ethereumContent} address={ethereumAddress} buttonColor='blue'/>
             <CoinRow header='Bitcoin' qrCodeValue={bitcoinContent} address={bitcoinAddress} buttonColor='yellow'/>
-        </Segment>
+        </Panel>
     </PageContainer>;
 }

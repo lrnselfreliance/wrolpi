@@ -1,7 +1,9 @@
 import React from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {BrowserRouter} from 'react-router';
+import {MantineProvider} from '@mantine/core';
 import {ThemeContext, SettingsContext} from '../../contexts/contexts';
+import {cssVariablesResolver, mantineTheme} from '../../themes/mantine';
 import {ControllerPage} from './ControllerPage';
 
 // Mock the controller API
@@ -134,11 +136,13 @@ const defaultSettings = {
 const renderControllerPage = () => {
     return render(
         <BrowserRouter>
-            <ThemeContext.Provider value={defaultTheme}>
-                <SettingsContext.Provider value={defaultSettings}>
-                    <ControllerPage/>
-                </SettingsContext.Provider>
-            </ThemeContext.Provider>
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                <ThemeContext.Provider value={defaultTheme}>
+                    <SettingsContext.Provider value={defaultSettings}>
+                        <ControllerPage/>
+                    </SettingsContext.Provider>
+                </ThemeContext.Provider>
+            </MantineProvider>
         </BrowserRouter>
     );
 };
@@ -210,7 +214,7 @@ describe('ControllerPage', () => {
         });
         expect(screen.getByText('Hotspot Protocol')).toBeInTheDocument();
         // The saved protocol is selected; WPA3 is offered because the device supports it.
-        // Semantic UI renders the selected value as both the dropdown text and an option.
+        // The select renders its chosen value as both the field's text and an option.
         await waitFor(() => {
             expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
             expect(screen.getAllByText('WPA3').length).toBeGreaterThan(0);
@@ -279,9 +283,11 @@ describe('DiskSection primary unmount', () => {
             expect(screen.getByText(/API service will/)).toBeInTheDocument();
         });
 
-        // Semantic's Confirm renders confirmButton='Unmount' as the last match.
-        const buttons = screen.getAllByText('Unmount');
-        fireEvent.click(buttons[buttons.length - 1]);
+        // The Confirm modal is portaled to the end of <body>, so it renders
+        // *before* the page content in DOM order -- scope the query to the
+        // dialog rather than assuming which match comes last.
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByText('Unmount'));
 
         await waitFor(() => {
             expect(controllerApi.unmountDisk).toHaveBeenCalledWith('/media/wrolpi');

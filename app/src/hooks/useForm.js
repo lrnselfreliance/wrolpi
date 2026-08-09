@@ -1,8 +1,7 @@
 import React from "react";
 import _ from "lodash";
 import {InfoPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
-import {Form, Icon, TextArea} from "../components/Theme";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {Icon, Message, Textarea} from "../components/ui";
 
 
 async function asyncNoOp() {
@@ -341,17 +340,31 @@ export function InputForm({
     const [inputProps, inputAttrs] = form.getInputProps({name, path, validator, type, required, onChange});
     inputProps.disabled = disabled || inputProps.disabled;
 
+    /*
+     * Callers build these as {content, header, positive|negative} --
+     * and the pages that build them are migrating separately, so both spellings are
+     * accepted until they have all moved to {kind, title}.
+     */
     let messageElm = null;
-    if (message && message.positive) {
-        messageElm = <Message {...message} positive/>;
-    } else if (message && message.negative) {
-        messageElm = <Message {...message}/>;
-    } else if (message) {
-        messageElm = <Message {...message}/>;
+    if (message) {
+        const kind = message.kind
+            || (message.positive && 'success')
+            || (message.negative && 'error')
+            || 'info';
+        messageElm = <Message kind={kind} title={message.title ?? message.header}>
+            {message.children ?? message.content}
+        </Message>;
     }
 
-    return <>
-        <label htmlFor={`${name}_input`}>
+    /*
+     * One element, not a fragment: every caller that puts an InputForm in a grid or flex
+     * container was getting the label and the input laid out as two separate items -- the
+     * input beside its own label rather than under it.  The label is block with the same
+     * 4px gap the migrated fields (Download.js FieldLabel) use, so an InputForm and a
+     * DestinationForm side by side line their inputs up at the same height.
+     */
+    return <div>
+        <label htmlFor={`${name}_input`} style={{display: 'block', marginBottom: 4}}>
             <b>{label} {required && <RequiredAsterisk/>}</b>
             {helpContent &&
                 <InfoPopup
@@ -360,15 +373,16 @@ export function InputForm({
                 />
             }
         </label>
-        <Form.Input
-            id={`${name}_input`}
-            placeholder={placeholder}
-            error={inputProps.error}
-        >
-            <input {...extraInputProps} {...inputProps}/>
-        </Form.Input>
+        <div className='wrolpi-form-field' data-error={inputProps.error ? true : undefined}>
+            <input
+                id={`${name}_input`}
+                placeholder={placeholder}
+                {...extraInputProps}
+                {...inputProps}
+            />
+        </div>
         {messageElm}
-    </>
+    </div>
 }
 
 export function NumberInputForm({
@@ -456,31 +470,36 @@ export function UrlsTextarea({name = 'urls', required, form}) {
     };
 
     return (
-        <Form.Input required error={inputProps.error} label="URLs">
-            <TextArea
-                id="urls_textarea"
-                placeholder="Enter one URL per line"
-                name="urls"
-                onDrop={handleDrop}
-                onKeyDown={handleKeyDown}
-                {...inputProps}
-            />
-        </Form.Input>
+        <Textarea
+            id="urls_textarea"
+            label="URLs"
+            required
+            error={inputProps.error}
+            placeholder="Enter one URL per line"
+            name="urls"
+            onDrop={handleDrop}
+            onKeyDown={handleKeyDown}
+            autosize
+            minRows={3}
+            {...inputProps}
+        />
     );
 }
 
 export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big', disabled = false}) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
-    const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;
-    return <Form.Input
-        label={label}>
-        {iconElm}
-        <Toggle
-            disabled={disabled || form.disabled}
-            name={name}
-            checked={inputProps.value}
-            onChange={inputProps.onChange}
-        />
-    </Form.Input>
+    const iconElm = icon ? <Icon size={iconSize === 'big' ? 'large' : iconSize} name={icon}/> : null;
+    return <div className='wrolpi-form-field'>
+        <label><b>{label}</b></label>
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            {iconElm}
+            <Toggle
+                disabled={disabled || form.disabled}
+                name={name}
+                checked={inputProps.value}
+                onChange={inputProps.onChange}
+            />
+        </div>
+    </div>
 }

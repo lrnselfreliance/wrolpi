@@ -1,23 +1,7 @@
 import {InfoPopup, roundDigits, Toggle, useLocalStorage, useLocalStorageInt} from "../Common";
 import React, {useState} from "react";
-import {Form, Header, Segment, Table} from "../Theme";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {
-    Container,
-    Dropdown,
-    GridColumn,
-    GridRow,
-    Icon,
-    Input,
-    TableBody,
-    TableCell,
-    TableHeader,
-    TableHeaderCell,
-    TableRow,
-} from "semantic-ui-react";
-import {ColoredInput} from "../Apps";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Media, ThemeContext} from "../../contexts/contexts";
+import {ColoredInput, Grid, Header, Message, Panel, Select, Stack, Table} from "../ui";
+import {Media} from "../../contexts/contexts";
 
 const initialState = {
     volts: '',
@@ -119,7 +103,6 @@ export function OhmsLawCalculator({setVolts}) {
     const inputProps = {
         fluid: true,
         type: 'number',
-        labelPosition: 'right',
         onSelect: e => e.target.select(), // Select the contents of the Input when a user selects it.
         autoComplete: 'off',
     };
@@ -133,43 +116,39 @@ export function OhmsLawCalculator({setVolts}) {
 
     return <div>
         <Header as='h1'>Ohm's Law</Header>
-        <Grid columns={2}>
-            <GridRow>
-                <GridColumn>
-                    <ColoredInput {...inputProps}
-                                  value={state.volts}
-                                  onChange={e => dispatch({type: 'volts', value: e.target.value})}
-                                  label='Volts'
-                                  color={calculateColor('volts')}
-                    />
-                </GridColumn>
-                <GridColumn>
-                    <ColoredInput {...inputProps}
-                                  value={state.amps}
-                                  onChange={e => dispatch({type: 'amps', value: e.target.value})}
-                                  label='Amps'
-                                  color={calculateColor('amps')}
-                    />
-                </GridColumn>
-            </GridRow>
-            <GridRow>
-                <GridColumn>
-                    <ColoredInput {...inputProps}
-                                  value={state.ohms}
-                                  onChange={e => dispatch({type: 'ohms', value: e.target.value})}
-                                  label='Ohms'
-                                  color={calculateColor('ohms')}
-                    />
-                </GridColumn>
-                <GridColumn>
-                    <ColoredInput {...inputProps}
-                                  value={state.watts}
-                                  onChange={e => dispatch({type: 'watts', value: e.target.value})}
-                                  label='Watts'
-                                  color={calculateColor('watts')}
-                    />
-                </GridColumn>
-            </GridRow>
+        <Grid>
+            <Grid.Col span={{base: 12, xs: 6}}>
+                <ColoredInput {...inputProps}
+                              value={state.volts}
+                              onChange={e => dispatch({type: 'volts', value: e.target.value})}
+                              label='Volts'
+                              color={calculateColor('volts')}
+                />
+            </Grid.Col>
+            <Grid.Col span={{base: 12, xs: 6}}>
+                <ColoredInput {...inputProps}
+                              value={state.amps}
+                              onChange={e => dispatch({type: 'amps', value: e.target.value})}
+                              label='Amps'
+                              color={calculateColor('amps')}
+                />
+            </Grid.Col>
+            <Grid.Col span={{base: 12, xs: 6}}>
+                <ColoredInput {...inputProps}
+                              value={state.ohms}
+                              onChange={e => dispatch({type: 'ohms', value: e.target.value})}
+                              label='Ohms'
+                              color={calculateColor('ohms')}
+                />
+            </Grid.Col>
+            <Grid.Col span={{base: 12, xs: 6}}>
+                <ColoredInput {...inputProps}
+                              value={state.watts}
+                              onChange={e => dispatch({type: 'watts', value: e.target.value})}
+                              label='Watts'
+                              color={calculateColor('watts')}
+                />
+            </Grid.Col>
         </Grid>
     </div>
 }
@@ -301,10 +280,10 @@ export const resistancesPerKm = {
 
 // Dropdown options for wire types
 const wireTypeOptions = [
-    {key: 'solid', text: 'Solid Copper', value: 'solid'},
-    {key: 'stranded', text: 'Stranded Copper', value: 'stranded'},
-    {key: 'solid_aluminum', text: 'Solid Aluminum', value: 'solid_aluminum'},
-    {key: 'stranded_aluminum', text: 'Stranded Aluminum', value: 'stranded_aluminum'},
+    {value: 'solid', label: 'Solid Copper'},
+    {value: 'stranded', label: 'Stranded Copper'},
+    {value: 'solid_aluminum', label: 'Solid Aluminum'},
+    {value: 'stranded_aluminum', label: 'Stranded Aluminum'},
 ];
 
 // Helper function to calculate power loss
@@ -325,18 +304,15 @@ export const calcPowerLossPercent = (isSAE, volts, amps, resistancePerKiloLength
 const PowerLossCalculator = ({volts, setVolts, wireType, setWireType, isSAE, setIsSAE, length, setLength}) => {
     const [ampsRange] = useState([1, 5, 10, 20, 40, 100]);
 
-    const {inverted} = React.useContext(ThemeContext);
-    const warningBackgroundColor = inverted === 'inverted' ? '#332020' : '#ffbebe';
-
     const resistances = isSAE ? resistancesPerKFeet[wireType]
         : resistancesPerKm[wireType];
 
-    const voltsInput = <Input fluid
+    const voltsInput = <ColoredInput fluid
                               label='Volts'
                               labelPosition='right'
                               type='number'
                               value={volts}
-                              onChange={(e, {value}) => setVolts(parseInt(value))}
+                              onChange={e => setVolts(parseInt(e.target.value))}
                               autoComplete="off"
     />;
 
@@ -346,91 +322,79 @@ const PowerLossCalculator = ({volts, setVolts, wireType, setWireType, isSAE, set
         onChange={() => setIsSAE(!isSAE)}
     />;
 
-    const lengthInput = <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column mobile={12} tablet={12}>
-                <Input fluid
-                       label={isSAE ? 'feet' : 'meters'}
-                       labelPosition='right'
-                       type='number'
-                       value={length}
-                       onChange={(e, {value}) => setLength(parseInt(value))}
-                       autoComplete="off"
-                />
-            </Grid.Column>
-            <Grid.Column mobile={4} tablet={2}>
-                <InfoPopup
-                    content='Length is one way.  This length will be doubled to account for return wire.'/>
-            </Grid.Column>
-        </Grid.Row>
+    const lengthInput = <Grid>
+        <Grid.Col span={10}>
+            <ColoredInput fluid
+                   label={isSAE ? 'feet' : 'meters'}
+                   labelPosition='right'
+                   type='number'
+                   value={length}
+                   onChange={e => setLength(parseInt(e.target.value))}
+                   autoComplete="off"
+            />
+        </Grid.Col>
+        <Grid.Col span={2}>
+            <InfoPopup
+                content='Length is one way.  This length will be doubled to account for return wire.'/>
+        </Grid.Col>
     </Grid>;
 
-    const wireTypeDropdown = <Dropdown
+    const wireTypeDropdown = <Select
         placeholder='Select Wire Type'
-        fluid
-        selection
-        options={wireTypeOptions}
+        data={wireTypeOptions}
         value={wireType}
-        onChange={(e, {value}) => setWireType(value)}
+        onChange={value => setWireType(value)}
     />;
-    return <Form>
+    return <div>
         <Header as='h1'>Power Loss</Header>
         <Media at='mobile'>
-            <Grid columns={2} divided stackable>
-                <Grid.Row>
-                    <Grid.Column>{voltsInput}</Grid.Column>
-                    <Grid.Column>{lengthInput}</Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>{wireTypeDropdown}</Grid.Column>
-                    <Grid.Column>{saeToggle}</Grid.Column>
-                </Grid.Row>
+            <Grid>
+                <Grid.Col span={6}>{voltsInput}</Grid.Col>
+                <Grid.Col span={6}>{lengthInput}</Grid.Col>
+                <Grid.Col span={6}>{wireTypeDropdown}</Grid.Col>
+                <Grid.Col span={6}>{saeToggle}</Grid.Col>
             </Grid>
         </Media>
         <Media greaterThan='mobile'>
-            <Grid columns={2} divided>
-                <Grid.Row>
-                    <Grid.Column>{voltsInput}</Grid.Column>
-                    <Grid.Column>{saeToggle}</Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>{lengthInput}</Grid.Column>
-                    <Grid.Column>{wireTypeDropdown}</Grid.Column>
-                </Grid.Row>
+            <Grid>
+                <Grid.Col span={6}>{voltsInput}</Grid.Col>
+                <Grid.Col span={6}>{saeToggle}</Grid.Col>
+                <Grid.Col span={6}>{lengthInput}</Grid.Col>
+                <Grid.Col span={6}>{wireTypeDropdown}</Grid.Col>
             </Grid>
         </Media>
 
-        <Table unstackable compact celled definition>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell/>
-                    {ampsRange.map(amp => <TableHeaderCell key={amp}>{amp}A</TableHeaderCell>)}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+        <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell/>
+                    {ampsRange.map(amp => <Table.HeaderCell key={amp}>{amp}A</Table.HeaderCell>)}
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
                 {Object.entries(resistances).map(([size, resistence]) => (
-                    <TableRow key={size}>
-                        <TableCell>{size}</TableCell>
+                    <Table.Row key={size}>
+                        <Table.Cell style={{fontWeight: 600}}>{size}</Table.Cell>
                         {ampsRange.map(amp => {
                             const lossPercentage = calcPowerLossPercent(isSAE, volts, amp, resistence, length);
-                            const style = lossPercentage > 2 ? {backgroundColor: warningBackgroundColor} : null;
-                            return <TableCell key={`${size}-${amp}`} style={style}>
+                            // The warning tint blends the amber token into the panel background, so
+                            // it stays a token-driven color in every theme rather than a fixed hex.
+                            const style = lossPercentage > 2
+                                ? {backgroundColor: 'color-mix(in srgb, var(--amber) 30%, var(--panel))'}
+                                : null;
+                            return <Table.Cell key={`${size}-${amp}`} style={style}>
                                 {lossPercentage >= 100 ? '-' : roundDigits(lossPercentage, 1) + '%'}
-                            </TableCell>
+                            </Table.Cell>
                         })}
-                    </TableRow>
+                    </Table.Row>
                 ))}
-            </TableBody>
+            </Table.Body>
         </Table>
 
-        <Message icon color='yellow'>
-            <Icon name='exclamation'/>
-            <Message.Content>
-                <Message.Header>Warning</Message.Header>
-                These numbers are only an estimate and are only applicable for bare wires.
-            </Message.Content>
+        <Message kind='warning' icon='warning' title='Warning'>
+            These numbers are only an estimate and are only applicable for bare wires.
         </Message>
-    </Form>
+    </div>
 };
 
 // Resistance changes with temperature; the resistance tables are referenced at 20°C.
@@ -479,7 +443,7 @@ const FourWireKelvinCalculator = ({wireType, isSAE, length}) => {
         setTemperatureC(isSAE ? (temperature - 32) * 5 / 9 : temperature);
     };
 
-    return <Form>
+    return <div>
         <Header as='h1'>4-Wire Kelvin</Header>
         <p>
             Expected millivolt drop across {length} {isSAE ? 'feet' : 'meters'} of wire when driving a known
@@ -488,48 +452,46 @@ const FourWireKelvinCalculator = ({wireType, isSAE, length}) => {
                 content='Uses the length and wire type from the Power Loss calculator above.  The length is NOT doubled because the sense leads measure across a single conductor.'/>
         </p>
 
-        <Grid columns={2}>
-            <Grid.Row>
-                <Grid.Column mobile={12} tablet={12}>
-                    <Input fluid
-                           label={isSAE ? '°F' : '°C'}
-                           labelPosition='right'
-                           type='number'
-                           value={displayTemperature}
-                           onChange={(e, {value}) => handleTemperatureChange(value)}
-                           autoComplete="off"
-                    />
-                </Grid.Column>
-                <Grid.Column mobile={4} tablet={2}>
-                    <InfoPopup
-                        content='Wire temperature.  Resistances are referenced at 20°C (68°F) and corrected using the temperature coefficient of the wire material (copper 0.393% per °C, aluminum 0.403% per °C).'/>
-                </Grid.Column>
-            </Grid.Row>
+        <Grid>
+            <Grid.Col span={10}>
+                <ColoredInput fluid
+                       label={isSAE ? '°F' : '°C'}
+                       labelPosition='right'
+                       type='number'
+                       value={displayTemperature}
+                       onChange={e => handleTemperatureChange(e.target.value)}
+                       autoComplete="off"
+                />
+            </Grid.Col>
+            <Grid.Col span={2}>
+                <InfoPopup
+                    content='Wire temperature.  Resistances are referenced at 20°C (68°F) and corrected using the temperature coefficient of the wire material (copper 0.393% per °C, aluminum 0.403% per °C).'/>
+            </Grid.Col>
         </Grid>
 
-        <Table unstackable compact celled definition>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell/>
-                    {ampsRange.map(amp => <TableHeaderCell key={amp}>{amp}A</TableHeaderCell>)}
-                </TableRow>
-            </TableHeader>
-            <TableBody>
+        <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell/>
+                    {ampsRange.map(amp => <Table.HeaderCell key={amp}>{amp}A</Table.HeaderCell>)}
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
                 {Object.entries(resistances).map(([size, resistance]) => (
-                    <TableRow key={size}>
-                        <TableCell>{size}</TableCell>
+                    <Table.Row key={size}>
+                        <Table.Cell style={{fontWeight: 600}}>{size}</Table.Cell>
                         {ampsRange.map(amp => {
                             const milliVolts = calcKelvinMilliVoltDrop(
                                 amp, resistance, length, temperatureC, tempCoefficientForWireType(wireType));
-                            return <TableCell key={`${size}-${amp}`}>
+                            return <Table.Cell key={`${size}-${amp}`}>
                                 {roundDigits(milliVolts, 1)} mV
-                            </TableCell>
+                            </Table.Cell>
                         })}
-                    </TableRow>
+                    </Table.Row>
                 ))}
-            </TableBody>
+            </Table.Body>
         </Table>
-    </Form>
+    </div>
 };
 
 export const ElectricalCalculators = () => {
@@ -537,12 +499,12 @@ export const ElectricalCalculators = () => {
     const [wireType, setWireType] = useLocalStorage('calculators.power_loss.wire_type', 'solid');
     const [isSAE, setIsSAE] = useLocalStorage('calculators.power_loss.is_sae', true);
     const [length, setLength] = useLocalStorageInt('calculators.power_loss.length', 100);
-    return <Container>
-        <Segment><OhmsLawCalculator setVolts={setVolts}/></Segment>
-        <Segment><PowerLossCalculator volts={volts} setVolts={setVolts}
+    return <Stack>
+        <Panel><OhmsLawCalculator setVolts={setVolts}/></Panel>
+        <Panel><PowerLossCalculator volts={volts} setVolts={setVolts}
                                       wireType={wireType} setWireType={setWireType}
                                       isSAE={isSAE} setIsSAE={setIsSAE}
-                                      length={length} setLength={setLength}/></Segment>
-        <Segment><FourWireKelvinCalculator wireType={wireType} isSAE={isSAE} length={length}/></Segment>
-    </Container>
+                                      length={length} setLength={setLength}/></Panel>
+        <Panel><FourWireKelvinCalculator wireType={wireType} isSAE={isSAE} length={length}/></Panel>
+    </Stack>
 }

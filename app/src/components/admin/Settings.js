@@ -2,18 +2,6 @@ import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {checkUpgrade, postRestart, postShutdown, saveSettings as saveSettingsApi, triggerUpgrade} from "../../api";
 import {getServices, startService, stopService} from "../../api/controller";
-import {Button, Divider, Form, Header, Loader, Modal, Segment} from "../Theme";
-import {
-    ButtonGroup,
-    Container,
-    Dimmer,
-    Dropdown,
-    FormDropdown,
-    GridColumn,
-    GridRow,
-    Icon,
-    Input
-} from "semantic-ui-react";
 import {
     APIButton,
     ErrorMessage,
@@ -25,10 +13,42 @@ import {
     WROLModeMessage
 } from "../Common";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
-import {toast} from "react-semantic-toasts-2";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ConfigsTable} from "./Configs";
-import {semanticUIColorMap} from "../Vars";
+import {navColorHexMap} from "../Vars";
+import {Link} from "react-router";
+import {
+    Button,
+    Divider,
+    Grid,
+    Header,
+    Icon,
+    Loading,
+    Modal,
+    Panel,
+    Select,
+    ThemePicker,
+    toast,
+    PathInput,
+    TextInput,
+} from "../ui";
+
+function ThemeSegment() {
+    return <Panel>
+        <Header as='h2'>Theme</Header>
+        <p>Choose how WROLPi looks. The choice is saved in this browser, so each device can
+            differ.</p>
+
+        <ThemePicker/>
+
+        <Divider/>
+
+        <Header as='h3'>Preview</Header>
+        <p>See every part of the interface in the theme you picked.</p>
+        <Link to='/theme-sample'>
+            <Button icon='eye'>View the components</Button>
+        </Link>
+    </Panel>;
+}
 
 export function ShutdownButton() {
     const dockerized = useDockerized();
@@ -71,7 +91,7 @@ export function ShutdownButton() {
 
     return <APIButton
         size='huge'
-        color='red'
+        role='danger'
         onClick={handleShutdown}
         confirmContent='Are you sure you want to turn off your WROLPi?'
         confirmButton='Shutdown'
@@ -118,33 +138,32 @@ function UpgradeSegment() {
 
     // Not available in Docker
     if (dockerized) {
-        return <Segment id='upgrade'>
+        return <Panel id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Upgrades are not available in Docker environments. Please upgrade your Docker images manually.</p>
-        </Segment>;
+        </Panel>;
     }
 
     // No update available
     if (!status?.update_available) {
-        return <Segment id='upgrade'>
+        return <Panel id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Your WROLPi is up to date.</p>
             <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong>
             </p>
             <APIButton
-                color='blue'
+                role='primary'
                 onClick={handleCheckUpgrade}
                 disabled={checking}
             >
                 {checking ? 'Checking...' : 'Check for Upgrades'}
             </APIButton>
-        </Segment>;
+        </Panel>;
     }
 
     // Update available
-    return <Segment id='upgrade'>
-        <Header as='h3'>
-            <Icon name='arrow alternate circle up'/>
+    return <Panel id='upgrade'>
+        <Header as='h3' icon='arrow alternate circle up'>
             Upgrade Available
         </Header>
         <p>Branch: <strong>{status?.git_branch}</strong></p>
@@ -153,7 +172,7 @@ function UpgradeSegment() {
         <p><strong>{status?.commits_behind}</strong> commit(s) behind</p>
 
         <APIButton
-            color='green'
+            role='save'
             size='big'
             onClick={handleUpgrade}
             disabled={upgrading}
@@ -162,7 +181,7 @@ function UpgradeSegment() {
         >
             {upgrading ? 'Starting Upgrade...' : 'Upgrade Now'}
         </APIButton>
-    </Segment>;
+    </Panel>;
 }
 
 export function RestartButton() {
@@ -206,7 +225,7 @@ export function RestartButton() {
 
     return <APIButton
         size='huge'
-        color='yellow'
+        role='retry'
         onClick={handleRestart}
         confirmContent='Are you sure you want to reboot your WROLPi?'
         confirmButton='Restart'
@@ -270,16 +289,15 @@ function WROLModeSection() {
     };
 
     return (
-        <Segment>
-            <Header as='h3'>
-                <Icon name='shield'/>
+        <Panel danger>
+            <Header as='h3' icon='shield'>
                 WROL Mode
             </Header>
             <p>
                 Enable read-only mode. No content can be deleted or modified.
                 Enable this when the SHTF and you want to prevent any potential loss of data.
             </p>
-            <p style={{fontSize: '0.9em', color: '#888'}}>
+            <p style={{fontSize: '0.9em', color: 'var(--muted)'}}>
                 Note: User settings and tags can still be modified.
             </p>
             <Toggle
@@ -287,7 +305,7 @@ function WROLModeSection() {
                 onChange={toggleWROLMode}
                 label={wrolMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
             />
-        </Segment>
+        </Panel>
     );
 }
 
@@ -474,28 +492,22 @@ export function SettingsPage() {
         });
     }, [JSON.stringify(settings)]);
 
-    const handleInputChange = async (e, name, value) => {
-        if (e) {
-            e.preventDefault()
-        }
+    const handleInputChange = async (name, value) => {
         setState({...state, [name]: value});
     }
 
-    const handleTimeoutChange = async (e, name, value) => {
-        if (e) {
-            e.preventDefault()
-        }
+    const handleTimeoutChange = async (name, value) => {
         // Restrict timeout to numbers.
         value = value.replace(/[^\d]/, '');
         setState({...state, [name]: value});
     }
 
     const timezoneOptions = Intl.supportedValuesOf('timeZone').map(tz => (
-        {key: tz, value: tz, text: tz}
+        {value: tz, label: tz}
     ));
 
-    const navColorOptions = Object.keys(semanticUIColorMap).map(i => {
-        return {key: i, value: i, text: i.charAt(0).toUpperCase() + i.slice(1)}
+    const navColorOptions = Object.keys(navColorHexMap).map(i => {
+        return {value: i, label: i.charAt(0).toUpperCase() + i.slice(1)}
     });
 
     const mediaDirectoryLabel = `${settings.media_directory}/`;
@@ -506,94 +518,92 @@ export function SettingsPage() {
         body = <>
             <p>Any changes will be written to <i>{settings.media_directory}/config/wrolpi.yaml</i>.</p>
 
-            <Form id="settings">
-                <Grid columns={2} stackable>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
-                                    label='CPU Power-save on Startup'
-                                    disabled={disabled || state.throttle_on_startup === null}
-                                    checked={state.throttle_on_startup === true}
-                                    onChange={checked => handleInputChange(null, 'throttle_on_startup', checked)}
-                                />
-                            </div>
-
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
-                                    label='Ignore outdated Zims'
-                                    disabled={disabled || state.ignore_outdated_zims === null}
-                                    checked={state.ignore_outdated_zims === true}
-                                    onChange={checked => handleInputChange(null, 'ignore_outdated_zims', checked)}
-                                />
-                            </div>
-
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
-                                    label='Check for upgrades hourly'
-                                    disabled={disabled || dockerized || state.check_for_upgrades === null}
-                                    checked={!dockerized && state.check_for_upgrades === true}
-                                    onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
-                                />
-                            </div>
-
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
-                                    label='Tags Directory'
-                                    disabled={disabled || state.tags_directory === null}
-                                    checked={state.tags_directory === true}
-                                    onChange={checked => handleInputChange(null, 'tags_directory', checked)}
-                                    info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
-                                />
-                            </div>
-
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
-                                    label='Save FFprobe Cache Files'
-                                    disabled={disabled || state.save_ffprobe_json === null}
-                                    checked={state.save_ffprobe_json === true}
-                                    onChange={checked => handleInputChange(null, 'save_ffprobe_json', checked)}
-                                    info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
-                                />
-                            </div>
-
-                            <br/>
-
-                            <label htmlFor='log_levels_input'>Log Level: {logLevelToName(state.log_level)}</label>
-                            <br/>
-                            <input type='range'
-                                   id='log_levels_input'
-                                   list='log_levels'
-                                   min='1'
-                                   max='5'
-                                   value={state.log_level}
-                                   onChange={e => setState({...state, log_level: parseInt(e.target.value)})}
-                                   style={{marginBottom: '1em'}}
+            <form id="settings" onSubmit={e => e.preventDefault()}>
+                <Grid>
+                    <Grid.Col span={12}>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='CPU Power-save on Startup'
+                                disabled={disabled || state.throttle_on_startup === null}
+                                checked={state.throttle_on_startup === true}
+                                onChange={checked => handleInputChange('throttle_on_startup', checked)}
                             />
-                            <datalist id='log_levels'>
-                                <option value='1'>Critical</option>
-                                <option value='2'>Warning</option>
-                                <option value='3'>Info</option>
-                                <option value='4'>Debug</option>
-                                <option value='5'>Trace</option>
-                            </datalist>
+                        </div>
 
-                            <br/>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Ignore outdated Zims'
+                                disabled={disabled || state.ignore_outdated_zims === null}
+                                checked={state.ignore_outdated_zims === true}
+                                onChange={checked => handleInputChange('ignore_outdated_zims', checked)}
+                            />
+                        </div>
 
-                            <ButtonGroup>
-                                <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
-                                <Dropdown
-                                    id='settings_navbar_color_dropdown'
-                                    className='button icon'
-                                    floating
-                                    options={navColorOptions}
-                                    onChange={(e, {value}) => setState({...state, nav_color: value})}
-                                    value={state.nav_color}
-                                />
-                            </ButtonGroup>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Check for upgrades hourly'
+                                disabled={disabled || dockerized || state.check_for_upgrades === null}
+                                checked={!dockerized && state.check_for_upgrades === true}
+                                onChange={checked => handleInputChange('check_for_upgrades', checked)}
+                            />
+                        </div>
 
-                        </Grid.Column>
-                    </Grid.Row>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Tags Directory'
+                                disabled={disabled || state.tags_directory === null}
+                                checked={state.tags_directory === true}
+                                onChange={checked => handleInputChange('tags_directory', checked)}
+                                info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
+                            />
+                        </div>
+
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Save FFprobe Cache Files'
+                                disabled={disabled || state.save_ffprobe_json === null}
+                                checked={state.save_ffprobe_json === true}
+                                onChange={checked => handleInputChange('save_ffprobe_json', checked)}
+                                info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
+                            />
+                        </div>
+
+                        <br/>
+
+                        <label htmlFor='log_levels_input'>Log Level: {logLevelToName(state.log_level)}</label>
+                        <br/>
+                        <input type='range'
+                               id='log_levels_input'
+                               list='log_levels'
+                               min='1'
+                               max='5'
+                               value={state.log_level}
+                               onChange={e => setState({...state, log_level: parseInt(e.target.value)})}
+                               style={{marginBottom: '1em'}}
+                        />
+                        <datalist id='log_levels'>
+                            <option value='1'>Critical</option>
+                            <option value='2'>Warning</option>
+                            <option value='3'>Info</option>
+                            <option value='4'>Debug</option>
+                            <option value='5'>Trace</option>
+                        </datalist>
+
+                        <br/>
+
+                        <div style={{display: 'flex', alignItems: 'center', gap: 0}}>
+                            <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
+                            <Select
+                                id='settings_navbar_color_dropdown'
+                                data={navColorOptions}
+                                value={state.nav_color || ''}
+                                onChange={value => setState({...state, nav_color: value})}
+                                allowDeselect={false}
+                                style={{width: '10em'}}
+                            />
+                        </div>
+
+                    </Grid.Col>
                 </Grid>
 
 
@@ -606,7 +616,7 @@ export function SettingsPage() {
                         label='Download on Startup'
                         disabled={disabled || state.download_on_startup === null}
                         checked={state.download_on_startup === true}
-                        onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
+                        onChange={checked => handleInputChange('download_on_startup', checked)}
                     />
                 </div>
 
@@ -619,7 +629,7 @@ export function SettingsPage() {
                         </>}
                         disabled={disabled || state.require_cookies_unlocked === null}
                         checked={state.require_cookies_unlocked === true}
-                        onChange={checked => handleInputChange(null, 'require_cookies_unlocked', checked)}
+                        onChange={checked => handleInputChange('require_cookies_unlocked', checked)}
                     />
                 </div>
 
@@ -632,107 +642,112 @@ export function SettingsPage() {
                         </>}
                         disabled={disabled || state.require_media_mounted === null}
                         checked={state.require_media_mounted === true}
-                        onChange={checked => handleInputChange(null, 'require_media_mounted', checked)}
+                        onChange={checked => handleInputChange('require_media_mounted', checked)}
                     />
                 </div>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Wait Between Downloads</b>
-                            <InfoPopup
-                                content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
-                        </>}
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Wait Between Downloads</b>
+                        <InfoPopup
+                            content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         value={state.download_wait}
                         disabled={disabled || state.download_wait === null}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
+                        onChange={e => handleTimeoutChange('download_wait', e.currentTarget.value)}
                     />
-                </Form.Group>
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Download Timeout</b>
-                            <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
-                                Downloads will never timeout if this is empty.'/>
-                        </>}
+                </div>
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Download Timeout</b>
+                        <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
+                            Downloads will never timeout if this is empty.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         value={state.download_timeout}
                         disabled={disabled || state.download_timeout === null}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
+                        onChange={e => handleTimeoutChange('download_timeout', e.currentTarget.value)}
                     />
-                </Form.Group>
+                </div>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Daily Download Limit (per domain)</b>
-                            <InfoPopup
-                                content='Maximum number of downloads from any single domain per day. Recurring
-                                    Channel/RSS catalog updates do not count; only the videos/archives they create
-                                    and one-off downloads count. Leave empty or set to 0 for no limit.'/>
-                        </>}
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Daily Download Limit (per domain)</b>
+                        <InfoPopup
+                            content='Maximum number of downloads from any single domain per day. Recurring
+                                Channel/RSS catalog updates do not count; only the videos/archives they create
+                                and one-off downloads count. Leave empty or set to 0 for no limit.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         value={state.download_daily_limit_per_domain}
                         disabled={disabled}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_daily_limit_per_domain', i.value)}
+                        onChange={e => handleTimeoutChange('download_daily_limit_per_domain', e.currentTarget.value)}
                     />
-                </Form.Group>
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Daily Download Limit (total)</b>
-                            <InfoPopup
-                                content='Maximum number of downloads across all domains per day. Recurring
-                                    Channel/RSS catalog updates do not count. Leave empty or set to 0 for no limit.'/>
-                        </>}
+                </div>
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Daily Download Limit (total)</b>
+                        <InfoPopup
+                            content='Maximum number of downloads across all domains per day. Recurring
+                                Channel/RSS catalog updates do not count. Leave empty or set to 0 for no limit.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         value={state.download_daily_limit_global}
                         disabled={disabled}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_daily_limit_global', i.value)}
+                        onChange={e => handleTimeoutChange('download_daily_limit_global', e.currentTarget.value)}
                     />
-                </Form.Group>
+                </div>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Download Window Start</b>
-                            <InfoPopup
-                                content='Start time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
-                        </>}
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Download Window Start</b>
+                        <InfoPopup
+                            content='Start time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         type='time'
                         value={state.download_window_start}
                         disabled={disabled}
-                        onChange={(e, i) => handleInputChange(e, 'download_window_start', i.value)}
+                        onChange={e => handleInputChange('download_window_start', e.currentTarget.value)}
                     />
-                </Form.Group>
+                </div>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Download Window End</b>
-                            <InfoPopup
-                                content='End time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
-                        </>}
+                <div style={{margin: '0.5em 0'}}>
+                    <label>
+                        <b>Download Window End</b>
+                        <InfoPopup
+                            content='End time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
+                    </label>
+                    <br/>
+                    <TextInput
                         type='time'
                         value={state.download_window_end}
                         disabled={disabled}
-                        onChange={(e, i) => handleInputChange(e, 'download_window_end', i.value)}
+                        onChange={e => handleInputChange('download_window_end', e.currentTarget.value)}
                     />
-                </Form.Group>
+                </div>
 
-                <Form.Field width={3}>
+                <div style={{margin: '0.5em 0', maxWidth: '20em'}}>
                     <label><b>Timezone</b>
                         <InfoPopup
                             content='IANA timezone (e.g. America/Denver). Leave empty to use system timezone.'/>
                     </label>
-                    <FormDropdown
+                    <Select
                         placeholder='System default'
-                        options={timezoneOptions}
+                        data={timezoneOptions}
                         value={state.timezone || ''}
                         disabled={disabled}
-                        search
-                        selection
+                        searchable
                         clearable
-                        onChange={(e, {value}) => setState({...state, timezone: value || ''})}
+                        onChange={value => setState({...state, timezone: value || ''})}
                     />
-                </Form.Field>
+                </div>
                 {status && status.local_time &&
                     <p>Current local time: <b>{status.local_time.slice(0, 16).replace('T', ' ')}</b></p>}
 
@@ -742,139 +757,119 @@ export function SettingsPage() {
                 <p>WROLPi will save files to these directories (any video files will be saved to
                     the <i>videos</i> by default, etc.).</p>
 
-                <Grid stackable>
-                    <GridRow columns={2}>
-                        <GridColumn>
-                            <Form.Field>
-                                <label>
-                                    Archive Directory
-                                    <InfoPopup
-                                        wide='very'
-                                        content={<>
-                                            <p>Variables:</p>
-                                            <ul>
-                                                <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
-                                                <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no
-                                                    tag)
-                                                </li>
-                                                <li><code>%(tag)s</code> - Alias for the tag name</li>
-                                                <li><code>%(name)s</code> - Alias for the domain name</li>
-                                            </ul>
-                                        </>}
-                                        position='top left'
-                                    />
-                                </label>
-                                <Input
-                                    label={mediaDirectoryLabel}
-                                    value={state.archive_destination}
-                                    disabled={!editSpecialDirectories}
-                                    onChange={(e, d) => handleInputChange(e, 'archive_destination', d.value)}
+                <Grid>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label={<>
+                                Archive Directory
+                                <InfoPopup
+                                    w={340}
+                                    content={<>
+                                        <p>Variables:</p>
+                                        <ul>
+                                            <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
+                                            <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no
+                                                tag)
+                                            </li>
+                                            <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                            <li><code>%(name)s</code> - Alias for the domain name</li>
+                                        </ul>
+                                    </>}
+                                    position='top'
                                 />
-                            </Form.Field>
-                        </GridColumn>
-                        <GridColumn>
-                            <Form.Field>
-                                <label>
-                                    Videos Directory
-                                    <InfoPopup
-                                        wide='very'
-                                        content={<>
-                                            <p>Variables:</p>
-                                            <ul>
-                                                <li><code>%(channel_name)s</code> - Channel name</li>
-                                                <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no
-                                                    tag)
-                                                </li>
-                                                <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
-                                                <li><code>%(tag)s</code> - Alias for the tag name</li>
-                                                <li><code>%(name)s</code> - Alias for the channel name</li>
-                                            </ul>
-                                        </>}
-                                        position='top left'
-                                    />
-                                </label>
-                                <Input
-                                    label={mediaDirectoryLabel}
-                                    value={state.videos_destination}
-                                    disabled={!editSpecialDirectories}
-                                    onChange={(e, d) => handleInputChange(e, 'videos_destination', d.value)}
+                            </>}
+                            prefix={mediaDirectoryLabel}
+                            value={state.archive_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('archive_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label={<>
+                                Videos Directory
+                                <InfoPopup
+                                    w={340}
+                                    content={<>
+                                        <p>Variables:</p>
+                                        <ul>
+                                            <li><code>%(channel_name)s</code> - Channel name</li>
+                                            <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no
+                                                tag)
+                                            </li>
+                                            <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
+                                            <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                            <li><code>%(name)s</code> - Alias for the channel name</li>
+                                        </ul>
+                                    </>}
+                                    position='top'
                                 />
-                            </Form.Field>
-                        </GridColumn>
-                    </GridRow>
-                    <GridRow columns={2}>
-                        <GridColumn>
-                            <Form.Field>
-                                <label>Map Directory</label>
-                                <Input
-                                    label={mediaDirectoryLabel}
-                                    value={state.map_destination}
-                                    disabled={!editSpecialDirectories}
-                                    onChange={(e, d) => handleInputChange(e, 'map_destination', d.value)}
-                                />
-                            </Form.Field>
-                        </GridColumn>
-                        <GridColumn>
-                            <Form.Field>
-                                <label>Zims Directory</label>
-                                <Input
-                                    label={mediaDirectoryLabel}
-                                    value={state.zims_destination}
-                                    disabled={!editSpecialDirectories}
-                                    onChange={(e, d) => handleInputChange(e, 'zims_destination', d.value)}
-                                />
-                            </Form.Field>
-                        </GridColumn>
-                    </GridRow>
-                    <GridRow columns={2}>
-                        <GridColumn>
-                            <Form.Field>
-                                <label>Playlists Directory</label>
-                                <Input
-                                    label={mediaDirectoryLabel}
-                                    value={state.playlists_destination}
-                                    disabled={!editSpecialDirectories}
-                                    onChange={(e, d) => handleInputChange(e, 'playlists_destination', d.value)}
-                                />
-                            </Form.Field>
-                        </GridColumn>
-                    </GridRow>
-                    <GridRow columns={1}>
-                        <GridColumn>
-                            <Toggle
-                                label='Edit Directories'
-                                disabled={disabled}
-                                checked={editSpecialDirectories === true}
-                                onChange={checked => setEditSpecialDirectories(checked)}
-                            />
-                        </GridColumn>
-                    </GridRow>
+                            </>}
+                            prefix={mediaDirectoryLabel}
+                            value={state.videos_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('videos_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label='Map Directory'
+                            prefix={mediaDirectoryLabel}
+                            value={state.map_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('map_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label='Zims Directory'
+                            prefix={mediaDirectoryLabel}
+                            value={state.zims_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('zims_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label='Playlists Directory'
+                            prefix={mediaDirectoryLabel}
+                            value={state.playlists_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('playlists_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={12}>
+                        <Toggle
+                            label='Edit Directories'
+                            disabled={disabled}
+                            checked={editSpecialDirectories === true}
+                            onChange={checked => setEditSpecialDirectories(checked)}
+                        />
+                    </Grid.Col>
                 </Grid>
 
                 <Divider/>
 
                 <APIButton
                     id='settings_save_button'
-                    color='violet'
+                    role='save'
                     size='big'
                     onClick={() => localSaveSettings(state)}
                     obeyWROLMode={true}
                     disabled={disabled}
                 >Save</APIButton>
 
-                <Dimmer active={pendingSave}>
-                    <Loader active={pendingSave} size='large'/>
-                </Dimmer>
+                {pendingSave && <Loading>Saving settings...</Loading>}
 
-            </Form>
+            </form>
         </>
     } else if (ready === false) {
-        body = <Loader active inline='centered'/>
+        body = <Loading/>
     } else {
         body = <ErrorMessage>Unable to fetch settings</ErrorMessage>
     }
 
-    const configsSegment = <Segment>
+    const configsSegment = <Panel>
         <RefreshHeader
             header='Configs'
             popupContents='Check if configs are valid'
@@ -902,17 +897,21 @@ export function SettingsPage() {
         <p>Install the WROLPi Root CA certificate on your devices to trust all HTTPS connections to this WROLPi.
             You only need to do this once per device.</p>
         <a href='/ca.crt' download='wrolpi-ca.crt'>
-            <Button primary><Icon name='download'/> Download Root CA Certificate</Button>
+            <Button role='primary' icon='download'>Download Root CA Certificate</Button>
         </a>
-    </Segment>;
+    </Panel>;
 
-    return <Container fluid>
+    // `wrolpi-stack`: these panels sit in a wrapper of this page's own, so the stack on
+    // PageContainer does not reach them and this wrapper is what has to space them.
+    return <div className='wrolpi-stack'>
         <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
-        <Segment>
+        <Panel>
             <Header as='h2'>Settings</Header>
             {body}
-        </Segment>
+        </Panel>
+
+        <ThemeSegment/>
 
         {configsSegment}
 
@@ -920,10 +919,10 @@ export function SettingsPage() {
 
         <WROLModeSection/>
 
-        <Segment>
+        <Panel>
             <Header as='h1'>Browser Settings</Header>
             <APIButton onClick={clearAll}>Show All Hints</APIButton>
-        </Segment>
+        </Panel>
 
         {/* Trace Level Modal - shown when user selects trace level in native mode */}
         <Modal
@@ -943,7 +942,7 @@ export function SettingsPage() {
                                 ? `Switching to debug mode in ${traceCountdown} seconds...`
                                 : 'Switching API services...'}
                         </p>
-                        <p style={{color: '#888', fontSize: '0.9em'}}>
+                        <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
                             The API will restart. This page may temporarily lose connection.
                         </p>
                     </>
@@ -957,7 +956,7 @@ export function SettingsPage() {
                             This will save your settings and restart the API service. The page may temporarily
                             lose connection during the switch.
                         </p>
-                        <p style={{color: '#888', fontSize: '0.9em'}}>
+                        <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
                             You can switch back to production mode later from the Controller page.
                         </p>
                     </>
@@ -965,21 +964,21 @@ export function SettingsPage() {
             </Modal.Content>
             <Modal.Actions>
                 <Button
-                    color='grey'
+                    role='cancel'
                     onClick={handleTraceModalCancel}
                     disabled={traceSwitching}
                 >
                     Cancel
                 </Button>
                 <Button
-                    color='green'
+                    role='save'
                     onClick={handleTraceModalConfirm}
                     disabled={traceSwitching}
+                    icon='check'
                 >
-                    <Icon name='check'/> Enable Debug Mode
+                    Enable Debug Mode
                 </Button>
             </Modal.Actions>
         </Modal>
-    </Container>;
+    </div>;
 }
-

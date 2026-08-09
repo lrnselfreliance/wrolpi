@@ -1,4 +1,4 @@
-import {mount} from 'cypress/react18'
+import {mount} from 'cypress/react'
 
-// Use React 18 for all mounts.
+// Cypress 14 dropped the separate cypress/react18 entry point; cypress/react mounts React 18 itself.
 Cypress.Commands.add('mount', mount);

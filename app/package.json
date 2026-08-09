@@ -11,7 +11,7 @@
     "@mantine/notifications": "^8.3.18",
     "@tabler/icons-react": "^3.46.0",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
+    "@testing-library/user-event": "^14.6.1",
     "cypress": "^15.20.0",
     "esptool-js": "^0.6.0",
     "lodash": "^4.18.1",

@@ -65,3 +65,38 @@ describe('PDF gating (source contract)', () => {
         expect(call).not.toContain('gatePdf');
     });
 });
+
+describe('preview gate remounting (source contract)', () => {
+    /*
+     * A revealed PDF must not carry its reveal over to the next document.
+     *
+     * The effect that rebuilds a preview sets the modal to null and then to the new content in
+     * a single pass, so React 18 batches both updates and reconciles rather than unmounting:
+     * the MediaGate fiber survives across documents.  Without a key, a reader who revealed PDF
+     * A and then opened PDF B would get B in full color with no prompt -- the flash the whole
+     * feature exists to prevent.
+     */
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, 'FilePreview.js'), 'utf8');
+
+    test('the gate is keyed by the document URL', () => {
+        const gate = source.match(/<MediaGate([^>]*)>/);
+
+        expect(gate).not.toBeNull();
+        expect(gate[1]).toMatch(/key=\{url\}/);
+    });
+
+    test('the rebuild really does batch, which is why the key is needed', () => {
+        /*
+         * The premise for the test above.  If the rebuild ever unmounted the modal between
+         * documents, the key would be redundant -- and if this assertion stopped holding, the
+         * reasoning in the comment above would be stale rather than merely belt-and-braces.
+         */
+        const effects = source.split('React.useEffect');
+        const rebuild = effects.filter(body =>
+            body.includes('setPreviewModal(null)') && body.includes('setModalContent('));
+
+        expect(rebuild.length).toBeGreaterThan(0);
+    });
+});

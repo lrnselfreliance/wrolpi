@@ -48,11 +48,19 @@ export function MediaGate({gated, kind = 'PDF', children}: MediaGateProps) {
     if (!gated) return <>{children}</>
 
     if (revealed) {
+        /*
+         * The control goes ABOVE the media, not after it.  A preview fills
+         * `calc(100dvh - 18.75rem)`, a height calibrated with no room for a trailing button
+         * row, so a control placed after it lands below the fold of a full-screen modal --
+         * leaving the reader who just lit up their eyes scrolling to find the way to undo it.
+         */
         return <>
-            {children}
             <div className='wrolpi-button-row'>
-                <Button role='cancel' onClick={() => setRevealed(false)}>Hide the {kind} again</Button>
+                <Button role='cancel' icon='eye slash' onClick={() => setRevealed(false)}>
+                    Hide the {kind} again
+                </Button>
             </div>
+            {children}
         </>
     }
 

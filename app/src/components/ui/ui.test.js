@@ -1737,20 +1737,31 @@ describe('MediaGate', () => {
         expect(screen.queryByText('the document')).not.toBeInTheDocument();
     });
 
-    it('re-gates when filtering is turned back on', () => {
-        // Revealing one document must not leave every later one unguarded: the reader who
-        // turns the filter off, looks at a PDF, then turns it back on has re-stated the
-        // preference that this respects.
-        const {rerender} = renderUI(<MediaGate gated={false}><p>the document</p></MediaGate>);
+    it('re-gates a revealed document when filtering is turned back on', async () => {
+        /*
+         * Revealing one document must not leave every later one unguarded: the reader who turns
+         * the filter off, looks at a PDF, then turns it back on has re-stated the preference
+         * this respects.
+         *
+         * The reveal in the middle is the whole test.  An earlier version went straight from
+         * `gated={false}` to `gated={true}` with `revealed` still false, which never reaches the
+         * reset effect at all -- it passed just as well with that effect deleted, so it was
+         * testing the `if (!gated)` early return and claiming to test the reset.
+         */
+        const gate = (gated) =>
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                <MediaGate gated={gated}><p>the document</p></MediaGate>
+            </MantineProvider>;
+
+        const {rerender} = render(gate(true));
+        await userEvent.click(screen.getByRole('button', {name: 'Show the full-color PDF'}));
         expect(screen.getByText('the document')).toBeInTheDocument();
 
-        rerender(
-            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
-                <MediaGate gated={true}><p>the document</p></MediaGate>
-            </MantineProvider>
-        );
+        rerender(gate(false));   // filter off: shown because nothing is being filtered
+        rerender(gate(true));    // filter back on: must be withheld again, not still revealed
 
         expect(screen.queryByText('the document')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Show the full-color PDF'})).toBeInTheDocument();
     });
 
     it('names what it is withholding', () => {

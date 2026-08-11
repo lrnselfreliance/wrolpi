@@ -271,8 +271,9 @@ export function ThemeSamplePage() {
                         <code>MediaGate</code>. A PDF is the one thing the filter cannot reach:
                         the browser draws it in its own viewer, outside the page, so it arrives
                         in full color however the frame is styled — and painting over it just
-                        hides the document. So night and amber withhold it and let you choose.
-                        Light and dark show it straight through, which is what you see here
+                        hides the document. So when a filter is on — night by default, amber if
+                        you ask — it withholds the PDF and lets you choose. Light and dark offer
+                        no filter and show it straight through, which is what you see here
                         unless a filter is on.
                     </p>
                 </div>

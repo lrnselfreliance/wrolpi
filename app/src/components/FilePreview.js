@@ -103,10 +103,18 @@ function getEpubViewerURL(previewFile) {
 function IframePreview({url, gatePdf}) {
     const {mediaFilterEnabled} = React.useContext(ThemeContext);
 
-    // `gatePdf` only for PDFs.  Text and the EPUB viewer are documents of our own, which the
-    // theme's media filter tints; Chrome's PDF viewer is composited out of process and arrives
-    // in full color however the iframe is styled.
-    return <MediaGate gated={!!gatePdf && !!mediaFilterEnabled}>
+    /*
+     * `gatePdf` only for PDFs.  Text and the EPUB viewer are documents of our own, which the
+     * theme's media filter tints; Chrome's PDF viewer is composited out of process and arrives
+     * in full color however the iframe is styled.
+     *
+     * Keyed by `url`, which is load-bearing rather than tidy.  The effect that rebuilds a
+     * preview sets the modal to null and then to the new content in one pass, so React 18
+     * batches both and reconciles instead of unmounting: the MediaGate fiber survives, and a
+     * reader who revealed one PDF would get the next one in full color with no prompt -- the
+     * exact flash this exists to prevent.  The key forces a remount per document.
+     */
+    return <MediaGate key={url} gated={!!gatePdf && !!mediaFilterEnabled}>
         <div className='preview-fit'>
             <iframe title='textModal' src={url}
                     style={{

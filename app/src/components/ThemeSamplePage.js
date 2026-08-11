@@ -15,6 +15,7 @@ import {
     Loading,
     IconStack,
     MediaFilterToggle,
+    MediaGate,
     Message,
     MultiSelect,
     NumberInput,
@@ -154,7 +155,7 @@ export const NavBarSample = ({color}) => {
 let toastCounter = 0;
 
 export function ThemeSamplePage() {
-    const {theme} = useContext(ThemeContext);
+    const {theme, mediaFilterEnabled} = useContext(ThemeContext);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [wideConfirmOpen, setWideConfirmOpen] = useState(false);
     const [comments, setComments] = useState(true);
@@ -233,7 +234,7 @@ export function ThemeSamplePage() {
                         </p>
                     </div>
                     <p style={{fontSize: '0.75rem', color: 'var(--muted)', margin: 0, maxWidth: 430}}>
-                        Images, video, PDFs, embedded pages, and the map canvas cannot read theme
+                        Images, video, embedded pages, and the map canvas cannot read theme
                         tokens, so a monochrome theme remaps them with an SVG color matrix instead.
                         Night filters to red unless you turn it off; amber tints to match only if
                         you ask. Light and dark offer no filter, so both images look the same here.
@@ -256,6 +257,23 @@ export function ThemeSamplePage() {
                         It is per theme — turning it off for night leaves amber's alone — and it
                         renders nothing for a theme that offers no filter, so light and dark
                         show only this caption.
+                    </p>
+                </div>
+                {/*
+                  The one thing the matrix cannot reach.  Gated on the live filter state, so in
+                  night it withholds and in light it simply shows — the same behavior /docs has.
+                */}
+                <div style={{marginTop: 18}}>
+                    <MediaGate gated={!!mediaFilterEnabled}>
+                        <img src='/icon.svg' alt='Stand-in for a PDF' width={104} height={104}/>
+                    </MediaGate>
+                    <p style={{fontSize: '0.75rem', color: 'var(--muted)', margin: '8px 0 0'}}>
+                        <code>MediaGate</code>. A PDF is the one thing the filter cannot reach:
+                        the browser draws it in its own viewer, outside the page, so it arrives
+                        in full color however the frame is styled — and painting over it just
+                        hides the document. So night and amber withhold it and let you choose.
+                        Light and dark show it straight through, which is what you see here
+                        unless a filter is on.
                     </p>
                 </div>
             </Panel>

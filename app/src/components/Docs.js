@@ -1,7 +1,7 @@
-import React, {useEffect, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useLocation, useNavigate, useParams, useSearchParams} from "react-router";
 import {deleteFileGroups, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
-import {Media} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import {
     APIButton,
     BackButton,
@@ -17,7 +17,18 @@ import {
     toLocaleString,
     useTitle
 } from "./Common";
-import {Button, ButtonGroup, Group, Header, Loading, Panel, Statistic, StatisticGroup, Tabs} from "./ui";
+import {
+    Button,
+    ButtonGroup,
+    Group,
+    Header,
+    Loading,
+    MediaGate,
+    Panel,
+    Statistic,
+    StatisticGroup,
+    Tabs
+} from "./ui";
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {DeepSearchHint, docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
@@ -157,6 +168,8 @@ function DocsPage() {
 function DocPage() {
     const {fileGroupId} = useParams();
     const navigate = useNavigate();
+    // Whether the theme is currently filtering media; a PDF is the one embed it cannot reach.
+    const {mediaFilterEnabled} = useContext(ThemeContext);
     const {docFile, doc, fetchDoc} = useDoc(parseInt(fileGroupId));
     const [searchParams] = useSearchParams();
     const [taggedFileGroups, setTaggedFileGroups] = useState(null);
@@ -344,11 +357,19 @@ function DocPage() {
         {isCbz && activePath && <CbzViewer path={activePath}/>}
 
         {canEmbed && embedUrl && !isCbz && <div style={{marginBottom: '1em'}}>
-            <iframe
-                src={embedUrl}
-                title={docFile.title || docFile.name}
-                style={{width: '100%', height: '80vh', border: '1px solid var(--border)'}}
-            />
+            {/*
+              * Only the PDF is gated.  The EPUB viewer is our own same-origin document, so the
+              * theme's media filter reaches it; Chrome's PDF viewer is composited out of
+              * process and cannot be tinted.  Keyed on the path so selecting a different file
+              * re-gates rather than inheriting the last one's reveal.
+              */}
+            <MediaGate key={activePath} gated={isPdf && mediaFilterEnabled}>
+                <iframe
+                    src={embedUrl}
+                    title={docFile.title || docFile.name}
+                    style={{width: '100%', height: '80vh', border: '1px solid var(--border)'}}
+                />
+            </MediaGate>
         </div>}
 
         <Panel>

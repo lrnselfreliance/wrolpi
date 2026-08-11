@@ -15,15 +15,22 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
-          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-6
       - run:
           name: Install Requirements
           command: |
+            # A restored venv points at the exact interpreter that built it.  CircleCI's
+            # cimg/python:3.13 gets patch bumps, and this cache key does not name the
+            # patch, so a venv cached before a bump has a dangling bin/python3 -- and
+            # `python3 -m venv` over it fails with `[Errno 2]` instead of repairing it,
+            # which broke every Python job.  Rebuild when it cannot run: that costs a
+            # reinstall only on the first run after a bump.
+            if ! ./venv/bin/python3 --version >/dev/null 2>&1; then rm -rf venv; fi
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-6
           paths:
             - "venv"
       # `-nauto` parallelizes across all available cores via pytest-xdist.
@@ -49,10 +56,17 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-6
       - run:
           name: Install Requirements
           command: |
+            # A restored venv points at the exact interpreter that built it.  CircleCI's
+            # cimg/python:3.13 gets patch bumps, and this cache key does not name the
+            # patch, so a venv cached before a bump has a dangling bin/python3 -- and
+            # `python3 -m venv` over it fails with `[Errno 2]` instead of repairing it,
+            # which broke every Python job.  Rebuild when it cannot run: that costs a
+            # reinstall only on the first run after a bump.
+            if ! ./venv/bin/python3 --version >/dev/null 2>&1; then rm -rf venv; fi
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
@@ -67,10 +81,17 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-6
       - run:
           name: Install Requirements
           command: |
+            # A restored venv points at the exact interpreter that built it.  CircleCI's
+            # cimg/python:3.13 gets patch bumps, and this cache key does not name the
+            # patch, so a venv cached before a bump has a dangling bin/python3 -- and
+            # `python3 -m venv` over it fails with `[Errno 2]` instead of repairing it,
+            # which broke every Python job.  Rebuild when it cannot run: that costs a
+            # reinstall only on the first run after a bump.
+            if ! ./venv/bin/python3 --version >/dev/null 2>&1; then rm -rf venv; fi
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
@@ -89,10 +110,17 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.13-{{ checksum "requirements.txt" }}-5
+          key: deps-3.13-{{ checksum "requirements.txt" }}-6
       - run:
           name: Install dependencies
           command: |
+            # A restored venv points at the exact interpreter that built it.  CircleCI's
+            # cimg/python:3.13 gets patch bumps, and this cache key does not name the
+            # patch, so a venv cached before a bump has a dangling bin/python3 -- and
+            # `python3 -m venv` over it fails with `[Errno 2]` instead of repairing it,
+            # which broke every Python job.  Rebuild when it cannot run: that costs a
+            # reinstall only on the first run after a bump.
+            if ! ./venv/bin/python3 --version >/dev/null 2>&1; then rm -rf venv; fi
             python -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt

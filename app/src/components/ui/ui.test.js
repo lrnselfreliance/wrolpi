@@ -309,6 +309,48 @@ describe('Button', () => {
 
         expect(screen.getByRole('button', {name: 'Delete channel'})).toBeInTheDocument();
     });
+
+    it('paints an icon button the color it was given', () => {
+        /*
+         * `IconButton` fell back to Mantine's `default` variant whenever no role was set, and
+         * that variant draws from `--mantine-color-default*` alone -- it never reads `color`.
+         * So a named color rendered byte-identical to no color at all, silently, at eleven
+         * call sites.  `Button` was never affected: it leaves `variant` undefined and Mantine
+         * fills in `filled`, which is why the same `color='violet'` worked there.
+         */
+        renderUI(<>
+            <IconButton icon='external' label='Open it' color='violet'/>
+            <IconButton icon='external' label='Plain'/>
+            <Button color='violet'>Labelled</Button>
+        </>);
+
+        const bg = (name, role = 'button') =>
+            screen.getByRole(role, {name}).getAttribute('style') || '';
+
+        // The color reaches the background, and matches what the labelled Button already did.
+        expect(bg('Open it')).toContain('var(--mantine-color-violet-filled)');
+        expect(bg('Labelled')).toContain('var(--mantine-color-violet-filled)');
+        // An icon button that names no color keeps the neutral default -- most of them.
+        expect(bg('Plain')).toContain('var(--mantine-color-default)');
+        expect(bg('Plain')).not.toContain('violet');
+    });
+
+    it('lets a role and an explicit variant still win over a color', () => {
+        // The color fallback is the LAST resort: it must not outrank either of the two ways a
+        // call site already had to state a variant, or `role='danger'` would lose its dashed
+        // night outline the moment someone also named a color.
+        renderUI(<>
+            <IconButton icon='trash' label='Roled' role='danger'/>
+            <IconButton icon='trash' label='Varianted' color='violet' variant='outline'/>
+        </>);
+
+        expect(screen.getByRole('button', {name: 'Roled'}))
+            .toHaveAttribute('data-variant', 'filled');
+        expect(screen.getByRole('button', {name: 'Roled'}))
+            .toHaveClass('wrolpi-button-danger');
+        expect(screen.getByRole('button', {name: 'Varianted'}))
+            .toHaveAttribute('data-variant', 'outline');
+    });
 });
 
 describe('Message', () => {

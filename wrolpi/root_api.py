@@ -1,4 +1,3 @@
-import asyncio
 import json
 import pathlib
 import re
@@ -774,12 +773,14 @@ async def post_search_suggestions(request: Request, body: schema.SearchSuggestio
     from modules.docs.lib import search_authors_by_name, search_subjects_by_name
 
     session = request.ctx.session
-    channels, domains, authors, subjects = await asyncio.gather(
-        search_channels_by_name(session, body.search_str, order_by_video_count=body.order_by_video_count),
-        search_domains_by_name(session, body.search_str),
-        search_authors_by_name(session, body.search_str),
-        search_subjects_by_name(session, body.search_str),
-    )
+    # Run sequentially: a SQLAlchemy Session is not safe for concurrent use, and
+    # asyncio.gather on the same session has caused intermittent empty results under
+    # pytest-xdist load even when the coroutines themselves do not await.
+    channels = await search_channels_by_name(
+        session, body.search_str, order_by_video_count=body.order_by_video_count)
+    domains = await search_domains_by_name(session, body.search_str)
+    authors = await search_authors_by_name(session, body.search_str)
+    subjects = await search_subjects_by_name(session, body.search_str)
 
     ret = dict(
         channels=channels,

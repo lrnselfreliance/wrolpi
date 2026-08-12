@@ -77,6 +77,10 @@ def archive_factory(test_session, archive_directory, make_files_structure, image
                 )
                 test_session.add(collection)
                 test_session.flush([collection])
+            # Archive.validate() -> apply_domain() clears collection_id when URL is missing.
+            # Give a URL derived from the domain so the link survives validation.
+            if not url:
+                url = f'https://{domain}/'
         else:
             collection = None
 

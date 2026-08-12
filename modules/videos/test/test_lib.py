@@ -337,30 +337,36 @@ def test_link_channel_and_downloads_by_source_id(test_session, channel_factory, 
 async def test_format_videos_destination(async_client, test_directory):
     """Videos destination is formatted according to the WROLPiConfig."""
     wrolpi_config = get_wrolpi_config()
+    # Restore after mutating the global singleton so later tests (especially those that
+    # call channel_factory without async_client re-init) do not inherit an invalid template.
+    original_videos_destination = wrolpi_config.videos_destination
 
-    # Channel directory without a tag.
-    wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_name)s'
-    assert format_videos_destination('Simple Channel', None, None) \
-           == test_directory / 'videos/Simple Channel'
+    try:
+        # Channel directory without a tag.
+        wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_name)s'
+        assert format_videos_destination('Simple Channel', None, None) \
+               == test_directory / 'videos/Simple Channel'
 
-    # One tag can be applied to a Channel.
-    assert format_videos_destination('Simple Channel', 'one', None) \
-           == test_directory / 'videos/one/Simple Channel'
+        # One tag can be applied to a Channel.
+        assert format_videos_destination('Simple Channel', 'one', None) \
+               == test_directory / 'videos/one/Simple Channel'
 
-    # Channel Domain is also supported.
-    wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_domain)s/%(channel_name)s'
-    assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
-           == test_directory / 'videos/one/example.com/Simple Channel'
+        # Channel Domain is also supported.
+        wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_domain)s/%(channel_name)s'
+        assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
+               == test_directory / 'videos/one/example.com/Simple Channel'
 
-    # Channel name is not required.
-    wrolpi_config.videos_destination = '%(channel_tag)s/%(channel_domain)s'
-    assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
-           == test_directory / 'one/example.com'
+        # Channel name is not required.
+        wrolpi_config.videos_destination = '%(channel_tag)s/%(channel_domain)s'
+        assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
+               == test_directory / 'one/example.com'
 
-    # Invalid `videos_destination` raises an error.
-    wrolpi_config.videos_destination = '%(channel_tag)s/%(channel)s'
-    with pytest.raises(FileNotFoundError):
-        assert format_videos_destination()
+        # Invalid `videos_destination` raises an error.
+        wrolpi_config.videos_destination = '%(channel_tag)s/%(channel)s'
+        with pytest.raises(FileNotFoundError):
+            assert format_videos_destination()
+    finally:
+        wrolpi_config.videos_destination = original_videos_destination
 
 
 @pytest.mark.asyncio

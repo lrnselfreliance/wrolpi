@@ -632,13 +632,16 @@ async def test_post_vin_number_decoder(async_client):
 
 @pytest.mark.asyncio
 async def test_search_suggestions(test_session, async_client, channel_factory, archive_factory, video_factory):
-    # WARNING results are cached, this test uses unique queries to avoid conflicts.
-    channel_factory(name='Foo')
-    channel_factory(name='Fool')
-    channel_factory(name='Bar')
-    archive_factory(domain='foo.com')
-    archive_factory(domain='bar.com')
-    video_factory(channel_id=2)  # Channel "Fool" will be first in results because it has the most videos.
+    # Use unique names so this test does not collide with other workers' fixtures or any
+    # leftover shared-process caches. Do not hardcode DB ids — they shift when other
+    # fixtures create Channels/Collections first.
+    channel_foo = channel_factory(name='SugFoo')
+    channel_fool = channel_factory(name='SugFool')
+    channel_bar = channel_factory(name='SugBar')
+    archive_factory(domain='sugfoo.com')
+    archive_factory(domain='sugbar.com')
+    # SugFool ranks first for "sugfoo" when ordering by video count.
+    video_factory(channel_id=channel_fool.id)
     test_session.commit()
 
     async def assert_results(body: dict, expected_channels=None, expected_domains=None):
@@ -646,35 +649,45 @@ async def test_search_suggestions(test_session, async_client, channel_factory, a
         expected_domains = expected_domains or []
 
         request, response = await async_client.post('/api/search_suggestions', json=body)
-        assert response.status_code == HTTPStatus.OK
-        if expected_channels:
-            for channel, expected_channel in zip_longest(response.json['channels'], expected_channels):
-                assert_dict_contains(channel, expected_channel)
-        assert response.json['domains'] == expected_domains
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert len(response.json['channels']) == len(expected_channels), response.json
+        for channel, expected_channel in zip_longest(response.json['channels'], expected_channels):
+            assert_dict_contains(channel, expected_channel)
+        assert len(response.json['domains']) == len(expected_domains), (
+            f"domains mismatch for {body!r}: got {response.json['domains']!r}, "
+            f"channels={response.json.get('channels')!r}"
+        )
+        for domain, expected_domain in zip_longest(response.json['domains'], expected_domains):
+            assert_dict_contains(domain, expected_domain)
 
     await assert_results(
-        dict(search_str='foo'),
+        dict(search_str='sugfoo'),
         [
-            {'directory': 'videos/Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []},
-            {'directory': 'videos/Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'downloads': []},
+            {'directory': 'videos/SugFool', 'id': channel_fool.id, 'name': 'SugFool',
+             'url': 'https://example.com/SugFool', 'downloads': []},
+            {'directory': 'videos/SugFoo', 'id': channel_foo.id, 'name': 'SugFoo',
+             'url': 'https://example.com/SugFoo', 'downloads': []},
         ],
-        [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 4}],
+        [{'directory': 'archive/sugfoo.com', 'domain': 'sugfoo.com'}],
     )
 
-    # Channel name "Fool" is matched because spaces are stripped in addition to only
+    # Channel name "SugFool" is matched because spaces are stripped.
     await assert_results(
-        dict(search_str='foo l'),
+        dict(search_str='sugfoo l'),
         [
-            {'directory': 'videos/Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []}],
+            {'directory': 'videos/SugFool', 'id': channel_fool.id, 'name': 'SugFool',
+             'url': 'https://example.com/SugFool', 'downloads': []},
+        ],
         [],
     )
 
     await assert_results(
-        dict(search_str='bar'),
+        dict(search_str='sugbar'),
         [
-            {'directory': 'videos/Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'downloads': []}
+            {'directory': 'videos/SugBar', 'id': channel_bar.id, 'name': 'SugBar',
+             'url': 'https://example.com/SugBar', 'downloads': []},
         ],
-        [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 5}],
+        [{'directory': 'archive/sugbar.com', 'domain': 'sugbar.com'}],
     )
 
 

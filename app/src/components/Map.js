@@ -51,21 +51,34 @@ async function getPreviewMapSource() {
     return {type: 'vector', url: `pmtiles://${MAP_OVERVIEW_URL}`};
 }
 
+/*
+ * The container is a piece of state set by a callback ref, not a `useRef` read in the effect.
+ *
+ * A modal body is not in the DOM on the render that opens the modal -- Mantine mounts it a
+ * commit later -- so an effect gated on `open` that reads `ref.current` finds null, returns,
+ * and never runs again, because nothing it depends on changes after that.  Both previews were
+ * silently blank for exactly this reason.  A callback ref re-runs the effect when the node
+ * arrives, whenever that is, so this does not depend on any modal's mounting schedule.
+ */
 function RegionPreviewModal({bbox, name, open, onClose}) {
-    const mapContainer = React.useRef(null);
+    const [mapContainer, setMapContainer] = useState(null);
 
     React.useEffect(() => {
-        if (!open || !mapContainer.current || !bbox) return;
+        if (!open || !mapContainer || !bbox) return;
 
         const [minLon, minLat, maxLon, maxLat] = bbox.split(',').map(Number);
         const centerLon = (minLon + maxLon) / 2;
         const centerLat = (minLat + maxLat) / 2;
 
         let map;
+        // The source lookup is async, so the modal can close before it resolves.  Without this
+        // the cleanup below runs while `map` is still undefined and the map built afterwards
+        // is never removed -- a leaked WebGL context on every quick open-and-close.
+        let cancelled = false;
         getPreviewMapSource().then(source => {
-            if (!mapContainer.current) return;
+            if (cancelled) return;
             map = new maplibregl.Map({
-                container: mapContainer.current,
+                container: mapContainer,
                 style: {
                     version: 8,
                     sources: {'basemap': source},
@@ -79,6 +92,9 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
             });
 
             map.on('load', () => {
+                // The flag again: cleanup can land between construction and `load`, and this
+                // body draws into a map `remove()` has already torn down.
+                if (cancelled) return;
                 map.addSource('bbox', {
                     type: 'geojson',
                     data: {
@@ -109,16 +125,19 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
                 });
                 map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {padding: 40});
             });
-        });
+        }).catch(e => console.error('Could not build the region preview map:', e));
 
-        return () => { if (map) map.remove(); };
-    }, [open, bbox]);
+        return () => {
+            cancelled = true;
+            if (map) map.remove();
+        };
+    }, [open, bbox, mapContainer]);
 
     return <Modal open={open} onClose={onClose} size='fullscreen' closeIcon title={name}>
         {/* No `.media` here: the bbox highlight is drawn as a map layer on the canvas itself
             (see the `bbox` source/layers above), so the automatic `canvas` element-type filter
             already covers it. There is no separate DOM overlay to wrap. */}
-        <div ref={mapContainer} style={{width: '100%', height: '50vh'}}/>
+        <div ref={setMapContainer} style={{width: '100%', height: '50vh'}}/>
     </Modal>;
 }
 
@@ -129,17 +148,19 @@ const REGION_COLORS = [
     '#a333c8', '#21ba45', '#db2828', '#fbbd08', '#a5673f', '#767676',
 ];
 
+// See RegionPreviewModal for why the container is state set by a callback ref.
 function AllRegionsPreviewModal({catalog, open, onClose}) {
-    const mapContainer = React.useRef(null);
+    const [mapContainer, setMapContainer] = useState(null);
 
     React.useEffect(() => {
-        if (!open || !mapContainer.current) return;
+        if (!open || !mapContainer) return;
 
         let map;
+        let cancelled = false;
         getPreviewMapSource().then(source => {
-            if (!mapContainer.current) return;
+            if (cancelled) return;
             map = new maplibregl.Map({
-                container: mapContainer.current,
+                container: mapContainer,
                 style: {
                     version: 8,
                     sources: {'basemap': source},
@@ -153,6 +174,8 @@ function AllRegionsPreviewModal({catalog, open, onClose}) {
             });
 
             map.on('load', () => {
+                // See RegionPreviewModal: cleanup can land between construction and `load`.
+                if (cancelled) return;
                 const regions = catalog.filter(r => r.bbox);
                 regions.forEach((region, i) => {
                     const [minLon, minLat, maxLon, maxLat] = region.bbox.split(',').map(Number);
@@ -197,14 +220,17 @@ function AllRegionsPreviewModal({catalog, open, onClose}) {
                     });
                 });
             });
-        });
+        }).catch(e => console.error('Could not build the all-regions preview map:', e));
 
-        return () => { if (map) map.remove(); };
-    }, [open, catalog]);
+        return () => {
+            cancelled = true;
+            if (map) map.remove();
+        };
+    }, [open, catalog, mapContainer]);
 
     return <Modal open={open} onClose={onClose} size='fullscreen' closeIcon title='All Map Regions'>
         {/* No `.media` here either — same reasoning as RegionPreviewModal. */}
-        <div ref={mapContainer} style={{width: '100%', height: '75vh'}}/>
+        <div ref={setMapContainer} style={{width: '100%', height: '75vh'}}/>
     </Modal>;
 }
 

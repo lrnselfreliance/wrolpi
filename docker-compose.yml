@@ -121,7 +121,10 @@ services:
       - './icon.png:/etc/caddy/icon.png'
       - './test:/opt/media'
       - './modules/map/static:/opt/wrolpi/modules/map/static:ro'
-      - './blobs:/opt/wrolpi-blobs:ro'
+      # No mount over /opt/wrolpi-blobs.  A bind mount REPLACES the image's directory rather
+      # than merging with it, and the host './blobs' this used to mount is git-ignored -- so
+      # it was empty on every clone and hid the blobs the image provides.  The web image bakes
+      # map-overview.pmtiles in; see docker/web/Dockerfile.
     environment:
       - MEDIA_DIRECTORY=/opt/media
       # Set EXTRA_SANS to include the host's LAN IP in the TLS certificate.

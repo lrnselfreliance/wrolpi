@@ -20,6 +20,7 @@ export * from './DataTable';
 export * from './Navigation';
 export * from './SearchBox';
 export * from './Inputs';
+export * from './MediaGate';
 export * from './Overlays';
 export * from './ThemePicker';
 export * from './toast';

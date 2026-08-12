@@ -6,13 +6,14 @@ import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
-import {Button, ButtonGroup, Header, Icon, IconButton, Menu, Modal, toast} from "./ui";
+import {Button, ButtonGroup, Header, Icon, IconButton, MediaGate, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {pathDirectory} from "./FileBrowser";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {useLocation} from "react-router";
+import {ThemeContext} from "../contexts/contexts";
 
 // Routes where file views should not be tracked
 const EXCLUDED_TRACKING_ROUTES = [
@@ -93,9 +94,27 @@ function getEpubViewerURL(previewFile) {
     return `/epub/epub.html?url=/media/${encodeMediaPath(url)}`
 }
 
-function getIframePreviewModal(previewFile, url) {
-    url = url || getMediaPathURL(previewFile);
-    return <Modal.Content>
+/*
+ * The iframe body of a preview.
+ *
+ * A component rather than part of `getIframePreviewModal` because it reads the theme: the
+ * modal builders are plain functions called from an event handler, where hooks cannot run.
+ */
+function IframePreview({url, gatePdf}) {
+    const {mediaFilterEnabled} = React.useContext(ThemeContext);
+
+    /*
+     * `gatePdf` only for PDFs.  Text and the EPUB viewer are documents of our own, which the
+     * theme's media filter tints; Chrome's PDF viewer is composited out of process and arrives
+     * in full color however the iframe is styled.
+     *
+     * Keyed by `url`, which is load-bearing rather than tidy.  The effect that rebuilds a
+     * preview sets the modal to null and then to the new content in one pass, so React 18
+     * batches both and reconciles instead of unmounting: the MediaGate fiber survives, and a
+     * reader who revealed one PDF would get the next one in full color with no prompt -- the
+     * exact flash this exists to prevent.  The key forces a remount per document.
+     */
+    return <MediaGate key={url} gated={!!gatePdf && !!mediaFilterEnabled}>
         <div className='preview-fit'>
             <iframe title='textModal' src={url}
                     style={{
@@ -104,6 +123,13 @@ function getIframePreviewModal(previewFile, url) {
                         backgroundColor: '#ffffff',
                     }}/>
         </div>
+    </MediaGate>
+}
+
+function getIframePreviewModal(previewFile, url, {gatePdf = false} = {}) {
+    url = url || getMediaPathURL(previewFile);
+    return <Modal.Content>
+        <IframePreview url={url} gatePdf={gatePdf}/>
     </Modal.Content>
 }
 
@@ -589,7 +615,7 @@ export function FilePreviewProvider({children}) {
                 const viewerURL = getEpubViewerURL(previewFile);
                 setModalContent(getIframePreviewModal(previewFile, viewerURL), viewerURL, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/pdf')) {
-                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path, taggable);
+                setModalContent(getIframePreviewModal(previewFile, null, {gatePdf: true}), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImagePreviewModal(previewFile), url, null, path, taggable);
             } else if (mimetype.startsWith('model/stl')) {

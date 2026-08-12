@@ -20,6 +20,7 @@ import {
     IconStack,
     Loader,
     Loading,
+    MediaGate,
     Placeholder,
     Pagination,
     SearchBox,
@@ -1692,5 +1693,80 @@ describe('modal sizes', () => {
         // names a size, so widening the scan is doing something rather than matching nothing.
         expect(confirms).toBeGreaterThan(0);
         expect(offenders).toEqual([]);
+    });
+});
+
+describe('MediaGate', () => {
+    /*
+     * Withholding media the theme's filter cannot reach.
+     *
+     * The case that matters is a PDF in night mode: Chrome renders it in an out-of-process
+     * viewer that the parent's filter never touches, so it arrives in full color -- measured at
+     * 55% non-red pixels on a device while the chrome around it was correctly red.
+     */
+    it('renders its children untouched when nothing is being filtered', () => {
+        renderUI(<MediaGate gated={false}><p>the document</p></MediaGate>);
+
+        expect(screen.getByText('the document')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /Show the full-color/})).not.toBeInTheDocument();
+    });
+
+    it('withholds the media, and says why, when the theme is filtering', () => {
+        renderUI(<MediaGate gated={true}><p>the document</p></MediaGate>);
+
+        // Not merely hidden: absent.  A CSS-hidden iframe still loads and paints the viewer,
+        // which is the bright flash this exists to prevent.
+        expect(screen.queryByText('the document')).not.toBeInTheDocument();
+        expect(screen.getByRole('status')).toHaveTextContent(/cannot be tinted/);
+    });
+
+    it('shows the media when the reader asks for it', async () => {
+        renderUI(<MediaGate gated={true}><p>the document</p></MediaGate>);
+
+        await userEvent.click(screen.getByRole('button', {name: 'Show the full-color PDF'}));
+
+        expect(screen.getByText('the document')).toBeInTheDocument();
+    });
+
+    it('lets the reader put it away again', async () => {
+        renderUI(<MediaGate gated={true}><p>the document</p></MediaGate>);
+        await userEvent.click(screen.getByRole('button', {name: 'Show the full-color PDF'}));
+
+        await userEvent.click(screen.getByRole('button', {name: 'Hide the PDF again'}));
+
+        expect(screen.queryByText('the document')).not.toBeInTheDocument();
+    });
+
+    it('re-gates a revealed document when filtering is turned back on', async () => {
+        /*
+         * Revealing one document must not leave every later one unguarded: the reader who turns
+         * the filter off, looks at a PDF, then turns it back on has re-stated the preference
+         * this respects.
+         *
+         * The reveal in the middle is the whole test.  An earlier version went straight from
+         * `gated={false}` to `gated={true}` with `revealed` still false, which never reaches the
+         * reset effect at all -- it passed just as well with that effect deleted, so it was
+         * testing the `if (!gated)` early return and claiming to test the reset.
+         */
+        const gate = (gated) =>
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                <MediaGate gated={gated}><p>the document</p></MediaGate>
+            </MantineProvider>;
+
+        const {rerender} = render(gate(true));
+        await userEvent.click(screen.getByRole('button', {name: 'Show the full-color PDF'}));
+        expect(screen.getByText('the document')).toBeInTheDocument();
+
+        rerender(gate(false));   // filter off: shown because nothing is being filtered
+        rerender(gate(true));    // filter back on: must be withheld again, not still revealed
+
+        expect(screen.queryByText('the document')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Show the full-color PDF'})).toBeInTheDocument();
+    });
+
+    it('names what it is withholding', () => {
+        renderUI(<MediaGate gated={true} kind='document'><p>x</p></MediaGate>);
+
+        expect(screen.getByRole('button', {name: 'Show the full-color document'})).toBeInTheDocument();
     });
 });

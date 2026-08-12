@@ -162,7 +162,18 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>((
         aria-label={label}
         title={label}
         color={props.color ?? fromRole?.color}
-        variant={props.variant ?? fromRole?.variant ?? 'default'}
+        /*
+         * `default` only when nothing was asked for.
+         *
+         * Mantine's `default` variant draws itself entirely from `--mantine-color-default*`
+         * and never reads `color`, so `<IconButton color='violet'/>` rendered byte-identical
+         * to one with no props at all -- eleven call sites were passing a color that could
+         * not reach a pixel, two of them the color a user had picked.  `Button` has no such
+         * fallback, which is why the same `color='violet'` works there: Mantine fills in
+         * `filled` on its own.  Match it, and keep the neutral default for the icon buttons
+         * that name no color, which is most of them.
+         */
+        variant={props.variant ?? fromRole?.variant ?? (props.color ? 'filled' : 'default')}
         className={[fromRole?.className, className].filter(Boolean).join(' ') || undefined}
         {...props}
         size={resolveSize(size)}

@@ -357,6 +357,21 @@ export function ThemeSamplePage() {
                     </Row>
                 </div>
                 <div style={{marginTop: 12}}>
+                    {/* An icon button takes a color the same way a labelled one does. It did
+                        not used to: with no role it fell back to Mantine's `default` variant,
+                        which reads only the default tokens, so a named color rendered exactly
+                        like no color at all. The pair below is what says it still works --
+                        each row should read as one color, in every theme. */}
+                    <Row>
+                        {['violet', 'blue', 'yellow'].map(color => <div key={color}
+                            style={{display: 'flex', gap: '0.4em', alignItems: 'center'}}>
+                            <Button color={color}>{color}</Button>
+                            <IconButton color={color} icon='external' label={`Open (${color})`}/>
+                        </div>)}
+                        <IconButton icon='external' label='Open (no color)'/>
+                    </Row>
+                </div>
+                <div style={{marginTop: 12}}>
                     <Row>
                         {['xs', 'sm', 'md', 'lg', 'xl'].map(size => <div key={size}
                             style={{display: 'flex', gap: '0.4em', alignItems: 'flex-start'}}>

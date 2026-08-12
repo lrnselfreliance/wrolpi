@@ -584,6 +584,16 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
         }
     };
 
+    /*
+     * Widths for everything except the URL, which takes what is left and truncates.  See
+     * `.table-ellipsis` in App.css: under fixed layout a column with no width stated gets an
+     * equal share, which would give a checkbox as much room as a URL.
+     *
+     * The numbers are what the content needs, measured: a checkbox is 2.5em; "Completed At" is
+     * 9.5em on one line with its sort arrow, which is narrow enough to keep on a phone rather
+     * than wrapping it there; and Control is 9.5em, which holds the widest button group a row
+     * can have (a failed download shows delete, edit and retry).
+     */
     const tableHeaders = [
         {
             key: 'select',
@@ -592,11 +602,13 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                 indeterminate={selectedIds.length > 0 && selectedIds.length < (downloads?.length || 0)}
                 onChange={toggleSelectAll}
             />,
-            sortBy: null
+            sortBy: null,
+            width: '2.5em',
         },
         {key: 'url', text: 'URL', sortBy: i => i.url.toLowerCase()},
-        {key: 'completed_at', text: 'Completed At', sortBy: i => i.last_successful_download || ''},
-        {key: 'control', text: 'Control', sortBy: null},
+        {key: 'completed_at', text: 'Completed At', sortBy: i => i.last_successful_download || '',
+            width: '9.5em'},
+        {key: 'control', text: 'Control', sortBy: null, width: '9.5em'},
     ];
 
     const rowFunc = (download) => (
@@ -654,12 +666,22 @@ export function RecurringDownloadsTable({downloads, fetchDownloads, onDelete}) {
     if (downloads && downloads.length >= 1) {
         return <Table className='table-ellipsis'>
             <Table.Header>
+                {/* Widths in em, not percentages: what each of these columns has to hold is a
+                    fixed amount of text or a fixed number of buttons, and a percentage of a
+                    phone's width is not that.  At 50% the URL column was 385px on a 540px
+                    screen and pushed Next and Control off the edge.  Only the URL is elastic
+                    now -- it takes the remainder and truncates, which is its job.
+
+                    "Download Frequency" is the one label too long to keep on one line on a
+                    phone, so its width comes from `.col-frequency` in App.css, which widens at
+                    the tablet breakpoint. The rest are sized to hold their label unwrapped at
+                    any width. */}
                 <Table.Row>
-                    <Table.HeaderCell style={{width: '50%'}}>URL</Table.HeaderCell>
-                    <Table.HeaderCell style={{width: '12.5%'}}>Download Frequency</Table.HeaderCell>
-                    <Table.HeaderCell style={{width: '12.5%'}}>Completed At</Table.HeaderCell>
-                    <Table.HeaderCell style={{width: '6.25%'}}>Next</Table.HeaderCell>
-                    <Table.HeaderCell style={{width: '18.75%', textAlign: 'right'}}>Control</Table.HeaderCell>
+                    <Table.HeaderCell>URL</Table.HeaderCell>
+                    <Table.HeaderCell className='col-frequency'>Download Frequency</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '8.5em'}}>Completed At</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '4em'}}>Next</Table.HeaderCell>
+                    <Table.HeaderCell style={{width: '7.5em', textAlign: 'right'}}>Control</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
             <Table.Body>

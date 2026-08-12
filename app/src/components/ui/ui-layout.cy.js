@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    ActionInput, Button, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
+    ActionInput, Button, ButtonGroup, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
     Group, Message, Pagination, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
@@ -1444,6 +1444,159 @@ describe('table rules', () => {
                 expect(parseFloat(getComputedStyle($cell[0]).borderRightWidth),
                     'no rule between columns').to.equal(0);
             });
+        });
+    });
+});
+
+describe('a truncating table fits the width it is given', () => {
+    /*
+     * The downloads tables ran off the side of a phone: 676px and 727px of table in a 540px
+     * window, so Completed At and Control were off the right edge and their buttons could not
+     * be reached without scrolling sideways.  `.table-ellipsis` was trying to truncate under
+     * `table-layout: auto`, where a table is as wide as its columns want to be, and the
+     * `min-width: 25em` floor on the truncating column made overflowing certain.
+     *
+     * None of this is visible in jsdom -- it is all resolved widths, and the fix turns on
+     * whether our `table-layout` beats the one Mantine sets on its own class. It did not, at
+     * first: every other property in the rule applied, so the table looked fixed and stayed
+     * auto.  These measure the rendered table instead.
+     */
+    const wideTable = <table className='table-ellipsis'>
+        <thead>
+        <tr>
+            <th style={{width: '2.5em'}}><input type='checkbox' readOnly checked={false}/></th>
+            <th>URL</th>
+            <th style={{width: '8em'}}>Completed At</th>
+            <th style={{width: '9.5em'}}>Control</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td><input type='checkbox' readOnly checked={false}/></td>
+            <td className='column-ellipsis'>
+                https://example.com/a/very/long/path/that/no/phone/could/ever/show/in/full
+            </td>
+            <td>3 days</td>
+            <td>
+                <ButtonGroup>
+                    <IconButton icon='trash' label='Delete' role='danger'/>
+                    <IconButton icon='edit' label='Edit'/>
+                    <IconButton icon='refresh' label='Retry' role='retry'/>
+                </ButtonGroup>
+            </td>
+        </tr>
+        </tbody>
+    </table>;
+
+    const mountNarrow = () => cy.viewport(400, 700).then(() => cy.mountUI(wideTable));
+
+    it('does not grow past its container on a phone', () => {
+        mountNarrow();
+
+        cy.get('table.table-ellipsis').should(($t) => {
+            const table = $t[0];
+            // The rule that does the work.  Asserted directly because it is the one that lost
+            // to Mantine's own class, silently, while the rest of the rule applied.
+            expect(getComputedStyle(table).tableLayout, 'fixed layout').to.equal('fixed');
+            expect(table.getBoundingClientRect().width, 'table fits its container')
+                .to.be.at.most(table.parentElement.clientWidth + 1);
+        });
+    });
+
+    it('spends the leftover width on the column that truncates', () => {
+        mountNarrow();
+
+        cy.get('td.column-ellipsis').should(($cell) => {
+            const cell = $cell[0];
+            // It gives up what it cannot show...
+            expect(cell.scrollWidth, 'the long URL is truncated').to.be.greaterThan(cell.clientWidth);
+            // ...and it is still the widest column, which is the point of truncating it rather
+            // than any of the others.  A 25em floor made it the widest by overflowing instead.
+            const others = [...cell.closest('tr').children].filter(td => td !== cell);
+            others.forEach(td => {
+                expect(cell.getBoundingClientRect().width, 'the URL keeps the remainder')
+                    .to.be.greaterThan(td.getBoundingClientRect().width);
+            });
+        });
+    });
+
+    it('wraps a header rather than printing it over the next column', () => {
+        // The fixture gives "Completed At" 8em deliberately -- less than the 9.33em it needs
+        // on one line -- because wrapping is the behavior under test. `.wrolpi-th-sort` is
+        // nowrap, so before this the label ran on into Control and the two printed on top of
+        // each other. The real tables are sized to hold their labels; this is the fallback.
+        mountNarrow();
+
+        cy.get('table.table-ellipsis thead th').should(($ths) => {
+            [...$ths].forEach(th => {
+                const inner = th.firstElementChild;
+                if (!inner) return;
+                expect(inner.getBoundingClientRect().right,
+                    `"${th.textContent.trim()}" stays inside its column`)
+                    .to.be.at.most(th.getBoundingClientRect().right + 1);
+            });
+        });
+    });
+
+    it('gives a long header its own line back on a desktop', () => {
+        /*
+         * A wrapped label is the fallback, not the layout.  "Download Frequency" is 11.7em on
+         * one line, which a phone cannot spare beside four other columns, so `.col-frequency`
+         * carries a narrow width below the tablet breakpoint and a wide one above it.  Without
+         * the media query the label wrapped at every width, including a 1400px desktop with
+         * hundreds of pixels going spare.
+         */
+        const frequencyHeader = <table className='table-ellipsis'>
+            <thead>
+            <tr>
+                <th>URL</th>
+                <th className='col-frequency'>Download Frequency</th>
+            </tr>
+            </thead>
+            <tbody><tr><td className='column-ellipsis'>https://example.com/x</td><td>30 Days</td></tr></tbody>
+        </table>;
+
+        const widthOfFrequency = () => cy.get('th.col-frequency')
+            .then(($th) => $th[0].getBoundingClientRect().width);
+
+        cy.viewport(400, 700);
+        cy.mountUI(frequencyHeader);
+        widthOfFrequency().then((narrow) => {
+            cy.viewport(1200, 700);
+            cy.mountUI(frequencyHeader);
+            widthOfFrequency().then((wide) => {
+                expect(wide, 'the column widens past the tablet breakpoint')
+                    .to.be.greaterThan(narrow);
+                // Wide enough for the whole label on one line, which is the point of widening.
+                cy.get('th.col-frequency').should(($th) => {
+                    const th = $th[0];
+                    const cs = getComputedStyle(th);
+                    const contentW = th.getBoundingClientRect().width
+                        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+                    const probe = document.createElement('span');
+                    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+                    probe.textContent = th.textContent.trim();
+                    th.appendChild(probe);
+                    const need = probe.getBoundingClientRect().width;
+                    probe.remove();
+                    expect(need, '"Download Frequency" fits on one line').to.be.at.most(contentW);
+                });
+            });
+        });
+    });
+
+    it('keeps grouped buttons at full size in a narrow column', () => {
+        // ButtonGroup is a nowrap flex row whose children shrink: in a column too narrow the
+        // Stop button came out 23px against its neighbour's 40px -- clipped, and too small to
+        // hit.  The column is sized for three buttons, so none of them should give.
+        mountNarrow();
+
+        cy.get('td .mantine-ButtonGroup-group button').should(($btns) => {
+            expect($btns.length, 'three buttons, the widest group a row can hold').to.equal(3);
+            const widths = [...$btns].map(b => b.getBoundingClientRect().width);
+            widths.forEach(w => expect(w, 'button is not squeezed').to.be.at.least(30));
+            expect(Math.max(...widths) - Math.min(...widths), 'all three are the same width')
+                .to.be.at.most(1);
         });
     });
 });

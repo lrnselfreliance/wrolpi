@@ -44,18 +44,24 @@ export class SortableTable extends React.Component {
         const data = this.props['data'] ? this.sortData(this.props['data']) : null;
 
         const tableHeader = (spec) => {
-            const {key, text, sortBy} = spec;
+            // `width` is how a column that must fit something exact -- a checkbox, a group of
+            // buttons -- states its size.  Under `table-layout: fixed` (see `.table-ellipsis`)
+            // the header cell is where a column's width is declared; columns that name none
+            // divide what is left, which is what the truncating column wants.
+            const {key, text, sortBy, width} = spec;
+            const style = width ? {width} : undefined;
             if (sortBy) {
                 const active = sortColumn === key;
                 return <Table.HeaderCell
                     key={key}
+                    style={style}
                     sorted={active ? direction : null}
                     onSort={() => this.changeSort(key)}
                 >
                     {text}
                 </Table.HeaderCell>;
             } else {
-                return <Table.HeaderCell key={key}>{text}</Table.HeaderCell>
+                return <Table.HeaderCell key={key} style={style}>{text}</Table.HeaderCell>
             }
         }
 

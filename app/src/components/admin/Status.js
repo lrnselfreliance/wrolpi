@@ -348,11 +348,15 @@ export function StatusPage() {
             <SizedHeader>Top Processes</SizedHeader>
             <Table className='table-ellipsis'>
                 <Table.Header>
+                    {/* The three readings are short and fixed; Command takes the rest and
+                        truncates. This table already asked for `.table-ellipsis` and marked
+                        its Command cell, so it overflowed a phone the same way the downloads
+                        tables did -- a long command line has no natural width. */}
                     <Table.Row>
                         <Table.HeaderCell>Command</Table.HeaderCell>
-                        <Table.HeaderCell>CPU %</Table.HeaderCell>
-                        <Table.HeaderCell>Mem %</Table.HeaderCell>
-                        <Table.HeaderCell>PID</Table.HeaderCell>
+                        <Table.HeaderCell style={{width: '4.5em'}}>CPU %</Table.HeaderCell>
+                        <Table.HeaderCell style={{width: '4.5em'}}>Mem %</Table.HeaderCell>
+                        <Table.HeaderCell style={{width: '4.5em'}}>PID</Table.HeaderCell>
                     </Table.Row>
                 </Table.Header>
                 <Table.Body>

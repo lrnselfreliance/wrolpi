@@ -336,12 +336,94 @@ textarea.otp {
     cursor: pointer;
 }
 
+/*
+ * A table that truncates to the width it has, rather than growing past it.
+ *
+ * `table-layout: fixed` is what makes the truncation possible at all.  Under the default
+ * `auto` layout a table is as wide as its columns want to be and the container simply
+ * overflows -- on a 540px phone the downloads tables came out 676px and 727px, so Completed
+ * At and Control sat off the right edge and the buttons could not be reached without
+ * scrolling sideways.  Fixed layout inverts that: the columns get the table's width divided
+ * between them, and the one marked `column-ellipsis` gives up what it cannot show.
+ *
+ * The old rule tried to do this with `max-width: 0` and `min-width: 25em`.  The max-width was
+ * the usual trick for forcing an ellipsis under `auto` layout; the min-width was there so the
+ * text column stayed readable -- but 25em is 385px, and a floor wider than the screen is what
+ * made the overflow certain.  Under fixed layout neither is needed: the column width comes
+ * from the header, and every other column is sized to its content so the ellipsis column
+ * keeps the remainder.
+ *
+ * Columns that must fit something exact -- a checkbox, a group of buttons -- state a width on
+ * their header cell.  Any column that does not is sized by what is left over.
+ */
+/*
+ * `table.` rather than the class alone: Mantine sets `table-layout` on its own
+ * `.mantine-Table-table`, which is the same specificity and comes later in the cascade, so
+ * the bare class silently lost and the table stayed `auto` -- with every other property here
+ * applying, which made it look like the rule had worked.
+ */
+table.table-ellipsis {
+    width: 100%;
+    table-layout: fixed;
+}
+
 .table-ellipsis td.column-ellipsis {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 0; /* Ensures the content doesn't exceed the cell's width */
-    min-width: 25em; /* About iPhone SE width */
+}
+
+/*
+ * The one column width that has to change with the screen.
+ *
+ * Most headers here are sized to hold their own label on one line at any width -- a wrapped
+ * label is a fallback, not a layout.  "Download Frequency" is the exception: 11.7em on one
+ * line, which a phone cannot spare when four other columns need room, and it is one of five
+ * columns rather than one of four.  So it wraps below the tablet breakpoint and gets its line
+ * back above it, where the width costs nothing.
+ *
+ * 700px is the app's `tablet` breakpoint (see `AppMedia` in contexts.js).
+ */
+.table-ellipsis th.col-frequency {
+    width: 7em;
+}
+
+@media (min-width: 700px) {
+    .table-ellipsis th.col-frequency {
+        width: 12em;
+    }
+}
+
+/*
+ * A header wraps instead of running into the next column.
+ *
+ * `.wrolpi-th-sort` is `white-space: nowrap` so a sortable label never splits from its arrow.
+ * That is right under `auto` layout, where the column widens to fit; under fixed layout the
+ * column does not widen, so "Completed At" overran its cell and printed on top of "Control".
+ * Wrapping to two lines is the only thing a fixed column can do with a label too long for it.
+ *
+ * `min-width: 0` as well as the wrap: the button is a flex container, and its text is an
+ * anonymous flex item whose automatic minimum is its longest word.  Without this the label
+ * still refuses to go below "Completed" and still overruns.  A column narrower than its
+ * longest word is a width to fix at the call site, not something CSS can hide.
+ */
+.table-ellipsis th .wrolpi-th-sort {
+    display: flex;
+    white-space: normal;
+    min-width: 0;
+    text-align: left;
+}
+
+/*
+ * Grouped buttons keep their size in a fixed column.
+ *
+ * `ButtonGroup` is a nowrap flex row whose children may shrink, and in a column too narrow
+ * for them they did: the Stop button on a pending download was squeezed to 23px against its
+ * neighbour's 40px, a target too small to hit and visibly clipped.  The column is sized for
+ * the widest group it has to hold (three buttons), so the buttons themselves should not give.
+ */
+.table-ellipsis td .mantine-ButtonGroup-group > * {
+    flex-shrink: 0;
 }
 
 .card-title-ellipsis {

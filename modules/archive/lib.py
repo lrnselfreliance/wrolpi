@@ -1493,6 +1493,7 @@ async def search_domains_by_name(session: Session, name: str, limit: int = 5) ->
     Returns:
         List of domain dicts matching the search (in old Domain format for backward compatibility)
     """
+    name = name or ''
     collections = session.query(Collection) \
         .filter(Collection.kind == 'domain') \
         .filter(Collection.name.ilike(f'%{name}%')) \

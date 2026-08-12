@@ -4,7 +4,8 @@ import {BrowserRouter} from 'react-router';
 import {MantineProvider} from '@mantine/core';
 import {ThemeContext, SettingsContext} from '../../contexts/contexts';
 import {cssVariablesResolver, mantineTheme} from '../../themes/mantine';
-import {ControllerPage} from './ControllerPage';
+import {ControllerPage, DesktopServiceRow, MobileServiceRow} from './ControllerPage';
+import {Table} from '../ui';
 
 // Mock the controller API
 jest.mock('../../api/controller', () => ({
@@ -350,5 +351,46 @@ describe('ControllerPage in Docker mode', () => {
         await waitFor(() => {
             expect(screen.getByText('Disk management is not available in Docker environments.')).toBeInTheDocument();
         });
+    });
+});
+
+describe('service action buttons', () => {
+    // `Media` renders neither branch in jsdom -- no media query matches -- so `ServicesSection`
+    // produces no rows there.  Mount the rows themselves instead.
+    const renderRow = (RowComponent, extraProps = {}) => render(
+        <BrowserRouter>
+            <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                <Table>
+                    <Table.Body>
+                        <RowComponent
+                            service={{
+                                name: 'wrolpi-api',
+                                port: 8081,
+                                status: 'running',
+                                viewable: true,
+                                view_path: '/docs',
+                                enabled: true,
+                            }}
+                            onAction={jest.fn()}
+                            {...extraProps}
+                        />
+                    </Table.Body>
+                </Table>
+            </MantineProvider>
+        </BrowserRouter>
+    );
+
+    test.each([
+        ['mobile', MobileServiceRow, {}],
+        ['desktop', DesktopServiceRow, {dockerized: false}],
+    ])('the %s row keeps Open on the same line as the other actions', (_name, RowComponent, extraProps) => {
+        renderRow(RowComponent, extraProps);
+        // Open used to sit outside `.wrolpi-button-row`, after the logs modal, which put it on a
+        // line of its own below the rest.  It belongs in the flex row with them.
+        const row = screen.getByLabelText('Open wrolpi-api').closest('.wrolpi-button-row');
+        expect(row).not.toBeNull();
+        expect(within(row).getByLabelText('Stop wrolpi-api')).toBeInTheDocument();
+        expect(within(row).getByLabelText('Restart wrolpi-api')).toBeInTheDocument();
+        expect(within(row).getByLabelText('View logs for wrolpi-api')).toBeInTheDocument();
     });
 });

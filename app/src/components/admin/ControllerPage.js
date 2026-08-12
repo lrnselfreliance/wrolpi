@@ -270,7 +270,9 @@ function ServiceLogsModal({
 }
 
 // Mobile service row - simplified layout
-function MobileServiceRow({service, onAction}) {
+// Exported so tests can mount a row directly: `Media` renders neither branch in jsdom,
+// where no media query matches, so `ServicesSection` produces no rows at all there.
+export function MobileServiceRow({service, onAction}) {
     const {
         loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
         handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
@@ -320,6 +322,17 @@ function MobileServiceRow({service, onAction}) {
                     role='primary'
                     onClick={handleViewLogs}
                 />
+                {viewUrl && (
+                    <IconButton
+                        icon='external'
+                        label={`Open ${service.name}`}
+                        color='violet'
+                        component='a'
+                        href={viewUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                    />
+                )}
                 </div>
                 <ServiceLogsModal
                     service={service}
@@ -334,24 +347,13 @@ function MobileServiceRow({service, onAction}) {
                     handleDownloadLogs={handleDownloadLogs}
                     fetchLogs={fetchLogs}
                 />
-                {viewUrl && (
-                    <IconButton
-                        icon='external'
-                        label={`Open ${service.name}`}
-                        color='violet'
-                        component='a'
-                        href={viewUrl}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                    />
-                )}
             </Table.Cell>
         </Table.Row>
     );
 }
 
 // Desktop service row - full layout with all columns
-function DesktopServiceRow({service, onAction, dockerized}) {
+export function DesktopServiceRow({service, onAction, dockerized}) {
     const {
         loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
         handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
@@ -402,6 +404,17 @@ function DesktopServiceRow({service, onAction, dockerized}) {
                     role='primary'
                     onClick={handleViewLogs}
                 />
+                {viewUrl && (
+                    <IconButton
+                        icon='external'
+                        label={`Open ${service.name}`}
+                        color='violet'
+                        component='a'
+                        href={viewUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                    />
+                )}
                 </div>
                 <ServiceLogsModal
                     service={service}
@@ -416,17 +429,6 @@ function DesktopServiceRow({service, onAction, dockerized}) {
                     handleDownloadLogs={handleDownloadLogs}
                     fetchLogs={fetchLogs}
                 />
-                {viewUrl && (
-                    <IconButton
-                        icon='external'
-                        label={`Open ${service.name}`}
-                        color='violet'
-                        component='a'
-                        href={viewUrl}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                    />
-                )}
             </Table.Cell>
             {!dockerized && (
                 <Table.Cell>

@@ -22,7 +22,7 @@
  * the document -- rather than the mechanism, which is the part that quietly changed under it.
  */
 import React from 'react';
-import {screen, waitFor} from '@testing-library/react';
+import {act, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Route, Routes} from 'react-router';
 import {renderWithProviders as render} from '../test-utils';
@@ -40,6 +40,10 @@ jest.mock('maplibre-gl', () => {
             this.options = options;
             this.container = options.container;
             this.handlers = {};
+            // Recorded on the instance rather than watched with a spy installed after the
+            // fact: a spy attached post-construction misses whatever the real `load` already
+            // drew, which is the only thing worth asserting about.
+            this.sources = [];
             constructed.push(this);
         }
 
@@ -50,7 +54,8 @@ jest.mock('maplibre-gl', () => {
             return this;
         }
 
-        addSource() {
+        addSource(id) {
+            this.sources.push(id);
             return this;
         }
 
@@ -173,19 +178,24 @@ describe('the "View All Regions" preview', () => {
         expect(document.body.contains(container)).toBe(true);
     });
 
-    it('draws a layer for every region that has a bbox', async () => {
+    it('draws a source for every region that has a bbox, and only those', async () => {
+        /*
+         * The component's own `load` handler does the drawing -- FakeMap fires it as MapLibre
+         * does, and nothing here fires it a second time.  An earlier version spied on
+         * `addSource` after construction and then re-invoked `load` by hand, which meant the
+         * count came entirely from that manual call and said nothing about the real path.
+         */
         await renderManage();
         await userEvent.click(screen.getByRole('button', {name: 'View All Regions'}));
         await waitFor(() => expect(constructed).toHaveLength(1));
 
-        const map = constructed[0];
-        const addSource = jest.spyOn(map, 'addSource');
-        // `load` is what triggers the region drawing; fire it as MapLibre would.
-        await waitFor(() => expect(map.handlers.load).toBeDefined());
-        map.handlers.load();
-
         const withBbox = CATALOG.filter(r => r.bbox);
-        expect(addSource).toHaveBeenCalledTimes(withBbox.length);
+        expect(withBbox.length).toBeLessThan(CATALOG.length);  // the premise: one has no bbox
+
+        const map = constructed[0];
+        await waitFor(() => expect(map.sources).toHaveLength(withBbox.length));
+        // Exactly once each, in catalog order -- a handler that ran twice would double these.
+        expect(map.sources).toEqual(withBbox.map((_, i) => `region-${i}`));
     });
 });
 
@@ -236,5 +246,63 @@ describe('closing a preview', () => {
         await userEvent.keyboard('{Escape}');
 
         await waitFor(() => expect(constructed[0].removed).toBe(true));
+    });
+
+
+    /*
+     * The two below are a matched pair, and neither means anything alone.
+     *
+     * A first attempt at the cancel test closed the modal immediately after the click and
+     * passed with the `cancelled` guard deleted -- because Mantine had not mounted the modal
+     * body yet, so the effect had never run and there was nothing to cancel.  It asserted that
+     * nothing happened in a test where nothing could have happened.  The control is what makes
+     * the cancel test falsifiable: it proves this exact setup DOES build a map when the modal
+     * stays open, so a zero in the other test is the flag working rather than the harness
+     * never having started.
+     */
+    const openWithHeldSource = async () => {
+        let releaseFiles;
+        const before = api.getMapFiles.mock.calls.length;
+        api.getMapFiles.mockReturnValue(new Promise(resolve => {
+            releaseFiles = resolve;
+        }));
+        await userEvent.click(screen.getByRole('button', {name: 'View All Regions'}));
+        // Wait for the effect to actually reach the source lookup.  Waiting on the click alone
+        // is too early: the modal body mounts a commit later, which is the whole bug this file
+        // exists for.
+        await waitFor(() => expect(api.getMapFiles.mock.calls.length).toBe(before + 1));
+        expect(constructed).toHaveLength(0);  // in flight, nothing built yet
+        return releaseFiles;
+    };
+
+    it('builds the map when the held source resolves while still open', async () => {
+        // The control.  See the note above.
+        await renderManage();
+        const releaseFiles = await openWithHeldSource();
+
+        await act(async () => {
+            releaseFiles({files: []});
+        });
+
+        expect(constructed).toHaveLength(1);
+    });
+
+    it('builds no map when closed before the source resolves', async () => {
+        /*
+         * The race the `cancelled` flag exists for, and the one "removes the map" does NOT
+         * cover: that one waits for the map before closing, so cleanup always finds a map to
+         * remove.  Here cleanup runs while `map` is still undefined; without the flag the
+         * promise then resolves and builds a map nothing will ever remove -- a WebGL context
+         * leaked on every quick open-and-close.
+         */
+        await renderManage();
+        const releaseFiles = await openWithHeldSource();
+
+        await userEvent.keyboard('{Escape}');
+        await act(async () => {
+            releaseFiles({files: []});
+        });
+
+        expect(constructed).toHaveLength(0);
     });
 });

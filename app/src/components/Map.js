@@ -92,6 +92,9 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
             });
 
             map.on('load', () => {
+                // The flag again: cleanup can land between construction and `load`, and this
+                // body draws into a map `remove()` has already torn down.
+                if (cancelled) return;
                 map.addSource('bbox', {
                     type: 'geojson',
                     data: {
@@ -122,7 +125,7 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
                 });
                 map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {padding: 40});
             });
-        });
+        }).catch(e => console.error('Could not build the region preview map:', e));
 
         return () => {
             cancelled = true;
@@ -171,6 +174,8 @@ function AllRegionsPreviewModal({catalog, open, onClose}) {
             });
 
             map.on('load', () => {
+                // See RegionPreviewModal: cleanup can land between construction and `load`.
+                if (cancelled) return;
                 const regions = catalog.filter(r => r.bbox);
                 regions.forEach((region, i) => {
                     const [minLon, minLat, maxLon, maxLat] = region.bbox.split(',').map(Number);
@@ -215,7 +220,7 @@ function AllRegionsPreviewModal({catalog, open, onClose}) {
                     });
                 });
             });
-        });
+        }).catch(e => console.error('Could not build the all-regions preview map:', e));
 
         return () => {
             cancelled = true;

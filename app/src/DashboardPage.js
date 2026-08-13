@@ -30,7 +30,7 @@ import {ProgressPlaceholder} from "./components/Placeholder";
 import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
-import {Upload} from "./components/Upload";
+import {UploadModal} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {OutdatedZimsMessage} from "./components/Zim";
 import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
@@ -269,16 +269,13 @@ export function Getters() {
             </Modal.Content>
         </Modal>;
     } else if (selectedGetter === 'upload') {
-        getterModal = <Modal size='large' closeIcon
-                             open={true}
-                             centered={false}
-                             onClose={() => handleSetGetter(null, null)}
-        >
-            <Modal.Header>Upload from your device</Modal.Header>
-            <Modal.Content>
-                <Upload disabled={gettersDisabled}/>
-            </Modal.Content>
-        </Modal>;
+        // The same dialog the file browser opens; it asks for a destination because, unlike the
+        // browser, the dashboard has no selected directory to upload into.
+        getterModal = <UploadModal
+            open={true}
+            onClose={() => handleSetGetter(null, null)}
+            disabled={gettersDisabled}
+        />;
     }
 
     if (wrolModeEnabled) {

@@ -7,11 +7,8 @@ import {
     IconButton,
     IconStack,
     Modal,
-    Panel,
     Placeholder,
-    Progress,
     Skeleton,
-    Stack,
     Table,
     TextInput,
 } from "./ui";
@@ -21,24 +18,22 @@ import {
     ErrorMessage,
     FileIcon,
     humanFileSize,
-    mimetypeIconName,
-    Toggle,
     useIsIgnoredDirectory
 } from "./Common";
 import React, {useContext, useEffect, useState} from "react";
 import {IconArrowsMove, IconChevronsUp, IconCursorText, IconTags} from "@tabler/icons-react";
-import {useDropzone} from "react-dropzone";
 import {useHotkeys} from "react-hotkeys-hook";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
-import {useBrowseFiles, useElementWidth, useMediaDirectory, useUploadFile, useWROLMode} from "../hooks/customHooks";
+import {useBrowseFiles, useElementWidth, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {DragSelectionContext, DragSelectionProvider, SettingsContext, ThemeContext} from "../contexts/contexts";
 import {BulkTagModal} from "./BulkTagModal";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
+import {UploadModal} from "./Upload";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -456,7 +451,7 @@ export function FileBrowser() {
             disabled={wrolModeEnabled || (selectedPathsCount > 0 && !singleDirectorySelected)}
             onClick={() => setUploadOpen(true)}
         >{label('Upload')}</Button>
-        <FileBrowserUploadModal
+        <UploadModal
             open={uploadOpen}
             onClose={() => setUploadOpen(false)}
             destination={singleDirectorySelected && selectedPaths[0] ? selectedPaths[0].slice(0, -1) : ''}
@@ -844,149 +839,6 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
         </Modal.Content>
         <Modal.Actions>
             <Button color='violet' onClick={handleSubmit}>Create</Button>
-        </Modal.Actions>
-    </Modal>
-}
-
-export function FileBrowserUploadModal({open, onClose, destination, onComplete}) {
-    const mediaDirectory = useMediaDirectory();
-
-    const {
-        setFiles,
-        progresses,
-        setDestination,
-        doClear,
-        tagsSelector,
-        overwrite,
-        setOverwrite,
-        overallProgress,
-        inProgress,
-    } = useUploadFile();
-
-    const onDrop = React.useCallback(async (acceptedFiles) => {
-        if (acceptedFiles && acceptedFiles.length > 0) {
-            setFiles(acceptedFiles);
-        }
-    }, [setFiles]);
-
-    const {getRootProps, getInputProps} = useDropzone({onDrop, disabled: inProgress});
-
-    // Set destination when modal opens or destination changes
-    useEffect(() => {
-        if (open) {
-            setDestination(destination);
-        }
-    }, [open, destination, setDestination]);
-
-    // Clear upload state when destination is cleared
-    useEffect(() => {
-        if (!destination && open) {
-            doClear();
-        }
-    }, [destination, open, doClear]);
-
-    const handleClose = () => {
-        if (!inProgress) {
-            doClear();
-            onClose();
-            if (onComplete) {
-                onComplete();
-            }
-        }
-    };
-
-    let progressBars;
-    if (!_.isEmpty(progresses)) {
-        progressBars = Object.entries(progresses).map(([name, value]) => {
-            const {percent, status, type} = value;
-            let color = 'grey';
-            let statusString;
-            if (status === 'complete') {
-                color = 'green';
-                statusString = 'Complete:';
-            } else if (status === 'pending') {
-                statusString = 'Pending:';
-            } else if (status === 'failed') {
-                color = 'red';
-                statusString = 'Failed:';
-            } else if (status === 'conflicting') {
-                color = 'orange';
-                statusString = 'Already Exists:';
-            }
-
-            return <div key={name} style={{display: 'flex', alignItems: 'center', gap: '0.75em'}}>
-                <Icon name={mimetypeIconName(type, name.toLowerCase())} size='large'/>
-                <div style={{flex: 1}}>
-                    <Progress percent={percent} color={color} label={`${statusString} ${name}`}/>
-                </div>
-            </div>
-        })
-    }
-
-    const displayPath = destination ? `${mediaDirectory}/${destination}` : mediaDirectory;
-
-    /*
-     * Fullscreen, for the drop target.  At 620px the target was a strip about 90px tall in a
-     * dialog covering a fifth of the screen -- a small thing to drag a file onto, and the
-     * page behind it was the file browser it came from.  Given the room, the target takes it.
-     */
-    return <Modal open={open} onClose={handleClose} fullScreen>
-        <Modal.Header>Upload to: {displayPath}</Modal.Header>
-        <Modal.Content>
-            <form onSubmit={e => e.preventDefault()}>
-                {tagsSelector}
-                <div style={{marginTop: '1em'}}>
-                <Toggle
-                    checked={overwrite}
-                    label='Overwrite existing files'
-                    onChange={() => setOverwrite(!overwrite)}
-                    disabled={inProgress}
-                />
-                </div>
-            </form>
-
-            {/* The target takes the room the dialog gives it rather than sitting as a strip
-                at the top of it.  `min-height` as well as `flex`, so it stays a large target
-                once the progress bars below it start claiming their own space. */}
-            <Panel style={{
-                marginTop: '1em',
-                padding: '1em',
-                flex: '1 1 auto',
-                display: 'flex',
-                flexDirection: 'column',
-            }}>
-                <div {...getRootProps()}
-                     style={{
-                         cursor: 'pointer',
-                         textAlign: 'center',
-                         display: 'flex',
-                         alignItems: 'center',
-                         justifyContent: 'center',
-                         flex: '1 1 auto',
-                         minHeight: '30vh',
-                     }}>
-                    <input {...getInputProps()}/>
-                    <Header as='h4' icon='file text'>Click here, or drop files here to upload</Header>
-                </div>
-            </Panel>
-
-            {progresses && Object.keys(progresses).length > 1 &&
-                <div style={{marginTop: '1em'}}>
-                    <Progress percent={overallProgress} color='blue' label='Overall Progress'/>
-                </div>}
-
-            <Stack gap={8} style={{marginTop: '1em'}}>
-                {progressBars}
-            </Stack>
-        </Modal.Content>
-        <Modal.Actions>
-            <Button
-                role='cancel'
-                onClick={handleClose}
-                disabled={inProgress}
-            >
-                Close
-            </Button>
         </Modal.Actions>
     </Modal>
 }

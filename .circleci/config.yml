@@ -168,6 +168,34 @@ jobs:
           name: Stop React App
           command: pkill -f npm
   # Jest tests moved to GitHub Actions (.github/workflows/jest-tests.yml)
+  # The component suite, which measures rendered layout and color in a real browser.
+  #
+  # It needs a job of its own because `cypress run` means e2e: its `specPattern` is
+  # `cypress/e2e/**`, and these specs live beside the components in `src/`.  So this suite ran
+  # nowhere -- not here, not in the jest job -- and stayed green in every PR while it was in
+  # fact unable to start.  Nothing here is checkable in jsdom, so "it runs in CI" is the only
+  # thing keeping it honest.
+  #
+  # No app server: component tests mount components against a dev server Cypress starts itself.
+  cypress-component-tests:
+    docker:
+      - image: cimg/node:20.19-browsers
+    resource_class: large
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-browsers-{{ checksum "app/package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: cd app && npm install
+      - run:
+          name: Install Cypress Binary
+          command: cd app && npx cypress install
+      - run:
+          name: Run Cypress Component Tests
+          command: cd app && CI=true npx cypress run --component
+      - store_artifacts:
+          path: app/cypress/screenshots
   cypress-e2e-tests:
     docker:
       - image: cimg/node:20.19-browsers
@@ -229,3 +257,4 @@ workflows:
       - react-app-start
       # jest-tests moved to GitHub Actions
       - cypress-e2e-tests
+      - cypress-component-tests

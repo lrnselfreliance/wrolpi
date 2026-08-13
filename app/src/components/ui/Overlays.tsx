@@ -23,7 +23,13 @@ ModalContent.displayName = 'Modal.Content';
 const ModalActions = ({children}: {children?: React.ReactNode}) => <>{children}</>;
 ModalActions.displayName = 'Modal.Actions';
 
-// WROLPi's size names, mapped onto Mantine's scale.  See `sizeAliases` in Button.tsx.
+/*
+ * WROLPi's size names, mapped onto Mantine's scale.  See `sizeAliases` in Button.tsx.
+ *
+ * `fullscreen` is the full WIDTH; the height still follows the content, which is what a log
+ * or a preview wants.  For a dialog that should fill the viewport in both directions, pass
+ * Mantine's `fullScreen` prop instead -- it forwards through, and the two are not the same.
+ */
 const modalSizes: Record<string, string> = {
     mini: 'xs',
     tiny: 'sm',

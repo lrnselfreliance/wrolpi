@@ -166,6 +166,7 @@ export function ThemeSamplePage() {
     const [logLevel, setLogLevel] = useState(3);
     const [dismissed, setDismissed] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
+    const [fullModalOpen, setFullModalOpen] = useState(false);
     const [realColors, setRealColors] = useState(false);
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState('Videos');
@@ -1003,11 +1004,33 @@ export function ThemeSamplePage() {
             <Panel>
                 <Row>
                     <Button role='cancel' icon='eye' onClick={() => setModalOpen(true)}>Open a modal</Button>
+                    <Button role='cancel' icon='expand arrows alternate' onClick={() => setFullModalOpen(true)}>
+                        Open a fullscreen modal
+                    </Button>
                 </Row>
                 <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
                     A modal is compound — Modal.Header, Modal.Content, Modal.Actions — so the
                     markup at a call site reads the way the dialog is laid out.
                 </p>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginBottom: 0, marginTop: 10}}>
+                    <code>fullScreen</code> is for a dialog whose content wants the room — a drop
+                    target, a directory browser, a log. It is edge to edge on a phone and 90% on a
+                    desktop, where filling the screen would read as the app having been replaced
+                    rather than as something opened over it. Note that the <code>fullscreen</code>
+                    <em>size</em> is a different thing: full width, height still from the content.
+                </p>
+                <Modal open={fullModalOpen} onClose={() => setFullModalOpen(false)} fullScreen>
+                    <Modal.Header>Upload to: /media/wrolpi</Modal.Header>
+                    <Modal.Content>
+                        <p style={{marginTop: 0}}>
+                            The body takes the leftover height, so the actions sit at the foot of
+                            the dialog rather than wherever the content happened to end.
+                        </p>
+                    </Modal.Content>
+                    <Modal.Actions>
+                        <Button role='cancel' onClick={() => setFullModalOpen(false)}>Close</Button>
+                    </Modal.Actions>
+                </Modal>
                 <Modal open={modalOpen} onClose={() => setModalOpen(false)} size='small'>
                     <Modal.Header>Restore Backup: channels.yaml</Modal.Header>
                     <Modal.Content>

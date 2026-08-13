@@ -253,3 +253,61 @@ describe('a parent that disables Escape while it is busy', () => {
             .should('exist');
     });
 });
+
+describe('a dialog that fills the screen', () => {
+    /*
+     * The upload dialog held a drop target about 90px tall inside a dialog covering a fifth
+     * of a desktop.  It asks for `fullScreen` now, which is edge to edge on a phone and 90%
+     * on a desktop -- big enough to aim a file at, with the page still framing it.
+     *
+     * Worth a browser test on two counts: the wrapper has to FORWARD `fullScreen` (it
+     * destructures several props and could swallow this one), and the 90% is a media query,
+     * so neither half is visible to jsdom.
+     */
+    const dialog = <Modal open fullScreen onClose={() => {}}>
+        <Modal.Header>Upload</Modal.Header>
+        <Modal.Content><p>drop files here</p></Modal.Content>
+        <Modal.Actions><Button role='cancel'>Close</Button></Modal.Actions>
+    </Modal>;
+
+    const box = ($el) => $el[0].getBoundingClientRect();
+
+    it('fills a phone edge to edge', () => {
+        cy.viewport(390, 844);
+        cy.mountUI(dialog);
+
+        cy.get('.mantine-Modal-content').should(($content) => {
+            const r = box($content);
+            expect(r.width, 'full width').to.be.closeTo(390, 1);
+            expect(r.height, 'full height').to.be.closeTo(844, 1);
+        });
+    });
+
+    it('stops at 90% on a desktop, so the page still frames it', () => {
+        cy.viewport(1440, 900);
+        cy.mountUI(dialog);
+
+        cy.get('.mantine-Modal-content').should(($content) => {
+            const r = box($content);
+            expect(r.width, '90% of the width').to.be.closeTo(1440 * 0.9, 2);
+            expect(r.height, '90% of the height').to.be.closeTo(900 * 0.9, 2);
+            // Framed rather than merely smaller: page shows on both sides.
+            expect(r.left, 'centred').to.be.greaterThan(0);
+            expect(r.right, 'centred').to.be.lessThan(1440);
+        });
+    });
+
+    it('puts the actions at the bottom of the dialog, not under the content', () => {
+        // Mantine sizes the content to the viewport but leaves the body at its content
+        // height, which left the footer two thirds up the screen with the rest empty.
+        cy.viewport(1440, 900);
+        cy.mountUI(dialog);
+
+        cy.get('.mantine-Modal-content').should(($content) => {
+            const actions = $content[0].querySelector('.wrolpi-modal-actions');
+            expect(actions, 'the dialog has an actions row').to.not.equal(null);
+            expect(box($content).bottom - actions.getBoundingClientRect().bottom,
+                'the actions sit at the foot of the dialog').to.be.at.most(2);
+        });
+    });
+});

@@ -58,12 +58,8 @@ function DownloadProgressModal({progress, url}) {
 
     const speedText = humanBandwidth(progress.speed);
     const etaText = progress.eta || '...';
-    /*
-     * A percent, not "5 MBps / 3m44s".  This button lives in the Completed At column, which is
-     * sized for its header; the speed-and-ETA label measured 169-188px against 124px of column
-     * and was clipped by the cell beside it.  Nothing is lost by shortening it -- the modal it
-     * opens already lists speed, ETA and bytes, which is where a reader goes for the detail.
-     */
+    // A percent: this button sits in a column sized for its header, and speed-and-ETA does not
+    // fit there.  The modal it opens carries the detail, and `title` the full text.
     const buttonLabel = Number.isFinite(progress.percent) ? `${Math.round(progress.percent)}%` : '...';
 
     return <>

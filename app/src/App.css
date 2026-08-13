@@ -371,19 +371,19 @@ table.table-ellipsis {
 }
 
 .table-ellipsis th.col-frequency {
-    width: 6.5em;
+    width: 6.9em;
 }
 
 .table-ellipsis th.col-completed {
-    width: 8em;
+    width: 8.3em;
 }
 
 .table-ellipsis th.col-completed-plain {
-    width: 6.75em;
+    width: 7em;
 }
 
 .table-ellipsis th.col-next {
-    width: 3.7em;
+    width: 3.9em;
 }
 
 /* A `ButtonGroup` cannot wrap -- its buttons are joined -- so this holds all three of them
@@ -436,20 +436,15 @@ table.table-ellipsis {
 }
 
 /*
- * A header is clipped by its column as a last resort.  Wrapping cannot save a single-word
- * label: the URL column is the elastic one, so on a 375px phone it is narrower than "URL"
- * plus its sort arrow, and the label ran into Completed At.  Nothing should paint outside
- * the column it belongs to, even when the column is too small for it.
+ * A header is clipped rather than painted over its neighbour.  Wrapping cannot save a
+ * single-word label in the elastic column, which may be narrower than the word itself.
  */
 .table-ellipsis th {
     overflow: hidden;
 }
 
-/*
- * `ButtonGroup` is a nowrap flex row whose children shrink, and in a narrow column they did --
- * a 23px button against its neighbour's 40px.  `col-control-group` is sized for the whole
- * group, so the buttons in it should not give.
- */
+/* `ButtonGroup` is a nowrap flex row whose children shrink; `col-control-group` is sized for
+   the whole group, so the buttons in it must not. */
 .table-ellipsis td .mantine-ButtonGroup-group > * {
     flex-shrink: 0;
 }

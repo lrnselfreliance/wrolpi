@@ -1526,6 +1526,26 @@ describe('a truncating table fits the width it is given', () => {
             - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     };
 
+    // The narrowest a label can be made: its longest word, which wrapping cannot break, plus
+    // the sort arrow and gap where there is one.  The whole label would be the wrong measure --
+    // a sized column may wrap -- and the text alone omits the arrow.
+    const minLabelWidth = (th) => {
+        const sort = th.querySelector('.wrolpi-th-sort');
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+        th.appendChild(probe);
+        let longest = 0;
+        th.textContent.trim().split(/\s+/).filter(Boolean).forEach((word) => {
+            probe.textContent = word;
+            longest = Math.max(longest, probe.getBoundingClientRect().width);
+        });
+        probe.remove();
+        if (!sort) return longest;
+        const arrow = sort.querySelector('svg');
+        const gap = parseFloat(getComputedStyle(sort).gap) || 0;
+        return longest + gap + (arrow ? arrow.getBoundingClientRect().width : 0);
+    };
+
     // What the label would need on one line, measured in its own cell.
     const oneLineWidth = (th) => {
         const probe = document.createElement('span');
@@ -1582,21 +1602,14 @@ describe('a truncating table fits the width it is given', () => {
                         const label = th.textContent.trim();
                         if (!label) return;
                         /*
-                         * The two kinds of column promise different things.  A column given a
-                         * width must be wide enough for its own label, wrapping it if need be.
-                         * The elastic one takes whatever is left and can be narrower than its
-                         * own label -- "URL" plus its sort arrow is 50px against 36px of
-                         * column here, and one word cannot wrap -- so what holds it in is the
-                         * clip, not the fit.
-                         *
-                         * `scrollWidth` against `clientWidth` measures the content either way,
-                         * whether the label is a text node or the flex button a sortable header
-                         * puts it in, and it still reports the overflow once the cell clips it.
+                         * A column given a width must hold its own label, wrapping it if it
+                         * must.  The elastic one takes what is left and can be narrower than
+                         * its label, which one word cannot wrap out of, so the clip holds it in.
                          */
                         if (th.className.includes('col-')) {
-                            expect(th.scrollWidth,
+                            expect(minLabelWidth(th),
                                 `"${label}" fits the width its column was given`)
-                                .to.be.at.most(th.clientWidth + 1);
+                                .to.be.at.most(contentWidth(th));
                         } else {
                             expect(getComputedStyle(th).overflow,
                                 `"${label}" is clipped rather than painted over its neighbour`)

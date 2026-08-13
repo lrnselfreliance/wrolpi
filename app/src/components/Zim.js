@@ -440,9 +440,9 @@ class ManageZim extends React.Component {
         const {zims, catalog, iso_639_codes, subscriptions} = this.state;
 
         const zimFilesHeaders = [
-            {key: 'path', text: 'Path', sortBy: 'path', width: 14},
-            {key: 'size', text: 'Size', sortBy: 'size', width: 2},
-            {key: 'search', text: 'Search', sortBy: 'auto_search', width: 2},
+            {key: 'path', text: 'Path', sortBy: 'path'},
+            {key: 'size', text: 'Size', sortBy: 'size'},
+            {key: 'search', text: 'Search', sortBy: 'auto_search'},
         ];
         let zimFilesBody = <Placeholder lines={2}/>;
         if (zims && zims.length >= 1) {
@@ -464,11 +464,11 @@ class ManageZim extends React.Component {
             {
                 key: 'name', text: 'Name', 'sortBy': [i => {
                     return i['name'].toLowerCase()
-                }], width: 8
+                }]
             },
-            {key: 'language', text: 'Language', 'sortBy': null, width: 4},
-            {key: 'subscription', text: 'Subscription', 'sortBy': null, width: 2},
-            {key: 'size', text: 'Maximum Size', sortBy: 'size', width: 2},
+            {key: 'language', text: 'Language', 'sortBy': null},
+            {key: 'subscription', text: 'Subscription', 'sortBy': null},
+            {key: 'size', text: 'Maximum Size', sortBy: 'size'},
         ];
         let kiwixCatalog = <Placeholder lines={2}/>;
         if (catalog && catalog.length > 0) {

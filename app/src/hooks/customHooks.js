@@ -1788,7 +1788,9 @@ export const useUploadFile = () => {
     }
 
     const doUpload = async () => {
-        if (!files || files.length === 0 || !destination) {
+        // `''` is the media directory, which the file browser uploads to when no folder is
+        // selected; only a missing destination means there is nowhere to put the files.
+        if (!files || files.length === 0 || destination === null || destination === undefined) {
             return;
         }
 
@@ -1890,14 +1892,17 @@ export const useUploadFile = () => {
         setInProgress(false);
     }
 
-    const doClear = () => {
+    // Stable across renders.  Callers put it in effect dependencies, and every call sets state
+    // with fresh objects -- an unstable identity there re-runs the effect on the render its own
+    // setState caused, which React ends with "Maximum update depth exceeded".
+    const doClear = React.useCallback(() => {
         setFiles([]);
         setProgresses({});
         setTotalSize(0);
         setUploadedSize(0);
         setOverallProgress(0);
         setInProgress(false);
-    }
+    }, []);
 
     useEffect(() => {
         doUpload()

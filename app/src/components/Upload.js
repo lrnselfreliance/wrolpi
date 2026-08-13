@@ -6,19 +6,11 @@ import {useMediaDirectory, useUploadFile} from "../hooks/customHooks";
 import _ from "lodash";
 
 /*
- * One upload form, two entry points.
+ * `destination` says where the files go:
  *
- * The dashboard asks the user where the files should go; the file browser already knows,
- * because the user selected the directory before pressing Upload.  That is the ONLY difference
- * between them, and it is `destination`:
- *
- *   undefined -- ask, with a DirectorySearch.  Until one is chosen there is nothing to drop
- *                files onto, so the target is replaced by the instruction to pick one.
- *   a string  -- fixed, and shown in the title.  '' is the media directory itself, which is a
- *                real destination; only `undefined` means "ask".
- *
- * Everything else -- the dropzone, the tag selector, the overwrite toggle, the per-file and
- * overall progress -- is the same work against the same `useUploadFile` state.
+ *   undefined -- ask, with a DirectorySearch.
+ *   a string  -- upload there.  '' is the media directory, a real destination; a falsy check
+ *                against it reads the media root as "nowhere".
  */
 
 export function UploadForm({
@@ -57,10 +49,9 @@ export function UploadForm({
     const canDrop = !askForDestination || !!destination;
 
     /*
-     * A fragment, not a wrapper element.  The drop target below grows into whatever height the
-     * dialog has left, which it can only do while its parent is the modal body's flex column --
-     * a `<div>` or a `<form>` around all of this would absorb the growth and leave the target
-     * its content height again.  The form is around the fields that have one.
+     * A fragment, and the `<form>` around only the fields.  The drop target below grows into
+     * the dialog's leftover height, which requires its parent to be the modal body's flex
+     * column: any element wrapping all of this absorbs the growth instead.
      */
     return <>
         <form onSubmit={e => e.preventDefault()}>
@@ -86,9 +77,8 @@ export function UploadForm({
         </Stack>
         </form>
 
-        {/* The target takes the room the dialog gives it rather than sitting as a strip at the
-            top of it.  `min-height` as well as `flex`, so it stays a large target once the
-            progress bars below it start claiming their own space. */}
+        {/* The target grows into the dialog's leftover height.  `min-height` as well as
+            `flex`, so it stays a large target once progress bars claim their own space. */}
         {canDrop ?
             <Panel style={{
                 marginTop: '1em',
@@ -111,8 +101,8 @@ export function UploadForm({
                     <Header as='h4' icon='file text'>Click here, or drop files here to upload</Header>
                 </div>
             </Panel>
-            // The instruction takes the same room the target would, so it sits where the user
-            // is about to look rather than as a line above two thirds of an empty dialog.
+            // The instruction takes the room the target would, rather than sitting as a line
+            // above an empty dialog.
             : <Header as='h4' style={{
                 flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
@@ -157,12 +147,19 @@ export function UploadModal({open, onClose, destination, onComplete, disabled}) 
         }
     }, [open, destination, asksForDestination, setDestination]);
 
-    // Destination was cleared, so the queued files have nowhere to go.
+    /*
+     * The user cleared their search, so the queued files have nowhere to go.
+     *
+     * Only while asking.  `''` is a fixed destination -- the media directory -- and clearing on
+     * it fired this effect on every render, because `doClear` is a new function each time and
+     * its own setState scheduled the next render.  React caps that at "Maximum update depth
+     * exceeded"; the file browser reached it whenever Upload was pressed with nothing selected.
+     */
     React.useEffect(() => {
-        if (!upload.destination && open) {
+        if (asksForDestination && !upload.destination && open) {
             doClear();
         }
-    }, [upload.destination, open, doClear]);
+    }, [asksForDestination, upload.destination, open, doClear]);
 
     const handleClose = () => {
         if (inProgress) return;
@@ -171,13 +168,11 @@ export function UploadModal({open, onClose, destination, onComplete, disabled}) 
         if (onComplete) onComplete();
     };
 
-    const displayPath = asksForDestination ? null : `${mediaDirectory}/${destination}`;
+    // No trailing slash for the media directory itself.
+    const displayPath = asksForDestination ? null
+        : (destination ? `${mediaDirectory}/${destination}` : mediaDirectory);
 
-    /*
-     * Fullscreen, for the drop target.  At `large` the target was a strip about 90px tall in a
-     * dialog covering a fifth of the screen -- a small thing to drag a file onto, and the page
-     * behind it was the browser the file came from.  Given the room, the target takes it.
-     */
+    // Fullscreen, so the drop target is something you can drag a file onto without aiming.
     return <Modal open={open} onClose={handleClose} fullScreen>
         <Modal.Header>{displayPath ? `Upload to: ${displayPath}` : 'Upload from your device'}</Modal.Header>
         <Modal.Content>

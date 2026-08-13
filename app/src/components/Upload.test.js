@@ -29,11 +29,8 @@ jest.mock('react-dropzone', () => ({
 const render = ui => renderWithProviders(ui, {settings: {media_directory: '/media/wrolpi'}});
 
 /*
- * The dashboard and the file browser open the SAME dialog.  They were two components with two
- * copies of the dropzone, the overwrite toggle and the progress bars, which is why the file
- * browser's grew to fill its dialog and the dashboard's stayed a strip.  These assert the one
- * difference that is real -- whether the destination is asked for -- so a future change to one
- * entry point cannot quietly fork them again.
+ * The dashboard and the file browser open the same dialog, and differ only in whether it asks
+ * where the files go.  That fork, and the `''` contract underneath it, are what these pin.
  */
 describe('one upload dialog, two entry points', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -57,14 +54,37 @@ describe('one upload dialog, two entry points', () => {
     });
 
     /*
-     * '' is the media directory, which is where the file browser uploads to when no folder is
-     * selected.  Only `undefined` means "ask" -- a falsy check here would send that user to a
-     * DirectorySearch instead of the drop target.
+     * '' is the media directory -- where the file browser uploads when no folder is selected,
+     * which is the state its Upload button is enabled in.  Every falsy check along this path
+     * reads it as "no destination", so each is asserted separately: the fork, the title, and
+     * what the hook is told.
      */
     it('treats the media directory as a destination, not a missing one', () => {
         render(<UploadModal open={true} onClose={() => {}} destination=''/>);
 
         expect(screen.queryByText('Destination')).not.toBeInTheDocument();
         expect(screen.getByText(/drop files here/)).toBeInTheDocument();
+        expect(screen.getByText('Upload to: /media/wrolpi')).toBeInTheDocument();
+        expect(mockUseUploadFile.setDestination).toHaveBeenCalledWith('');
+    });
+
+    /*
+     * The clearing effect ran on every render for a `''` destination, and `doClear` sets state,
+     * so each run scheduled the render that ran it again -- "Maximum update depth exceeded" on
+     * the file browser's default Upload.  A fixed destination is never cleared, so it is never
+     * the thing that empties the queue.
+     */
+    it('does not clear the queue it is about to upload', () => {
+        const {rerender} = render(<UploadModal open={true} onClose={() => {}} destination=''/>);
+        rerender(<UploadModal open={true} onClose={() => {}} destination=''/>);
+
+        expect(mockUseUploadFile.doClear).not.toHaveBeenCalled();
+    });
+
+    // Asking is the case that does clear: the user emptied their own search.
+    it('clears the queue when the user clears their search', () => {
+        render(<UploadModal open={true} onClose={() => {}}/>);
+
+        expect(mockUseUploadFile.doClear).toHaveBeenCalled();
     });
 });

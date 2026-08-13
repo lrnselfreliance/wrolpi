@@ -15,17 +15,8 @@ module.exports = defineConfig({
   },
   component: {
     devServer: {
-      /*
-       * Cypress 14 removed the built-in create-react-app dev server, so the webpack config
-       * this project builds with has to be handed over explicitly.  Until it was, every
-       * component run ended in `Unexpected framework create-react-app`.
-       *
-       * The config comes from react-scripts rather than being written out here, so the
-       * components under test are compiled exactly as `npm start` compiles them -- same
-       * babel, same loaders, same resolve rules.  Cypress supplies the entry, the output
-       * and the HTML shell, so those are dropped along with the plugins that would fight
-       * it for them.
-       */
+      // Cypress removed its create-react-app framework, so hand it the same webpack config
+      // `npm start` uses, minus the entry, output and HTML plugins Cypress supplies itself.
       framework: "react",
       bundler: "webpack",
       webpackConfig: () => {
@@ -44,11 +35,7 @@ module.exports = defineConfig({
         config.plugins = (config.plugins || [])
           .filter(plugin => !cypressOwnsThese.includes(plugin.constructor.name));
 
-        /*
-         * react-scripts compiles `src` and nothing else, so the support file -- which is
-         * JSX, and lives in `cypress/` -- reached babel-loader with no preset and failed on
-         * its first tag.  The support file and the specs are as much "our code" as `src` is.
-         */
+        // react-scripts only babel-loads `src`; the JSX support file lives in `cypress/`.
         const alsoCompile = [path.resolve(__dirname, 'cypress')];
         const widenBabel = (rules) => rules.forEach((rule) => {
           if (rule.oneOf) return widenBabel(rule.oneOf);

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
-    ActionInput, Button, ButtonGroup, Card, Header, Icon, IconButton, IconStack, Loading, MultiSelect, Panel, PathInput,
+    ActionInput, Button, ButtonGroup, Card, Checkbox, Header, Icon, IconButton, IconStack, Loading, MultiSelect,
+    Panel, PathInput,
     Group, Message, Pagination, Placeholder, Progress, SearchBox, Statistic, StatisticGroup, Status, TabBar, Table,
     tabClassName, TextInput,
 } from './index';
@@ -15,6 +16,7 @@ import {NavBarSample} from '../ThemeSamplePage';
 import {DesktopNav, NavIconWrapper} from '../Nav';
 import {APIButton} from '../Common';
 import {ShareButton} from '../Share';
+import {SortableTable} from '../SortableTable';
 
 /*
  * The interface scale, so a test can express a length the way the stylesheet does.
@@ -1450,158 +1452,193 @@ describe('table rules', () => {
 
 describe('a truncating table fits the width it is given', () => {
     /*
-     * The downloads tables ran off the side of a phone: 676px and 727px of table in a 540px
-     * window, so Completed At and Control were off the right edge and their buttons could not
-     * be reached without scrolling sideways.  `.table-ellipsis` was trying to truncate under
-     * `table-layout: auto`, where a table is as wide as its columns want to be, and the
-     * `min-width: 25em` floor on the truncating column made overflowing certain.
-     *
-     * None of this is visible in jsdom -- it is all resolved widths, and the fix turns on
-     * whether our `table-layout` beats the one Mantine sets on its own class. It did not, at
-     * first: every other property in the rule applied, so the table looked fixed and stayed
-     * auto.  These measure the rendered table instead.
+     * Mount the real `Table`, `Table.HeaderCell onSort` and `Checkbox`, not native tags: the
+     * rule under test has to beat Mantine's own `.mantine-Table-table`, and a raw `<table>`
+     * has no such competitor, so it would report `fixed` either way.  `.wrolpi-th-sort` and
+     * the cell padding only exist on the real components too.
      */
-    const wideTable = <table className='table-ellipsis'>
-        <thead>
-        <tr>
-            <th style={{width: '2.5em'}}><input type='checkbox' readOnly checked={false}/></th>
-            <th>URL</th>
-            <th style={{width: '8em'}}>Completed At</th>
-            <th style={{width: '9.5em'}}>Control</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr>
-            <td><input type='checkbox' readOnly checked={false}/></td>
-            <td className='column-ellipsis'>
-                https://example.com/a/very/long/path/that/no/phone/could/ever/show/in/full
-            </td>
-            <td>3 days</td>
-            <td>
-                <ButtonGroup>
-                    <IconButton icon='trash' label='Delete' role='danger'/>
-                    <IconButton icon='edit' label='Edit'/>
-                    <IconButton icon='refresh' label='Retry' role='retry'/>
-                </ButtonGroup>
-            </td>
-        </tr>
-        </tbody>
-    </table>;
+    const columns = [
+        {key: 'select', text: <Checkbox readOnly checked={false} aria-label='Select all'/>,
+            className: 'col-select'},
+        {key: 'url', text: 'URL', sortBy: i => i},
+        {key: 'completed_at', text: 'Completed At', sortBy: i => i, className: 'col-completed'},
+        {key: 'control', text: 'Control', className: 'col-control-group'},
+    ];
 
-    const mountNarrow = () => cy.viewport(400, 700).then(() => cy.mountUI(wideTable));
+    const row = <Table.Row>
+        <Table.Cell><Checkbox readOnly checked={false} aria-label='Select row'/></Table.Cell>
+        <Table.Cell className='column-ellipsis'>
+            https://example.com/a/very/long/path/that/no/phone/could/ever/show/in/full
+        </Table.Cell>
+        <Table.Cell>3 days</Table.Cell>
+        <Table.Cell>
+            <ButtonGroup>
+                <IconButton icon='trash' label='Delete' role='danger'/>
+                <IconButton icon='edit' label='Edit'/>
+                <IconButton icon='refresh' label='Retry' role='retry'/>
+            </ButtonGroup>
+        </Table.Cell>
+    </Table.Row>;
 
-    it('does not grow past its container on a phone', () => {
-        mountNarrow();
+    const onceTable = <SortableTable
+        tableHeaders={columns}
+        data={['one']}
+        rowFunc={() => row}
+        rowKey='0'
+        tableProps={{className: 'table-ellipsis'}}
+    />;
 
-        cy.get('table.table-ellipsis').should(($t) => {
-            const table = $t[0];
-            // The rule that does the work.  Asserted directly because it is the one that lost
-            // to Mantine's own class, silently, while the rest of the rule applied.
-            expect(getComputedStyle(table).tableLayout, 'fixed layout').to.equal('fixed');
-            expect(table.getBoundingClientRect().width, 'table fits its container')
-                .to.be.at.most(table.parentElement.clientWidth + 1);
-        });
-    });
+    // The five-column table, which is the one that runs out of room first.
+    const recurringTable = <Table className='table-ellipsis'>
+        <Table.Header>
+            <Table.Row>
+                <Table.HeaderCell>URL</Table.HeaderCell>
+                <Table.HeaderCell className='col-frequency'>Download Frequency</Table.HeaderCell>
+                <Table.HeaderCell className='col-completed-plain'>Completed At</Table.HeaderCell>
+                <Table.HeaderCell className='col-next'>Next</Table.HeaderCell>
+                <Table.HeaderCell className='col-control-row'>Control</Table.HeaderCell>
+            </Table.Row>
+        </Table.Header>
+        <Table.Body>
+            <Table.Row>
+                <Table.Cell className='column-ellipsis'>
+                    https://example.com/a/very/long/path/that/no/phone/could/ever/show/in/full
+                </Table.Cell>
+                <Table.Cell>30 Days</Table.Cell>
+                <Table.Cell>63d</Table.Cell>
+                <Table.Cell>now</Table.Cell>
+                <Table.Cell>
+                    <div className='wrolpi-button-row'>
+                        <IconButton icon='edit' label='Edit recurring'/>
+                        <IconButton icon='refresh' label='Retry recurring' role='retry'/>
+                    </div>
+                </Table.Cell>
+            </Table.Row>
+        </Table.Body>
+    </Table>;
 
-    it('spends the leftover width on the column that truncates', () => {
-        mountNarrow();
+    // The narrowest phone supported, and the width at which five columns run out of room.
+    const PHONE = 375;
 
-        cy.get('td.column-ellipsis').should(($cell) => {
-            const cell = $cell[0];
-            // It gives up what it cannot show...
-            expect(cell.scrollWidth, 'the long URL is truncated').to.be.greaterThan(cell.clientWidth);
-            /*
-             * ...and it gets precisely what the sized columns did not take.  Measured against
-             * the row rather than against a threshold: a lower bound alone would also pass if
-             * the column were far too WIDE, which is exactly what losing `table-layout: fixed`
-             * would do.
-             */
-            const row = cell.closest('tr');
-            const cells = [...row.children];
-            const sized = cells
-                .filter(td => td !== cell)
-                .reduce((total, td) => total + td.getBoundingClientRect().width, 0);
-            // The row's box is a few px wider than its cells put together -- the table's own
-            // borders -- so take that from the row itself rather than allowing a fixed slack.
-            const chrome = row.getBoundingClientRect().width
-                - cells.reduce((total, td) => total + td.getBoundingClientRect().width, 0);
-            const leftover = row.getBoundingClientRect().width - sized - chrome;
+    const contentWidth = (el) => {
+        const cs = getComputedStyle(el);
+        return el.getBoundingClientRect().width
+            - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    };
 
-            expect(leftover, 'the sized columns left something over').to.be.greaterThan(0);
-            expect(cell.getBoundingClientRect().width, 'and the URL column is exactly that')
-                .to.be.closeTo(leftover, 1);
-            // The sized columns took what they asked for, which is what makes the line above
-            // more than arithmetic: if leftover leaked, one of these would have absorbed it.
-            const declared = {'col-select': 2.5, 'col-completed': 8, 'col-control-group': 9.5};
-            const em = parseFloat(getComputedStyle(cell).fontSize);
-            cells.filter(td => td !== cell).forEach((td, i) => {
-                const width = Object.values(declared)[i] * em;
-                expect(td.getBoundingClientRect().width, `sized column ${i} kept its width`)
-                    .to.be.closeTo(width, 2);
+    // What the label would need on one line, measured in its own cell.
+    const oneLineWidth = (th) => {
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+        probe.textContent = th.textContent.trim();
+        th.appendChild(probe);
+        const need = probe.getBoundingClientRect().width;
+        probe.remove();
+        return need;
+    };
+
+    [['the once-downloads table', onceTable], ['the recurring table', recurringTable]]
+        .forEach(([name, table]) => {
+            it(`${name} fits a 375px phone, with width left for the URL`, () => {
+                cy.viewport(PHONE, 700);
+                cy.mountUI(table);
+
+                cy.get('table.table-ellipsis').should(($t) => {
+                    const el = $t[0];
+                    // The assertion that fails if the selector stops beating Mantine's.
+                    expect(getComputedStyle(el).tableLayout, 'fixed layout').to.equal('fixed');
+                    expect(el.getBoundingClientRect().width, 'table fits its container')
+                        .to.be.at.most(el.parentElement.clientWidth + 1);
+                });
+                cy.get('td.column-ellipsis').should(($cell) => {
+                    const cell = $cell[0];
+                    /*
+                     * The URL column is whatever the sized columns did not take.  Measured
+                     * against the row rather than a floor: a lower bound alone would also
+                     * pass on a column that had grown, which is what losing `table-layout:
+                     * fixed` does.
+                     */
+                    const row = cell.closest('tr');
+                    const cells = [...row.children];
+                    const width = (td) => td.getBoundingClientRect().width;
+                    const sized = cells.filter(td => td !== cell).reduce((t, td) => t + width(td), 0);
+                    // The row's box exceeds its cells by the table's own borders.
+                    const chrome = width(row) - cells.reduce((t, td) => t + width(td), 0);
+                    const leftover = width(row) - sized - chrome;
+
+                    expect(leftover, 'the sized columns leave something over').to.be.greaterThan(0);
+                    expect(width(cell), 'and the URL column is exactly that')
+                        .to.be.closeTo(leftover, 1);
+                    expect(cell.scrollWidth, 'the long URL truncates').to.be.greaterThan(cell.clientWidth);
+                });
+            });
+
+            it(`${name} keeps every header inside its own column on a phone`, () => {
+                cy.viewport(PHONE, 700);
+                cy.mountUI(table);
+
+                cy.get('table.table-ellipsis thead th').should(($ths) => {
+                    [...$ths].forEach(th => {
+                        const label = th.textContent.trim();
+                        if (!label) return;
+                        // The sortable headers put their label in `.wrolpi-th-sort`; the plain
+                        // ones are a text node, so measure the text rather than a child element
+                        // -- checking `firstElementChild` alone silently skips them.
+                        const sort = th.querySelector('.wrolpi-th-sort');
+                        if (sort) {
+                            expect(sort.getBoundingClientRect().right,
+                                `"${label}" stays inside its column`)
+                                .to.be.at.most(th.getBoundingClientRect().right + 1);
+                        }
+                        // Either it fits on one line, or it wrapped; what it must not do is
+                        // stay on one line wider than the column it was given.
+                        const need = oneLineWidth(th);
+                        const room = contentWidth(th);
+                        const wrapped = getComputedStyle(sort || th).whiteSpace !== 'nowrap';
+                        expect(need <= room + 1 || wrapped,
+                            `"${label}" either fits or is allowed to wrap`).to.equal(true);
+                    });
+                });
             });
         });
-    });
 
-    it('wraps a header rather than printing it over the next column', () => {
-        // The fixture gives "Completed At" 8em deliberately -- less than the 9.33em it needs
-        // on one line -- because wrapping is the behavior under test. `.wrolpi-th-sort` is
-        // nowrap, so before this the label ran on into Control and the two printed on top of
-        // each other. The real tables are sized to hold their labels; this is the fallback.
-        mountNarrow();
+    it('sizes the select column for a real checkbox', () => {
+        // 2.5em left 16.5px of content for a 22px Checkbox, which hung into the URL column.
+        // Only a real `Checkbox` in a real `Table.HeaderCell` has both those numbers.
+        cy.viewport(PHONE, 700);
+        cy.mountUI(onceTable);
 
-        cy.get('table.table-ellipsis thead th').should(($ths) => {
-            [...$ths].forEach(th => {
-                const inner = th.firstElementChild;
-                if (!inner) return;
-                expect(inner.getBoundingClientRect().right,
-                    `"${th.textContent.trim()}" stays inside its column`)
-                    .to.be.at.most(th.getBoundingClientRect().right + 1);
-            });
+        cy.get('th.col-select').should(($th) => {
+            const th = $th[0];
+            const box = th.querySelector('.mantine-Checkbox-root, input[type=checkbox]');
+            expect(box, 'the header holds a real Checkbox').to.not.equal(null);
+            expect(box.getBoundingClientRect().right, 'the checkbox stays inside its column')
+                .to.be.at.most(th.getBoundingClientRect().right + 0.5);
+            expect(box.getBoundingClientRect().width, 'and is not itself squeezed')
+                .to.be.at.most(contentWidth(th) + 0.5);
         });
     });
 
     it('gives a long header its own line back on a desktop', () => {
         /*
-         * A wrapped label is the fallback, not the layout.  "Download Frequency" is 11.7em on
-         * one line, which a phone cannot spare beside four other columns, so `.col-frequency`
-         * carries a narrow width below the tablet breakpoint and a wide one above it.  Without
-         * the media query the label wrapped at every width, including a 1400px desktop with
-         * hundreds of pixels going spare.
+         * A wrapped label is the fallback, not the layout.  "Download Frequency" is too long
+         * for a phone beside four other columns, so `.col-frequency` is narrow below the
+         * tablet breakpoint and wide above it.
          */
-        const frequencyHeader = <table className='table-ellipsis'>
-            <thead>
-            <tr>
-                <th>URL</th>
-                <th className='col-frequency'>Download Frequency</th>
-            </tr>
-            </thead>
-            <tbody><tr><td className='column-ellipsis'>https://example.com/x</td><td>30 Days</td></tr></tbody>
-        </table>;
-
         const widthOfFrequency = () => cy.get('th.col-frequency')
             .then(($th) => $th[0].getBoundingClientRect().width);
 
-        cy.viewport(400, 700);
-        cy.mountUI(frequencyHeader);
+        cy.viewport(PHONE, 700);
+        cy.mountUI(recurringTable);
         widthOfFrequency().then((narrow) => {
             cy.viewport(1200, 700);
-            cy.mountUI(frequencyHeader);
+            cy.mountUI(recurringTable);
             widthOfFrequency().then((wide) => {
                 expect(wide, 'the column widens past the tablet breakpoint')
                     .to.be.greaterThan(narrow);
-                // Wide enough for the whole label on one line, which is the point of widening.
                 cy.get('th.col-frequency').should(($th) => {
-                    const th = $th[0];
-                    const cs = getComputedStyle(th);
-                    const contentW = th.getBoundingClientRect().width
-                        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-                    const probe = document.createElement('span');
-                    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
-                    probe.textContent = th.textContent.trim();
-                    th.appendChild(probe);
-                    const need = probe.getBoundingClientRect().width;
-                    probe.remove();
-                    expect(need, '"Download Frequency" fits on one line').to.be.at.most(contentW);
+                    expect(oneLineWidth($th[0]), '"Download Frequency" fits on one line')
+                        .to.be.at.most(contentWidth($th[0]));
                 });
             });
         });
@@ -1610,8 +1647,9 @@ describe('a truncating table fits the width it is given', () => {
     it('keeps grouped buttons at full size in a narrow column', () => {
         // ButtonGroup is a nowrap flex row whose children shrink: in a column too narrow the
         // Stop button came out 23px against its neighbour's 40px -- clipped, and too small to
-        // hit.  The column is sized for three buttons, so none of them should give.
-        mountNarrow();
+        // hit.  `col-control-group` is sized for three, so none of them should give.
+        cy.viewport(PHONE, 700);
+        cy.mountUI(onceTable);
 
         cy.get('td .mantine-ButtonGroup-group button').should(($btns) => {
             expect($btns.length, 'three buttons, the widest group a row can hold').to.equal(3);

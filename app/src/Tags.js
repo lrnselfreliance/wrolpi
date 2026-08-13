@@ -337,19 +337,19 @@ function EditTagsModal() {
     }
 
     const tableHeaders = [
-        {key: 'delete', text: 'Delete', sortBy: null, width: 1},
-        {key: 'edit', text: 'Edit', sortBy: null, width: 1},
-        {key: 'name', text: 'Name', sortBy: 'name', width: 4},
-        {key: 'files', text: 'Files', sortBy: 'file_group_count', width: 2},
-        {key: 'zims', text: 'Zims', sortBy: 'zim_entry_count', width: 2},
-        {key: 'channels', text: 'Channels', sortBy: 'channel_count', width: 2},
-        {key: 'domains', text: 'Domains', sortBy: 'domain_count', width: 2},
+        {key: 'delete', text: 'Delete', sortBy: null},
+        {key: 'edit', text: 'Edit', sortBy: null},
+        {key: 'name', text: 'Name', sortBy: 'name'},
+        {key: 'files', text: 'Files', sortBy: 'file_group_count'},
+        {key: 'zims', text: 'Zims', sortBy: 'zim_entry_count'},
+        {key: 'channels', text: 'Channels', sortBy: 'channel_count'},
+        {key: 'domains', text: 'Domains', sortBy: 'domain_count'},
     ];
     const mobileTableHeaders = [
-        {key: 'delete', text: 'Delete', sortBy: null, width: 2},
-        {key: 'edit', text: 'Edit', sortBy: null, width: 2},
-        {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'count', text: 'Count', sortBy: i => i['file_group_count'] + i['zim_entry_count'] + i['channel_count'] + i['domain_count'], width: 4},
+        {key: 'delete', text: 'Delete', sortBy: null},
+        {key: 'edit', text: 'Edit', sortBy: null},
+        {key: 'name', text: 'Name', sortBy: 'name'},
+        {key: 'count', text: 'Count', sortBy: i => i['file_group_count'] + i['zim_entry_count'] + i['channel_count'] + i['domain_count']},
     ];
 
     return <>

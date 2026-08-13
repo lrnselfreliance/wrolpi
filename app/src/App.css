@@ -365,21 +365,39 @@ table.table-ellipsis {
  * 700px is the app's `tablet` breakpoint (`AppMedia` in contexts.js).  `em` here is the
  * table's own font (~15.4px), not the root's.
  */
+/*
+ * A header too long for a phone carries both forms and shows one.  The short word is what the
+ * mobile column widths below are sized for; the full words return at the breakpoint.
+ */
+.table-ellipsis th .label-long {
+    display: none;
+}
+
+@media (min-width: 700px) {
+    .table-ellipsis th .label-long {
+        display: inline;
+    }
+
+    .table-ellipsis th .label-short {
+        display: none;
+    }
+}
+
 .table-ellipsis th.col-select {
     /* 22px of checkbox plus 11px of cell padding either side. */
     width: 3em;
 }
 
 .table-ellipsis th.col-frequency {
-    width: 6.9em;
+    width: 4.2em;
 }
 
 .table-ellipsis th.col-completed {
-    width: 8.3em;
+    width: 5.5em;
 }
 
 .table-ellipsis th.col-completed-plain {
-    width: 7em;
+    width: 4.2em;
 }
 
 .table-ellipsis th.col-next {

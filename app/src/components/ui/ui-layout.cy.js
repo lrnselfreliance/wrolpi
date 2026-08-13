@@ -1457,11 +1457,17 @@ describe('a truncating table fits the width it is given', () => {
      * has no such competitor, so it would report `fixed` either way.  `.wrolpi-th-sort` and
      * the cell padding only exist on the real components too.
      */
+    const shortHeader = (short, full) => <>
+        <span className='label-short'>{short}</span>
+        <span className='label-long'>{full}</span>
+    </>;
+
     const columns = [
         {key: 'select', text: <Checkbox readOnly checked={false} aria-label='Select all'/>,
             className: 'col-select'},
         {key: 'url', text: 'URL', sortBy: i => i},
-        {key: 'completed_at', text: 'Completed At', sortBy: i => i, className: 'col-completed'},
+        {key: 'completed_at', text: shortHeader('Done', 'Completed At'), sortBy: i => i,
+            className: 'col-completed'},
         {key: 'control', text: 'Control', className: 'col-control-group'},
     ];
 
@@ -1493,8 +1499,12 @@ describe('a truncating table fits the width it is given', () => {
         <Table.Header>
             <Table.Row>
                 <Table.HeaderCell>URL</Table.HeaderCell>
-                <Table.HeaderCell className='col-frequency'>Download Frequency</Table.HeaderCell>
-                <Table.HeaderCell className='col-completed-plain'>Completed At</Table.HeaderCell>
+                <Table.HeaderCell className='col-frequency'>
+                    {shortHeader('Freq', 'Download Frequency')}
+                </Table.HeaderCell>
+                <Table.HeaderCell className='col-completed-plain'>
+                    {shortHeader('Done', 'Completed At')}
+                </Table.HeaderCell>
                 <Table.HeaderCell className='col-next'>Next</Table.HeaderCell>
                 <Table.HeaderCell className='col-control-row'>Control</Table.HeaderCell>
             </Table.Row>
@@ -1535,7 +1545,8 @@ describe('a truncating table fits the width it is given', () => {
         probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
         th.appendChild(probe);
         let longest = 0;
-        th.textContent.trim().split(/\s+/).filter(Boolean).forEach((word) => {
+        // A header may carry a short and a long form; `innerText` reads only the shown one.
+        (th.innerText || th.textContent).trim().split(/\s+/).filter(Boolean).forEach((word) => {
             probe.textContent = word;
             longest = Math.max(longest, probe.getBoundingClientRect().width);
         });
@@ -1550,7 +1561,7 @@ describe('a truncating table fits the width it is given', () => {
     const oneLineWidth = (th) => {
         const probe = document.createElement('span');
         probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
-        probe.textContent = th.textContent.trim();
+        probe.textContent = (th.innerText || th.textContent).trim();
         th.appendChild(probe);
         const need = probe.getBoundingClientRect().width;
         probe.remove();
@@ -1599,7 +1610,8 @@ describe('a truncating table fits the width it is given', () => {
 
                 cy.get('table.table-ellipsis thead th').should(($ths) => {
                     [...$ths].forEach(th => {
-                        const label = th.textContent.trim();
+                        // The visible form, so a failure names what the reader actually sees.
+                        const label = (th.innerText || th.textContent).trim();
                         if (!label) return;
                         /*
                          * A column given a width must hold its own label, wrapping it if it
@@ -1637,29 +1649,33 @@ describe('a truncating table fits the width it is given', () => {
         });
     });
 
-    it('gives a long header its own line back on a desktop', () => {
+    it('shows the short header on a phone and the full words on a desktop', () => {
         /*
-         * A wrapped label is the fallback, not the layout.  "Download Frequency" is too long
-         * for a phone beside four other columns, so `.col-frequency` is narrow below the
-         * tablet breakpoint and wide above it.
+         * Five columns plus five full-length headers do not fit a phone: sized for
+         * "Download Frequency" and "Completed At", the URL column came out 20px, which is
+         * narrower than one character and its ellipsis.  The short word is what the phone
+         * widths are sized for, and the full one returns where there is room for it.
          */
-        const widthOfFrequency = () => cy.get('th.col-frequency')
-            .then(($th) => $th[0].getBoundingClientRect().width);
+        const shown = ($th) => ($th[0].innerText || '').trim();
 
         cy.viewport(PHONE, 700);
         cy.mountUI(recurringTable);
-        widthOfFrequency().then((narrow) => {
-            cy.viewport(1200, 700);
-            cy.mountUI(recurringTable);
-            widthOfFrequency().then((wide) => {
-                expect(wide, 'the column widens past the tablet breakpoint')
-                    .to.be.greaterThan(narrow);
-                cy.get('th.col-frequency').should(($th) => {
-                    expect(oneLineWidth($th[0]), '"Download Frequency" fits on one line')
-                        .to.be.at.most(contentWidth($th[0]));
-                });
-            });
+        cy.get('th.col-frequency').should(($th) => expect(shown($th), 'phone').to.equal('Freq'));
+        cy.get('th.col-completed-plain').should(($th) => expect(shown($th), 'phone').to.equal('Done'));
+        // And the width that buys: the URL column is readable rather than a placeholder.
+        cy.get('td.column-ellipsis').should(($cell) =>
+            expect($cell[0].getBoundingClientRect().width, 'the URL column is usable')
+                .to.be.greaterThan(90));
+
+        cy.viewport(1200, 700);
+        cy.mountUI(recurringTable);
+        cy.get('th.col-frequency').should(($th) => {
+            expect(shown($th), 'desktop').to.equal('Download Frequency');
+            expect(oneLineWidth($th[0]), 'and it fits on one line')
+                .to.be.at.most(contentWidth($th[0]));
         });
+        cy.get('th.col-completed-plain').should(($th) =>
+            expect(shown($th), 'desktop').to.equal('Completed At'));
     });
 
     it('keeps grouped buttons at full size in a narrow column', () => {

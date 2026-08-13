@@ -52,6 +52,13 @@ import {
 import {Downloaders} from "../Vars";
 import {SortableTable} from "../SortableTable";
 
+// A header too long for a phone.  Both forms are rendered and `.label-*` in App.css shows
+// one; the mobile column widths are sized for the short word.
+const shortHeader = (short, full) => <>
+    <span className='label-short'>{short}</span>
+    <span className='label-long'>{full}</span>
+</>;
+
 function DownloadProgressModal({progress, url}) {
     const [open, setOpen] = React.useState(false);
     const [navColor] = useLocalStorage('nav_color', 'violet');
@@ -601,8 +608,8 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
             className: 'col-select',
         },
         {key: 'url', text: 'URL', sortBy: i => i.url.toLowerCase()},
-        {key: 'completed_at', text: 'Completed At', sortBy: i => i.last_successful_download || '',
-            className: 'col-completed'},
+        {key: 'completed_at', text: shortHeader('Done', 'Completed At'),
+            sortBy: i => i.last_successful_download || '', className: 'col-completed'},
         {key: 'control', text: 'Control', sortBy: null, className: 'col-control-group'},
     ];
 
@@ -667,8 +674,12 @@ export function RecurringDownloadsTable({downloads, fetchDownloads, onDelete}) {
                     takes the remainder and truncates. */}
                 <Table.Row>
                     <Table.HeaderCell>URL</Table.HeaderCell>
-                    <Table.HeaderCell className='col-frequency'>Download Frequency</Table.HeaderCell>
-                    <Table.HeaderCell className='col-completed-plain'>Completed At</Table.HeaderCell>
+                    <Table.HeaderCell className='col-frequency'>
+                        {shortHeader('Freq', 'Download Frequency')}
+                    </Table.HeaderCell>
+                    <Table.HeaderCell className='col-completed-plain'>
+                        {shortHeader('Done', 'Completed At')}
+                    </Table.HeaderCell>
                     <Table.HeaderCell className='col-next'>Next</Table.HeaderCell>
                     <Table.HeaderCell className='col-control-row'
                                       style={{textAlign: 'right'}}>Control</Table.HeaderCell>

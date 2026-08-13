@@ -1,5 +1,5 @@
 import React from 'react';
-import {ArchiveDownloadForm, ChannelDownloadForm, EditRSSDownloadForm} from './Download';
+import {ArchiveDownloadForm, ChannelDownloadForm, EditRSSDownloadForm, VideosDownloadForm} from './Download';
 
 /*
  * A field in the error state.
@@ -50,6 +50,61 @@ describe('<ArchiveDownloadForm />', () => {
         cy.get('#urls_textarea').clear();
         cy.get('#urls_textarea').type('https://wrolpi.org').wait(500);
         shouldBeValid('#urls_textarea');
+    });
+});
+
+/*
+ * A form the user submits several times in a row.  Only what identified the last download is
+ * emptied; the settings behind it stay, and Clear is what puts those back.
+ *
+ * The field watched here is Audio only, deliberately.  Compress and Video format are remembered
+ * in localStorage, so they would survive a full reset too and prove nothing about this.
+ */
+describe('a download form that stays filled in', () => {
+    beforeEach(() => {
+        cy.intercept('GET', '**/download-defaults', {statusCode: 200, body: {}}).as('defaults');
+        cy.intercept('POST', '**/api/files/search_directories', {
+            statusCode: 200,
+            body: {is_dir: true, channel_directories: [], domain_directories: [], directories: []},
+        }).as('searchDirectories');
+        cy.intercept('POST', '**/api/download', {statusCode: 204, body: ''}).as('postDownload');
+        cy.mountWithTags(<VideosDownloadForm singleDownload={false}/>);
+    });
+
+    // `force`: the switch's own track paints over its input, so a real user clicks the track
+    // and Cypress refuses the covered checkbox.  State is asserted from the input either way.
+    const audioOnly = () => cy.get('input[type="checkbox"]').first();
+    const clickAudioOnly = () => audioOnly().click({force: true});
+
+    it('empties the URLs it submitted, and nothing else', () => {
+        clickAudioOnly();
+        cy.get('#urls_textarea').type('https://wrolpi.org').wait(500);
+        cy.get('#download_form_download_button').click();
+        cy.wait('@postDownload');
+
+        cy.get('#urls_textarea').should('have.value', '');
+        audioOnly().should('be.checked');
+    });
+
+    it('is ready for the next download as soon as one is typed', () => {
+        cy.get('#urls_textarea').type('https://wrolpi.org').wait(500);
+        cy.get('#download_form_download_button').click();
+        cy.wait('@postDownload');
+
+        // Nothing to submit until a URL is given, then submittable again -- no reopening.
+        cy.get('#download_form_download_button').should('have.attr', 'disabled');
+        cy.get('#urls_textarea').type('https://wrolpi.org/two').wait(500);
+        cy.get('#download_form_download_button').should('not.have.attr', 'disabled');
+    });
+
+    it('puts the settings back when Clear is pressed', () => {
+        clickAudioOnly();
+        cy.get('#urls_textarea').type('https://wrolpi.org').wait(500);
+
+        cy.get('#download_form_clear_button').click();
+
+        cy.get('#urls_textarea').should('have.value', '');
+        audioOnly().should('not.be.checked');
     });
 });
 

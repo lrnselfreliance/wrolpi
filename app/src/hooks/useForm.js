@@ -16,6 +16,7 @@ export function useForm({
                             onFailure = asyncNoOp,
                             onDirty = _.noop,
                             clearOnSuccess = false,
+                            clearPathsOnSuccess = null,
                             fetchOnSuccess = false,
                         }) {
     const [formData, setFormData] = React.useState(defaultFormData || {});
@@ -111,6 +112,29 @@ export function useForm({
         setFormData(emptyFormData || defaultFormData);
     }
 
+    /*
+     * Put the named paths back to their default and leave the rest alone.
+     *
+     * A path neither the defaults nor the form declares is skipped, not created: callers name
+     * several spellings of the same field and only one of them exists.  A path the form has but
+     * the defaults do not clears to '', because the field it belongs to is controlled and
+     * `undefined` would hand it back to the DOM.
+     */
+    const clearPaths = (paths) => {
+        const defaults = emptyFormData || defaultFormData || {};
+        setFormData(prev => {
+            const next = _.cloneDeep(prev);
+            paths.forEach(path => {
+                if (_.has(defaults, path)) {
+                    _.set(next, path, _.cloneDeep(_.get(defaults, path)));
+                } else if (_.has(prev, path)) {
+                    _.set(next, path, '');
+                }
+            });
+            return next;
+        });
+    }
+
     const onSubmit = async () => {
         if (!ready) {
             console.error('Refusing to submit form because it is not ready');
@@ -125,6 +149,8 @@ export function useForm({
             if (fetchOnSuccess && fetcher) {
                 const result = await fetcher();
                 setFormData(result);
+            } else if (clearPathsOnSuccess) {
+                clearPaths(clearPathsOnSuccess);
             } else if (clearOnSuccess) {
                 reset();
             }
@@ -306,6 +332,7 @@ export function useForm({
         onSubmit,
         ready,
         reset,
+        clearPaths,
     }
 }
 

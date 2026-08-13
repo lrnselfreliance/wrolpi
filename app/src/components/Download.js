@@ -48,6 +48,14 @@ import {
  * leaves out of scope (hooks/useForm.js itself is unmigrated).
  */
 
+/*
+ * What a successful submit empties.  Everything else -- tags, destination, frequency, video
+ * settings -- survives, so a user adding downloads one after another types only the URL.
+ * Both spellings: the forms use `url` for a single download and `urls` for a textarea, and
+ * `clearPaths` ignores a path the form does not have.
+ */
+const URL_PATHS = ['url', 'urls'];
+
 function FieldLabel({htmlFor, label, required, helpContent, helpPosition = 'top'}) {
     if (!label) return null;
     return <label htmlFor={htmlFor} style={{display: 'block', marginBottom: 4}}>
@@ -304,15 +312,30 @@ export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
 }
 
 export function DownloadFormButtons({onCancel, form}) {
+    /*
+     * Clear is the user's, not the form's.  A successful submit empties only the URLs, so the
+     * tags, destination and settings behind them survive for the next download; this is the
+     * button that puts those back to their defaults when the next download is unrelated.
+     */
     return <Group justify='space-between' mt='sm'>
         <Button role='cancel' onClick={onCancel} type='button'>Cancel</Button>
-        <APIButton
-            role='primary'
-            disabled={form.disabled || !form.ready}
-            type='submit'
-            onClick={form.onSubmit}
-            id='download_form_download_button'
-        >Download</APIButton>
+        <Group gap='sm'>
+            <Button
+                role='cancel'
+                icon='undo'
+                type='button'
+                disabled={form.disabled}
+                onClick={form.reset}
+                id='download_form_clear_button'
+            >Clear</Button>
+            <APIButton
+                role='primary'
+                disabled={form.disabled || !form.ready}
+                type='submit'
+                onClick={form.onSubmit}
+                id='download_form_download_button'
+            >Download</APIButton>
+        </Group>
     </Group>
 }
 
@@ -609,15 +632,19 @@ export function VideosDownloadForm({
         setShowMessage(true);
         if (propOnSuccess) {
             propOnSuccess();
-        } else {
-            form.reset();
         }
     }
 
     const form = useForm({
         submitter,
         defaultFormData: download ? mergeDeep(defaultFormData, download) : defaultFormData,
+        // The blank form, NOT the one seeded with a URL from the browser extension: clearing
+        // must not put the URL that was just submitted back into the field.
+        emptyFormData: defaultFormData,
         onSuccess,
+        // Editing an existing download keeps what it was given; creating one empties the URLs
+        // so the next can be typed, and keeps everything else.
+        clearPathsOnSuccess: propOnSuccess ? null : URL_PATHS,
     });
 
     // Fetch global defaults to pre-fill the form
@@ -850,7 +877,7 @@ export function ChannelDownloadForm({
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
         onSuccess: localOnSuccess,
-        clearOnSuccess,
+        clearPathsOnSuccess: clearOnSuccess ? URL_PATHS : null,
     });
 
     // Fetch global defaults to pre-fill the form
@@ -1072,7 +1099,7 @@ export function ArchiveDownloadForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearOnSuccess: !propOnSuccess,
+        clearPathsOnSuccess: propOnSuccess ? null : URL_PATHS,
         onSuccess,
     });
 
@@ -1167,7 +1194,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearOnSuccess,
+        clearPathsOnSuccess: clearOnSuccess ? URL_PATHS : null,
         onSuccess: async () => setShowMessage(true),
     });
 
@@ -1389,7 +1416,7 @@ export function FilesDownloadForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearOnSuccess,
+        clearPathsOnSuccess: clearOnSuccess ? URL_PATHS : null,
         onSuccess: async () => setShowMessage(true),
     });
 
@@ -1486,7 +1513,7 @@ export function ScrapeFilesDownloadForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearOnSuccess,
+        clearPathsOnSuccess: clearOnSuccess ? URL_PATHS : null,
         onSuccess: localOnSuccess,
     });
 

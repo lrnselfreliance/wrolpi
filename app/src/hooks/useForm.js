@@ -16,6 +16,7 @@ export function useForm({
                             onFailure = asyncNoOp,
                             onDirty = _.noop,
                             clearOnSuccess = false,
+                            clearPathsOnSuccess = null,
                             fetchOnSuccess = false,
                         }) {
     const [formData, setFormData] = React.useState(defaultFormData || {});
@@ -111,6 +112,25 @@ export function useForm({
         setFormData(emptyFormData || defaultFormData);
     }
 
+    /*
+     * Put some fields back to their default and leave the rest alone.
+     *
+     * A form the user submits repeatedly -- a download, one URL after another -- keeps its
+     * tags, destination and settings, and empties only what identifies the last submission.
+     * A path the defaults do not mention clears to '', because the field it belongs to is
+     * controlled and `undefined` would hand it back to the DOM.
+     */
+    const clearPaths = (paths) => {
+        const defaults = emptyFormData || defaultFormData || {};
+        setFormData(prev => {
+            const next = _.cloneDeep(prev);
+            paths.forEach(path => _.set(
+                next, path, _.has(defaults, path) ? _.cloneDeep(_.get(defaults, path)) : '',
+            ));
+            return next;
+        });
+    }
+
     const onSubmit = async () => {
         if (!ready) {
             console.error('Refusing to submit form because it is not ready');
@@ -125,6 +145,8 @@ export function useForm({
             if (fetchOnSuccess && fetcher) {
                 const result = await fetcher();
                 setFormData(result);
+            } else if (clearPathsOnSuccess) {
+                clearPaths(clearPathsOnSuccess);
             } else if (clearOnSuccess) {
                 reset();
             }
@@ -306,6 +328,7 @@ export function useForm({
         onSubmit,
         ready,
         reset,
+        clearPaths,
     }
 }
 

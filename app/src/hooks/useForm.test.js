@@ -275,6 +275,54 @@ describe('useForm', () => {
             expect(result.current.formData).toEqual(emptyFormData);
         });
 
+        it('clears only the named paths when clearPathsOnSuccess is given', async () => {
+            const submitter = jest.fn().mockResolvedValue(undefined);
+
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {urls: '', tag_names: [], settings: {audio_only: false}},
+                emptyFormData: {urls: '', tag_names: [], settings: {audio_only: false}},
+                submitter,
+                clearPathsOnSuccess: ['url', 'urls'],
+            }));
+
+            await act(async () => {
+                result.current.setValue('urls', 'https://example.com/one');
+                result.current.setValue('tag_names', ['Radio']);
+                result.current.setValue('settings.audio_only', true);
+            });
+            await act(async () => {
+                await result.current.onSubmit();
+            });
+
+            // What identified the submission is gone; what configured it is not.
+            expect(result.current.formData.urls).toEqual('');
+            expect(result.current.formData.tag_names).toEqual(['Radio']);
+            expect(result.current.formData.settings.audio_only).toBe(true);
+        });
+
+        /*
+         * The forms name both spellings because a single-URL form has `url` and a textarea form
+         * has `urls`.  Inventing the absent one would give a controlled input a value its form
+         * never declared.
+         */
+        it('does not invent a path the form does not have', async () => {
+            const submitter = jest.fn().mockResolvedValue(undefined);
+
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {urls: ''},
+                emptyFormData: {urls: ''},
+                submitter,
+                clearPathsOnSuccess: ['url', 'urls'],
+            }));
+
+            await act(async () => {
+                await result.current.onSubmit();
+            });
+
+            expect(result.current.formData.url).toEqual('');
+            expect('urls' in result.current.formData).toBe(true);
+        });
+
         it('re-fetches when fetchOnSuccess is true', async () => {
             const fetchedData = {name: 'refetched'};
             const fetcher = jest.fn().mockResolvedValue(fetchedData);

@@ -113,20 +113,24 @@ export function useForm({
     }
 
     /*
-     * Put some fields back to their default and leave the rest alone.
+     * Put the named paths back to their default and leave the rest alone.
      *
-     * A form the user submits repeatedly -- a download, one URL after another -- keeps its
-     * tags, destination and settings, and empties only what identifies the last submission.
-     * A path the defaults do not mention clears to '', because the field it belongs to is
-     * controlled and `undefined` would hand it back to the DOM.
+     * A path neither the defaults nor the form declares is skipped, not created: callers name
+     * several spellings of the same field and only one of them exists.  A path the form has but
+     * the defaults do not clears to '', because the field it belongs to is controlled and
+     * `undefined` would hand it back to the DOM.
      */
     const clearPaths = (paths) => {
         const defaults = emptyFormData || defaultFormData || {};
         setFormData(prev => {
             const next = _.cloneDeep(prev);
-            paths.forEach(path => _.set(
-                next, path, _.has(defaults, path) ? _.cloneDeep(_.get(defaults, path)) : '',
-            ));
+            paths.forEach(path => {
+                if (_.has(defaults, path)) {
+                    _.set(next, path, _.cloneDeep(_.get(defaults, path)));
+                } else if (_.has(prev, path)) {
+                    _.set(next, path, '');
+                }
+            });
             return next;
         });
     }

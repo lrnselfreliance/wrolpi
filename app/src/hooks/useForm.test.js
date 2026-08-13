@@ -302,8 +302,8 @@ describe('useForm', () => {
 
         /*
          * The forms name both spellings because a single-URL form has `url` and a textarea form
-         * has `urls`.  Inventing the absent one would give a controlled input a value its form
-         * never declared.
+         * has `urls`.  Creating the absent one leaves a field the form never declared, which
+         * keeps it `dirty` against its own defaults forever.
          */
         it('does not invent a path the form does not have', async () => {
             const submitter = jest.fn().mockResolvedValue(undefined);
@@ -319,8 +319,8 @@ describe('useForm', () => {
                 await result.current.onSubmit();
             });
 
-            expect(result.current.formData.url).toEqual('');
-            expect('urls' in result.current.formData).toBe(true);
+            expect('url' in result.current.formData).toBe(false);
+            expect(result.current.formData.urls).toEqual('');
         });
 
         it('re-fetches when fetchOnSuccess is true', async () => {

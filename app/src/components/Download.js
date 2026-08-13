@@ -48,12 +48,8 @@ import {
  * leaves out of scope (hooks/useForm.js itself is unmigrated).
  */
 
-/*
- * What a successful submit empties.  Everything else -- tags, destination, frequency, video
- * settings -- survives, so a user adding downloads one after another types only the URL.
- * Both spellings: the forms use `url` for a single download and `urls` for a textarea, and
- * `clearPaths` ignores a path the form does not have.
- */
+// Both spellings: a single-URL form has `url`, a textarea form has `urls`, and `clearPaths`
+// skips a path the form does not declare.
 const URL_PATHS = ['url', 'urls'];
 
 function FieldLabel({htmlFor, label, required, helpContent, helpPosition = 'top'}) {
@@ -312,11 +308,6 @@ export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
 }
 
 export function DownloadFormButtons({onCancel, form}) {
-    /*
-     * Clear is the user's, not the form's.  A successful submit empties only the URLs, so the
-     * tags, destination and settings behind them survive for the next download; this is the
-     * button that puts those back to their defaults when the next download is unrelated.
-     */
     return <Group justify='space-between' mt='sm'>
         <Button role='cancel' onClick={onCancel} type='button'>Cancel</Button>
         <Group gap='sm'>
@@ -1470,7 +1461,6 @@ export function SuffixFormInput({form, name = 'suffix', path = 'settings.suffix'
 export function ScrapeFilesDownloadForm({
                                             download,
                                             submitter,
-                                            clearOnSuccess,
                                             onDelete,
                                             onCancel,
                                             onSuccess,
@@ -1513,7 +1503,8 @@ export function ScrapeFilesDownloadForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearPathsOnSuccess: clearOnSuccess ? URL_PATHS : null,
+        // `onSuccess` is only given by the edit form, which keeps what it was given.
+        clearPathsOnSuccess: onSuccess ? null : URL_PATHS,
         onSuccess: localOnSuccess,
     });
 

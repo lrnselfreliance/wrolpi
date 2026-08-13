@@ -1510,12 +1510,34 @@ describe('a truncating table fits the width it is given', () => {
             const cell = $cell[0];
             // It gives up what it cannot show...
             expect(cell.scrollWidth, 'the long URL is truncated').to.be.greaterThan(cell.clientWidth);
-            // ...and it is still the widest column, which is the point of truncating it rather
-            // than any of the others.  A 25em floor made it the widest by overflowing instead.
-            const others = [...cell.closest('tr').children].filter(td => td !== cell);
-            others.forEach(td => {
-                expect(cell.getBoundingClientRect().width, 'the URL keeps the remainder')
-                    .to.be.greaterThan(td.getBoundingClientRect().width);
+            /*
+             * ...and it gets precisely what the sized columns did not take.  Measured against
+             * the row rather than against a threshold: a lower bound alone would also pass if
+             * the column were far too WIDE, which is exactly what losing `table-layout: fixed`
+             * would do.
+             */
+            const row = cell.closest('tr');
+            const cells = [...row.children];
+            const sized = cells
+                .filter(td => td !== cell)
+                .reduce((total, td) => total + td.getBoundingClientRect().width, 0);
+            // The row's box is a few px wider than its cells put together -- the table's own
+            // borders -- so take that from the row itself rather than allowing a fixed slack.
+            const chrome = row.getBoundingClientRect().width
+                - cells.reduce((total, td) => total + td.getBoundingClientRect().width, 0);
+            const leftover = row.getBoundingClientRect().width - sized - chrome;
+
+            expect(leftover, 'the sized columns left something over').to.be.greaterThan(0);
+            expect(cell.getBoundingClientRect().width, 'and the URL column is exactly that')
+                .to.be.closeTo(leftover, 1);
+            // The sized columns took what they asked for, which is what makes the line above
+            // more than arithmetic: if leftover leaked, one of these would have absorbed it.
+            const declared = {'col-select': 2.5, 'col-completed': 8, 'col-control-group': 9.5};
+            const em = parseFloat(getComputedStyle(cell).fontSize);
+            cells.filter(td => td !== cell).forEach((td, i) => {
+                const width = Object.values(declared)[i] * em;
+                expect(td.getBoundingClientRect().width, `sized column ${i} kept its width`)
+                    .to.be.closeTo(width, 2);
             });
         });
     });

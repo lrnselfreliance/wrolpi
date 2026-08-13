@@ -168,6 +168,27 @@ jobs:
           name: Stop React App
           command: pkill -f npm
   # Jest tests moved to GitHub Actions (.github/workflows/jest-tests.yml)
+  # Component specs live under `src/`, so they need `cypress run --component`; the e2e job's
+  # `cypress run` will not match them.  Cypress starts its own dev server, so no `npm start`.
+  cypress-component-tests:
+    docker:
+      - image: cimg/node:20.19-browsers
+    resource_class: large
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-browsers-{{ checksum "app/package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: cd app && npm install
+      - run:
+          name: Install Cypress Binary
+          command: cd app && npx cypress install
+      - run:
+          name: Run Cypress Component Tests
+          command: cd app && CI=true npx cypress run --component
+      - store_artifacts:
+          path: app/cypress/screenshots
   cypress-e2e-tests:
     docker:
       - image: cimg/node:20.19-browsers
@@ -229,3 +250,4 @@ workflows:
       - react-app-start
       # jest-tests moved to GitHub Actions
       - cypress-e2e-tests
+      - cypress-component-tests

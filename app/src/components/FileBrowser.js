@@ -710,11 +710,11 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
     </Table.Row>);
 
     /*
-     * Audited: `large` (620px).  This dialog holds a DirectorySearch and a two-column
-     * Source/Destination table of every path being moved, which is the densest content
-     * of the five FileBrowser modals.
+     * Fullscreen: a DirectorySearch above a two-column Source/Destination table of every
+     * path being moved, which grows with the selection.  620px showed a handful of rows and
+     * scrolled the rest.
      */
-    return <Modal size='large'
+    return <Modal fullScreen
                   onClose={onClose}
                   open={open}
     >
@@ -925,7 +925,12 @@ export function FileBrowserUploadModal({open, onClose, destination, onComplete})
 
     const displayPath = destination ? `${mediaDirectory}/${destination}` : mediaDirectory;
 
-    return <Modal open={open} onClose={handleClose} size='large'>
+    /*
+     * Fullscreen, for the drop target.  At 620px the target was a strip about 90px tall in a
+     * dialog covering a fifth of the screen -- a small thing to drag a file onto, and the
+     * page behind it was the file browser it came from.  Given the room, the target takes it.
+     */
+    return <Modal open={open} onClose={handleClose} fullScreen>
         <Modal.Header>Upload to: {displayPath}</Modal.Header>
         <Modal.Content>
             <form onSubmit={e => e.preventDefault()}>
@@ -940,8 +945,26 @@ export function FileBrowserUploadModal({open, onClose, destination, onComplete})
                 </div>
             </form>
 
-            <Panel style={{marginTop: '1em', padding: '1em'}}>
-                <div {...getRootProps()} style={{cursor: 'pointer', textAlign: 'center'}}>
+            {/* The target takes the room the dialog gives it rather than sitting as a strip
+                at the top of it.  `min-height` as well as `flex`, so it stays a large target
+                once the progress bars below it start claiming their own space. */}
+            <Panel style={{
+                marginTop: '1em',
+                padding: '1em',
+                flex: '1 1 auto',
+                display: 'flex',
+                flexDirection: 'column',
+            }}>
+                <div {...getRootProps()}
+                     style={{
+                         cursor: 'pointer',
+                         textAlign: 'center',
+                         display: 'flex',
+                         alignItems: 'center',
+                         justifyContent: 'center',
+                         flex: '1 1 auto',
+                         minHeight: '30vh',
+                     }}>
                     <input {...getInputProps()}/>
                     <Header as='h4' icon='file text'>Click here, or drop files here to upload</Header>
                 </div>

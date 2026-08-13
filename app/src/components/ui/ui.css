@@ -494,6 +494,48 @@ html .wrolpi-searchbox-clear {
     border-top: 1px solid var(--border);
 }
 
+/*
+ * A fullscreen dialog fills its height as well as its width.
+ *
+ * Mantine gives the content 100vh but leaves the body at its content height, so the footer
+ * landed wherever the content ended -- on the upload dialog, two thirds up the screen with a
+ * quarter of the viewport empty beneath it.  The body takes the leftover instead, and the
+ * actions ride to the bottom of it.
+ *
+ * `data-full-screen` is Mantine's own marker, so this follows the prop rather than a class a
+ * call site has to remember.
+ */
+.mantine-Modal-content[data-full-screen] {
+    display: flex;
+    flex-direction: column;
+}
+
+/*
+ * Edge to edge is for a phone, where the alternative is a dialog with a few pixels of page
+ * showing around it.  On a desktop it reads as the app having been replaced rather than as
+ * something opened on top of it, so the dialog stops at 90% and leaves the page framing it.
+ *
+ * 700px is the app's `tablet` breakpoint (`AppMedia` in contexts.js).
+ */
+@media (min-width: 700px) {
+    .mantine-Modal-content[data-full-screen] {
+        width: 90vw;
+        max-width: 90vw;
+        height: 90vh;
+        max-height: 90vh;
+    }
+}
+
+.mantine-Modal-content[data-full-screen] .mantine-Modal-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.mantine-Modal-content[data-full-screen] .wrolpi-modal-actions {
+    margin-top: auto;
+}
+
 /* A confirmation's buttons: under the question, no separating rule.  See Confirm. */
 .wrolpi-confirm-actions {
     display: flex;

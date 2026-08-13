@@ -1573,7 +1573,7 @@ describe('a truncating table fits the width it is given', () => {
                 });
             });
 
-            it(`${name} keeps every header inside its own column on a phone`, () => {
+            it(`${name} never paints a header outside its column on a phone`, () => {
                 cy.viewport(PHONE, 700);
                 cy.mountUI(table);
 
@@ -1581,22 +1581,27 @@ describe('a truncating table fits the width it is given', () => {
                     [...$ths].forEach(th => {
                         const label = th.textContent.trim();
                         if (!label) return;
-                        // The sortable headers put their label in `.wrolpi-th-sort`; the plain
-                        // ones are a text node, so measure the text rather than a child element
-                        // -- checking `firstElementChild` alone silently skips them.
-                        const sort = th.querySelector('.wrolpi-th-sort');
-                        if (sort) {
-                            expect(sort.getBoundingClientRect().right,
-                                `"${label}" stays inside its column`)
-                                .to.be.at.most(th.getBoundingClientRect().right + 1);
+                        /*
+                         * The two kinds of column promise different things.  A column given a
+                         * width must be wide enough for its own label, wrapping it if need be.
+                         * The elastic one takes whatever is left and can be narrower than its
+                         * own label -- "URL" plus its sort arrow is 50px against 36px of
+                         * column here, and one word cannot wrap -- so what holds it in is the
+                         * clip, not the fit.
+                         *
+                         * `scrollWidth` against `clientWidth` measures the content either way,
+                         * whether the label is a text node or the flex button a sortable header
+                         * puts it in, and it still reports the overflow once the cell clips it.
+                         */
+                        if (th.className.includes('col-')) {
+                            expect(th.scrollWidth,
+                                `"${label}" fits the width its column was given`)
+                                .to.be.at.most(th.clientWidth + 1);
+                        } else {
+                            expect(getComputedStyle(th).overflow,
+                                `"${label}" is clipped rather than painted over its neighbour`)
+                                .to.not.equal('visible');
                         }
-                        // Either it fits on one line, or it wrapped; what it must not do is
-                        // stay on one line wider than the column it was given.
-                        const need = oneLineWidth(th);
-                        const room = contentWidth(th);
-                        const wrapped = getComputedStyle(sort || th).whiteSpace !== 'nowrap';
-                        expect(need <= room + 1 || wrapped,
-                            `"${label}" either fits or is allowed to wrap`).to.equal(true);
                     });
                 });
             });

@@ -392,10 +392,10 @@ table.table-ellipsis {
     width: 9.5em;
 }
 
-/* A `.wrolpi-button-row` does wrap, so on a phone this is one button wide and the second
-   drops beneath it, which buys the URL column the width instead. */
+/* A `.wrolpi-button-row` wraps, so on a phone this holds one button and the second drops
+   beneath it.  It is sized by the word "Control" rather than by the button, which is wider. */
 .table-ellipsis th.col-control-row {
-    width: 4.5em;
+    width: 5.2em;
 }
 
 @media (min-width: 700px) {

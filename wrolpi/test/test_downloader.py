@@ -620,12 +620,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
 @pytest.mark.asyncio
 async def test_deferred_once_download_is_retried(test_session, test_download_manager, fake_now, test_downloader,
                                                  await_switches):
-    """A once-download that was deferred is retried once its backoff has elapsed.
-
-    A deferred download is only ever scheduled -- `next_download` is set, but nothing marks it "new"
-    again.  Recurring downloads are renewed by `renew_recurring_downloads`; once-downloads must be
-    renewed too, or a single transient error (a YouTube 403, a flaky connection) strands the
-    download as "deferred" forever."""
+    """A once-download that was deferred is retried once its backoff has elapsed."""
     fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
     test_downloader.set_test_failure()
 

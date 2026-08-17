@@ -1390,13 +1390,7 @@ class DownloadManager:
     def renew_deferred_once_downloads(self):
         """Mark any deferred once-downloads whose backoff has elapsed as "new" so they are retried.
 
-        Deferring only schedules -- it sets `next_download` and nothing more.  `renew_recurring_downloads`
-        acts on that schedule for downloads with a `frequency`; a once-download has none, so without this
-        a single transient error (a 403, a dropped connection) strands it as "deferred" forever and it is
-        only ever cleared by a manual retry.
-
-        `attempts` is preserved so `calculate_next_download`'s exponential backoff keeps growing -- a URL
-        that never succeeds backs off toward never, rather than retrying at a fixed interval."""
+        `renew()` is called without `reset_attempts` so `calculate_next_download`'s backoff keeps growing."""
         now_ = now()
 
         # Decide what is due in a read session so the usual cycle (nothing due) never takes the write

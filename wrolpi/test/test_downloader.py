@@ -618,6 +618,87 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
 
 
 @pytest.mark.asyncio
+async def test_deferred_once_download_is_retried(test_session, test_download_manager, fake_now, test_downloader,
+                                                 await_switches):
+    """A once-download that was deferred is retried once its backoff has elapsed."""
+    fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
+    test_downloader.set_test_failure()
+
+    test_download_manager.create_download(test_session, 'https://example.com/once', test_downloader.name)
+    await test_download_manager.wait_for_all_downloads()
+
+    # The download failed, so it is deferred for 3 hours (3^attempts).
+    download = test_session.query(Download).one()
+    assert download.frequency is None, 'This must be a once-download'
+    assert download.is_deferred, download.status_code
+    assert download.attempts == 1
+    assert download.next_download == datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC)
+
+    # An hour before it is due, it is left alone.
+    fake_now(datetime(2020, 1, 1, 2, 0, 0, tzinfo=pytz.UTC))
+    test_download_manager.renew_deferred_once_downloads()
+    download = test_session.query(Download).one()
+    assert download.is_deferred, download.status_code
+
+    # Once due, it is renewed and downloaded again.  This time it succeeds.
+    fake_now(datetime(2020, 1, 1, 3, 0, 1, tzinfo=pytz.UTC))
+    test_download_manager.renew_deferred_once_downloads()
+    download = test_session.query(Download).one()
+    assert download.is_new, download.status_code
+    assert download.attempts == 1, 'Attempts are preserved so the backoff keeps growing'
+
+    test_downloader.set_test_success()
+    await test_download_manager.wait_for_all_downloads()
+    download = test_session.query(Download).one()
+    assert download.is_complete, download.status_code
+    assert download.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_deferred_once_download_backoff_grows(test_session, test_download_manager, fake_now, test_downloader,
+                                                    await_switches):
+    """Repeated failures of a once-download back off exponentially rather than retrying in a loop."""
+    fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
+    test_downloader.set_test_failure()
+
+    test_download_manager.create_download(test_session, 'https://example.com/once', test_downloader.name)
+    await test_download_manager.wait_for_all_downloads()
+
+    download = test_session.query(Download).one()
+    # First failure: 3^1 hours.
+    assert download.next_download == datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC)
+
+    fake_now(datetime(2020, 1, 1, 3, 0, 1, tzinfo=pytz.UTC))
+    test_download_manager.renew_deferred_once_downloads()
+    await test_download_manager.wait_for_all_downloads()
+
+    download = test_session.query(Download).one()
+    assert download.is_deferred, download.status_code
+    assert download.attempts == 2
+    # Second failure: 3^2 hours.
+    assert download.next_download == datetime(2020, 1, 1, 12, 0, 1, tzinfo=pytz.UTC)
+
+
+@pytest.mark.asyncio
+async def test_failed_once_download_is_not_renewed(test_session, test_download_manager, fake_now, test_downloader,
+                                                  await_switches):
+    """A once-download that failed unrecoverably is never renewed, no matter how overdue it is."""
+    fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
+    test_downloader.set_test_unrecoverable_exception()
+
+    test_download_manager.create_download(test_session, 'https://example.com/once', test_downloader.name)
+    await test_download_manager.wait_for_all_downloads()
+
+    download = test_session.query(Download).one()
+    assert download.is_failed, download.status_code
+
+    fake_now(datetime(2020, 2, 1, 0, 0, 0, tzinfo=pytz.UTC))
+    test_download_manager.renew_deferred_once_downloads()
+    download = test_session.query(Download).one()
+    assert download.is_failed, download.status_code
+
+
+@pytest.mark.asyncio
 async def test_max_attempts(test_session, test_download_manager, test_downloader, await_switches):
     """A Download will only be attempted so many times, it will eventually be deleted."""
     _, session = get_db_context()

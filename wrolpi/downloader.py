@@ -1254,6 +1254,11 @@ class DownloadManager:
             self.log_error(f'Unable to renew downloads!', exc_info=e)
 
         try:
+            self.renew_deferred_once_downloads()
+        except Exception as e:
+            self.log_error(f'Unable to renew deferred once downloads!', exc_info=e)
+
+        try:
             self.delete_old_once_downloads()
         except Exception as e:
             self.log_error(f'Unable to delete old downloads!', exc_info=e)
@@ -1381,6 +1386,37 @@ class DownloadManager:
 
             if renewed_count:
                 self.log_debug(f'Renewed {renewed_count} recurring downloads')
+
+    def renew_deferred_once_downloads(self):
+        """Mark any deferred once-downloads whose backoff has elapsed as "new" so they are retried.
+
+        `renew()` is called without `reset_attempts` so `calculate_next_download`'s backoff keeps growing."""
+        now_ = now()
+
+        # Decide what is due in a read session so the usual cycle (nothing due) never takes the write
+        # lock.  See `renew_recurring_downloads` for why the read and write are split.  The status filter
+        # runs in SQL because deferred once-downloads are few; the datetime comparison runs in Python to
+        # match how the rest of this class compares `next_download`.
+        with get_db_session() as session:
+            due_ids = [i.id for i in session.query(Download).filter(
+                Download.frequency == None,  # noqa
+                Download.status == DownloadStatus.deferred,
+            ) if i.next_download and i.next_download < now_]
+
+        if not due_ids:
+            return
+
+        with get_db_session(commit=True) as session:
+            renewed_count = 0
+            for download in session.query(Download).filter(Download.id.in_(due_ids)):
+                # A row's status may have moved on since the read above (the dispatcher claims
+                # downloads constantly), so re-check it here.
+                if download.is_deferred:
+                    download.renew()
+                    renewed_count += 1
+
+            if renewed_count:
+                self.log_debug(f'Renewed {renewed_count} deferred once downloads')
 
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:

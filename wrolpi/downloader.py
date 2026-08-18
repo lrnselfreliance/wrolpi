@@ -1656,9 +1656,7 @@ class DownloadManager:
             seconds = hours * Seconds.hour
             if download.frequency:
                 seconds = min(seconds, download.frequency)
-            # Spread the retry across a window so downloads that failed together do not retry together; a
-            # synchronized burst against one host is what gets a whole batch rejected.  Jitter is added, never
-            # subtracted, so the backoff above is still a floor.
+            # Spread retries that failed together.
             seconds += random.uniform(0, seconds * DEFERRED_RETRY_JITTER)
             if download.frequency:
                 # A recurring download is never retried later than its own frequency.

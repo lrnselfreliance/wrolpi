@@ -689,11 +689,7 @@ async def test_deferred_once_download_backoff_grows(test_session, test_download_
 
 def test_deferred_downloads_do_not_retry_in_lockstep(test_session, test_download_manager, fake_now,
                                                     test_downloader):
-    """Downloads that failed together are spread out, rather than all retrying at the same moment.
-
-    Every deferred download gets the same `3^attempts` backoff, so without jitter a batch that failed
-    together retries together forever.  A synchronized burst against one host is what gets the whole
-    batch rejected, which defers them all again on the same schedule."""
+    """Downloads that failed together are spread out, rather than all retrying at the same moment."""
     fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
 
     downloads = []

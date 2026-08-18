@@ -47,6 +47,10 @@ logger = logger.getChild(__name__)
 
 ARIA2C_PATH = which('aria2c', '/usr/bin/aria2c')
 
+# A deferred Download's retry is pushed back by up to this fraction of its backoff, so a batch that failed
+# together does not retry together.
+DEFERRED_RETRY_JITTER = 0.5
+
 ARIA2C_PROGRESS_RE = re.compile(
     r'\[#\w+\s+'
     r'([\d.]+\w+)/([\d.]+\w+)'  # downloaded/total
@@ -1651,6 +1655,13 @@ class DownloadManager:
             hours = 3 ** (download.attempts or 1)
             seconds = hours * Seconds.hour
             if download.frequency:
+                seconds = min(seconds, download.frequency)
+            # Spread the retry across a window so downloads that failed together do not retry together; a
+            # synchronized burst against one host is what gets a whole batch rejected.  Jitter is added, never
+            # subtracted, so the backoff above is still a floor.
+            seconds += random.uniform(0, seconds * DEFERRED_RETRY_JITTER)
+            if download.frequency:
+                # A recurring download is never retried later than its own frequency.
                 seconds = min(seconds, download.frequency)
             delta = timedelta(seconds=seconds)
             return now() + delta

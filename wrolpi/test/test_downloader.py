@@ -20,7 +20,7 @@ from wrolpi.conftest import probe_write_lock_is_held, production_like_sessions
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     get_download_manager_config, RSSDownloader, parse_aria2c_progress, _parse_size, \
-    set_download_progress, clear_download_progress, make_progress_callback
+    set_download_progress, clear_download_progress, make_progress_callback, DEFERRED_RETRY_JITTER
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
@@ -378,19 +378,23 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
     download.status = 'deferred'
 
     # next_download slowly increases as we accumulate attempts.  Largest gap is the download frequency.
+    # Each retry is jittered forward by up to DEFERRED_RETRY_JITTER, so the backoff is a floor and the
+    # frequency is a ceiling.
+    start = datetime(2000, 1, 1, tzinfo=pytz.UTC)
     attempts_expected = [
-        (0, datetime(2000, 1, 1, 3, tzinfo=pytz.UTC)),
-        (1, datetime(2000, 1, 1, 3, tzinfo=pytz.UTC)),
-        (2, datetime(2000, 1, 1, 9, tzinfo=pytz.UTC)),
-        (3, datetime(2000, 1, 2, 3, tzinfo=pytz.UTC)),
-        (4, datetime(2000, 1, 4, 9, tzinfo=pytz.UTC)),
-        (5, datetime(2000, 1, 8, tzinfo=pytz.UTC)),
-        (6, datetime(2000, 1, 8, tzinfo=pytz.UTC)),
+        (0, timedelta(hours=3), timedelta(hours=4.5)),
+        (1, timedelta(hours=3), timedelta(hours=4.5)),
+        (2, timedelta(hours=9), timedelta(hours=13.5)),
+        (3, timedelta(hours=27), timedelta(hours=40.5)),
+        (4, timedelta(hours=81), timedelta(hours=121.5)),
+        # 3^5 hours exceeds the weekly frequency, so the retry is pinned to the frequency.
+        (5, timedelta(days=7), timedelta(days=7)),
+        (6, timedelta(days=7), timedelta(days=7)),
     ]
-    for attempts, expected in attempts_expected:
+    for attempts, earliest, latest in attempts_expected:
         download.attempts = attempts
         result = test_download_manager.calculate_next_download(test_session, download)
-        assert result == expected, f'{attempts} != {result}'
+        assert start + earliest <= result <= start + latest, f'{attempts} != {result}'
 
     d1 = Download(url='https://example.com/1', frequency=DownloadFrequency.weekly)
     d2 = Download(url='https://example.com/2', frequency=DownloadFrequency.weekly)
@@ -632,7 +636,8 @@ async def test_deferred_once_download_is_retried(test_session, test_download_man
     assert download.frequency is None, 'This must be a once-download'
     assert download.is_deferred, download.status_code
     assert download.attempts == 1
-    assert download.next_download == datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC)
+    assert datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC) <= download.next_download \
+           <= datetime(2020, 1, 1, 4, 30, 0, tzinfo=pytz.UTC)
 
     # An hour before it is due, it is left alone.
     fake_now(datetime(2020, 1, 1, 2, 0, 0, tzinfo=pytz.UTC))
@@ -640,8 +645,8 @@ async def test_deferred_once_download_is_retried(test_session, test_download_man
     download = test_session.query(Download).one()
     assert download.is_deferred, download.status_code
 
-    # Once due, it is renewed and downloaded again.  This time it succeeds.
-    fake_now(datetime(2020, 1, 1, 3, 0, 1, tzinfo=pytz.UTC))
+    # Once due (past the jitter window), it is renewed and downloaded again.  This time it succeeds.
+    fake_now(datetime(2020, 1, 1, 5, 0, 0, tzinfo=pytz.UTC))
     test_download_manager.renew_deferred_once_downloads()
     download = test_session.query(Download).one()
     assert download.is_new, download.status_code
@@ -665,18 +670,65 @@ async def test_deferred_once_download_backoff_grows(test_session, test_download_
     await test_download_manager.wait_for_all_downloads()
 
     download = test_session.query(Download).one()
-    # First failure: 3^1 hours.
-    assert download.next_download == datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC)
+    # First failure: 3^1 hours, plus up to 50% jitter.
+    assert datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC) <= download.next_download \
+           <= datetime(2020, 1, 1, 4, 30, 0, tzinfo=pytz.UTC)
 
-    fake_now(datetime(2020, 1, 1, 3, 0, 1, tzinfo=pytz.UTC))
+    # Advance past the whole jitter window so the retry is certainly due.
+    fake_now(datetime(2020, 1, 1, 5, 0, 0, tzinfo=pytz.UTC))
     test_download_manager.renew_deferred_once_downloads()
     await test_download_manager.wait_for_all_downloads()
 
     download = test_session.query(Download).one()
     assert download.is_deferred, download.status_code
     assert download.attempts == 2
-    # Second failure: 3^2 hours.
-    assert download.next_download == datetime(2020, 1, 1, 12, 0, 1, tzinfo=pytz.UTC)
+    # Second failure: 3^2 hours, a larger gap than the first.
+    assert datetime(2020, 1, 1, 14, 0, 0, tzinfo=pytz.UTC) <= download.next_download \
+           <= datetime(2020, 1, 1, 18, 30, 0, tzinfo=pytz.UTC)
+
+
+def test_deferred_downloads_do_not_retry_in_lockstep(test_session, test_download_manager, fake_now,
+                                                    test_downloader):
+    """Downloads that failed together are spread out, rather than all retrying at the same moment.
+
+    Every deferred download gets the same `3^attempts` backoff, so without jitter a batch that failed
+    together retries together forever.  A synchronized burst against one host is what gets the whole
+    batch rejected, which defers them all again on the same schedule."""
+    fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
+
+    downloads = []
+    for i in range(8):
+        download = test_download_manager.create_download(test_session, f'https://example.com/{i}',
+                                                         test_downloader.name)
+        download.defer()
+        download.attempts = 1
+        downloads.append(download)
+    test_session.commit()
+
+    # `now()` is frozen, so jitter is the only thing that can spread these apart.
+    next_downloads = [test_download_manager.calculate_next_download(test_session, i) for i in downloads]
+    assert len(set(next_downloads)) > 1, 'All deferred downloads were scheduled for the same moment'
+
+    # The backoff is still respected: nothing is retried early, and nothing is pushed beyond the jitter window.
+    base = datetime(2020, 1, 1, 3, 0, 0, tzinfo=pytz.UTC)
+    latest = base + timedelta(seconds=Seconds.hour * 3 * DEFERRED_RETRY_JITTER)
+    for next_download in next_downloads:
+        assert base <= next_download <= latest, f'{next_download} is outside [{base}, {latest}]'
+
+
+@pytest.mark.asyncio
+async def test_deferred_recurring_download_is_capped_at_its_frequency(test_session, test_download_manager, fake_now,
+                                                                     test_downloader):
+    """Jitter never pushes a recurring download's retry past its own frequency."""
+    fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
+    download = test_download_manager.recurring_download(test_session, 'https://example.com/recurring',
+                                                        Seconds.hour, test_downloader.name)
+    download.defer()
+    download.attempts = 3
+    test_session.commit()
+
+    next_download = test_download_manager.calculate_next_download(test_session, download)
+    assert next_download == datetime(2020, 1, 1, 1, 0, 0, tzinfo=pytz.UTC)
 
 
 @pytest.mark.asyncio

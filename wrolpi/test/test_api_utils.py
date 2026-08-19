@@ -123,24 +123,77 @@ def test_claim_perpetual_tasks_when_owner_process_is_dead(async_client):
         'claimer must record this process as the new owner'
 
 
-def test_perpetual_events_include_file_worker_when_not_claimed(async_client):
-    """Every Sanic worker must run the file-worker pump, even if it does not
-    own the other perpetual tasks.
+def test_claim_perpetual_tasks_when_heartbeat_is_stale(async_client):
+    """A live PID with a stale heartbeat is treated as a dead owner.
 
-    Otherwise a live owner whose *task* died (CancelledError before the
-    reschedule fix) still wedges file operations in every other process.
+    After a crash the kernel can reuse the owner PID for an unrelated
+    process, so pid_is_running alone is not enough.  The owner must keep
+    a heartbeat; if it goes quiet, another worker reclaims.
     """
     import os
+    import time
+    from wrolpi.api_utils import OWNER_HEARTBEAT_STALE_SECONDS, _claim_perpetual_tasks, api_app
+
+    api_app.shared_ctx.perpetual_tasks_started.set()
+    api_app.shared_ctx.perpetual_tasks_owner_pid.value = os.getpid()
+    api_app.shared_ctx.perpetual_tasks_heartbeat.value = time.time() - OWNER_HEARTBEAT_STALE_SECONDS - 1
+    assert _claim_perpetual_tasks(api_app) is True
+
+
+def test_non_owner_starts_watchdog_not_file_worker(async_client):
+    """Non-owner workers run a reclaim watchdog, not a second file-worker pump.
+
+    Five concurrent pumps would race on the shared status dict, the busy
+    flag, and the DB — overlapping refreshes/moves are how stale
+    primary_path rows appear.  File jobs stay single-consumer; other
+    workers only notice a dead owner and take over.
+    """
+    import os
+    import time
     from wrolpi.api_utils import (
         FILE_WORKER_PERPETUAL_EVENT,
+        OWNER_WATCHDOG_EVENT,
         _perpetual_events_for_this_process,
         api_app,
     )
 
     api_app.shared_ctx.perpetual_tasks_started.set()
     api_app.shared_ctx.perpetual_tasks_owner_pid.value = os.getpid()
+    api_app.shared_ctx.perpetual_tasks_heartbeat.value = time.time()
     events = _perpetual_events_for_this_process(api_app)
-    assert events == [FILE_WORKER_PERPETUAL_EVENT]
+    assert events == [OWNER_WATCHDOG_EVENT]
+    assert FILE_WORKER_PERPETUAL_EVENT not in events
+
+
+@pytest.mark.asyncio
+async def test_watchdog_reclaims_and_starts_pumps_when_owner_is_dead(async_client, monkeypatch):
+    """The watchdog, not after_server_start, is what heals a dead owner mid-life.
+
+    Existing workers have already passed start_perpetual_tasks.  If the
+    owner dies later, a periodic tick must claim and dispatch the pumps.
+    """
+    import os
+    from wrolpi.api_utils import perpetual_owner_watchdog, api_app
+
+    dispatched = []
+
+    async def fake_dispatch(event):
+        dispatched.append(event)
+
+    api_app.shared_ctx.perpetual_tasks_started.set()
+    api_app.shared_ctx.perpetual_tasks_owner_pid.value = 2**31 - 1
+    monkeypatch.setattr('wrolpi.api_utils._dispatch_perpetual', fake_dispatch)
+    monkeypatch.setattr('wrolpi.api_utils.PERPETUAL_WORKERS', [
+        'wrolpi.perpetual.perpetual_file_worker_queue',
+        'wrolpi.perpetual.perpetual_owner_watchdog',
+    ])
+
+    await perpetual_owner_watchdog()
+
+    assert api_app.shared_ctx.perpetual_tasks_owner_pid.value == os.getpid()
+    assert api_app.shared_ctx.perpetual_tasks_heartbeat.value > 0
+    assert 'wrolpi.perpetual.perpetual_file_worker_queue' in dispatched
+    assert 'wrolpi.perpetual.perpetual_owner_watchdog' not in dispatched
 
 
 @pytest.mark.asyncio

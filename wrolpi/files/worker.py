@@ -909,7 +909,8 @@ class FileWorker:
             if PYTEST:
                 self.transfer_queue()
                 await self.process_queue()
-            await asyncio.sleep(0.01)
+            # Tests poll tightly; production is an IPC round-trip per check.
+            await asyncio.sleep(0.01 if PYTEST else 0.1)
         logger.error(f'wait_for_job: TIMEOUT job_id={job_id} after {iteration} iterations')
         raise TimeoutError(f'Job {job_id} did not complete in time')
 
@@ -1081,7 +1082,8 @@ class FileWorker:
 
         ``process_queue`` handles one task per tick, so a shrinking backlog is
         not a stall.  Only warn when a tick processed nothing and the queues
-        stayed non-empty while status is idle.
+        stayed non-empty while status is idle.  This runs inside the pump, so
+        it cannot report the pump's own death.
         """
         if processed:
             self._queue_stall_since = None

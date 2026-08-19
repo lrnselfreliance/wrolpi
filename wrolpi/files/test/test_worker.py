@@ -683,6 +683,29 @@ async def test_wait_for_job_times_out(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_wait_for_job_polls_slowly_outside_tests(async_client, monkeypatch):
+    """Production wait_for_job must not hammer the Manager dict at 100 Hz.
+
+    Each get_job_status is an IPC round-trip.  Tests keep a short sleep so
+    they stay fast; production can wait a tenth of a second between polls.
+    """
+    job_id = 'move-poll-interval'
+    file_worker._set_job_status(job_id, 'pending')
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        file_worker._complete_job(job_id)
+
+    monkeypatch.setattr('wrolpi.files.worker.PYTEST', False)
+    monkeypatch.setattr('wrolpi.files.worker.asyncio.sleep', fake_sleep)
+
+    await file_worker.wait_for_job(job_id, timeout=1)
+    assert sleeps, 'wait_for_job should sleep between polls'
+    assert sleeps[0] == pytest.approx(0.1, abs=0.01)
+
+
+@pytest.mark.asyncio
 async def test_wait_for_job_raises_immediately_when_job_failed(async_client, test_session):
     """wait_for_job must treat 'failed' as terminal and raise with the recorded error.
 

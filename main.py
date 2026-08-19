@@ -318,7 +318,8 @@ async def start_single_tasks(app: Sanic):
 @perpetual_signal(sleep=1)
 async def perpetual_file_worker_queue():
     file_worker.transfer_queue()
-    await file_worker.process_queue()
+    processed = await file_worker.process_queue()
+    file_worker.check_queue_stall(processed=processed)
 
 
 @perpetual_signal(sleep=1)

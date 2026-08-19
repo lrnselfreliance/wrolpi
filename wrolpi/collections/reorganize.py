@@ -978,6 +978,16 @@ def get_reorganization_status(job_id: str) -> dict:
             'percent': 0,
             'error': None,
         }
+    elif job_status == 'failed':
+        # reset_status() clears worker_status['error'] after the handler
+        # finishes; the recorded job error is the durable source.
+        return {
+            'status': 'failed',
+            'total': worker_status.get('operation_total', 0),
+            'completed': worker_status.get('operation_processed', 0),
+            'percent': worker_status.get('operation_percent', 0),
+            'error': file_worker.get_job_error(job_id) or worker_status.get('error'),
+        }
     else:
         # Job is running
         return {
@@ -1189,7 +1199,7 @@ def get_batch_reorganization_status(batch_job_id: str) -> dict:
             'overall_percent': batch_status.get('overall_percent', 0),
             'completed': completed_list,
             'failed_collection': batch_status.get('failed_collection'),
-            'error': batch_status.get('error'),
+            'error': file_worker.get_job_error(batch_job_id) or batch_status.get('error'),
         }
     else:
         # Job is running

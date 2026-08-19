@@ -8,7 +8,16 @@ from sqlalchemy import text
 from wrolpi.conftest import await_switches
 from wrolpi.dates import from_timestamp
 from wrolpi.files.models import FileGroup
-from wrolpi.files.worker import compare_file_groups, count_files, file_worker, FileGroupDiff, FileTask, FileTaskType
+from wrolpi.files.worker import (
+    compare_file_groups,
+    count_files,
+    file_worker,
+    FileGroupDiff,
+    FileTask,
+    FileTaskType,
+    FileWorkerJobFailed,
+    QUEUE_STALL_SECONDS,
+)
 
 
 @pytest.mark.asyncio
@@ -671,6 +680,90 @@ async def test_wait_for_job_times_out(async_client, test_session):
 
     with pytest.raises(TimeoutError):
         await file_worker.wait_for_job(job_id, timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_wait_for_job_raises_immediately_when_job_failed(async_client, test_session):
+    """wait_for_job must treat 'failed' as terminal and raise with the recorded error.
+
+    Regression: a failed move left the job 'pending', so wait_for_job spun until
+    its 300s timeout and POST /api/files/rename hung for 5 minutes.
+    """
+    job_id = 'move-already-failed'
+    file_worker._fail_job(job_id, 'UNIQUE constraint failed: file_group.primary_path')
+
+    start = asyncio.get_event_loop().time()
+    with pytest.raises(FileWorkerJobFailed, match='UNIQUE constraint failed'):
+        await file_worker.wait_for_job(job_id, timeout=5)
+    elapsed = asyncio.get_event_loop().time() - start
+    assert elapsed < 1, f'wait_for_job should fail immediately, took {elapsed:.2f}s'
+    assert file_worker.get_job_status(job_id) == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_process_queue_marks_refresh_job_failed(async_client, test_session, test_directory,
+                                                      make_files_structure):
+    """A handler exception must mark the tracked job failed, not leave it pending."""
+    make_files_structure(['docs/file1.txt'])
+    job_id = 'refresh-will-fail'
+    task = FileTask(FileTaskType.refresh, [test_directory], count=1, job_id=job_id)
+    file_worker._set_job_status(job_id, 'pending')
+    file_worker.private_queue.put_nowait(task)
+
+    with mock.patch('wrolpi.files.worker.apply_modelers', side_effect=RuntimeError('boom')):
+        with pytest.raises(RuntimeError, match='boom'):
+            await file_worker.process_queue()
+
+    assert file_worker.get_job_status(job_id) == 'failed'
+    assert 'boom' in (file_worker.get_job_error(job_id) or '')
+
+
+@pytest.mark.asyncio
+async def test_transfer_queue_survives_empty_race(async_client):
+    """transfer_queue must not raise when get_nowait races with another process.
+
+    The public queue is a multiprocessing.Queue.  qsize() > 0 followed by
+    get_nowait() is check-then-act; the loser gets queue.Empty.
+    """
+    import queue as queue_mod
+
+    public = mock.Mock()
+    public.get_nowait.side_effect = queue_mod.Empty
+    with mock.patch.object(type(file_worker), 'public_queue', new_callable=mock.PropertyMock,
+                           return_value=public):
+        file_worker.transfer_queue()  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_check_queue_stall_logs_when_idle_with_queued_jobs(async_client, caplog):
+    """A non-empty queue while status is idle for N seconds is a logged stall."""
+    import logging
+    import time as time_mod
+
+    file_worker.update_status(status='idle')
+    file_worker._queue_stall_since = time_mod.time() - (QUEUE_STALL_SECONDS + 1)
+    public = mock.Mock()
+    public.qsize.return_value = 3
+    with mock.patch.object(type(file_worker), 'public_queue', new_callable=mock.PropertyMock,
+                           return_value=public):
+        with caplog.at_level(logging.ERROR):
+            file_worker.check_queue_stall(processed=False)
+    assert 'stalled' in caplog.text.lower()
+    assert '3' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_check_queue_stall_resets_when_a_job_was_processed(async_client, caplog):
+    """A tick that handled a job is not a stall, even if more jobs remain."""
+    import logging
+    import time as time_mod
+
+    file_worker.update_status(status='idle')
+    file_worker._queue_stall_since = time_mod.time() - (QUEUE_STALL_SECONDS + 1)
+    with caplog.at_level(logging.ERROR):
+        file_worker.check_queue_stall(processed=True)
+    assert 'stalled' not in caplog.text.lower()
+    assert file_worker._queue_stall_since is None
 
 
 @pytest.mark.asyncio

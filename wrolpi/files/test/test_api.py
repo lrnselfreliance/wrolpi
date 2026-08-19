@@ -1290,6 +1290,9 @@ async def test_rename_directory_stale_destination_fails_promptly(
         timeout=5,
     )
     assert response.status_code == HTTPStatus.CONFLICT, response.json
+    error = (response.json or {}).get('error') or ''
+    # The recorded move error, not just "Failed to rename …".
+    assert 'UNIQUE' in error.upper() or 'constraint' in error.lower(), response.json
 
 
 @pytest.mark.asyncio

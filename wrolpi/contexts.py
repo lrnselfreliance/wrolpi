@@ -65,6 +65,7 @@ def attach_shared_contexts(app: Sanic):
     # The Event alone survives that worker dying (Sanic auto_reload / crash),
     # so replacement workers check this PID before skipping startup.
     app.shared_ctx.perpetual_tasks_owner_pid = multiprocessing.Value(ctypes.c_int, 0)
+    app.shared_ctx.perpetual_tasks_heartbeat = multiprocessing.Value(ctypes.c_double, 0.0)
     app.shared_ctx.perpetual_tasks_lock = multiprocessing.Lock()
 
     # Switches
@@ -213,6 +214,8 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.perpetual_tasks_started.clear()
     if hasattr(app.shared_ctx, 'perpetual_tasks_owner_pid'):
         app.shared_ctx.perpetual_tasks_owner_pid.value = 0
+    if hasattr(app.shared_ctx, 'perpetual_tasks_heartbeat'):
+        app.shared_ctx.perpetual_tasks_heartbeat.value = 0.0
 
     # Do not start downloads when reloading.
     app.shared_ctx.download_manager_stopped.set()

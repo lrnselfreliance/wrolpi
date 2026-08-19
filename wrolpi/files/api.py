@@ -340,7 +340,8 @@ async def post_rename(request: Request, body: schema.Rename):
         await lib.rename(request.ctx.session, path, body.new_name, send_events=True)
     except Exception as e:
         logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
-        raise FileConflict(f'Failed to rename {path} to {new_path}') from e
+        cause = str(e).split('\n', 1)[0]
+        raise FileConflict(f'Failed to rename {path} to {new_path}: {cause}') from e
 
     # Refresh the parent directory instead of individual files.
     # This ensures all related files (e.g., subtitles, posters) are discovered together.

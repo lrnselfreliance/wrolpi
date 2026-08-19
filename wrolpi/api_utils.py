@@ -165,12 +165,32 @@ async def cleanup_session(request: Request, response_: HTTPResponse):
 
 PERPETUAL_WORKERS = list()
 
-# Always started in every Sanic worker so file jobs survive the owner process dying.
 FILE_WORKER_PERPETUAL_EVENT = 'wrolpi.perpetual.perpetual_file_worker_queue'
+OWNER_WATCHDOG_EVENT = 'wrolpi.perpetual.perpetual_owner_watchdog'
+OWNER_HEARTBEAT_STALE_SECONDS = 30
+
+
+def _touch_heartbeat(app) -> None:
+    try:
+        app.shared_ctx.perpetual_tasks_heartbeat.value = time()
+    except Exception:
+        logger.error('Failed to update perpetual-tasks heartbeat', exc_info=True)
+
+
+def _i_am_owner(app) -> bool:
+    try:
+        return app.shared_ctx.perpetual_tasks_owner_pid.value == os.getpid()
+    except Exception:
+        return False
 
 
 def _perpetual_owner_is_alive(app) -> bool:
-    """True if the process that claimed the single-process perpetual loops is still running."""
+    """True if the claiming worker is still running *and* keeping a heartbeat.
+
+    pid_is_running alone is not enough: after a crash the kernel can reuse the
+    owner PID for an unrelated process.  A zero heartbeat means the owner just
+    claimed and has not ticked yet, so a live PID still counts.
+    """
     try:
         pid = app.shared_ctx.perpetual_tasks_owner_pid.value
     except Exception:
@@ -178,7 +198,15 @@ def _perpetual_owner_is_alive(app) -> bool:
     if not pid:
         return False
     from wrolpi.cmd import pid_is_running
-    return pid_is_running(pid)
+    if not pid_is_running(pid):
+        return False
+    try:
+        heartbeat = app.shared_ctx.perpetual_tasks_heartbeat.value
+    except Exception:
+        return True
+    if not heartbeat:
+        return True
+    return (time() - heartbeat) < OWNER_HEARTBEAT_STALE_SECONDS
 
 
 def _claim_perpetual_tasks(app) -> bool:
@@ -188,7 +216,7 @@ def _claim_perpetual_tasks(app) -> bool:
     exits (Sanic auto_reload in docker, crash), the Event stays set and every
     replacement ``after_server_start`` used to no-op — file processing, downloads,
     and switches stayed dead until a full API restart.  Track the owner PID and
-    retake the claim when that process is gone.
+    a heartbeat, and retake the claim when that process is gone or silent.
     """
     lock = getattr(app.shared_ctx, 'perpetual_tasks_lock', None)
     if lock is None:
@@ -204,20 +232,24 @@ def _claim_perpetual_tasks_unlocked(app) -> bool:
     try:
         app.shared_ctx.perpetual_tasks_owner_pid.value = os.getpid()
     except Exception:
-        pass
+        logger.error('Failed to record perpetual-tasks owner pid', exc_info=True)
+    _touch_heartbeat(app)
     return True
 
 
 def _perpetual_events_for_this_process(app) -> list[str]:
     """Events this worker should dispatch at startup.
 
-    The claiming worker starts every perpetual loop.  Every other worker still
-    starts the file-worker pump so a dead/cancelled owner cannot stall file
-    operations for the life of the remaining processes.
+    The claiming worker starts every perpetual loop (one file-worker consumer).
+    Every other worker starts only the owner watchdog, which reclaims if the
+    owner dies later — after_server_start will not run again on those processes.
     """
     if _claim_perpetual_tasks(app):
-        return list(PERPETUAL_WORKERS)
-    return [FILE_WORKER_PERPETUAL_EVENT]
+        events = list(PERPETUAL_WORKERS)
+        if OWNER_WATCHDOG_EVENT not in events:
+            events.append(OWNER_WATCHDOG_EVENT)
+        return events
+    return [OWNER_WATCHDOG_EVENT]
 
 
 def _app_is_stopping() -> bool:
@@ -355,3 +387,30 @@ def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testin
         return func
 
     return wrapper
+
+
+async def perpetual_owner_watchdog():
+    """Keep the owner heartbeat fresh, or reclaim the loops if the owner is gone.
+
+    Non-owner Sanic workers run only this tick — not the file-worker pump — so
+    file jobs stay single-consumer.  cancel_background_tasks / cancel_refresh_tasks
+    do not cancel perpetual signals; the only intentional stop is shutdown.
+    """
+    if _app_is_stopping():
+        return
+    if _i_am_owner(api_app):
+        _touch_heartbeat(api_app)
+        return
+    if not _claim_perpetual_tasks(api_app):
+        return
+    logger.warning(f'Perpetual-loop owner is gone; this worker is taking over pid={os.getpid()}')
+    _touch_heartbeat(api_app)
+    for event_ in list(PERPETUAL_WORKERS):
+        if event_ == OWNER_WATCHDOG_EVENT:
+            continue
+        await _dispatch_perpetual(event_)
+
+
+# Register after perpetual_signal is defined.  In PYTEST the decorator is a
+# no-op, so tests call perpetual_owner_watchdog() directly.
+perpetual_signal(sleep=5)(perpetual_owner_watchdog)

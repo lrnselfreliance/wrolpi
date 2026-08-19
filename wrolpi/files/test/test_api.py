@@ -1262,6 +1262,37 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
+async def test_rename_directory_stale_destination_fails_promptly(
+        test_session, test_directory, make_files_structure, async_client, refresh_files
+):
+    """A directory rename that collides with a stale FileGroup must fail promptly.
+
+    Regression: the move's IntegrityError left the job 'pending', so
+    POST /api/files/rename hung until wait_for_job's 300s timeout.
+    """
+    import asyncio
+    import shutil
+
+    make_files_structure({'dir-a/one.txt': 'hello'})
+    await refresh_files()
+
+    content = dict(path='dir-a', new_name='dir-b')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Remove dest on disk without refreshing; recreate the old source.
+    shutil.rmtree(test_directory / 'dir-b')
+    (test_directory / 'dir-a').mkdir()
+    (test_directory / 'dir-a' / 'one.txt').write_text('hello')
+
+    request, response = await asyncio.wait_for(
+        async_client.post('/api/files/rename', content=json.dumps(content)),
+        timeout=5,
+    )
+    assert response.status_code == HTTPStatus.CONFLICT, response.json
+
+
+@pytest.mark.asyncio
 async def test_rename_collection_directory(test_session, test_directory, make_files_structure, async_client,
                                            refresh_files):
     """Renaming a Collection's directory updates the Collection.directory."""

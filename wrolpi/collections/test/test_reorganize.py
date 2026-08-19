@@ -179,6 +179,75 @@ async def test_get_reorganization_status_unknown_job(async_client):
     assert 'error' in status
 
 
+@pytest.mark.asyncio
+async def test_get_reorganization_status_failed_job(async_client):
+    """A failed reorganize job must report status=failed with the recorded error.
+
+    reset_status() clears worker_status['error'], so the error has to come from
+    the job record itself — otherwise the UI would show an idle/running job.
+    """
+    from wrolpi.files.worker import file_worker
+
+    file_worker._fail_job('reorg-failed', 'disk full')
+    status = get_reorganization_status('reorg-failed')
+    assert status['status'] == 'failed'
+    assert status['error'] == 'disk full'
+
+
+@pytest.mark.asyncio
+async def test_handle_reorganize_marks_job_failed_on_exception(
+        async_client, test_directory, video_factory
+):
+    """handle_reorganize must mark its job failed when a move raises.
+
+    Regression: the except path sent a failure event but left the job
+    'pending', so waiters (and the batch reorganize poller) spun forever.
+    """
+    from unittest import mock
+    from wrolpi.files.worker import file_worker, FileTask, FileTaskType
+
+    channel_dir = test_directory / 'videos' / 'FailChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_db_session(commit=True) as session:
+        collection = Collection(
+            name='FailChannel',
+            kind='channel',
+            directory=channel_dir,
+            file_format='%(title)s.%(ext)s',
+        )
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='FailChannel', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+
+    video = video_factory(channel_id=channel_id, title='will_fail', with_video_file=True)
+    with get_db_session() as session:
+        video_obj = session.query(Video).get(video.id)
+        old_path = video_obj.file_group.primary_path
+
+    dest = channel_dir / 'renamed_will_fail.mp4'
+    job_id = 'reorganize-will-fail'
+    task = FileTask(
+        task_type=FileTaskType.reorganize,
+        paths=[],
+        move_mappings=[(old_path, dest)],
+        job_id=job_id,
+    )
+    file_worker._set_job_status(job_id, 'pending')
+
+    with mock.patch('wrolpi.files.worker.shutil.move', side_effect=OSError('disk full')):
+        await file_worker.handle_reorganize(task)
+
+    assert file_worker.get_job_status(job_id) == 'failed'
+    assert 'disk full' in (file_worker.get_job_error(job_id) or '')
+    status = get_reorganization_status(job_id)
+    assert status['status'] == 'failed'
+    assert 'disk full' in (status['error'] or '')
+
+
 def test_filegroup_primary_path_lookup_consistency(test_session, test_directory):
     """FileGroup.primary_path returns a Path object, but IN queries use strings.
 

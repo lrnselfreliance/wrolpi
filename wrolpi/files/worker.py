@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import pathlib
+import queue
 import shlex
 import shutil
 import stat as stat_module
@@ -30,6 +31,7 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
+from wrolpi.vars import PYTEST
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
@@ -42,6 +44,9 @@ logger = logger.getChild(__name__)
 # Update status every N items to avoid excessive overhead
 PROGRESS_UPDATE_INTERVAL = 100
 
+# Log if jobs sit queued while the worker reports idle for this long.
+QUEUE_STALL_SECONDS = 30
+
 # Maximum mtime difference (seconds) before a file is considered "modified".
 # 0.5s accommodates SD card / FAT32 / exFAT timestamp granularity on Pi 4.
 MTIME_TOLERANCE_SECONDS = 0.5
@@ -49,10 +54,15 @@ MTIME_TOLERANCE_SECONDS = 0.5
 __all__ = [
     'FileGroupDiff',
     'FileComparisonResult',
+    'FileWorkerJobFailed',
     'compare_file_groups',
     'count_files',
     'file_worker',
 ]
+
+
+class FileWorkerJobFailed(RuntimeError):
+    """A tracked file-worker job finished unsuccessfully."""
 
 
 @dataclass
@@ -795,6 +805,7 @@ class FileWorker:
     def __init__(self):
         # Use last-in, first out so a task that inserts another task is handled next.
         self.private_queue = asyncio.LifoQueue()
+        self._queue_stall_since: float | None = None
 
     @property
     def public_queue(self) -> Queue:
@@ -831,27 +842,50 @@ class FileWorker:
         from wrolpi.api_utils import api_app
         return api_app.shared_ctx.file_worker_jobs
 
-    def _set_job_status(self, job_id: str, status: str):
-        """Set the status of a tracked job."""
-        self._jobs[job_id] = status
+    def _set_job_status(self, job_id: str, status: str, error: str | None = None):
+        """Set the status of a tracked job.
+
+        Failed jobs store ``{'status': 'failed', 'error': ...}`` so waiters can
+        surface the recorded error after ``reset_status()`` clears worker status.
+        """
+        if not job_id:
+            return
+        if error is not None:
+            self._jobs[job_id] = {'status': status, 'error': error}
+        else:
+            self._jobs[job_id] = status
 
     def _complete_job(self, job_id: str):
         """Mark a job as complete."""
-        if job_id:
-            self._set_job_status(job_id, 'complete')
+        self._set_job_status(job_id, 'complete')
+
+    def _fail_job(self, job_id: str, error: str | BaseException):
+        """Mark a job as failed and record the error for waiters."""
+        self._set_job_status(job_id, 'failed', error=str(error))
 
     def get_job_status(self, job_id: str) -> str | None:
         """Get the status of a tracked job."""
         job_status = self._jobs.get(job_id)
         if not job_status:
             raise RuntimeError(f'Job {job_id} does not exist')
+        if isinstance(job_status, dict):
+            return job_status.get('status')
         return job_status
 
-    async def wait_for_job(self, job_id: str, timeout: float = 300):
-        """Wait for a job to complete.
+    def get_job_error(self, job_id: str) -> str | None:
+        """Return the recorded error for a failed job, if any."""
+        job_status = self._jobs.get(job_id)
+        if isinstance(job_status, dict):
+            return job_status.get('error')
+        return None
 
-        Transfers and processes the queue while waiting to ensure jobs are actually executed.
-        This is especially important in tests and synchronous contexts.
+    async def wait_for_job(self, job_id: str, timeout: float = 300):
+        """Wait for a job to complete or fail.
+
+        In tests (no perpetual file-worker loop) this drains the shared queue
+        so the job actually runs.  Production request processes only poll:
+        stealing from the public queue reorders work (the private queue is
+        LIFO) and can starve the perpetual loop.
 
         Args:
             job_id: The job ID to wait for
@@ -859,8 +893,8 @@ class FileWorker:
 
         Raises:
             TimeoutError: If job doesn't complete within timeout
+            FileWorkerJobFailed: If the job is marked failed
         """
-        import time
         start = time.time()
         iteration = 0
         while time.time() - start < timeout:
@@ -868,9 +902,13 @@ class FileWorker:
             status = self.get_job_status(job_id)
             if status == 'complete':
                 return
-            # Transfer from public to private queue, then process
-            self.transfer_queue()
-            await self.process_queue()
+            if status == 'failed':
+                error = self.get_job_error(job_id) or 'unknown error'
+                logger.error(f'wait_for_job: job_id={job_id} failed: {error}')
+                raise FileWorkerJobFailed(f'Job {job_id} failed: {error}')
+            if PYTEST:
+                self.transfer_queue()
+                await self.process_queue()
             await asyncio.sleep(0.01)
         logger.error(f'wait_for_job: TIMEOUT job_id={job_id} after {iteration} iterations')
         raise TimeoutError(f'Job {job_id} did not complete in time')
@@ -1024,12 +1062,50 @@ class FileWorker:
             self.reset_status()
 
     def transfer_queue(self):
-        """Transfer items from the public queue to the private queue."""
-        while self.public_queue.qsize() > 0:
-            item = self.public_queue.get_nowait()
+        """Transfer items from the public queue to the private queue.
+
+        Uses ``get_nowait()`` in a loop rather than checking ``qsize()`` first:
+        the public queue is a multiprocessing.Queue drained by every process, so
+        ``qsize() > 0`` followed by ``get_nowait()`` races and raises
+        ``queue.Empty``.
+        """
+        while True:
+            try:
+                item = self.public_queue.get_nowait()
+            except queue.Empty:
+                break
             self.private_queue.put_nowait(item)
 
-    async def process_queue(self):
+    def check_queue_stall(self, processed: bool = False) -> None:
+        """Log if jobs sit queued while the worker looks idle.
+
+        ``process_queue`` handles one task per tick, so a shrinking backlog is
+        not a stall.  Only warn when a tick processed nothing and the queues
+        stayed non-empty while status is idle.
+        """
+        if processed:
+            self._queue_stall_since = None
+            return
+        try:
+            queued = self.public_queue.qsize() + self.private_queue.qsize()
+        except Exception:
+            return
+        if queued and self.status.get('status') == 'idle':
+            now = time.time()
+            if self._queue_stall_since is None:
+                self._queue_stall_since = now
+            elif now - self._queue_stall_since >= QUEUE_STALL_SECONDS:
+                logger.error(
+                    'File worker appears stalled: %s queued job(s) while status is idle for %ss',
+                    queued,
+                    int(now - self._queue_stall_since),
+                )
+                self._queue_stall_since = now
+        else:
+            self._queue_stall_since = None
+
+    async def process_queue(self) -> bool:
+        """Process one queued task.  Returns True if a task was handled."""
         try:
             task: FileTask = self.private_queue.get_nowait()
         except asyncio.QueueEmpty:
@@ -1037,7 +1113,7 @@ class FileWorker:
             if flags.file_worker_busy.is_set() and self.public_queue.qsize() == 0:
                 flags.file_worker_busy.clear()
             await asyncio.sleep(0)
-            return
+            return False
 
         # Set flag before processing any task (if not already set)
         if not flags.file_worker_busy.is_set():
@@ -1056,6 +1132,7 @@ class FileWorker:
                 case FileTaskType.batch_reorganize:
                     await self.handle_batch_reorganize(task)
         except asyncio.CancelledError:
+            self._fail_job(task.job_id, 'File worker task was cancelled')
             raise
         except Exception as e:
             # `handle_count`/`handle_refresh` reset their own status on success (or intentionally
@@ -1066,11 +1143,13 @@ class FileWorker:
             # failure.  (handle_move/handle_reorganize handle their own errors and do not reach here.)
             logger.error(f'FileWorker task {task.task_type} failed', exc_info=e)
             self.update_status(status='error', error=str(e))
+            self._fail_job(task.job_id, e)
             raise
         finally:
             # Clear flag if both queues are now empty
             if self.private_queue.qsize() == 0 and self.public_queue.qsize() == 0:
                 flags.file_worker_busy.clear()
+        return True
 
     async def handle_count(self, task: FileTask):
         """Count files in the task's paths and chain to next task if specified."""
@@ -1994,12 +2073,14 @@ class FileWorker:
 
         if not destination or not sources:
             logger.error('Invalid move task: missing destination or sources')
+            self._fail_job(task.job_id, 'Invalid move task: missing destination or sources')
             self.reset_status()
             return
 
         media_directory = get_media_directory()
 
         if not self._validate_move_paths(sources, destination, media_directory):
+            self._fail_job(task.job_id, 'Move paths are not within the media directory')
             return
 
         # Estimate total for planning phase based on number of sources
@@ -2059,11 +2140,18 @@ class FileWorker:
 
         except asyncio.CancelledError:
             logger.warning('Move task was cancelled')
+            try:
+                if revert_plan:
+                    self._revert_move(revert_plan, created_directories, destination, destination_existed)
+            except Exception as revert_error:
+                logger.error(f'Failed to revert cancelled move: {revert_error}')
+            self._fail_job(task.job_id, 'Move task was cancelled')
             raise
         except Exception as e:
             logger.error(f'Move failed: {e}, reverting {len(revert_plan)} items', exc_info=e)
             self.update_status(status='reverting', error=str(e))
             self._revert_move(revert_plan, created_directories, destination, destination_existed)
+            self._fail_job(task.job_id, e)
             Events.send_file_move_failed(f'Move to {destination} failed: {e}')
         finally:
             self.reset_status()
@@ -2354,12 +2442,14 @@ class FileWorker:
 
         except asyncio.CancelledError:
             logger.warning('Reorganize task was cancelled')
+            self._fail_job(task.job_id, 'Reorganize task was cancelled')
             raise
         except Exception as e:
             logger.error(f'Reorganize failed: {e}', exc_info=e)
             self.update_status(status='error', error=str(e))
             # Note: We don't attempt automatic rollback for reorganize tasks
             # as the partial state may be complex. User should refresh files.
+            self._fail_job(task.job_id, e)
             Events.send_file_move_failed(f'Reorganize failed: {e}')
         finally:
             self.reset_status()
@@ -2497,7 +2587,7 @@ class FileWorker:
                             error=str(e),
                             batch_status=batch_status,
                         )
-                        self._set_job_status(task.job_id, 'failed')
+                        self._fail_job(task.job_id, e)
                         Events.send_file_move_failed(
                             f'Batch reorganization failed on {collection_name}: {e}'
                         )
@@ -2512,12 +2602,13 @@ class FileWorker:
 
         except asyncio.CancelledError:
             logger.warning('Batch reorganize task was cancelled')
+            self._fail_job(task.job_id, 'Batch reorganize task was cancelled')
             raise
         except Exception as e:
             logger.error(f'Batch reorganize failed: {e}', exc_info=e)
             batch_status['error'] = str(e)
             self.update_status(status='error', error=str(e), batch_status=batch_status)
-            self._set_job_status(task.job_id, 'failed')
+            self._fail_job(task.job_id, e)
             Events.send_file_move_failed(f'Batch reorganization failed: {e}')
         finally:
             self.reset_status()
@@ -2544,8 +2635,14 @@ class FileWorker:
             status = self.get_job_status(job_id)
             if status == 'complete':
                 return
+            if status == 'failed':
+                error = self.get_job_error(job_id) or 'unknown error'
+                raise FileWorkerJobFailed(
+                    f'Collection {collection_name} reorganization failed: {error}'
+                )
 
-            # Transfer and process queue FIRST to ensure status is updated
+            # Nested under process_queue (batch reorganize); must drain the
+            # sub-job ourselves or this wait deadlocks.
             self.transfer_queue()
             await self.process_queue()
 
@@ -2571,5 +2668,7 @@ class FileWorker:
         raise TimeoutError(f'Collection {collection_name} reorganization timed out')
 
 
-# All processes create a FileWorker, but only one receives the signals and actually does work.
+# Each Sanic worker constructs a FileWorker.  The perpetual signal is started
+# once, but request handlers (and wait_for_job in tests) can also drain the
+# shared public queue in this process.
 file_worker = FileWorker()

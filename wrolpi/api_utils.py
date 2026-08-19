@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
@@ -164,18 +165,113 @@ async def cleanup_session(request: Request, response_: HTTPResponse):
 
 PERPETUAL_WORKERS = list()
 
+# Always started in every Sanic worker so file jobs survive the owner process dying.
+FILE_WORKER_PERPETUAL_EVENT = 'wrolpi.perpetual.perpetual_file_worker_queue'
+
+
+def _perpetual_owner_is_alive(app) -> bool:
+    """True if the process that claimed the single-process perpetual loops is still running."""
+    try:
+        pid = app.shared_ctx.perpetual_tasks_owner_pid.value
+    except Exception:
+        return False
+    if not pid:
+        return False
+    from wrolpi.cmd import pid_is_running
+    return pid_is_running(pid)
+
+
+def _claim_perpetual_tasks(app) -> bool:
+    """Return True if this process should start the single-process perpetual loops.
+
+    ``perpetual_tasks_started`` is a shared Event.  If the worker that set it
+    exits (Sanic auto_reload in docker, crash), the Event stays set and every
+    replacement ``after_server_start`` used to no-op — file processing, downloads,
+    and switches stayed dead until a full API restart.  Track the owner PID and
+    retake the claim when that process is gone.
+    """
+    lock = getattr(app.shared_ctx, 'perpetual_tasks_lock', None)
+    if lock is None:
+        return _claim_perpetual_tasks_unlocked(app)
+    with lock:
+        return _claim_perpetual_tasks_unlocked(app)
+
+
+def _claim_perpetual_tasks_unlocked(app) -> bool:
+    if app.shared_ctx.perpetual_tasks_started.is_set() and _perpetual_owner_is_alive(app):
+        return False
+    app.shared_ctx.perpetual_tasks_started.set()
+    try:
+        app.shared_ctx.perpetual_tasks_owner_pid.value = os.getpid()
+    except Exception:
+        pass
+    return True
+
+
+def _perpetual_events_for_this_process(app) -> list[str]:
+    """Events this worker should dispatch at startup.
+
+    The claiming worker starts every perpetual loop.  Every other worker still
+    starts the file-worker pump so a dead/cancelled owner cannot stall file
+    operations for the life of the remaining processes.
+    """
+    if _claim_perpetual_tasks(app):
+        return list(PERPETUAL_WORKERS)
+    return [FILE_WORKER_PERPETUAL_EVENT]
+
+
+def _app_is_stopping() -> bool:
+    """True when Sanic is shutting down (perpetual workers should not reschedule).
+
+    Only the ``before_server_stop`` flag (and Sanic's ``is_stopping`` if it is
+    ever set) count.  ``state.is_running`` stays False in some serving modes
+    (including this project's docker Sanic workers), so treating
+    ``is_started and not is_running`` as shutdown killed every perpetual
+    worker after its first tick.
+    """
+    try:
+        if getattr(api_app.ctx, 'perpetual_shutdown', False):
+            return True
+        state = getattr(api_app, 'state', None)
+        return bool(state is not None and getattr(state, 'is_stopping', False))
+    except Exception:
+        return False
+
+
+def _uncancel_current_task():
+    """Allow a perpetual worker to continue after an unexpected CancelledError.
+
+    Python 3.11+ re-raises CancelledError at the next await unless uncancel()
+    is called.  Without this, catching CancelledError cannot reschedule.
+    """
+    task = asyncio.current_task()
+    if task is not None and hasattr(task, 'uncancel'):
+        task.uncancel()
+
+
+@api_app.listener('before_server_start')
+async def _clear_perpetual_shutdown(app):
+    app.ctx.perpetual_shutdown = False
+
+
+@api_app.listener('before_server_stop')
+async def _set_perpetual_shutdown(app):
+    app.ctx.perpetual_shutdown = True
+
+
+async def _dispatch_perpetual(event_: str):
+    """Dispatch a perpetual-signal event.  Isolated so tests can stub it."""
+    await api_app.dispatch(event_)
+
 
 @api_app.after_server_start
 async def start_perpetual_tasks(app: Sanic):
-    # Only one set of perpetual tasks needs to be started.
-    if app.shared_ctx.perpetual_tasks_started.is_set():
-        return
-    logger.info('start_perpetual_tasks started')
-    logger.debug(f'start_perpetual_tasks: {PERPETUAL_WORKERS}')
-    app.shared_ctx.perpetual_tasks_started.set()
+    events = _perpetual_events_for_this_process(app)
+    logger.info(f'start_perpetual_tasks started pid={os.getpid()} events={len(events)}')
+    logger.debug(f'start_perpetual_tasks: {events}')
 
     try:
-        for event_ in PERPETUAL_WORKERS:
+        for event_ in events:
             logger.debug(f'start_perpetual_tasks {event_}')
             await app.dispatch(event_)
     except Exception as e:
@@ -183,6 +279,58 @@ async def start_perpetual_tasks(app: Sanic):
         raise
 
     logger.debug('start_perpetual_tasks completed')
+
+
+async def _run_perpetual_iteration(func: callable, event_: str, sleep: int | float):
+    """Run one perpetual-worker iteration and reschedule unless shutting down.
+
+    An ordinary Exception is logged and the loop continues.  CancelledError is
+    terminal only during shutdown; any other cancellation is logged and the
+    worker is rescheduled.  Previously any CancelledError skipped reschedule
+    with no log, silently killing file processing for the life of the process.
+    """
+    logger.trace(f'perpetual_signal {event_}')
+    start = time()
+    try:
+        await func()
+    except CancelledError:
+        if _app_is_stopping():
+            logger.info(f'Perpetual worker {event_} cancelled during shutdown')
+            raise
+        logger.warning(
+            f'Perpetual worker {event_} cancelled unexpectedly; will reschedule',
+            exc_info=True,
+        )
+        _uncancel_current_task()
+    except Exception as e:
+        logger.error(f'Perpetual worker {event_} had error', exc_info=e)
+    finally:
+        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+            elapsed = int(time() - start)
+            logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
+
+    if PYTEST:
+        return
+    if _app_is_stopping():
+        logger.info(f'Perpetual worker {event_} not rescheduling because the app is stopping')
+        return
+
+    try:
+        await asyncio.sleep(sleep)
+    except CancelledError:
+        if _app_is_stopping():
+            logger.info(f'Perpetual worker {event_} stopped during shutdown')
+            raise
+        logger.warning(
+            f'Perpetual worker {event_} cancelled while sleeping; rescheduling immediately'
+        )
+        _uncancel_current_task()
+
+    try:
+        await _dispatch_perpetual(event_)
+    except CancelledError:
+        logger.info(f'Perpetual worker {event_} cancelled while dispatching next run')
+        raise
 
 
 def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testing: bool = False):
@@ -200,25 +348,7 @@ def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testin
         # Wrap the function in a worker that will call it perpetually.
         @api_app.signal(event_)
         async def worker(*args, **kwargs):
-            logger.trace(f'perpetual_signal {event_}')
-            cancelled = False
-            start = time()
-            try:
-                await func(*args, **kwargs)
-            except CancelledError:
-                cancelled = True
-                raise
-            except Exception as e:
-                logger.error(f'Perpetual worker {event_} had error', exc_info=e)
-            finally:
-                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-                    elapsed = int(time() - start)
-                    logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
-                if not cancelled and not PYTEST:
-                    # In PYTEST mode, don't self-dispatch - the test fixture handles this.
-                    # This prevents "Task was destroyed but it is pending!" errors during teardown.
-                    await asyncio.sleep(sleep)
-                    await api_app.dispatch(event_)
+            await _run_perpetual_iteration(lambda: func(*args, **kwargs), event_, sleep)
 
         # Add this new signal to the global list so that a task will be started after server startup.
         PERPETUAL_WORKERS.append(event_)

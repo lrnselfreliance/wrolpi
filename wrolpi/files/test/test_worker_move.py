@@ -7,7 +7,7 @@ from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.files import worker as worker_module
 from wrolpi.files.lib import _move_file_group_files
 from wrolpi.files.models import FileGroup, Directory
-from wrolpi.files.worker import file_worker, FileTask, FileTaskType, build_move_plan_bulk
+from wrolpi.files.worker import file_worker, FileTask, FileTaskType, FileWorkerJobFailed, build_move_plan_bulk
 
 
 @pytest.mark.asyncio
@@ -396,6 +396,74 @@ async def test_file_worker_move_rollback_on_failure(
     dest_source = dest / 'source'
     assert not dest_source.exists() or not list(dest_source.iterdir()), \
         "Destination should be empty after rollback"
+
+
+@pytest.mark.asyncio
+async def test_handle_move_marks_job_failed_on_exception(
+        async_client, test_session, test_directory, make_files_structure, monkeypatch
+):
+    """A failed move must mark its tracked job 'failed' so wait_for_job can return.
+
+    Regression: handle_move's except path sent a failure event and reverted files
+    but never touched the job status, leaving it 'pending' forever.
+    """
+    source_file, = make_files_structure(['source/file1.txt'])
+    FileGroup.from_paths(test_session, source_file)
+    test_session.commit()
+
+    dest = test_directory / 'destination'
+    dest.mkdir()
+
+    def failing_move(fg, new_path):
+        raise IOError('Simulated disk failure')
+
+    monkeypatch.setattr('wrolpi.files.worker._move_file_group_files', failing_move)
+
+    job_id = 'move-will-fail'
+    task = FileTask(FileTaskType.move, [source_file], destination=dest, job_id=job_id)
+    file_worker._set_job_status(job_id, 'pending')
+    file_worker.private_queue.put_nowait(task)
+
+    await file_worker.process_queue()
+
+    assert file_worker.get_job_status(job_id) == 'failed'
+    assert 'Simulated disk failure' in (file_worker.get_job_error(job_id) or '')
+    assert source_file.exists(), 'Source should be reverted'
+
+
+@pytest.mark.asyncio
+async def test_wait_for_job_fails_promptly_on_stale_destination_filegroup(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """A move that collides with a stale destination FileGroup must fail promptly.
+
+    Reproduction from the incident: rename dir-a -> dir-b, delete dir-b on disk
+    without a refresh, recreate dir-a/one.txt, rename again.  The move plan
+    INSERTs a FileGroup for the new source then UPDATEs primary_path onto the
+    stale destination row and hits UNIQUE constraint.  The waiter must raise
+    FileWorkerJobFailed immediately, not spin until the 300s timeout.
+    """
+    source, = make_files_structure({'dir-a/one.txt': 'hello'})
+    FileGroup.from_paths(test_session, source)
+    test_session.commit()
+
+    dest_b = test_directory / 'dir-b'
+    first_job = file_worker.queue_move(dest_b, [source])
+    await file_worker.wait_for_job(first_job, timeout=10)
+    assert (dest_b / 'one.txt').exists()
+
+    # Dest gone on disk; DB still holds dir-b/one.txt.  Recreate the old source.
+    # The first move leaves the empty source directory in place.
+    import shutil
+    shutil.rmtree(dest_b)
+    source.parent.mkdir(exist_ok=True)
+    source.write_text('hello')
+
+    second_job = file_worker.queue_move(dest_b, [source])
+    with pytest.raises(FileWorkerJobFailed):
+        await file_worker.wait_for_job(second_job, timeout=5)
+    assert file_worker.get_job_status(second_job) == 'failed'
+    assert source.exists(), 'Failed move should revert the source file'
 
 
 @pytest.mark.asyncio

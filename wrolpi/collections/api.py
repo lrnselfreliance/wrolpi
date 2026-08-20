@@ -10,6 +10,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
+from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
@@ -89,20 +90,23 @@ async def create_collection_endpoint(request: Request, body: schema.CollectionCr
 @wrol_mode_check
 async def add_collection_item_endpoint(request: Request, collection_id: int, body: schema.AddItemRequest):
     """Append (or insert at ``position``) a file/zim/url item into the collection."""
-    session = request.ctx.session
-    try:
-        item, created = lib.add_collection_item(
-            session, collection_id, item_kind=body.item_kind,
-            file_group_id=body.file_group_id, zim_id=body.zim_id, zim_entry=body.zim_entry,
-            url=body.url, title=body.title, position=body.position)
-    except UnknownCollection as e:
-        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
-    except ValidationError as e:
-        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
+    # Not `request.ctx.session`: this reads (the Collection, the FileGroup) before it INSERTs, and a
+    # deferred transaction fails that lock upgrade *instantly* with "database is locked" if anything
+    # else wrote in between (see `get_db_session`).
+    with get_db_session(commit=True) as session:
+        try:
+            item, created = lib.add_collection_item(
+                session, collection_id, item_kind=body.item_kind,
+                file_group_id=body.file_group_id, zim_id=body.zim_id, zim_entry=body.zim_entry,
+                url=body.url, title=body.title, position=body.position)
+        except UnknownCollection as e:
+            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+        except ValidationError as e:
+            return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
-    # 201 when a new item was created; 200 when the item already existed (idempotent add).
-    status = HTTPStatus.CREATED if created else HTTPStatus.OK
-    return json_response({'item': item.dict()}, status=status)
+        # 201 when a new item was created; 200 when the item already existed (idempotent add).
+        status = HTTPStatus.CREATED if created else HTTPStatus.OK
+        return json_response({'item': item.dict()}, status=status)
 
 
 @collection_bp.delete('/<collection_id:int>/items/<item_id:int>')
@@ -112,11 +116,12 @@ async def add_collection_item_endpoint(request: Request, collection_id: int, bod
 @wrol_mode_check
 async def remove_collection_item_endpoint(request: Request, collection_id: int, item_id: int):
     """Remove a single item by its id and close the ordering gap."""
-    session = request.ctx.session
-    try:
-        removed = lib.remove_collection_item(session, collection_id, item_id)
-    except UnknownCollection as e:
-        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    # Write intent (see `add_collection_item_endpoint`).
+    with get_db_session(commit=True) as session:
+        try:
+            removed = lib.remove_collection_item(session, collection_id, item_id)
+        except UnknownCollection as e:
+            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
 
     if not removed:
         return json_response({'error': f'Item {item_id} not found in collection {collection_id}'},
@@ -137,15 +142,16 @@ async def remove_collection_item_endpoint(request: Request, collection_id: int, 
 async def reorder_collection_items_endpoint(request: Request, collection_id: int,
                                             body: schema.ReorderItemsRequest):
     """Set the item order from a full list of item ids (used by drag-and-drop)."""
-    session = request.ctx.session
-    try:
-        lib.reorder_collection_items(session, collection_id, body.item_ids)
-    except UnknownCollection as e:
-        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
-    except ValueError as e:
-        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
+    # Write intent (see `add_collection_item_endpoint`).
+    with get_db_session(commit=True) as session:
+        try:
+            lib.reorder_collection_items(session, collection_id, body.item_ids)
+        except UnknownCollection as e:
+            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+        except ValueError as e:
+            return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
-    data = lib.get_collection_with_stats(session, collection_id)
+        data = lib.get_collection_with_stats(session, collection_id)
     return json_response({'collection': data})
 
 

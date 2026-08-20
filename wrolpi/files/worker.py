@@ -789,6 +789,7 @@ class FileTask:
     next_task_type: FileTaskType = None
     job_id: str = None  # Unique ID for tracking completion
     expand_stems: bool = True  # Whether to expand files to their FileGroup stem-mates
+    send_events: bool = True  # Whether to notify the user with Events (automatic refreshes set False)
     # For reorganize tasks: list of (source_path, dest_path) tuples
     move_mappings: list[tuple[pathlib.Path, pathlib.Path]] = None
     collection_id: int = None  # Collection being reorganized
@@ -922,13 +923,16 @@ class FileWorker:
         except ValueError:
             return str(path)
 
-    def queue_refresh(self, paths: list[pathlib.Path | str], expand_stems: bool = True) -> str:
+    def queue_refresh(self, paths: list[pathlib.Path | str], expand_stems: bool = True,
+                      send_events: bool = True) -> str:
         """Queue a refresh task for background processing.
 
         Args:
             paths: List of file or directory paths to refresh
             expand_stems: Whether to expand files to their FileGroup stem-mates.
                          Set to False when API users explicitly select specific files.
+            send_events: Whether to notify the user with Events.  Automatic refreshes
+                         (like a Channel refresh before downloading) set this to False.
 
         Returns:
             A unique job_id that can be used with wait_for_job() to track completion.
@@ -941,6 +945,7 @@ class FileWorker:
             next_task_type=FileTaskType.refresh,
             job_id=job_id,
             expand_stems=expand_stems,
+            send_events=send_events,
         )
         self._set_job_status(job_id, 'pending')
         self.public_queue.put_nowait(task)
@@ -1192,6 +1197,7 @@ class FileWorker:
                 prev_task_type=FileTaskType.count,
                 job_id=task.job_id,
                 expand_stems=task.expand_stems,
+                send_events=task.send_events,
             )
             self.private_queue.put_nowait(next_task)
         else:
@@ -1238,6 +1244,7 @@ class FileWorker:
                 FileTaskType.count,
                 task.paths,
                 next_task_type=FileTaskType.refresh,
+                send_events=task.send_events,
             )
             self.private_queue.put_nowait(count_task)
             return
@@ -1249,13 +1256,14 @@ class FileWorker:
             logger.info(f'Starting global refresh with {task.count} files')
             flags.global_refresh_active.set()
             Events.send_global_refresh_started()
-        elif dir_paths and len(dir_paths) == 1 and not file_paths:
-            relative_path = self._get_relative_path(dir_paths[0])
-            Events.send_directory_refresh(f'Refreshing: {relative_path}')
-        elif file_paths:
-            Events.send_files_refreshed(f'Refreshing {len(file_paths)} files')
-        else:
-            Events.send_files_refreshed(f'Refreshing {len(task.paths)} paths')
+        elif task.send_events:
+            if dir_paths and len(dir_paths) == 1 and not file_paths:
+                relative_path = self._get_relative_path(dir_paths[0])
+                Events.send_directory_refresh(f'Refreshing: {relative_path}')
+            elif file_paths:
+                Events.send_files_refreshed(f'Refreshing {len(file_paths)} files')
+            else:
+                Events.send_files_refreshed(f'Refreshing {len(task.paths)} paths')
 
         # Process files and directories within discovery flag context
         # This covers comparing, upserting, and deleting phases
@@ -1333,13 +1341,14 @@ class FileWorker:
             message = f'Global refresh completed in {elapsed:.1f} seconds'
             logger.info(message)
             Events.send_global_after_refresh_completed(message)
-        elif dir_paths and len(dir_paths) == 1 and not file_paths:
-            relative_path = self._get_relative_path(dir_paths[0])
-            Events.send_directory_refresh(f'Refreshed: {relative_path}')
-        elif file_paths:
-            Events.send_files_refreshed(f'Refreshed {len(file_paths)} files')
-        else:
-            Events.send_files_refreshed(f'Refreshed {len(task.paths)} paths')
+        elif task.send_events:
+            if dir_paths and len(dir_paths) == 1 and not file_paths:
+                relative_path = self._get_relative_path(dir_paths[0])
+                Events.send_directory_refresh(f'Refreshed: {relative_path}')
+            elif file_paths:
+                Events.send_files_refreshed(f'Refreshed {len(file_paths)} files')
+            else:
+                Events.send_files_refreshed(f'Refreshed {len(task.paths)} paths')
 
         # Set refresh_complete flag only when refreshing the entire media directory
         if is_global_refresh:

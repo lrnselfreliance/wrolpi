@@ -143,7 +143,13 @@ html .wrolpi-navbar .mantine-ActionIcon-root:hover {
 .wrolpi-navbar-icon {
     display: flex;
     align-items: center;
-    margin-left: 1.5em;
+    /*
+     * Tightened from 1.5em: three slots' worth of that was ~80px, which wrapped the mobile
+     * bar's corner onto a second row on a 375px phone, and on the desktop bar it only took
+     * room from links that useOverflowNav then folded into "More".  The corner's gap and
+     * the slots' own padding still space the icons.
+     */
+    margin-left: 0.25em;
     /* Full bar height, so the anchor inside has somewhere to stretch to. */
     align-self: stretch;
 }

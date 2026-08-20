@@ -13,7 +13,7 @@ import {clearToasts, toast} from './toast';
 import {isDarkTheme, monochromeThemes, themeNames} from '../../themes/names';
 import {navColorNames} from '../../themes/navColors';
 import {NavBarSample} from '../ThemeSamplePage';
-import {DesktopNav, NavIconWrapper} from '../Nav';
+import {DesktopNav, MobileNav, NavIconWrapper} from '../Nav';
 import {APIButton} from '../Common';
 import {ShareButton} from '../Share';
 import {SortableTable} from '../SortableTable';
@@ -3729,6 +3729,82 @@ describe('the navigation bar never breaks onto a second line', () => {
                     expect(link.getBoundingClientRect().right, `${link.textContent} at ${width}px`)
                         .to.be.at.most(bar.right + 0.5);
                 });
+            });
+        });
+    });
+});
+
+describe('the mobile navigation bar fits a phone on one row', () => {
+    /*
+     * The mobile bar showed the logo on one row and the whole corner -- share, hotspot,
+     * theme, search, hamburger -- on a second, on any screen narrower than about 380px.
+     * Every icon slot carried a 1.5em separator margin, which is ~80px across three
+     * slots: more than the deficit.  The slot margin is small now (`.wrolpi-navbar-icon`),
+     * and this holds the bar to fitting a phone whatever the margin becomes.
+     */
+    const indicators = <>
+        <NavIconWrapper>
+            {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+            <a href='#' data-testid='share'><Icon name='share' size='large'/></a>
+        </NavIconWrapper>
+        <NavIconWrapper>
+            {/* No size inside icon={}: the icon-name audit in ui.test.js reads every string
+                literal in such an expression as an icon name. */}
+            <IconButton data-testid='hotspot' label='Hotspot' variant='subtle' icon={() =>
+                <Icon name='wifi'/>}/>
+        </NavIconWrapper>
+        <NavIconWrapper>
+            <IconButton data-testid='theme' icon='sun' label='Theme' variant='subtle'/>
+        </NavIconWrapper>
+    </>;
+
+    const mountAt = (width) => cy.viewport(width, 700).then(() => cy.mountUI(
+        <MemoryRouter><div style={{width}}>
+            <MobileNav
+                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
+                icons={indicators}
+            />
+        </div></MemoryRouter>,
+    ));
+
+    // Wide enough that nothing can wrap, so this is the height of exactly one row.
+    let singleRow;
+
+    before(() => {
+        mountAt(700);
+        cy.get('.wrolpi-navbar').then(($nav) => {
+            singleRow = $nav[0].getBoundingClientRect().height;
+            expect(singleRow, 'a single row has a height to compare against')
+                .to.be.greaterThan(30);
+        });
+    });
+
+    it('stays one row at small phone widths', () => {
+        /*
+         * 375px is the iPhone SE that wrapped.  The fixture is wider than the real bar --
+         * the search link renders its keyboard hint here (a phone detects no keyboard and
+         * drops it) and the text home link outmeasures the logo -- so passing at 360px
+         * covers real devices meaningfully narrower than that.
+         */
+        [414, 375, 360].forEach((width) => {
+            mountAt(width);
+            cy.get('.wrolpi-navbar').should(($nav) => {
+                expect($nav[0].getBoundingClientRect().height, `bar height at ${width}px`)
+                    .to.be.at.most(singleRow + 2);
+            });
+        });
+    });
+
+    it('keeps the whole corner inside the bar rather than clipping it', () => {
+        // The failure a nowrap fix would trade the second row for.
+        [375, 360].forEach((width) => {
+            mountAt(width);
+            cy.get('.wrolpi-navbar').should(($nav) => {
+                const bar = $nav[0].getBoundingClientRect();
+                const corner = $nav[0].querySelector('.wrolpi-navbar-right');
+                expect(corner.getBoundingClientRect().right, `corner at ${width}px`)
+                    .to.be.at.most(bar.right + 0.5);
             });
         });
     });

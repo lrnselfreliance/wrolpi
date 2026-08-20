@@ -89,10 +89,6 @@ trap '
     echo "WROLPi upgrade has completed"
   else
     echo "WROLPi upgrade has FAILED (exit code: $EXIT_STATUS)"
-    # If we failed before the real upgrade work started (fetch, signature
-    # verification, or checkout), no code was changed on disk (the exit-6
-    # path rolls the checkout back), so restart the services we stopped
-    # instead of leaving the WROLPi down.
     if [ "$RESTART_SERVICES_ON_FAILURE" = true ]; then
       echo "Restarting WROLPi services after failed upgrade..."
       systemctl start wrolpi-api || :
@@ -110,9 +106,18 @@ set -o pipefail
 # Units may not be installed yet if a previous install/repair failed; repair.sh installs them later.
 systemctl stop wrolpi-api || :
 systemctl stop wrolpi-app || :
-# Services are now stopped; until the upgrade actually modifies the code the
-# EXIT trap can safely bring them back up on failure.
 RESTART_SERVICES_ON_FAILURE=true
+
+# Restore the previously-running commit after a failed checkout or verification.
+# Services must only restart on that known-good commit, so if the rollback does
+# not land there, leave them stopped.
+rollback_or_no_restart() {
+  git -C /opt/wrolpi checkout -f -B "${BRANCH}" "${PREVIOUS_HEAD}" || :
+  if [ "$(git -C /opt/wrolpi rev-parse HEAD 2>/dev/null)" != "${PREVIOUS_HEAD}" ]; then
+    echo "ERROR: rollback to ${PREVIOUS_HEAD} failed; not restarting services."
+    RESTART_SERVICES_ON_FAILURE=false
+  fi
+}
 
 # Fetch the latest commits without modifying the working tree.
 git -C /opt/wrolpi fetch || exit 4
@@ -137,20 +142,22 @@ if ! git -C /opt/wrolpi verify-commit origin/"${BRANCH}" 2>&1; then
 fi
 
 # Signature verified, safe to apply.
-# Remember the running code's commit so a failed verification below can roll back to it.
 PREVIOUS_HEAD=$(git -C /opt/wrolpi rev-parse HEAD)
 # Force the checkout so local working-tree changes (e.g. app/package-lock.json
 # rewritten by npm install during a prior upgrade) cannot abort the switch.
 # Use `checkout -B <branch> origin/<branch>` so the ref can never be mistaken for a path. A tracked `release/`
 # directory otherwise collides with the `release` branch name, making a bare `git checkout release` ambiguous.
-(cd /opt/wrolpi && git checkout -f -B "${BRANCH}" "origin/${BRANCH}") || exit 4
+# checkout -B moves the ref before checking out the tree, so a failure here may
+# leave a mixed tree; roll back before the EXIT trap restarts anything.
+(cd /opt/wrolpi && git checkout -f -B "${BRANCH}" "origin/${BRANCH}") || {
+  rollback_or_no_restart
+  exit 4
+}
 
 # Verify HEAD again after checkout in case the branch was swapped between fetch and checkout.
 if ! git -C /opt/wrolpi verify-commit HEAD 2>&1; then
   echo "ERROR: HEAD commit signature verification failed after checkout. Aborting upgrade."
-  # Roll back to the previously-running (verified) commit so the EXIT trap
-  # restarts the services on known-good code, never on the unverified commit.
-  git -C /opt/wrolpi checkout -f -B "${BRANCH}" "${PREVIOUS_HEAD}" || :
+  rollback_or_no_restart
   rm -rf "$GNUPGHOME"
   exit 6
 fi
@@ -158,9 +165,8 @@ fi
 rm -rf "$GNUPGHOME"
 unset GNUPGHOME
 
-# The verified code is checked out and scripts/upgrade.sh will start modifying
-# the system; from here a blind restart could run half-upgraded code, so leave
-# recovery to repair.sh (invoked at the end of scripts/upgrade.sh).
+# From here scripts/upgrade.sh mutates the system; a blind restart could run
+# half-upgraded code, so recovery belongs to repair.sh.
 RESTART_SERVICES_ON_FAILURE=false
 
 /opt/wrolpi/scripts/upgrade.sh 2>&1 | tee /opt/wrolpi/upgrade.log

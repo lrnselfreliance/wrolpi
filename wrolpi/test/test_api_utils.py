@@ -180,6 +180,12 @@ async def test_watchdog_reclaims_and_starts_pumps_when_owner_is_dead(async_clien
     async def fake_dispatch(event):
         dispatched.append(event)
 
+    # A sibling test's async_client teardown runs the real before_server_stop listener,
+    # which leaves perpetual_shutdown=True on the module-global app; the watchdog would
+    # then return before reclaiming.  This test is about a dead owner, not shutdown.
+    monkeypatch.setattr(api_app.ctx, 'perpetual_shutdown', False, raising=False)
+    monkeypatch.setattr(api_app.state, 'is_stopping', False, raising=False)
+
     api_app.shared_ctx.perpetual_tasks_started.set()
     api_app.shared_ctx.perpetual_tasks_owner_pid.value = 2**31 - 1
     monkeypatch.setattr('wrolpi.api_utils._dispatch_perpetual', fake_dispatch)

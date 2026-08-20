@@ -1076,6 +1076,67 @@ async def test_config_valid(async_client, test_wrolpi_config):
     assert config.is_valid() is True
 
 
+@pytest.mark.asyncio
+async def test_write_config_data_failure_preserves_existing_file(async_client, test_wrolpi_config):
+    """A failed config write must leave the existing config file untouched.
+
+    The write must also be atomic (temp file + rename) so a concurrent reader can never observe a
+    truncated config."""
+    test_wrolpi_config.write_text('version: 5\nwrol_mode: true\n')
+
+    # `object()` cannot be serialized; the key sorts last so YAML would emit partial output first.
+    with pytest.raises(ValueError):
+        common.write_config_data({'version': 6, 'zzz': object()}, test_wrolpi_config)
+
+    # The original file survives the failed write.
+    assert common.read_config_data(test_wrolpi_config) == {'version': 5, 'wrol_mode': True}
+
+    # A successful write replaces the contents and leaves no temporary file behind.
+    common.write_config_data({'version': 6}, test_wrolpi_config)
+    assert common.read_config_data(test_wrolpi_config) == {'version': 6}
+    leftovers = [i for i in test_wrolpi_config.parent.iterdir()
+                 if i.name.startswith(test_wrolpi_config.name) and i.name != test_wrolpi_config.name]
+    assert not leftovers, f'Temporary files were left behind: {leftovers}'
+
+
+@pytest.mark.asyncio
+async def test_save_version_check_runs_under_config_save_lock(async_client, test_wrolpi_config):
+    """`ConfigFile.save` must read the config file for its version check only while holding
+    `config_save_lock`, otherwise it can read a config another process is writing."""
+    from wrolpi.api_utils import api_app
+
+    config = get_wrolpi_config()
+    config.dump_config()
+
+    class RecordingLock:
+        def __init__(self, lock):
+            self.lock = lock
+            self.held = False
+
+        def __enter__(self):
+            self.lock.__enter__()
+            self.held = True
+
+        def __exit__(self, *args):
+            self.held = False
+            return self.lock.__exit__(*args)
+
+    recording_lock = RecordingLock(api_app.shared_ctx.config_save_lock)
+    lock_held_during_read = list()
+    real_read_config_file = config.read_config_file
+
+    def recording_read_config_file(*args, **kwargs):
+        lock_held_during_read.append(recording_lock.held)
+        return real_read_config_file(*args, **kwargs)
+
+    with mock.patch.object(api_app.shared_ctx, 'config_save_lock', recording_lock), \
+            mock.patch.object(config, 'read_config_file', recording_read_config_file):
+        config.dump_config()
+
+    assert lock_held_during_read, 'The version check never read the config file'
+    assert all(lock_held_during_read), 'The config file was read without holding config_save_lock'
+
+
 @pytest.mark.parametrize('name,expected_name', [
     ('foo', 'foo'),
     (pathlib.Path('foo'), pathlib.Path('foo')),

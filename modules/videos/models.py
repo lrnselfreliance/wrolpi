@@ -1019,7 +1019,7 @@ class Channel(ModelHelper, Base):
             external_paths = cls._get_external_file_paths(session, id_, directory)
 
         # Queue refresh immediately so caller can await the job.
-        job_id = file_worker.queue_refresh([directory] + external_paths)
+        job_id = file_worker.queue_refresh([directory] + external_paths, send_events=send_events)
 
         # Background task handles post-processing after job completes.
         async def _():

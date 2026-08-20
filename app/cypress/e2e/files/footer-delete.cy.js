@@ -31,11 +31,17 @@ import {
 
     // Remove the suite's tag wherever a failed run may have left it, along with the
     // tags/<TAG_NAME>/ directory: force-deleting a tagged file strands its hardlink there.
+    // failOnStatusCode: false throughout -- a failed command aborts the rest of its hook,
+    // and this runs in teardown, where an API hiccup must not skip the disk cleanup.
     const deleteTestTag = () => {
-        cy.request('/api/tag').its('body.tags').then((tags) => {
-            const tag = tags.find((t) => t.name === TAG_NAME);
+        cy.request({url: '/api/tag', failOnStatusCode: false}).then(({body}) => {
+            const tag = ((body && body.tags) || []).find((t) => t.name === TAG_NAME);
             if (tag) {
-                cy.request('DELETE', `/api/tag/${tag.id}`);
+                cy.request({
+                    method: 'DELETE',
+                    url: `/api/tag/${tag.id}`,
+                    failOnStatusCode: false,
+                });
             }
         });
         cy.task('fb:cleanup-tag-dir', TAG_NAME);

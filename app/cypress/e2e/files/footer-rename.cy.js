@@ -73,43 +73,57 @@ import {
         cy.task('fb:exists', 'fb-notes.txt').should('be.true');
     });
 
+    // A rename queues a refresh of the parent directory AFTER responding.  Events carry no
+    // job id, so a test must not leave that refresh in flight: the next test's own refresh
+    // wait could be satisfied by this straggler while the DB still reflects the old tree.
+    const drainQueuedRefresh = (act) => {
+        cy.serverNow().then((since) => {
+            act();
+            cy.waitForEvent({since, event: 'directory_refresh', message: 'Refreshed: cypress-fb'});
+        });
+    };
+
     it('renames a file on disk', () => {
         selectRow('fb-notes.txt');
         footerButton('Rename').click();
 
-        dialog().within(() => {
-            cy.get('input').clear().type('fb-renamed.txt');
-            cy.contains('button', 'Rename').click();
+        drainQueuedRefresh(() => {
+            dialog().within(() => {
+                cy.get('input').clear().type('fb-renamed.txt');
+                cy.contains('button', 'Rename').click();
+            });
+
+            dialog().should('not.exist');
+            row('fb-renamed.txt').should('be.visible');
+            cy.contains('tr', 'fb-notes.txt').should('not.exist');
+
+            cy.task('fb:exists', 'fb-renamed.txt').should('be.true');
+            cy.task('fb:exists', 'fb-notes.txt').should('be.false');
+            // The neighboring file was not touched.
+            cy.task('fb:exists', 'fb-other.txt').should('be.true');
         });
-
-        dialog().should('not.exist');
-        row('fb-renamed.txt').should('be.visible');
-        cy.contains('tr', 'fb-notes.txt').should('not.exist');
-
-        cy.task('fb:exists', 'fb-renamed.txt').should('be.true');
-        cy.task('fb:exists', 'fb-notes.txt').should('be.false');
-        // The neighboring file was not touched.
-        cy.task('fb:exists', 'fb-other.txt').should('be.true');
     });
 
     it('renames a directory and its children move with it on disk', () => {
         selectRow('fb-alpha');
         footerButton('Rename').click();
 
-        dialog().within(() => {
-            cy.get('input').clear().type('fb-alpha-renamed');
-            cy.contains('button', 'Rename').click();
+        drainQueuedRefresh(() => {
+            dialog().within(() => {
+                cy.get('input').clear().type('fb-alpha-renamed');
+                cy.contains('button', 'Rename').click();
+            });
+
+            // A directory rename runs as a file-worker move job; the modal stays open until
+            // the job finishes, which takes longer than the default timeout.
+            cy.get('[role="dialog"]', {timeout: 30000}).should('not.exist');
+            row('fb-alpha-renamed').should('be.visible');
+            // The folder row's text is just the name, so anchoring excludes 'fb-alpha-renamed'.
+            cy.contains('tr', /fb-alpha$/).should('not.exist');
+
+            cy.task('fb:readdir', 'fb-alpha-renamed')
+                .should('deep.equal', ['fb-one.txt', 'fb-two.txt']);
+            cy.task('fb:exists', 'fb-alpha').should('be.false');
         });
-
-        // A directory rename runs as a file-worker move job; the modal stays open until the
-        // job finishes, which takes longer than the default timeout.
-        cy.get('[role="dialog"]', {timeout: 30000}).should('not.exist');
-        row('fb-alpha-renamed').should('be.visible');
-        // The folder row's text is just the name, so anchoring excludes 'fb-alpha-renamed'.
-        cy.contains('tr', /fb-alpha$/).should('not.exist');
-
-        cy.task('fb:readdir', 'fb-alpha-renamed')
-            .should('deep.equal', ['fb-one.txt', 'fb-two.txt']);
-        cy.task('fb:exists', 'fb-alpha').should('be.false');
     });
 });

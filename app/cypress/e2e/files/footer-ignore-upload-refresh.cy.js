@@ -28,17 +28,18 @@ import {
 
     beforeEach(() => setupFileBrowser(seedFiles, 'fb-notes.txt'));
 
-    after(() => {
-        // Un-ignore unconditionally: a failed test must not leave the sandbox in the
-        // ignored_directories config (it would confuse later runs and the user's stack).
+    // Un-ignore after EVERY test: a failure mid-ignore must not leave the sandbox in the
+    // ignored_directories config for the spec's later tests (or the user's stack).
+    afterEach(() => {
         cy.request({
             method: 'POST',
             url: '/api/files/unignore_directory',
             body: {path: `/media/wrolpi/${IGNORED_DIR}`},
             failOnStatusCode: false,
         });
-        teardownFileBrowser();
     });
+
+    after(teardownFileBrowser);
 
     // cy.task has no built-in retry; background work (uploads) lands on disk asynchronously.
     const waitForDisk = (relativePath, timeout = 30000) => {
@@ -131,12 +132,8 @@ import {
             });
         });
 
-        // The table does NOT refetch itself after a refresh (useBrowseFiles only fetches on
-        // mount and folder toggles) -- the user must reload or toggle a folder to see what
-        // the refresh found.  Assert the current behavior; if this later starts auto-updating,
-        // the reload can be dropped.
-        // The open folders live in the ?folders= query, so the sandbox is still open
-        // after the reload -- clicking it again would close it.
+        // The browse table does not refetch after a refresh, so reload to see the result.
+        // The open folders live in the ?folders= query, so the sandbox stays open.
         cy.reload();
         row('fb-sneaky.txt').should('be.visible');
     });

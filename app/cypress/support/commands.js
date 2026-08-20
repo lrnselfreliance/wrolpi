@@ -12,8 +12,9 @@ Cypress.Commands.add('mount', mount);
  * signal is the completion event on /api/events/feed.  The pattern: capture the server's clock
  * BEFORE starting the work, then poll the feed for a matching event newer than that timestamp.
  *
- * If the timeout expires the test FAILS -- historically that has meant the file worker was
- * wedged and the api service needed a restart (fixed since, but fail loudly regardless).
+ * Events carry no job id, so the match is by name/message and cannot prove WHICH job finished.
+ * A test that leaves a job queued (e.g. rename queues a parent-directory refresh) must drain
+ * it before ending, or the next test's wait may be satisfied by the straggler.
  */
 
 // The API decides what time it is (the frontend does the same, in case of clock drift).
@@ -21,25 +22,26 @@ Cypress.Commands.add('serverNow', () =>
     cy.request('/api/events/feed').its('body.now'));
 
 /*
- * cy.waitForEvent({since, event, message?, messagePrefix?, failureEvent?, timeout?})
+ * cy.waitForEvent({since, event, message?, messagePrefix?, messageContains?, failureEvent?, timeout?})
  *
  * Poll the events feed until an event newer than `since` matches.  `event` is a name or a
- * list of names; narrow further with an exact `message` or a `messagePrefix`.  If a
- * `failureEvent` (name or list) shows up first, fail immediately with its message instead
- * of timing out.
+ * list of names; narrow further with an exact `message`, a `messagePrefix`, or a
+ * `messageContains` substring.  If a `failureEvent` (name or list) shows up first, fail
+ * immediately with its message instead of timing out.
  *
  *   cy.serverNow().then((since) => {
  *       // ...start the background work...
  *       cy.waitForEvent({since, event: 'file_move_completed', failureEvent: 'file_move_failed'});
  *   });
  */
-Cypress.Commands.add('waitForEvent', ({since, event, message, messagePrefix, failureEvent, timeout = 60000}) => {
+Cypress.Commands.add('waitForEvent', ({since, event, message, messagePrefix, messageContains, failureEvent, timeout = 60000}) => {
     const wanted = [].concat(event);
     const failures = failureEvent ? [].concat(failureEvent) : [];
     const matches = (e) => {
         if (!wanted.includes(e.event)) return false;
         if (message) return e.message === message;
         if (messagePrefix) return (e.message || '').startsWith(messagePrefix);
+        if (messageContains) return (e.message || '').includes(messageContains);
         return true;
     };
 

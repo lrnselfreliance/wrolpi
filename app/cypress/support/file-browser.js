@@ -47,8 +47,33 @@ export const setupFileBrowser = (seedFiles, firstRow) => {
 
 // Empty the sandbox on disk, let a refresh purge its rows from the DB, then remove the
 // empty directory itself so nothing stale survives into the next run.  Call from after().
+//
+// The refresh is best-effort and never fails: a failed command aborts the rest of its hook,
+// and the disk wipe below must always run.  The next run's setup refresh repairs the DB
+// even when this purge is missed.
 export const teardownFileBrowser = () => {
     cy.task('fb:reset', {files: {}});
-    cy.refreshFiles([SANDBOX]);
+    cy.serverNow().then((since) => {
+        cy.request({
+            method: 'POST',
+            url: '/api/files/refresh',
+            body: {paths: [SANDBOX]},
+            failOnStatusCode: false,
+        });
+        const deadline = Date.now() + 30000;
+        const poll = () => {
+            cy.request({
+                url: `/api/events/feed?after=${encodeURIComponent(since)}`,
+                failOnStatusCode: false,
+            }).then(({body}) => {
+                const done = ((body && body.events) || []).some((e) =>
+                    e.event === 'directory_refresh' && e.message === `Refreshed: ${SANDBOX}`);
+                if (done || Date.now() > deadline) return;
+                cy.wait(1000);
+                poll();
+            });
+        };
+        poll();
+    });
     cy.task('fb:cleanup');
 };

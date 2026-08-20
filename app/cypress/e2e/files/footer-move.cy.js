@@ -42,13 +42,16 @@ import {
     };
 
     // Start the clock, run the move via `act`, then wait for the background job to finish.
-    const moveAndWait = (act) => {
+    // The completion event names the destination ('Moved N items to /media/wrolpi/...'); match
+    // it so an unrelated move finishing at the same moment cannot satisfy this wait.
+    const moveAndWait = (destination, act) => {
         cy.serverNow().then((since) => {
             act();
             dialog().should('not.exist');
             cy.waitForEvent({
                 since,
                 event: 'file_move_completed',
+                messageContains: `/media/wrolpi/${destination}`,
                 failureEvent: 'file_move_failed',
                 timeout: 30000,
             });
@@ -75,7 +78,7 @@ import {
         // The destination column previews where the file will land.
         dialog().contains('pre', 'cypress-fb/fb-beta/fb-notes.txt');
 
-        moveAndWait(() => dialog().contains('button', 'Move').click());
+        moveAndWait('cypress-fb/fb-beta', () => dialog().contains('button', 'Move').click());
 
         cy.task('fb:exists', 'fb-beta/fb-notes.txt').should('be.true');
         cy.task('fb:exists', 'fb-notes.txt').should('be.false');
@@ -100,7 +103,7 @@ import {
         });
         chooseDestination('cypress-fb/fb-beta');
 
-        moveAndWait(() => dialog().contains('button', 'Move').click());
+        moveAndWait('cypress-fb/fb-beta', () => dialog().contains('button', 'Move').click());
 
         cy.task('fb:readdir', 'fb-beta').should('deep.equal', ['fb-one.txt', 'fb-two.txt']);
         cy.task('fb:readdir', 'fb-alpha').should('deep.equal', []);

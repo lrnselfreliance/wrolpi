@@ -3742,6 +3742,14 @@ describe('the mobile navigation bar fits a phone on one row', () => {
      * slots: more than the deficit.  The slot margin is small now (`.wrolpi-navbar-icon`),
      * and this holds the bar to fitting a phone whatever the margin becomes.
      */
+    /*
+     * The fixture matches what a phone actually renders, so the widths below are the widths
+     * being proven -- not a stand-in with different contents:
+     *   - the home link is the 32px logo, the default (`NAME` is null in production);
+     *   - the theme slot carries the 0.8em right margin the real DarkModeToggle has;
+     *   - the pointer is made coarse (below), which is what makes a phone drop the search
+     *     link's keyboard hint.
+     */
     const indicators = <>
         <NavIconWrapper>
             {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
@@ -3754,19 +3762,46 @@ describe('the mobile navigation bar fits a phone on one row', () => {
                 <Icon name='wifi'/>}/>
         </NavIconWrapper>
         <NavIconWrapper>
-            <IconButton data-testid='theme' icon='sun' label='Theme' variant='subtle'/>
+            <IconButton data-testid='theme' icon='sun' label='Theme' variant='subtle'
+                        style={{marginRight: '0.8em'}}/>
         </NavIconWrapper>
     </>;
 
-    const mountAt = (width) => cy.viewport(width, 700).then(() => cy.mountUI(
-        <MemoryRouter><div style={{width}}>
-            <MobileNav
-                navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
-                homeLink={<a className='wrolpi-navbar-link' href='#'><i>WROLPi</i></a>}
-                icons={indicators}
-            />
-        </div></MemoryRouter>,
-    ));
+    const homeLink = <a className='wrolpi-navbar-link' href='#'
+                        style={{paddingTop: 0, paddingBottom: 0}}>
+        <i><img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/></i>
+    </a>;
+
+    const mountAt = (width) => {
+        /*
+         * A phone has a coarse pointer.  useKeyboardDetected keys off that and never turns
+         * true without a keypress, so SearchIconButton drops its keyboard hint -- on the
+         * desktop browser running this spec the hint renders and widens the corner by a
+         * hint the phone never shows.  Other queries pass through untouched; Mantine asks
+         * its own.  Guarded because a stub cannot wrap a method twice in one test.
+         */
+        cy.window().then((win) => {
+            if (win.matchMedia.restore) return;
+            const real = win.matchMedia.bind(win);
+            cy.stub(win, 'matchMedia').callsFake((query) => query === '(pointer: coarse)'
+                ? {
+                    matches: true, media: query, onchange: null,
+                    addEventListener: () => undefined, removeEventListener: () => undefined,
+                    addListener: () => undefined, removeListener: () => undefined,
+                    dispatchEvent: () => false,
+                }
+                : real(query));
+        });
+        return cy.viewport(width, 700).then(() => cy.mountUI(
+            <MemoryRouter><div style={{width}}>
+                <MobileNav
+                    navColors={{background: '#5c4fa8', color: '#ffffff', ratio: 6.69}}
+                    homeLink={homeLink}
+                    icons={indicators}
+                />
+            </div></MemoryRouter>,
+        ));
+    };
 
     // Wide enough that nothing can wrap, so this is the height of exactly one row.
     let singleRow;
@@ -3780,14 +3815,18 @@ describe('the mobile navigation bar fits a phone on one row', () => {
         });
     });
 
+    it('renders what a phone renders: no keyboard hint on the search link', () => {
+        // The teeth for the coarse-pointer stub.  If the hint ever renders here, the widths
+        // below are being proven against a wider bar than any phone shows.
+        mountAt(375);
+        cy.get('.wrolpi-navbar [aria-label="Search"]').should(($search) => {
+            expect($search.text().trim(), 'search link shows a glyph only').to.equal('');
+        });
+    });
+
     it('stays one row at small phone widths', () => {
-        /*
-         * 375px is the iPhone SE that wrapped.  The fixture is wider than the real bar --
-         * the search link renders its keyboard hint here (a phone detects no keyboard and
-         * drops it) and the text home link outmeasures the logo -- so passing at 360px
-         * covers real devices meaningfully narrower than that.
-         */
-        [414, 375, 360].forEach((width) => {
+        // 375px is the iPhone SE class that wrapped; 320px is the original iPhone SE.
+        [414, 375, 320].forEach((width) => {
             mountAt(width);
             cy.get('.wrolpi-navbar').should(($nav) => {
                 expect($nav[0].getBoundingClientRect().height, `bar height at ${width}px`)
@@ -3798,7 +3837,7 @@ describe('the mobile navigation bar fits a phone on one row', () => {
 
     it('keeps the whole corner inside the bar rather than clipping it', () => {
         // The failure a nowrap fix would trade the second row for.
-        [375, 360].forEach((width) => {
+        [375, 320].forEach((width) => {
             mountAt(width);
             cy.get('.wrolpi-navbar').should(($nav) => {
                 const bar = $nav[0].getBoundingClientRect();

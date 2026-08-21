@@ -35,20 +35,27 @@ async def test_uploaded_audio_becomes_a_channel_video(async_client, test_session
 
 @pytest.mark.asyncio
 async def test_audio_playlist_is_not_a_video(async_client, test_session, test_directory):
-    """An .m3u playlist carries an audio/* mimetype but is a text list of URLs, not media.
+    """A playlist with an audio/* mimetype is a text list of URLs, not media.
 
-    Neither the upload flow nor the batch modeler may turn one into a Video.
+    Neither the upload flow (do_model) nor the batch modeler may turn one into a Video.  The
+    mimetype is forced rather than detected: libmagic versions disagree (.m3u is
+    audio/x-mpegurl on some, text/plain on others), and the denylist must hold wherever an
+    audio/* playlist type comes back.
     """
     playlist = test_directory / 'stations.m3u'
     playlist.write_text('#EXTM3U\n#EXTINF:0,WRMI\nhttp://example.org/stream\n')
+    file_group = FileGroup.from_paths(test_session, playlist)
+    file_group.mimetype = 'audio/x-mpegurl'
+    test_session.commit()
 
-    await upsert_file(playlist)
+    # The upload path's decision point.
+    file_group.do_model(test_session)
+    test_session.commit()
+    assert file_group.model is None, 'a playlist must not be modeled by an upload'
+
+    # The refresh path: the modeler selects any audio/* FileGroup without a Video row,
+    # so only the playlist denylist keeps this one out.
     await video_modeler()
-
-    file_group = test_session.query(FileGroup).filter_by(primary_path=str(playlist)).one()
-    assert file_group.mimetype in ('audio/x-mpegurl', 'audio/mpegurl'), \
-        f'the playlist must detect as an audio playlist, got {file_group.mimetype}'
-    assert file_group.model is None, 'a playlist must not be modeled'
     assert test_session.query(Video).count() == 0, 'a playlist must not create a Video'
 
 

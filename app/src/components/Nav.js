@@ -439,19 +439,23 @@ export function NavBar() {
 
     return <>
         <Media between={['mobile', 'tablet']}>
-            <nav className='wrolpi-navbar' id='global_navbar' style={navBarStyle(navColors)}>
-                {homeLink}
-                <div className='wrolpi-navbar-right'>
-                    {icons}
-                    <SearchIconButton/>
-                    <MobileMenu links={[...allLinks, ...rightLinks]}/>
-                </div>
-            </nav>
+            <MobileNav navColors={navColors} homeLink={homeLink} icons={icons}/>
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <DesktopNav navColors={navColors} homeLink={homeLink} icons={icons}/>
         </Media>
     </>
+}
+
+export function MobileNav({navColors, homeLink, icons}) {
+    return <nav className='wrolpi-navbar' id='global_navbar' style={navBarStyle(navColors)}>
+        {homeLink}
+        <div className='wrolpi-navbar-right'>
+            {icons}
+            <SearchIconButton/>
+            <MobileMenu links={[...allLinks, ...rightLinks]}/>
+        </div>
+    </nav>
 }
 
 export function DesktopNav({navColors, homeLink, icons}) {

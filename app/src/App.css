@@ -143,7 +143,9 @@ html .wrolpi-navbar .mantine-ActionIcon-root:hover {
 .wrolpi-navbar-icon {
     display: flex;
     align-items: center;
-    margin-left: 1.5em;
+    /* A sliver only: the corner's gap and the slots' own padding already separate the
+       icons, and anything more has to fit a 320px phone times the number of slots. */
+    margin-left: 0.25em;
     /* Full bar height, so the anchor inside has somewhere to stretch to. */
     align-self: stretch;
 }

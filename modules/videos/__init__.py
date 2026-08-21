@@ -21,6 +21,28 @@ __all__ = ['video_modeler']
 VIDEO_PROCESSING_LIMIT = 20
 
 
+def _model_video(session: Session, file_group: FileGroup, video: Video | None, probed: dict) -> Video:
+    """Create/update and validate the Video row for one FileGroup."""
+    if not video:
+        video = Video(file_group=file_group, file_group_id=file_group.id)
+        session.add(video)
+        session.flush([video])
+    if not Session.object_session(video):
+        session.add(video)
+        video.flush()
+    # Store the ffprobe data gathered outside the write transaction.
+    if (result := probed.get(file_group.id)) is not None:
+        video.ffprobe_json, ffprobe_file = result
+        if ffprobe_file:
+            # Track the .ffprobe.json cache file that was just written.
+            file_group.append_files(ffprobe_file)
+    video.flush(session)
+    # Validate and index subtitles.  (Poster generation happens here when a Channel
+    # asks for it; it is the remaining slow work inside this transaction.)
+    video.validate(session)
+    return video
+
+
 @register_modeler
 async def video_modeler(progress_callback: Callable[[int], None] = None):
     total_processed = 0
@@ -35,9 +57,7 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
                 .filter(
                 or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
                 FileGroup.mimetype.notin_(AUDIO_PLAYLIST_MIMETYPES),
-                # Model anything without a Video row, even if something else (an upload, an
-                # indexer) already set `indexed=True` -- gating solely on `indexed == False`
-                # left such files permanently invisible in their Channels.
+                # Also model indexed FileGroups that never got a Video row.
                 or_(Video.id.is_(None), FileGroup.indexed != True),
             )
             if failed_ids:
@@ -68,32 +88,14 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
                 .outerjoin(Video, Video.file_group_id == FileGroup.id))
 
             for file_group, video in file_groups:
-                video_id = None
                 try:
-                    if not video:
-                        video = Video(file_group=file_group, file_group_id=file_group.id)
-                        session.add(video)
-                        session.flush([video])
-                    video_id = video.id
-                    if not Session.object_session(video):
-                        session.add(video)
-                        video.flush()
-                    # Store the ffprobe data gathered above.
-                    if (result := probed.get(file_group.id)) is not None:
-                        video.ffprobe_json, ffprobe_file = result
-                        if ffprobe_file:
-                            # Track the .ffprobe.json cache file that was just written.
-                            file_group.append_files(ffprobe_file)
-                    video.flush(session)
-                    # Validate and index subtitles.  (Poster generation happens here when a Channel
-                    # asks for it; it is the remaining slow work inside this transaction.)
-                    video.validate(session)
+                    _model_video(session, file_group, video, probed)
                 except Exception as e:
+                    # Before the re-raise, so no failure path can re-select this id forever.
+                    failed_ids.add(file_group.id)
                     if PYTEST:
                         raise
-                    failed_ids.add(file_group.id)
-                    i = video.file_group.primary_path if video.file_group else video_id
-                    logger.error(f'Unable to model Video: {str(i)}', exc_info=e)
+                    logger.error(f'Unable to model Video: {file_group.primary_path}', exc_info=e)
 
                 file_group.indexed = True
 
@@ -178,14 +180,13 @@ def video_cleanup():
     # Read the FileGroups that are no longer video/audio (audio playlists never were),
     # then unmodel them in short transactions.
     with get_db_curs() as curs:
-        playlists = ', '.join(f"'{mt}'" for mt in AUDIO_PLAYLIST_MIMETYPES)
-        curs.execute(f'''
+        curs.execute('''
                      SELECT id
                      FROM file_group
                      WHERE model = 'video'
                        AND ((mimetype NOT LIKE 'video/%' AND mimetype NOT LIKE 'audio/%')
-                         OR mimetype IN ({playlists}))
-                     ''')
+                         OR mimetype IN (SELECT value FROM json_each(:playlists)))
+                     ''', dict(playlists=json.dumps(AUDIO_PLAYLIST_MIMETYPES)))
         stale_ids = [i['id'] for i in curs.fetchall()]
     for chunk in _chunks(stale_ids):
         ids = json.dumps(chunk)

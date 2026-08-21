@@ -20,7 +20,10 @@ from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 
 logger = logger.getChild(__name__)
 
-__all__ = ['Video', 'Channel']
+__all__ = ['Video', 'Channel', 'AUDIO_PLAYLIST_MIMETYPES']
+
+# .m3u playlists detect as audio/* but are text lists of URLs, not media.
+AUDIO_PLAYLIST_MIMETYPES = ('audio/x-mpegurl', 'audio/mpegurl')
 
 
 class Video(ModelHelper, Base):
@@ -100,7 +103,11 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     def can_model(file_group: FileGroup) -> bool:
-        return file_group.mimetype.startswith('video/')
+        # Audio too: an audio file in a Channel's directory is that Channel's content, and the
+        # batch video_modeler already models audio -- an upload must not decide differently.
+        if file_group.mimetype in AUDIO_PLAYLIST_MIMETYPES:
+            return False
+        return file_group.mimetype.startswith('video/') or file_group.mimetype.startswith('audio/')
 
     @staticmethod
     def do_model(session: Session, file_group: FileGroup) -> 'Video':

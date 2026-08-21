@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.common import get_or_create_ffprobe_json
-from modules.videos.models import Video
+from modules.videos.models import Video, AUDIO_PLAYLIST_MIMETYPES
 from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.files.models import FileGroup
@@ -24,13 +24,25 @@ VIDEO_PROCESSING_LIMIT = 20
 @register_modeler
 async def video_modeler(progress_callback: Callable[[int], None] = None):
     total_processed = 0
+    # Ids that failed to model this run.  A failure leaves no Video row, so the `Video.id IS
+    # NULL` gate below would re-select it forever; failures are retried on the next refresh.
+    failed_ids: set = set()
     while True:
         # Read the batch; nothing is claimed yet, so the write lock stays free while ffprobe runs.
         with get_db_session() as session:
-            batch: List[Tuple[int, pathlib.Path]] = list(session.query(FileGroup.id, FileGroup.primary_path).filter(
-                FileGroup.indexed != True,
+            query = session.query(FileGroup.id, FileGroup.primary_path) \
+                .outerjoin(Video, Video.file_group_id == FileGroup.id) \
+                .filter(
                 or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
-            ).limit(VIDEO_PROCESSING_LIMIT).all())
+                FileGroup.mimetype.notin_(AUDIO_PLAYLIST_MIMETYPES),
+                # Model anything without a Video row, even if something else (an upload, an
+                # indexer) already set `indexed=True` -- gating solely on `indexed == False`
+                # left such files permanently invisible in their Channels.
+                or_(Video.id.is_(None), FileGroup.indexed != True),
+            )
+            if failed_ids:
+                query = query.filter(FileGroup.id.notin_(failed_ids))
+            batch: List[Tuple[int, pathlib.Path]] = list(query.limit(VIDEO_PROCESSING_LIMIT).all())
 
         if not batch:
             break
@@ -79,6 +91,7 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
                 except Exception as e:
                     if PYTEST:
                         raise
+                    failed_ids.add(file_group.id)
                     i = video.file_group.primary_path if video.file_group else video_id
                     logger.error(f'Unable to model Video: {str(i)}', exc_info=e)
 
@@ -162,14 +175,16 @@ _UNCLAIMED_VIDEOS_SQL = '''
 @limit_concurrent(1)
 def video_cleanup():
     logger.info('Claiming Videos for their Channels')
-    # Read the FileGroups that are no longer video/audio, then unmodel them in short transactions.
+    # Read the FileGroups that are no longer video/audio (audio playlists never were),
+    # then unmodel them in short transactions.
     with get_db_curs() as curs:
-        curs.execute('''
+        playlists = ', '.join(f"'{mt}'" for mt in AUDIO_PLAYLIST_MIMETYPES)
+        curs.execute(f'''
                      SELECT id
                      FROM file_group
                      WHERE model = 'video'
-                       AND mimetype NOT LIKE 'video/%'
-                       AND mimetype NOT LIKE 'audio/%'
+                       AND ((mimetype NOT LIKE 'video/%' AND mimetype NOT LIKE 'audio/%')
+                         OR mimetype IN ({playlists}))
                      ''')
         stale_ids = [i['id'] for i in curs.fetchall()]
     for chunk in _chunks(stale_ids):

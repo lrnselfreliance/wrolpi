@@ -639,11 +639,6 @@ class ConfigFile:
                           f' during import: {rel_path}'
                 Events.send_config_save_failed(message)
                 raise RuntimeError(message)
-            version = self.read_config_file(file).get('version')
-            if version and version > self.version:
-                message = f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}'
-                Events.send_config_save_failed(message)
-                raise RuntimeError(message)
 
         # Don't overwrite a real config while testing.
         if PYTEST and not is_tempfile(file):
@@ -653,6 +648,13 @@ class ConfigFile:
 
         # Only one process can write to a config.
         with api_app.shared_ctx.config_save_lock:
+            # The version check reads the file, so it must hold the lock.
+            if file.exists() and overwrite is False:
+                version = self.read_config_file(file).get('version')
+                if version and version > self.version:
+                    message = f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}'
+                    Events.send_config_save_failed(message)
+                    raise RuntimeError(message)
             try:
                 # Config directory may not exist (parents=True for nested file_names like inventory/catalog.yaml).
                 if not file.parent.is_dir():
@@ -788,7 +790,8 @@ class ConfigFile:
 
 
 def write_config_data(config: dict, config_file: pathlib.Path, width: int = 90):
-    """Write a config dict to a YAML file.  Decimals are converted to str; all other Python objects are rejected.
+    """Write a config dict to a YAML file atomically (readers never see a truncated config).
+    Decimals are converted to str; all other Python objects are rejected.
 
     Shared by `ConfigFile` and `MultiFileConfig` so both serialize configs identically (Decimal-safe, fsync'd)."""
 
@@ -798,14 +801,26 @@ def write_config_data(config: dict, config_file: pathlib.Path, width: int = 90):
 
     _ConfigDumper.add_representer(Decimal, lambda dumper, data: dumper.represent_str(str(data)))
 
-    with config_file.open('wt') as fh:
-        try:
-            yaml.dump(config, fh, Dumper=_ConfigDumper, width=width, sort_keys=True)
-        except yaml.representer.RepresenterError as e:
-            raise ValueError(f'Config contains a Python object that cannot be serialized: {e}') from e
-        # Wait for data to be written before releasing lock.
-        fh.flush()
-        os.fsync(fh.fileno())
+    # Same directory as the config so the rename is atomic.
+    fd, temporary_path = tempfile.mkstemp(dir=config_file.parent, prefix=f'{config_file.name}.', suffix='.tmp')
+    try:
+        # The rename keeps the temporary file's 0600, so give it the config's mode.
+        mode = config_file.stat().st_mode & 0o777 if config_file.exists() else 0o644
+        os.chmod(temporary_path, mode)
+        with os.fdopen(fd, 'wt') as fh:
+            fd = None  # The file object owns the descriptor now.
+            try:
+                yaml.dump(config, fh, Dumper=_ConfigDumper, width=width, sort_keys=True)
+            except yaml.representer.RepresenterError as e:
+                raise ValueError(f'Config contains a Python object that cannot be serialized: {e}') from e
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temporary_path, config_file)
+    except BaseException:
+        if fd is not None:
+            os.close(fd)
+        pathlib.Path(temporary_path).unlink(missing_ok=True)
+        raise
 
 
 def read_config_data(file: pathlib.Path) -> dict:

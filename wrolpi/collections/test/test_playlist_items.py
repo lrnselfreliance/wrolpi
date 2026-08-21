@@ -157,6 +157,41 @@ async def test_add_file_item(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
+async def test_item_write_endpoints_use_write_intent_sessions(async_client, test_session):
+    """The item write endpoints (add/remove/reorder) each open their session with
+    `get_db_session(commit=True)` — the deferred `request.ctx.session` reads before its first
+    write, which SQLite fails instantly on concurrent writes (see `get_db_session`)."""
+    from unittest import mock
+    from wrolpi.collections import api as collections_api
+    from wrolpi.db import get_db_session
+
+    _, response = await async_client.post('/api/collections', json={'name': 'Locks'})
+    cid = response.json['collection']['id']
+
+    commit_kwargs = list()
+
+    def recording_get_db_session(*args, **kwargs):
+        commit_kwargs.append(kwargs.get('commit', args[0] if args else False))
+        return get_db_session(*args, **kwargs)
+
+    with mock.patch.object(collections_api, 'get_db_session', recording_get_db_session):
+        _, response = await async_client.post(f'/api/collections/{cid}/items',
+                                              json={'item_kind': 'url', 'url': '/u/a', 'title': 'a'})
+        assert response.status_code == HTTPStatus.CREATED, response.json
+        item_id = response.json['item']['id']
+
+        _, response = await async_client.put(f'/api/collections/{cid}/items/order',
+                                             json={'item_ids': [item_id]})
+        assert response.status_code == HTTPStatus.OK, response.json
+
+        _, response = await async_client.delete(f'/api/collections/{cid}/items/{item_id}')
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    assert len(commit_kwargs) == 3, 'Each item write endpoint must open its own session'
+    assert all(commit is True for commit in commit_kwargs)
+
+
+@pytest.mark.asyncio
 async def test_reorder_and_remove_items(async_client, test_session):
     """Items can be reordered by id and removed, with positions kept contiguous."""
     _, response = await async_client.post('/api/collections', json={'name': 'Order'})

@@ -90,23 +90,20 @@ async def create_collection_endpoint(request: Request, body: schema.CollectionCr
 @wrol_mode_check
 async def add_collection_item_endpoint(request: Request, collection_id: int, body: schema.AddItemRequest):
     """Append (or insert at ``position``) a file/zim/url item into the collection."""
-    # Not `request.ctx.session`: this reads (the Collection, the FileGroup) before it INSERTs, and a
-    # deferred transaction fails that lock upgrade *instantly* with "database is locked" if anything
-    # else wrote in between (see `get_db_session`).
-    with get_db_session(commit=True) as session:
-        try:
+    try:
+        # Read-then-write, so the session must begin as a writer (see `get_db_session`).
+        with get_db_session(commit=True) as session:
             item, created = lib.add_collection_item(
                 session, collection_id, item_kind=body.item_kind,
                 file_group_id=body.file_group_id, zim_id=body.zim_id, zim_entry=body.zim_entry,
                 url=body.url, title=body.title, position=body.position)
-        except UnknownCollection as e:
-            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
-        except ValidationError as e:
-            return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
-
-        # 201 when a new item was created; 200 when the item already existed (idempotent add).
-        status = HTTPStatus.CREATED if created else HTTPStatus.OK
-        return json_response({'item': item.dict()}, status=status)
+            # 201 when a new item was created; 200 when the item already existed (idempotent add).
+            status = HTTPStatus.CREATED if created else HTTPStatus.OK
+            return json_response({'item': item.dict()}, status=status)
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ValidationError as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
 
 @collection_bp.delete('/<collection_id:int>/items/<item_id:int>')
@@ -116,12 +113,11 @@ async def add_collection_item_endpoint(request: Request, collection_id: int, bod
 @wrol_mode_check
 async def remove_collection_item_endpoint(request: Request, collection_id: int, item_id: int):
     """Remove a single item by its id and close the ordering gap."""
-    # Write intent (see `add_collection_item_endpoint`).
-    with get_db_session(commit=True) as session:
-        try:
+    try:
+        with get_db_session(commit=True) as session:
             removed = lib.remove_collection_item(session, collection_id, item_id)
-        except UnknownCollection as e:
-            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
 
     if not removed:
         return json_response({'error': f'Item {item_id} not found in collection {collection_id}'},
@@ -142,16 +138,14 @@ async def remove_collection_item_endpoint(request: Request, collection_id: int, 
 async def reorder_collection_items_endpoint(request: Request, collection_id: int,
                                             body: schema.ReorderItemsRequest):
     """Set the item order from a full list of item ids (used by drag-and-drop)."""
-    # Write intent (see `add_collection_item_endpoint`).
-    with get_db_session(commit=True) as session:
-        try:
+    try:
+        with get_db_session(commit=True) as session:
             lib.reorder_collection_items(session, collection_id, body.item_ids)
-        except UnknownCollection as e:
-            return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
-        except ValueError as e:
-            return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
-
-        data = lib.get_collection_with_stats(session, collection_id)
+            data = lib.get_collection_with_stats(session, collection_id)
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
     return json_response({'collection': data})
 
 

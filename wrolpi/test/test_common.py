@@ -1078,25 +1078,27 @@ async def test_config_valid(async_client, test_wrolpi_config):
 
 @pytest.mark.asyncio
 async def test_write_config_data_failure_preserves_existing_file(async_client, test_wrolpi_config):
-    """A failed config write must leave the existing config file untouched.
+    """A failed config write must leave the existing config file untouched, and no write may leave
+    a temporary file behind."""
 
-    The write must also be atomic (temp file + rename) so a concurrent reader can never observe a
-    truncated config."""
+    def temporary_leftovers() -> list:
+        return [i for i in test_wrolpi_config.parent.iterdir()
+                if i.name.startswith(test_wrolpi_config.name) and i.name != test_wrolpi_config.name]
+
     test_wrolpi_config.write_text('version: 5\nwrol_mode: true\n')
 
     # `object()` cannot be serialized; the key sorts last so YAML would emit partial output first.
     with pytest.raises(ValueError):
         common.write_config_data({'version': 6, 'zzz': object()}, test_wrolpi_config)
 
-    # The original file survives the failed write.
+    # The original file survives the failed write, and no temporary file is left behind.
     assert common.read_config_data(test_wrolpi_config) == {'version': 5, 'wrol_mode': True}
+    assert not temporary_leftovers()
 
     # A successful write replaces the contents and leaves no temporary file behind.
     common.write_config_data({'version': 6}, test_wrolpi_config)
     assert common.read_config_data(test_wrolpi_config) == {'version': 6}
-    leftovers = [i for i in test_wrolpi_config.parent.iterdir()
-                 if i.name.startswith(test_wrolpi_config.name) and i.name != test_wrolpi_config.name]
-    assert not leftovers, f'Temporary files were left behind: {leftovers}'
+    assert not temporary_leftovers()
 
 
 @pytest.mark.asyncio

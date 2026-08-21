@@ -158,12 +158,9 @@ async def test_add_file_item(async_client, test_session, test_directory):
 
 @pytest.mark.asyncio
 async def test_item_write_endpoints_use_write_intent_sessions(async_client, test_session):
-    """The item write endpoints (add/remove/reorder) must open their sessions with
-    `get_db_session(commit=True)` so the transaction begins as a writer (BEGIN IMMEDIATE).
-
-    These handlers read (the Collection, the FileGroup) before their first write; a deferred
-    transaction upgrading at that write fails instantly with "database is locked" whenever another
-    connection wrote in between, bypassing `busy_timeout` (see `get_db_session`)."""
+    """The item write endpoints (add/remove/reorder) each open their session with
+    `get_db_session(commit=True)` — the deferred `request.ctx.session` reads before its first
+    write, which SQLite fails instantly on concurrent writes (see `get_db_session`)."""
     from unittest import mock
     from wrolpi.collections import api as collections_api
     from wrolpi.db import get_db_session

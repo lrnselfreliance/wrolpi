@@ -20,7 +20,12 @@ from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 
 logger = logger.getChild(__name__)
 
-__all__ = ['Video', 'Channel']
+__all__ = ['Video', 'Channel', 'AUDIO_PLAYLIST_MIMETYPES']
+
+# Playlists that detect as audio/* but are text lists of URLs, not media.  Detection varies by
+# libmagic version (.pls is text/plain on some, audio/x-scpls on others); the denylist covers
+# whatever comes back audio/*.
+AUDIO_PLAYLIST_MIMETYPES = ('audio/x-mpegurl', 'audio/mpegurl', 'audio/x-scpls', 'audio/scpls')
 
 
 class Video(ModelHelper, Base):
@@ -100,7 +105,11 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     def can_model(file_group: FileGroup) -> bool:
-        return file_group.mimetype.startswith('video/')
+        # Audio in a Channel is Channel content; playlists are not media.  Must agree with the
+        # batch video_modeler's query.
+        if file_group.mimetype in AUDIO_PLAYLIST_MIMETYPES:
+            return False
+        return file_group.mimetype.startswith('video/') or file_group.mimetype.startswith('audio/')
 
     @staticmethod
     def do_model(session: Session, file_group: FileGroup) -> 'Video':

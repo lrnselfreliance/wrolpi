@@ -1054,7 +1054,11 @@ async def get_statistics():
 
 NAME_PARSER = re.compile(
     r'(?:(.*?)_)?((?:\d+?)|(?:NA))_(?:(.{5,25})_)?(.*)'
-    r'\.(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)',  # the file suffix
+    # The file suffix.  Every media suffix a Video FileGroup can lead with belongs here:
+    # audio is Channel content too, and a suffix missing from this list leaves the file
+    # without a published date, sorted to the end of its Channel.
+    r'\.(jpg|webp|flv|mp4|m4v|mkv|webm|mp3|flac|opus|ogg|m4a|wav|aac|wma'
+    r'|part|info\.json|description|..\.srt|..\.vtt)',
     re.IGNORECASE)
 
 

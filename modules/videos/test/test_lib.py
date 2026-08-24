@@ -34,7 +34,18 @@ from wrolpi.vars import PROJECT_DIR
     ('Learning Self-Reliance_20170529_p_Beekeeping 2017 Part 6 - Merging Hives.mp4',
      ('Learning Self-Reliance', '20170529', None, 'p_Beekeeping 2017 Part 6 - Merging Hives')),
     ('Learning Self-Reliance_20240722_clyx8ark92qk70860vtl997n5_Long Source Id File with _.mp4',
-     ('Learning Self-Reliance', '20240722', 'clyx8ark92qk70860vtl997n5', 'Long Source Id File with _'))
+     ('Learning Self-Reliance', '20240722', 'clyx8ark92qk70860vtl997n5', 'Long Source Id File with _')),
+    # Audio files and other media containers carry the same name format; a suffix missing from
+    # the parser leaves the file with no published date, sorted to the end of its Channel.
+    ('The Tech Prepper_20260820_WRMI S2 Underground Shortwave Interview.flac',
+     ('The Tech Prepper', '20260820', None, 'WRMI S2 Underground Shortwave Interview')),
+    ('channel_20000101_12345678910_ some title.mp3', ('channel', '20000101', '12345678910', 'some title')),
+    ('channel_20000101_12345678910_ some title.mkv', ('channel', '20000101', '12345678910', 'some title')),
+    ('channel_20000101_some title.opus', ('channel', '20000101', None, 'some title')),
+    ('channel_20000101_some title.ogg', ('channel', '20000101', None, 'some title')),
+    ('channel_20000101_some title.m4a', ('channel', '20000101', None, 'some title')),
+    ('channel_20000101_some title.m4v', ('channel', '20000101', None, 'some title')),
+    ('channel_20000101_some title.wav', ('channel', '20000101', None, 'some title')),
 ])
 def test_parse_video_file_name(file_name, expected):
     """

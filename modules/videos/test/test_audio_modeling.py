@@ -34,6 +34,27 @@ async def test_uploaded_audio_becomes_a_channel_video(async_client, test_session
 
 
 @pytest.mark.asyncio
+async def test_uploaded_audio_gets_published_datetime_from_filename(async_client, test_session,
+                                                                    channel_factory):
+    """An uploaded audio file named in WROLPi's format gets its published date from the name.
+
+    The Channel page sorts by published date; without one the file sorts to the very end of the
+    Channel, which reads as missing.
+    """
+    channel = channel_factory(name='The Tech Prepper')
+    audio_path = channel.directory / 'The Tech Prepper_20260820_WRMI Interview.mp3'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny.mp3', audio_path)
+
+    await upsert_file(audio_path)
+
+    file_group = test_session.query(FileGroup).filter_by(primary_path=str(audio_path)).one()
+    assert file_group.published_datetime is not None, \
+        'the published date must be parsed from the file name'
+    assert file_group.published_datetime.strftime('%Y%m%d') == '20260820'
+    assert file_group.title == 'WRMI Interview'
+
+
+@pytest.mark.asyncio
 async def test_audio_playlist_is_not_a_video(async_client, test_session, test_directory):
     """A playlist with an audio/* mimetype is a text list of URLs, not media.
 

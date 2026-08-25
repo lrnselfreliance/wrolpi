@@ -374,7 +374,6 @@ async def test_get_or_create_channel_computed_directory_conflict(async_client, t
     channel by name (e.g. the local channel was renamed) even though its directory is already taken."""
     from wrolpi.collections import Collection
 
-    # An existing channel occupies `videos/Uploader`, but its name no longer matches.
     existing_dir = test_directory / 'videos/Uploader'
     existing_dir.mkdir(parents=True)
     collection = Collection(name='Uploader (old name)', kind='channel', directory=existing_dir)
@@ -384,10 +383,6 @@ async def test_get_or_create_channel_computed_directory_conflict(async_client, t
     test_session.add(channel)
     test_session.commit()
 
-    # A collaboration video reports channel 'Uploader' with an unknown source_id/url; no destination is
-    # provided because the download came from a channel subscription.  The computed directory
-    # (videos/Uploader) is already owned, so the owning channel is returned rather than raising
-    # UnrecoverableDownloadError from ChannelDirectoryConflict.
     result = get_or_create_channel(test_session, source_id='UCnew',
                                    url='https://www.youtube.com/channel/UCnew', name='Uploader')
     assert result.id == channel.id

@@ -1362,10 +1362,7 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
     else:
         channel_directory = format_videos_destination(name, tag_name, url)
 
-    # The computed directory may already belong to a Channel that no longer matches by
-    # source_id/url/name (e.g. it was renamed, or a YouTube collaboration video reports the
-    # primary uploader's channel).  Files must live in their Channel's directory, so the
-    # directory's owner wins over creating a conflicting Channel.
+    # Reuse the Channel that already owns this directory instead of creating a conflicting one.
     try:
         channel = get_channel(session, directory=channel_directory, return_dict=False)
         channel.dict()

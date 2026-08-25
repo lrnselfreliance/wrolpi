@@ -1361,6 +1361,15 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
         channel_directory = get_absolute_media_path(destination)
     else:
         channel_directory = format_videos_destination(name, tag_name, url)
+
+    # Reuse the Channel that already owns this directory instead of creating a conflicting one.
+    try:
+        channel = get_channel(session, directory=channel_directory, return_dict=False)
+        channel.dict()
+        return channel
+    except UnknownChannel:
+        pass
+
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
     data = ChannelPostRequest(

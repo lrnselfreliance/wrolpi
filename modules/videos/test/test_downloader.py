@@ -366,6 +366,29 @@ async def test_get_or_create_channel_destination_nested_conflict(async_client, t
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_channel_computed_directory_conflict(async_client, test_session, test_directory):
+    """When no existing channel matches by source_id/url/name, but the directory that would be created
+    already belongs to a channel, that channel should be returned instead of raising.
+
+    YouTube collaboration videos report the primary uploader's channel, which may not match any local
+    channel by name (e.g. the local channel was renamed) even though its directory is already taken."""
+    from wrolpi.collections import Collection
+
+    existing_dir = test_directory / 'videos/Uploader'
+    existing_dir.mkdir(parents=True)
+    collection = Collection(name='Uploader (old name)', kind='channel', directory=existing_dir)
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='UCold', url='https://www.youtube.com/@olduploader')
+    test_session.add(channel)
+    test_session.commit()
+
+    result = get_or_create_channel(test_session, source_id='UCnew',
+                                   url='https://www.youtube.com/channel/UCnew', name='Uploader')
+    assert result.id == channel.id
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_channel_existing_ignores_destination(async_client, test_session, test_directory):
     """When a channel already exists (matched by source_id), the destination parameter should be ignored."""
     from wrolpi.collections import Collection

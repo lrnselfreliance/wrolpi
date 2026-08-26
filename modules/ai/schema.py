@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclasses.dataclass
@@ -7,8 +7,8 @@ class AISearchRequest:
     search_str: Optional[str] = None
     limit: int = 5
     offset: int = 0
-    mimetypes: Optional[list] = None
-    tag_names: Optional[list] = None
+    mimetypes: Optional[List[str]] = None
+    tag_names: Optional[List[str]] = None
 
 
 @dataclasses.dataclass
@@ -17,7 +17,7 @@ class AIVideoSearchRequest:
     limit: int = 5
     offset: int = 0
     channel_id: Optional[int] = None
-    tag_names: Optional[list] = None
+    tag_names: Optional[List[str]] = None
 
 
 @dataclasses.dataclass
@@ -26,7 +26,7 @@ class AIArchiveSearchRequest:
     limit: int = 5
     offset: int = 0
     domain: Optional[str] = None
-    tag_names: Optional[list] = None
+    tag_names: Optional[List[str]] = None
 
 
 @dataclasses.dataclass
@@ -38,7 +38,7 @@ class AIDocSearchRequest:
     mimetype: Optional[str] = None
     limit: int = 5
     offset: int = 0
-    tag_names: Optional[list] = None
+    tag_names: Optional[List[str]] = None
 
 
 @dataclasses.dataclass

@@ -44,6 +44,13 @@
 		redir * /controller/ 301
 	}
 
+	# AI chat streams Server-Sent Events; never buffer them.
+	handle /api/chat* {
+		reverse_proxy api:8081 {
+			flush_interval -1
+		}
+	}
+
 	# Main API.
 	handle /api/* {
 		reverse_proxy api:8081

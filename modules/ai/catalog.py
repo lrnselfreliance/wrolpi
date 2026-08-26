@@ -17,15 +17,15 @@ logger = logger.getChild(__name__)
 CDN = 'https://wrolpi.nyc3.cdn.digitaloceanspaces.com'
 MODELS_MANIFEST_URL = f'{CDN}/ai/models.json'
 
-# Sizes are bytes; sha256 values are filled from the published manifest at release time.  The
-# meta4 sidecar (GPG-verified at download time) is what actually enforces the hash.
+# Sizes are bytes; sha256 values match the published manifest (wrolpi/scripts/publish_ai_models.py
+# refreshes both).  The meta4 sidecar (GPG-verified at download time) is what enforces the hash.
 AI_MODELS = [
     dict(
         name='Qwen3-1.7B-Q4_K_M.gguf',
         tier='small',
         url=f'{CDN}/ai/Qwen3-1.7B-Q4_K_M.gguf',
-        sha256='',
-        size=1_200_000_000,
+        sha256='b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897',
+        size=1_107_409_472,
         min_ram_gb=4,
         default_context=8_192,
         license='Apache 2.0',
@@ -35,8 +35,8 @@ AI_MODELS = [
         name='Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
         tier='medium',
         url=f'{CDN}/ai/Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
-        sha256='',
-        size=2_600_000_000,
+        sha256='3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597',
+        size=2_497_281_120,
         min_ram_gb=8,
         default_context=16_384,
         license='Apache 2.0',

@@ -16,13 +16,19 @@ from modules.inventory.common import get_inventory_configs
 from modules.inventory.errors import UnknownInventory
 from modules.videos.video import lib as videos_lib
 from modules.zim import lib as zim_lib
+from wrolpi import flags
 from wrolpi.api_utils import json_response
 from wrolpi.collections.lib import search_collections
-from wrolpi.common import api_param_limiter, get_media_directory, logger
+from wrolpi.common import api_param_limiter, get_media_directory, logger, wrol_mode_enabled
+from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile
 from wrolpi.files.lib import search_files
+from wrolpi.vars import DOCKERIZED
+from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
+from .controller_client import controller_get
+from .errors import ControllerUnavailable
 
 ai_bp = Blueprint('AI', url_prefix='/api/ai')
 
@@ -326,6 +332,142 @@ async def get_inventory(_: Request, slug: str):
     if inventory is None:
         raise UnknownInventory(f'No inventory: {slug}')
     return json_response(dict(inventory=inventory))
+
+
+# ---------------------------------------------------------------------------
+# System endpoints (System mode).  The Controller is proxied so the model sees one API; every
+# proxy degrades gracefully — a Controller outage becomes an entry in `errors`, never a 500.
+# ---------------------------------------------------------------------------
+
+# The lean subset of the Controller's cached status that is useful for diagnosis; the full blob
+# (processes, iostat, disk bandwidth) is too big for small model contexts.
+SYSTEM_STATUS_KEYS = ('cpu', 'memory', 'load', 'drives', 'network', 'uptime', 'hotspot', 'throttle', 'is_rpi')
+
+log_lines_limiter = api_param_limiter(1_000, default=100)
+
+
+@ai_bp.get('/status')
+@openapi.definition(
+    summary='Get WROLPi system status',
+    description='Get an aggregate of the whole system in one call: WROLPi version, mode flags, download'
+                ' summary, CPU/memory/load/disk usage, and the state of every WROLPi service. Start'
+                ' troubleshooting here. Any part that could not be gathered is listed in errors.',
+)
+@openapi.operation('get_system_status')
+async def get_system_status(_: Request):
+    errors = []
+    ret = dict(
+        version=__version__.strip(),
+        dockerized=DOCKERIZED,
+        wrol_mode=wrol_mode_enabled(),
+        flags=flags.get_flags(),
+        errors=errors,
+    )
+
+    try:
+        ret['downloads'] = download_manager.get_summary()
+    except Exception as e:
+        logger.debug('AI status could not get download summary', exc_info=e)
+        errors.append('Could not get download summary')
+
+    try:
+        status, stats = await controller_get('/api/stats')
+        if status == HTTPStatus.OK:
+            ret['system'] = {k: v for k, v in stats.items() if k in SYSTEM_STATUS_KEYS}
+        else:
+            errors.append(f'Controller stats returned HTTP {status}')
+    except Exception as e:
+        logger.debug('AI status could not reach Controller stats', exc_info=e)
+        errors.append('Could not reach the Controller for system stats')
+
+    try:
+        ret['services'] = await _lean_services()
+    except Exception as e:
+        logger.debug('AI status could not get services', exc_info=e)
+        errors.append('Could not get service statuses')
+
+    return json_response(ret)
+
+
+async def _lean_services() -> list:
+    status, services = await controller_get('/api/services')
+    if status != HTTPStatus.OK or not isinstance(services, list):
+        raise ControllerUnavailable(f'Controller services returned HTTP {status}')
+    return [{k: v for k, v in dict(
+        name=i.get('name'),
+        status=i.get('status'),
+        enabled=i.get('enabled'),
+        port=i.get('port'),
+        description=i.get('description') or None,
+    ).items() if v is not None} for i in services]
+
+
+@ai_bp.get('/services')
+@openapi.definition(
+    summary='List WROLPi services',
+    description='List every WROLPi service with its state (running, stopped, failed) and port. Use the'
+                ' name with get_service_logs to read a failing service\'s logs.',
+)
+@openapi.operation('list_services')
+@openapi.response(HTTPStatus.BAD_GATEWAY, JSONErrorResponse)
+async def ai_list_services(_: Request):
+    services = await _lean_services()
+    return json_response(dict(results=services, total=len(services)))
+
+
+@ai_bp.get('/services/<name:str>/logs')
+@openapi.definition(
+    summary='Read service logs',
+    description='Read the most recent log lines of one WROLPi service by its name from list_services.'
+                ' Pass lines to read more history (at most 1000).',
+)
+@openapi.operation('get_service_logs')
+@openapi.response(HTTPStatus.BAD_GATEWAY, JSONErrorResponse)
+async def ai_get_service_logs(request: Request, name: str):
+    try:
+        lines = log_lines_limiter(int(request.args.get('lines', 100)))
+    except ValueError:
+        lines = 100
+    status, body = await controller_get(f'/api/services/{name}/logs',
+                                        params=dict(lines=max(lines, 1), since=request.args.get('since')))
+    if status != HTTPStatus.OK:
+        raise ControllerUnavailable(f'Controller logs returned HTTP {status}: {body.get("detail")}')
+    return json_response(dict(service=body.get('service', name), lines=body.get('lines'), logs=body.get('logs', '')))
+
+
+@ai_bp.get('/disks')
+@openapi.definition(
+    summary='Get disks and drive health',
+    description='List the disks and partitions (size, filesystem, where mounted) and SMART drive-health'
+                ' status. Use this to diagnose full or failing drives. Parts that could not be gathered'
+                ' are listed in errors.',
+)
+@openapi.operation('list_disks')
+async def ai_list_disks(_: Request):
+    errors = []
+    ret = dict(errors=errors)
+
+    try:
+        status, disks = await controller_get('/api/disks')
+        if status == HTTPStatus.OK:
+            ret['disks'] = disks
+        else:
+            errors.append(f'Controller disks returned HTTP {status}: {disks.get("detail")}')
+    except Exception as e:
+        logger.debug('AI disks could not reach Controller', exc_info=e)
+        errors.append('Could not reach the Controller for disks')
+
+    try:
+        status, smart = await controller_get('/api/disks/smart')
+        if status == HTTPStatus.OK:
+            ret['smart'] = smart
+        else:
+            errors.append(f'Controller SMART returned HTTP {status}: {smart.get("detail")}')
+    except Exception as e:
+        logger.debug('AI disks could not reach Controller SMART', exc_info=e)
+        errors.append('Could not reach the Controller for SMART status')
+
+    return json_response(ret)
 
 
 @ai_bp.get('/files/read')

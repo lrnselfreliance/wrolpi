@@ -117,6 +117,7 @@ async def get_video(_: Request, file_group_id: int):
                 ' continue reading.',
 )
 @openapi.operation('get_video_captions')
+@openapi.parameter('offset', int, 'query')
 @openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_video_captions(request: Request, file_group_id: int):
@@ -156,6 +157,7 @@ async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
                 ' again with offset=next_offset to continue reading.',
 )
 @openapi.operation('get_archive_text')
+@openapi.parameter('offset', int, 'query')
 @openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive_text(request: Request, file_group_id: int):
@@ -268,6 +270,8 @@ async def search_zims(request: Request, body: schema.AIZimSearchRequest):
                 ' reading.',
 )
 @openapi.operation('get_zim_entry')
+@openapi.parameter('path', str, 'query')
+@openapi.parameter('offset', int, 'query')
 @openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_zim_entry(request: Request, zim_id: int):
@@ -289,6 +293,7 @@ async def get_zim_entry(request: Request, zim_id: int):
                 ' name with search_archives.',
 )
 @openapi.operation('list_collections')
+@openapi.parameter('kind', str, 'query')
 async def list_collections(request: Request):
     kind = request.args.get('kind')
     collections = search_collections(request.ctx.session, kind=kind)
@@ -366,6 +371,7 @@ async def search_help(_: Request, body: schema.AIHelpSearchRequest):
                 ' pages are paged: request again with offset=next_offset to continue reading.',
 )
 @openapi.operation('get_help_doc')
+@openapi.parameter('offset', int, 'query')
 @openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_help_doc(request: Request, slug: str):
@@ -466,6 +472,8 @@ async def ai_list_services(_: Request):
                 ' Pass lines to read more history (at most 1000).',
 )
 @openapi.operation('get_service_logs')
+@openapi.parameter('lines', int, 'query')
+@openapi.parameter('since', str, 'query')
 @openapi.response(HTTPStatus.BAD_GATEWAY, JSONErrorResponse)
 async def ai_get_service_logs(request: Request, name: str):
     try:
@@ -584,6 +592,8 @@ async def manage_settings(_: Request, body: schema.AIManageSettingsRequest):
                 ' request again with offset=next_offset to continue reading.',
 )
 @openapi.operation('read_file')
+@openapi.parameter('path', str, 'query')
+@openapi.parameter('offset', int, 'query')
 @openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def read_file(request: Request):

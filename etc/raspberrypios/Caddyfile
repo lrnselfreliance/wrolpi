@@ -51,6 +51,13 @@
 		}
 	}
 
+	# AI chat streams Server-Sent Events; never buffer them.
+	handle /api/chat* {
+		reverse_proxy 0.0.0.0:8081 {
+			flush_interval -1
+		}
+	}
+
 	# Main API.
 	handle /api/* {
 		reverse_proxy 0.0.0.0:8081

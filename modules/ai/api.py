@@ -26,7 +26,7 @@ from wrolpi.files.lib import search_files
 from wrolpi.vars import DOCKERIZED
 from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
-from . import lib, schema
+from . import help_docs, lib, schema
 from .controller_client import controller_get
 from .errors import ControllerUnavailable
 
@@ -332,6 +332,49 @@ async def get_inventory(_: Request, slug: str):
     if inventory is None:
         raise UnknownInventory(f'No inventory: {slug}')
     return json_response(dict(inventory=inventory))
+
+
+# ---------------------------------------------------------------------------
+# Help endpoints (Help mode).  Help markdown is searched in-process; see help_docs.py.
+# ---------------------------------------------------------------------------
+
+@ai_bp.post('/help/search')
+@openapi.definition(
+    summary='Search the WROLPi help documentation',
+    description='Search the WROLPi help documentation for how to use and repair WROLPi. Returns matching'
+                ' help pages with a snippet; read a full page with get_help_doc. Links are pages on the'
+                ' WROLPi help site.',
+    body=schema.AIHelpSearchRequest,
+)
+@openapi.operation('search_help')
+@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
+@validate(schema.AIHelpSearchRequest)
+async def search_help(_: Request, body: schema.AIHelpSearchRequest):
+    if not body.search_str:
+        raise SearchEmpty()
+    if not help_docs.get_help_docs_directory():
+        return json_response(dict(results=[], total=0, message='Help documentation is not installed.'))
+    results, total = help_docs.search_help(body.search_str, ai_limiter(body.limit))
+    return json_response(dict(results=results, total=total))
+
+
+@ai_bp.get('/help/<slug:path>')
+@openapi.definition(
+    summary='Read a help page',
+    description='Read one WROLPi help page as markdown by its doc slug from search_help results. Long'
+                ' pages are paged: request again with offset=next_offset to continue reading.',
+)
+@openapi.operation('get_help_doc')
+@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_help_doc(request: Request, slug: str):
+    doc = help_docs.get_help_doc(slug)
+    if not doc:
+        raise UnknownFile(f'No such help doc: {slug}')
+    result = lib.paginate_text(doc.body, _offset(request))
+    result['title'] = doc.title
+    result['link'] = help_docs.help_doc_link(doc.slug)
+    return json_response(result)
 
 
 # ---------------------------------------------------------------------------

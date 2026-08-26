@@ -78,6 +78,16 @@ DEFAULT_CONFIG = {
             "use_https": True,
             "description": "Kiwix/Zim server",
         },
+        {
+            "name": "wrolpi-llm",
+            "systemd_name": "wrolpi-llm",
+            "port": 11435,
+            "viewable": False,
+            "use_https": False,
+            "description": "AI assistant (llama-server)",
+            # On-demand: started by the Controller when AI is enabled, stopped by the API when idle.
+            "kind": "persistent",
+        },
         # System services
         {
             "name": "caddy",

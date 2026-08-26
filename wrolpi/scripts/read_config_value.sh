@@ -20,7 +20,8 @@ KEY="${1:?Usage: read_config_value.sh KEY [DEFAULT]}"
 DEFAULT="${2:-}"
 
 MEDIA_DIRECTORY="${MEDIA_DIRECTORY:-/media/wrolpi}"
-CONFIG="${MEDIA_DIRECTORY}/config/wrolpi.yaml"
+# Another top-level config file (e.g. ai.yaml) may be selected with WROLPI_CONFIG_FILE.
+CONFIG="${WROLPI_CONFIG_FILE:-${MEDIA_DIRECTORY}/config/wrolpi.yaml}"
 
 value=""
 if [ -f "${CONFIG}" ]; then

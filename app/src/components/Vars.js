@@ -194,6 +194,7 @@ export function audioContainerForCodec(codec) {
 }
 
 export const Downloaders = {
+    AiModel: 'ai_model',
     Archive: 'archive',
     File: 'file',
     KiwixCatalog: 'kiwix_catalog',

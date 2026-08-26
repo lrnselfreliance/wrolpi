@@ -3,7 +3,9 @@ import {Route, Routes} from 'react-router';
 
 import {getAiCatalog, postAiSettings, postDownload} from '../api';
 import {getServiceStatus, startService, stopService} from '../api/controller';
+import {AiChatProvider} from '../contexts/AiChatContext';
 import {StatusContext} from '../contexts/contexts';
+import {AiChat} from './AiChat';
 import {APIButton, humanFileSize, InfoMessage, PageContainer, TabLinks, useTitle, WROLModeMessage} from './Common';
 import {SortableTable} from './SortableTable';
 import {Button, Divider, Group, Header, NumberInput, Select, Table, Text, Toggle, toast} from './ui';
@@ -186,10 +188,6 @@ export function ManageAi() {
     </>;
 }
 
-function ChatPlaceholder() {
-    return <Text>Chat is coming soon. Configure the assistant on the Manage tab.</Text>;
-}
-
 export function AiRoute() {
     useTitle('AI');
 
@@ -198,11 +196,14 @@ export function AiRoute() {
         {text: 'Manage', to: '/ai/manage', key: 'manage'},
     ];
 
-    return <PageContainer>
-        <TabLinks links={links}/>
-        <Routes>
-            <Route path='/' exact element={<ChatPlaceholder/>}/>
-            <Route path='manage' exact element={<ManageAi/>}/>
-        </Routes>
-    </PageContainer>;
+    // The provider wraps both tabs so the conversation survives visiting Manage.
+    return <AiChatProvider>
+        <PageContainer>
+            <TabLinks links={links}/>
+            <Routes>
+                <Route path='/' exact element={<AiChat/>}/>
+                <Route path='manage' exact element={<ManageAi/>}/>
+            </Routes>
+        </PageContainer>
+    </AiChatProvider>;
 }

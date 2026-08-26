@@ -21,12 +21,13 @@ from wrolpi.api_utils import json_response
 from wrolpi.collections.lib import search_collections
 from wrolpi.common import api_param_limiter, get_media_directory, logger, wrol_mode_enabled
 from wrolpi.downloader import download_manager
-from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile
+from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile, ValidationError
 from wrolpi.files.lib import search_files
-from wrolpi.vars import DOCKERIZED
+from wrolpi.vars import DOCKERIZED, IS_RPI4
 from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
-from . import help_docs, lib, schema
+from . import catalog, help_docs, lib, schema
+from .config import get_ai_config
 from .controller_client import controller_get
 from .errors import ControllerUnavailable
 
@@ -511,6 +512,68 @@ async def ai_list_disks(_: Request):
         errors.append('Could not reach the Controller for SMART status')
 
     return json_response(ret)
+
+
+# ---------------------------------------------------------------------------
+# Manage endpoints — for the AI page's Manage tab, NOT part of the model's tool catalog.
+# The agent loop excludes everything under /api/ai/manage/ when building tool definitions.
+# ---------------------------------------------------------------------------
+
+@ai_bp.get('/manage/catalog')
+@openapi.description('The AI model catalog, download/active state, and the recommended tier for this'
+                     ' device.  For the Manage tab, not the model.')
+async def manage_catalog(_: Request):
+    models, source = await catalog.get_models_catalog()
+    models_directory = catalog.get_models_directory()
+    downloaded = {i.name for i in models_directory.glob('*.gguf')} if models_directory.is_dir() else set()
+    disk_usage = sum(i.stat().st_size for i in models_directory.glob('*')) if models_directory.is_dir() else 0
+
+    config = get_ai_config()
+    models = [dict(i, downloaded=i['name'] in downloaded, active=i['name'] == config.active_model)
+              for i in models]
+
+    total_ram = catalog.get_total_ram_bytes()
+    return json_response(dict(
+        models=models,
+        catalog_source=source,
+        total_ram=total_ram,
+        recommended_tier=catalog.recommend_tier(total_ram),
+        slow_hardware=IS_RPI4,
+        models_directory=str(models_directory),
+        disk_usage=disk_usage,
+        enabled=config.enabled,
+        active_model=config.active_model,
+        idle_unload_minutes=config.idle_unload_minutes,
+        context_size=config.context_size,
+    ))
+
+
+@ai_bp.post('/manage/settings')
+@openapi.definition(
+    description='Update the AI settings (ai.yaml).  For the Manage tab, not the model.',
+    body=schema.AIManageSettingsRequest,
+)
+@validate(schema.AIManageSettingsRequest)
+async def manage_settings(_: Request, body: schema.AIManageSettingsRequest):
+    config = get_ai_config()
+    if body.active_model is not None:
+        if body.active_model and not (catalog.get_models_directory() / body.active_model).is_file():
+            raise ValidationError(f'Model is not downloaded: {body.active_model}')
+        config.active_model = body.active_model
+    if body.enabled is not None:
+        config.enabled = body.enabled
+    if body.idle_unload_minutes is not None:
+        if body.idle_unload_minutes < 1:
+            raise ValidationError('idle_unload_minutes must be at least 1')
+        config.idle_unload_minutes = body.idle_unload_minutes
+    if body.context_size is not None:
+        config.context_size = body.context_size
+    return json_response(dict(
+        enabled=config.enabled,
+        active_model=config.active_model,
+        idle_unload_minutes=config.idle_unload_minutes,
+        context_size=config.context_size,
+    ))
 
 
 @ai_bp.get('/files/read')

@@ -144,6 +144,7 @@ export const downloadAudioFormatOptions = [
 export const defaultAudioFormatOption = 'mp3';
 
 export const Downloaders = {
+    AiModel: 'ai_model',
     Archive: 'archive',
     File: 'file',
     KiwixCatalog: 'kiwix_catalog',

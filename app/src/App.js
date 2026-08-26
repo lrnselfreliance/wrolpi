@@ -31,6 +31,7 @@ import {ZimRoute} from "./components/Zim";
 import {PlaylistsRoute} from "./components/Playlists";
 import {DocsRoute} from "./components/Docs";
 import {FlasherRoute} from "./components/Flasher";
+import {AiRoute} from "./components/Ai";
 import ErrorBoundary from "./components/ErrorBoundary";
 import {KeyboardShortcutsProvider} from "./components/KeyboardShortcutsProvider";
 
@@ -116,6 +117,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path='playlists/*' element={<ErrorBoundary><PlaylistsRoute/></ErrorBoundary>}/>
     <Route path='files/*' element={<ErrorBoundary><FilesRoute/></ErrorBoundary>}/>
     <Route path='flasher/*' element={<ErrorBoundary><FlasherRoute/></ErrorBoundary>}/>
+    <Route path='ai/*' element={<ErrorBoundary><AiRoute/></ErrorBoundary>}/>
 </Route>));
 
 export default function App() {

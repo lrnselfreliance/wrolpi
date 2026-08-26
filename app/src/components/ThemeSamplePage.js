@@ -44,6 +44,7 @@ import {
 } from './ui';
 import {paletteColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
+import {AiModelRow} from './Ai';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
 
@@ -690,6 +691,32 @@ export function ThemeSamplePage() {
                         <Table.Cell numeric>104 GiB</Table.Cell>
                         <Table.Cell><Button role='cancel' size='xs'>Cancel</Button></Table.Cell>
                     </Table.Row>
+                </Table.Body>
+            </Table>
+        </Section>
+
+        <Section label='AI model catalog'>
+            {/* The real AiModelRow from the AI page's Manage tab, in both of its states. */}
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Model</Table.HeaderCell>
+                        <Table.HeaderCell>Tier</Table.HeaderCell>
+                        <Table.HeaderCell>Size</Table.HeaderCell>
+                        <Table.HeaderCell/>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                    <AiModelRow model={{
+                        name: 'Qwen3-1.7B-Q4_K_M.gguf', tier: 'small', size: 1_200_000_000,
+                        description: 'The default assistant for 4GB devices (Pi 4/5).',
+                        downloaded: true, active: true,
+                    }} onDownload={() => {}}/>
+                    <AiModelRow model={{
+                        name: 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf', tier: 'medium', size: 2_600_000_000,
+                        description: 'The default assistant for 8GB+ devices.',
+                        downloaded: false, active: false,
+                    }} onDownload={() => {}}/>
                 </Table.Body>
             </Table>
         </Section>

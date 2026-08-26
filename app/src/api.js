@@ -2379,3 +2379,33 @@ export async function setPlaylistTag(playlistId, tagName, directory) {
     toast({type: 'error', title: 'Error', description: message, time: 5000});
     throw Error(message);
 }
+
+// --- AI assistant ---
+
+export async function getAiCatalog() {
+    const response = await apiGet(`${API_URI}/ai/manage/catalog`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Failed to fetch AI catalog.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+}
+
+export async function postAiSettings(settings) {
+    const response = await apiPost(`${API_URI}/ai/manage/settings`, settings);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Failed to save AI settings.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function getChatModes() {
+    const response = await apiGet(`${API_URI}/chat/modes`);
+    if (response.ok) {
+        return (await response.json())['modes'];
+    }
+    const message = await getErrorMessage(response, 'Failed to fetch chat modes.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+}

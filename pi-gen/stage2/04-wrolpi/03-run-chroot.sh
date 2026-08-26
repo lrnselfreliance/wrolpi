@@ -45,6 +45,9 @@ git config --global --add safe.directory /opt/wrolpi
 # CPU-heavy step on weak hardware.
 /opt/wrolpi/wrolpi/scripts/install_map_tools.sh
 
+# Bake in llama.cpp (local AI) so a fresh Pi does not compile it on first upgrade.
+/opt/wrolpi/wrolpi/scripts/install_llama_cpp.sh
+
 # Install Python requirements.  Try multiple times because pypi may stop responding.
 python3 -m venv /opt/wrolpi/venv
 /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||

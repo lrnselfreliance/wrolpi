@@ -1,0 +1,17 @@
+[Unit]
+Description=WROLPi AI (llama-server)
+PartOf=wrolpi.target
+
+[Service]
+ExecStart=/opt/wrolpi/scripts/start_llama_server.sh
+Group=wrolpi
+User=wrolpi
+WorkingDirectory=/opt/wrolpi/
+Restart=on-failure
+# The lowest priority of any WROLPi service; inference must never starve the API.
+Nice=15
+
+# On-demand service: deliberately NOT enabled at boot and NOT wanted by wrolpi.target.
+# The Controller starts it when the user enables AI; the API stops it when idle.
+[Install]
+WantedBy=default.target

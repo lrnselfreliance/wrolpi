@@ -42,6 +42,8 @@ services:
       # Sanic 25.x wants 'spawn' but our code uses 'fork' for multiprocessing.
       # This tells Sanic to accept the existing start method.
       - SANIC_START_METHOD_SET=1
+      # llama-server runs in the llm container (native installs use 127.0.0.1).
+      - LLAMA_URL=http://llm:11435
     volumes:
       - './main.py:/opt/wrolpi/main.py'
       - './wrolpi:/opt/wrolpi/wrolpi'
@@ -145,6 +147,21 @@ services:
       - './docker/zim/entrypoint.sh:/entrypoint.sh'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
+      interval: 1m
+
+  llm: # llama-server (local AI) - started/stopped by the controller on demand; the API stops it when idle.
+    build:
+      context: .
+      dockerfile: docker/llm/Dockerfile
+    restart: "no"
+    depends_on:
+      controller:
+        condition: service_healthy
+    volumes:
+      - ${MEDIA_DIRECTORY:-./test}:/media/wrolpi
+      - './docker/llm/entrypoint.sh:/entrypoint.sh'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:11435/health' ]
       interval: 1m
 
   samba: # Samba file sharing - started/stopped by the controller based on configured shares.

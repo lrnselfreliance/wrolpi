@@ -59,6 +59,9 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_disabled.set()
     app.shared_ctx.download_manager_stopped.set()
 
+    # Monotonic-ish timestamp of the last chat/LLM request; the AI idle-unload worker reads it.
+    app.shared_ctx.ai_llm_last_request = multiprocessing.Value(ctypes.c_double, 0.0)
+
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
     app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()

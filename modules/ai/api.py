@@ -126,6 +126,28 @@ async def get_video_captions(request: Request, file_group_id: int):
     return json_response(lib.paginate_text(text, _offset(request)))
 
 
+@ai_bp.get('/videos/<file_group_id:int>/comments')
+@openapi.definition(
+    summary='Get video comments',
+    description='Read the downloaded comments of a video by its ID. Long comment threads are paged:'
+                ' request again with offset=next_offset to continue reading.',
+)
+@openapi.operation('get_video_comments')
+@openapi.parameter('offset', int, 'query')
+@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_video_comments(request: Request, file_group_id: int):
+    video = videos_lib.get_video(file_group_id)
+    comments = video.get_comments() or []
+    lines = []
+    for comment in comments:
+        author = comment.get('author') or 'unknown'
+        text = (comment.get('text') or '').strip()
+        if text:
+            lines.append(f'{author}: {text}')
+    return json_response(lib.paginate_text('\n'.join(lines), _offset(request)))
+
+
 @ai_bp.post('/archives/search')
 @openapi.definition(
     summary='Search archived web pages',
@@ -148,6 +170,32 @@ async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
         headline=True,
     )
     return json_response(lib.format_file_groups(file_groups, total))
+
+
+@ai_bp.get('/archives/<file_group_id:int>')
+@openapi.definition(
+    summary='Get one archived web page',
+    description='Get details about one archived web page by its ID from search results: title, source URL,'
+                ' its WROLPi link, a text_link to read it, and earlier snapshots of the same page.',
+)
+@openapi.operation('get_archive')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_archive(request: Request, file_group_id: int):
+    archive = archive_lib.get_archive_by_file_group_id(request.ctx.session, file_group_id, skip_viewed=True)
+    result = lib.format_file_group(archive.file_group.__json__(),
+                                   description_length=lib.DETAIL_DESCRIPTION_LENGTH)
+    history = []
+    for snapshot in archive.history[:10]:
+        fg = snapshot.file_group.__json__()
+        history.append({k: v for k, v in dict(
+            id=fg.get('id'),
+            title=fg.get('title') or fg.get('name'),
+            published=fg.get('published_datetime'),
+            link=lib.wrolpi_link(fg),
+        ).items() if v is not None})
+    if history:
+        result['history'] = history
+    return json_response(result)
 
 
 @ai_bp.get('/archives/<file_group_id:int>/text')

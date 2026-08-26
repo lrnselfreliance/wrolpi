@@ -141,6 +141,47 @@ async def test_ai_get_archive_text(async_client, test_session, archive_factory):
 
 
 @pytest.mark.asyncio
+async def test_ai_get_archive(async_client, test_session, archive_factory):
+    """A single archive can be fetched with its history of snapshots."""
+    archive_factory(domain='example.com', url='https://example.com/a', title='first', contents='one')
+    archive = archive_factory(domain='example.com', url='https://example.com/a', title='second', contents='two')
+    test_session.commit()
+
+    request, response = await async_client.get(f'/api/ai/archives/{archive.file_group_id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['kind'] == 'archive'
+    assert response.json['link'] == f'/archives/{archive.file_group_id}'
+    # History holds the OTHER snapshots of the URL, not the archive itself.
+    assert [i['title'] for i in response.json['history']] == ['first']
+
+    request, response = await async_client.get('/api/ai/archives/123456')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_ai_get_video_comments(async_client, test_session, video_factory):
+    """Video comments render as paged author lines."""
+    info_json = dict(duration=5, comments=[
+        dict(author='alice', text='great video'),
+        dict(author='bob', text='thanks'),
+    ])
+    video = video_factory(title='commented', with_info_json=info_json)
+    test_session.commit()
+
+    request, response = await async_client.get(f'/api/ai/videos/{video.file_group_id}/comments')
+    assert response.status_code == HTTPStatus.OK
+    assert 'alice: great video' in response.json['content']
+    assert 'bob: thanks' in response.json['content']
+
+    # No comments is an empty page, not an error.
+    no_comments = video_factory(title='quiet')
+    test_session.commit()
+    request, response = await async_client.get(f'/api/ai/videos/{no_comments.file_group_id}/comments')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['content'] == ''
+
+
+@pytest.mark.asyncio
 async def test_ai_search_docs(async_client, test_session, test_directory, example_epub, refresh_files):
     """Docs can be searched and fetched with links."""
     await refresh_files()

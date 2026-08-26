@@ -45,6 +45,7 @@ import {
 import {paletteColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
 import {AiModelRow} from './Ai';
+import {ChatMessage} from './AiChat';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
 
@@ -719,6 +720,25 @@ export function ThemeSamplePage() {
                     }} onDownload={() => {}}/>
                 </Table.Body>
             </Table>
+        </Section>
+
+        <Section label='AI chat'>
+            {/* The real ChatMessage from the AI Chat tab, in each of its states. */}
+            <ChatMessage message={{role: 'user', content: 'Find videos about canning'}}/>
+            <ChatMessage message={{
+                role: 'assistant',
+                content: 'I found one video: Pressure Canning Basics — /videos/123',
+                activity: [{tool: 'search_videos', pending: false, success: true}],
+            }}/>
+            <ChatMessage message={{
+                role: 'assistant', content: '',
+                activity: [{tool: 'search_archives', pending: true}], streaming: true,
+            }}/>
+            <ChatMessage message={{
+                role: 'assistant', content: '',
+                activity: [{tool: 'get_video_captions', pending: false, success: false}],
+                error: 'The AI failed to answer.  Check the logs.',
+            }}/>
         </Section>
 
         <Section label='Form controls'>

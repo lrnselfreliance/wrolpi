@@ -50,6 +50,12 @@ class AIZimSearchRequest:
 
 
 @dataclasses.dataclass
+class AIHelpSearchRequest:
+    search_str: Optional[str] = None
+    limit: int = 5
+
+
+@dataclasses.dataclass
 class AISearchResponse:
     results: list = dataclasses.field(default_factory=list)
     total: int = 0

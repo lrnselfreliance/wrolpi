@@ -281,6 +281,10 @@ async def start_single_tasks(app: Sanic):
                 from wrolpi.downloader import get_download_cache_config
                 get_download_cache_config().import_config()
                 logger.debug('download cache config imported')
+            with log_and_suppress(Exception, message='Failed to import ai config'):
+                from modules.ai.config import get_ai_config
+                get_ai_config().import_config()
+                logger.debug('ai config imported')
 
     from modules.zim.lib import flag_outdated_zim_files
     try:

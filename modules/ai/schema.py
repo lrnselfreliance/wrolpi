@@ -56,6 +56,14 @@ class AIHelpSearchRequest:
 
 
 @dataclasses.dataclass
+class AIManageSettingsRequest:
+    enabled: Optional[bool] = None
+    active_model: Optional[str] = None
+    idle_unload_minutes: Optional[int] = None
+    context_size: Optional[int] = None
+
+
+@dataclasses.dataclass
 class AISearchResponse:
     results: list = dataclasses.field(default_factory=list)
     total: int = 0

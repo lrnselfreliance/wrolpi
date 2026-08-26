@@ -143,6 +143,9 @@ cp /opt/wrolpi/wrolpi/blobs/* /opt/wrolpi-blobs/
 # systemd.
 /opt/wrolpi/wrolpi/scripts/install_map_tools.sh
 
+# Bake in llama.cpp (local AI) so a fresh install does not compile it on first upgrade.
+/opt/wrolpi/wrolpi/scripts/install_llama_cpp.sh
+
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh
 

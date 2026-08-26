@@ -258,6 +258,10 @@ rm -f /home/wrolpi/.pgpass
 # Migrate from old Leaflet/renderd/Apache2 map stack to MapLibre GL JS + PMTiles.
 /opt/wrolpi/scripts/install_protomaps.sh || echo "Protomaps migration failed."
 
+# Install llama.cpp for the local AI assistant (version-guarded no-op once installed;
+# the first build takes several minutes on a Raspberry Pi).
+/opt/wrolpi/wrolpi/scripts/install_llama_cpp.sh || echo "llama.cpp install failed, continuing..."
+
 # Download map fonts blob if missing.
 MAP_FONTS_BLOB=/opt/wrolpi-blobs/map-fonts.tar.gz
 if [[ ! -f ${MAP_FONTS_BLOB} || ! -s ${MAP_FONTS_BLOB} ]]; then

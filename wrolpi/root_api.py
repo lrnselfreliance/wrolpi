@@ -13,6 +13,7 @@ from sanic_ext.extensions.openapi import openapi
 from vininfo import Vin
 from vininfo.details._base import VinDetails
 
+from modules.ai.api import ai_bp
 from modules.archive.api import archive_bp
 from modules.docs.api import docs_bp
 from modules.flasher.api import flasher_bp
@@ -49,6 +50,7 @@ api_bp = Blueprint('RootAPI', url_prefix='/api')
 
 # Blueprints order here defines what order they are displayed in OpenAPI Docs.
 api_app.blueprint(api_bp)
+api_app.blueprint(ai_bp)
 api_app.blueprint(archive_bp)
 api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)

@@ -1,3 +1,4 @@
+from modules.ai.conftest import *  # noqa
 from modules.archive.conftest import *  # noqa
 from modules.inventory.conftest import *  # noqa
 from modules.videos.conftest import *  # noqa

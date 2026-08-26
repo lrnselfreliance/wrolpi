@@ -1173,6 +1173,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if playlists_config := get_playlists_config():
         all_configs[playlists_config.file_name] = playlists_config
 
+    from modules.ai.config import get_ai_config
+    if ai_config := get_ai_config():
+        all_configs[ai_config.file_name] = ai_config
+
     return all_configs
 
 

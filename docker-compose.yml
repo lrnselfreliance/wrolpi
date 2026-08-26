@@ -49,6 +49,8 @@ services:
       - './scripts:/opt/wrolpi/scripts'
       - './test:/opt/wrolpi/test'
       - './test:/media/wrolpi'
+      # Help markdown for the AI help search (native installs read /opt/wrolpi-help directly).
+      - './docker/help/wrolpi-help/docs:/opt/wrolpi-help/docs:ro'
       - './alembic:/opt/wrolpi/alembic'
       - './alembic.ini:/opt/wrolpi/alembic.ini'
     ports:

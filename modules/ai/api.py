@@ -52,7 +52,7 @@ def _offset(request: Request) -> int:
 @openapi.definition(
     summary='Search all WROLPi content',
     description='Search everything in the library at once: videos, archived web pages, ebooks, PDFs, and other'
-                ' files. Returns lean results with a WROLPi link for each item. Prefer the type-specific search'
+                ' files. search_str is optional: omit it to browse the newest items. Prefer the type-specific search'
                 ' (videos/archives/docs) when the user asks about one kind of content. When total is large,'
                 ' narrow the query instead of paging.',
     body=schema.AISearchRequest,
@@ -69,15 +69,15 @@ async def search_all(_: Request, body: schema.AISearchRequest):
         tag_names=body.tag_names,
         headline=True,
     )
-    return json_response(lib.format_file_groups(file_groups, total))
+    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
 
 
 @ai_bp.post('/videos/search')
 @openapi.definition(
     summary='Search videos',
     description='Search downloaded videos (and audio) by title and captions. Returns lean results with a'
-                ' WROLPi link and a captions_link for each video. When total is large, narrow the query'
-                ' instead of paging.',
+                ' WROLPi link and a captions_link for each video. search_str is optional: omit it to browse the'
+                ' newest videos, or pass channel_id (from list_collections) to browse one channel.',
     body=schema.AIVideoSearchRequest,
 )
 @openapi.operation('search_videos')
@@ -92,7 +92,7 @@ async def search_videos(_: Request, body: schema.AIVideoSearchRequest):
         tag_names=body.tag_names,
         headline=True,
     )
-    return json_response(lib.format_file_groups(file_groups, total))
+    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
 
 
 @ai_bp.get('/videos/<file_group_id:int>')
@@ -152,8 +152,8 @@ async def get_video_comments(request: Request, file_group_id: int):
 @openapi.definition(
     summary='Search archived web pages',
     description='Search archived web pages (saved with SingleFile) by title and content. Returns lean results'
-                ' with a WROLPi link and a text_link to read each page. Filter with domain (e.g. "example.com")'
-                ' when the user asks about one site.',
+                ' with a WROLPi link and a text_link to read each page. search_str is optional: omit it to browse'
+                ' the newest pages. Filter with domain (the exact name from list_collections) for one site.',
     body=schema.AIArchiveSearchRequest,
 )
 @openapi.operation('search_archives')
@@ -169,7 +169,7 @@ async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
         body.tag_names,
         headline=True,
     )
-    return json_response(lib.format_file_groups(file_groups, total))
+    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
 
 
 @ai_bp.get('/archives/<file_group_id:int>')
@@ -183,7 +183,7 @@ async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
 async def get_archive(request: Request, file_group_id: int):
     archive = archive_lib.get_archive_by_file_group_id(request.ctx.session, file_group_id, skip_viewed=True)
     result = lib.format_file_group(archive.file_group.__json__(),
-                                   description_length=lib.DETAIL_DESCRIPTION_LENGTH)
+                                   description_length=lib.DETAIL_DESCRIPTION_LENGTH, include_url=True)
     history = []
     for snapshot in archive.history[:10]:
         fg = snapshot.file_group.__json__()
@@ -239,7 +239,7 @@ async def search_docs(_: Request, body: schema.AIDocSearchRequest):
         order_by='rank' if body.search_str else 'published_datetime',
         tag_names=body.tag_names,
     )
-    return json_response(lib.format_file_groups(file_groups, total))
+    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
 
 
 @ai_bp.get('/docs/<file_group_id:int>')
@@ -347,11 +347,14 @@ async def list_collections(request: Request):
     collections = search_collections(request.ctx.session, kind=kind)
     results = []
     for collection in collections:
+        # Channels have a browsable page; a real link stops the model inventing one.
+        link = f"/videos/channel/{collection['id']}/video" if collection.get('kind') == 'channel' else None
         results.append({k: v for k, v in dict(
             id=collection.get('id'),
             name=collection.get('name'),
             kind=collection.get('kind'),
             directory=collection.get('directory'),
+            link=link,
         ).items() if v is not None})
     return json_response(dict(results=results, total=len(results)))
 

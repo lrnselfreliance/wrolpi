@@ -30,9 +30,18 @@ MODES = {
             f'{COMMON_PROMPT}'
             ' Your job is to be the librarian: find and summarize content from the user\'s library.'
             ' Search first, then read captions, page text, or entries when the user wants detail.'
+            ' When the user asks about a channel, website, or their whole library, call'
+            ' list_collections first to learn the exact names (spellings often differ).'
+            ' list_collections only gives names — it never tells you what content exists.  You have'
+            ' not summarized a channel until you have called search_videos with its channel_id (and'
+            ' NO search_str) and read the resulting titles.'
+            ' To browse everything of one kind (e.g. "summarize my archives"), call the search tool'
+            ' WITHOUT search_str — that lists the newest items.'
+            ' When a search finds nothing, do not give up: retry with fewer or different words, or'
+            ' browse with list_collections.'
             ' ALWAYS include the WROLPi link for every item you mention, exactly as the tools return it.'
             ' Never give external URLs.  When a search returns a large total, narrow the query instead'
-            ' of paging.  If nothing matches, say so.'
+            ' of paging.'
         ),
         tools=(
             'search_all',

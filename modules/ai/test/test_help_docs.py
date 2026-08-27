@@ -31,14 +31,14 @@ def test_search_help_scoring(help_corpus):
     """Title matches outrank body matches; snippets show context."""
     results, total = help_docs.search_help('logs')
     assert total == 1
-    assert results[0]['doc'] == 'system/logs'
+    assert results[0]['slug'] == 'system/logs'
     assert results[0]['title'] == 'Logs'
     assert results[0]['link'] == '/system/logs/'
     assert 'journalctl' in results[0]['snippet'] or 'Logs' in results[0]['snippet']
 
     # 'videos' matches the videos doc far better than any other.
     results, _ = help_docs.search_help('downloading videos')
-    assert results[0]['doc'] == 'modules/videos'
+    assert results[0]['slug'] == 'modules/videos'
 
     # No matches.
     results, total = help_docs.search_help('xyzzy')
@@ -48,7 +48,7 @@ def test_search_help_scoring(help_corpus):
 def test_help_doc_cache_invalidation(help_corpus):
     """Edited files are re-parsed; deleted files leave the corpus."""
     results, _ = help_docs.search_help('welcome')
-    assert results[0]['doc'] == 'index'
+    assert results[0]['slug'] == 'index'
     assert results[0]['link'] == '/'
 
     (help_corpus / 'index.md').write_text('# Home\n\nGreetings, traveler.\n')
@@ -57,7 +57,7 @@ def test_help_doc_cache_invalidation(help_corpus):
     results, total = help_docs.search_help('welcome')
     assert total == 0
     results, _ = help_docs.search_help('greetings')
-    assert results[0]['doc'] == 'index'
+    assert results[0]['slug'] == 'index'
 
     (help_corpus / 'system/logs.md').unlink()
     _, total = help_docs.search_help('logs')
@@ -77,9 +77,9 @@ async def test_ai_help_endpoints(async_client, help_corpus):
     assert response.status_code == HTTPStatus.OK
     assert response.json['total'] == 1
     result = response.json['results'][0]
-    assert result['doc'] == 'system/logs'
+    assert result['slug'] == 'system/logs'
 
-    request, response = await async_client.get(f'/api/ai/help/{result["doc"]}')
+    request, response = await async_client.get(f'/api/ai/help/{result["slug"]}')
     assert response.status_code == HTTPStatus.OK
     assert response.json['title'] == 'Logs'
     assert 'journalctl' in response.json['content']

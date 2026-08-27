@@ -46,6 +46,9 @@ from wrolpi.version import __version__
 logger = logger.getChild(__name__)
 
 api_app.config.FALLBACK_ERROR_FORMAT = 'json'
+# The AI chat streams for as long as CHAT_TIMEOUT_SECONDS (its own hard ceiling); Sanic's 60s
+# default killed the stream before a slow CPU produced its first token.
+api_app.config.RESPONSE_TIMEOUT = 660
 
 api_bp = Blueprint('RootAPI', url_prefix='/api')
 

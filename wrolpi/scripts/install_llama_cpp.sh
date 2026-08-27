@@ -19,12 +19,18 @@ LLAMA_CPP_VERSION="v0.3.0"
 LLAMA_CPP_SHA256="d94c02d86db22d68692f6bb5b3854763d5091e52142868dc7251995517c666d1"
 
 # llama-server's version output tracks build numbers, not release tags, so the
-# installed release is recorded in a marker file.
+# installed release is recorded in a marker file.  The +dl suffix marks the
+# multi-variant CPU build; bumping it forces a rebuild of older installs.
 MARKER_DIR=/usr/local/share/wrolpi
 MARKER="${MARKER_DIR}/llama_cpp_version"
+MARKER_VALUE="${LLAMA_CPP_VERSION}+dl1"
+
+# llama-server and its dlopen'd CPU-variant backends live together here; the
+# backend loader scans the real executable's directory.
+INSTALL_DIR=/opt/llama-cpp
 
 install_llama_cpp() {
-  if [ -f "${MARKER}" ] && [ "$(cat "${MARKER}")" = "${LLAMA_CPP_VERSION}" ] \
+  if [ -f "${MARKER}" ] && [ "$(cat "${MARKER}")" = "${MARKER_VALUE}" ] \
       && command -v llama-server &>/dev/null; then
     echo "llama.cpp ${LLAMA_CPP_VERSION} already installed"
     return 0
@@ -41,24 +47,41 @@ install_llama_cpp() {
   tar -xz -C "${build_dir}" --strip-components=1 -f /tmp/llama_cpp.tar.gz
   rm -f /tmp/llama_cpp.tar.gz
 
-  # Static-ish single binary; GGML_NATIVE=OFF so an image built in a chroot/QEMU
-  # does not bake in the build host's CPU features.
+  # GGML_NATIVE=OFF: an image built in a chroot/QEMU (or a docker image moved
+  # between machines) must not bake in the build host's CPU features.  On
+  # x86_64 the baseline still assumes AVX2, which SIGILLs on older CPUs
+  # (AMD FX, early Atom) -- so build every CPU variant with runtime dispatch,
+  # exactly like llama.cpp's official release binaries.
+  local variant_flags=""
+  if [ "$(uname -m)" = "x86_64" ]; then
+    variant_flags="-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON"
+  fi
   (cd "${build_dir}" &&
     cmake -B build \
       -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_SHARED_LIBS=OFF \
       -DGGML_NATIVE=OFF \
+      -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
+      ${variant_flags} \
       -DLLAMA_CURL=OFF \
       -DLLAMA_BUILD_TESTS=OFF \
       -DLLAMA_BUILD_EXAMPLES=OFF \
       -DLLAMA_BUILD_SERVER=ON &&
-    cmake --build build --target llama-server -j"$(nproc)")
-  install -m 0755 "${build_dir}/build/bin/llama-server" /usr/local/bin/llama-server
+    cmake --build build -j"$(nproc)")
+
+  # Install the binary and every built library (CPU-variant backends included)
+  # together; the backend loader scans the executable's real directory.
+  rm -rf "${INSTALL_DIR}"
+  mkdir -p "${INSTALL_DIR}"
+  cp "${build_dir}"/build/bin/llama-server "${INSTALL_DIR}/"
+  cp "${build_dir}"/build/bin/*.so "${INSTALL_DIR}/" 2>/dev/null || true
+  find "${build_dir}/build" -name 'lib*.so*' -exec cp {} "${INSTALL_DIR}/" \; 2>/dev/null || true
+  chmod 0755 "${INSTALL_DIR}"/llama-server
+  ln -sf "${INSTALL_DIR}/llama-server" /usr/local/bin/llama-server
   rm -rf "${build_dir}"
 
   mkdir -p "${MARKER_DIR}"
-  echo "${LLAMA_CPP_VERSION}" > "${MARKER}"
-  llama-server --version || true
+  echo "${MARKER_VALUE}" > "${MARKER}"
+  LD_LIBRARY_PATH="${INSTALL_DIR}" llama-server --version || true
   echo "llama.cpp ${LLAMA_CPP_VERSION} installed"
 }
 

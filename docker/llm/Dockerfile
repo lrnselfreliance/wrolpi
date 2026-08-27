@@ -6,7 +6,9 @@ RUN apt-get update && apt-get install -y curl ca-certificates
 # Build llama-server from the pinned release (single source of truth with native installs).
 COPY wrolpi/scripts/install_llama_cpp.sh /tmp/install_llama_cpp.sh
 RUN /tmp/install_llama_cpp.sh && rm /tmp/install_llama_cpp.sh \
-    && apt-get remove -y build-essential cmake && apt-get autoremove -y && apt-get clean
+    && apt-get remove -y build-essential cmake && apt-get autoremove -y \
+    # llama-server needs the OpenMP runtime, which the build-tool cleanup just removed.
+    && apt-get install -y libgomp1 && apt-get clean
 
 # The same startup scripts the native install uses.
 COPY scripts/start_llama_server.sh /opt/wrolpi/scripts/start_llama_server.sh

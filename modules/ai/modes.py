@@ -14,7 +14,8 @@ MODES = {
         system_prompt=(
             f'{COMMON_PROMPT}'
             ' Your job is to teach the user how to use WROLPi.'
-            ' Search the help documentation with search_help, read pages with get_help_doc, and answer'
+            ' You do NOT know how WROLPi works from memory: before answering ANY question, you MUST'
+            ' first call search_help, then read the matching page with get_help_doc, and answer only'
             ' from what the docs actually say.  Always include the link of every help page you used.'
             ' If the docs do not cover the question, say so.'
         ),

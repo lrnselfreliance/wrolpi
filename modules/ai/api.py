@@ -396,7 +396,7 @@ async def get_inventory(_: Request, slug: str):
 @openapi.definition(
     summary='Search the WROLPi help documentation',
     description='Search the WROLPi help documentation for how to use and repair WROLPi. Returns matching'
-                ' help pages with a snippet; read a full page with get_help_doc. Links are pages on the'
+                ' help pages with a snippet; read a full page by passing its slug to get_help_doc. Links are pages on the'
                 ' WROLPi help site.',
     body=schema.AIHelpSearchRequest,
 )

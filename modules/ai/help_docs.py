@@ -133,7 +133,7 @@ def search_help(search_str: str, limit: int = 5) -> (List[dict], int):
     results = []
     for score, doc in scored[:limit]:
         result = dict(
-            doc=doc.slug,
+            slug=doc.slug,
             title=doc.title,
             link=help_doc_link(doc.slug),
             snippet=_snippet(doc.body, tokens),

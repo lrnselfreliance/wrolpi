@@ -152,6 +152,9 @@ async def post_chat(request: Request, body: ChatRequest):
                 return
 
             service.record_llm_activity()
+            # Always send something before the model call: on slow CPUs the first token can be
+            # minutes away, and a silent stream looks dead to the UI and to proxies.
+            await _send_event(response, 'status', dict(message='Thinking…'))
             tool_calls = []
             final_answer = []
             async for event in llama_chat_stream(messages, tools):

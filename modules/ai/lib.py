@@ -78,10 +78,13 @@ def _truncate(text: Optional[str], length: int) -> Optional[str]:
     return text
 
 
-def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LENGTH) -> dict:
+def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LENGTH,
+                      include_url: bool = False) -> dict:
     """Format a FileGroup JSON dict into the lean, flat shape the model consumes.
 
-    Empty fields are omitted so results stay compact on small contexts.
+    Empty fields are omitted so results stay compact on small contexts.  The source URL is
+    omitted unless requested (archive detail): given both, small models present the familiar
+    external URL instead of the WROLPi link.
     """
     kind = file_group_kind(fg)
     result = dict(
@@ -94,7 +97,7 @@ def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LE
         published=fg.get('published_datetime'),
         author=fg.get('author'),
         tags=fg.get('tags') or None,
-        url=fg.get('url'),
+        url=fg.get('url') if include_url else None,
     )
 
     # FTS headline (content match context), if the search requested headlines.
@@ -127,9 +130,15 @@ def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LE
     return {k: v for k, v in result.items() if v is not None}
 
 
-def format_file_groups(file_groups: list, total: int) -> dict:
+def format_file_groups(file_groups: list, total: int, searched: bool = False) -> dict:
     """Format search results: lean items plus the total so the model narrows instead of paging."""
-    return dict(results=[format_file_group(i) for i in file_groups], total=total)
+    result = dict(results=[format_file_group(i) for i in file_groups], total=total)
+    if searched and total == 0:
+        # Small models give up on one empty search; steer the retry.
+        result['hint'] = ('No matches. Names may be spelled differently: try fewer or different'
+                          ' words, list_collections for exact channel/domain names, or omit'
+                          ' search_str to browse the newest items.')
+    return result
 
 
 def paginate_text(text: Optional[str], offset: int = 0) -> dict:

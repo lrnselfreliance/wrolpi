@@ -92,7 +92,8 @@ async def test_chat_tool_call_then_answer(async_client, ai_enabled, video_factor
     assert response.status_code == HTTPStatus.OK
 
     events = _parse_sse(response.text)
-    names = [e for e, _ in events]
+    # A status event precedes every model call so slow CPUs never leave the stream silent.
+    names = [e for e, _ in events if e != 'status']
     assert names == ['tool_call', 'tool_result', 'token', 'token', 'done']
     tool_call = dict(events)['tool_call']
     assert tool_call == dict(tool='search_videos', args=dict(search_str='canning'))
@@ -116,7 +117,7 @@ async def test_chat_plain_answer(async_client, ai_enabled):
     body = dict(mode='help', messages=[dict(role='user', content='hi')])
     with patch:
         request, response = await async_client.post('/api/chat/', content=json.dumps(body))
-    events = _parse_sse(response.text)
+    events = [e for e in _parse_sse(response.text) if e[0] != 'status']
     assert events == [('token', dict(content='Hello!')), ('done', dict(content='Hello!'))]
 
 

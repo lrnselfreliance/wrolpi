@@ -70,7 +70,9 @@ def test_format_file_group_archive():
     assert result['kind'] == 'archive'
     assert result['link'] == '/archives/8'
     assert result['text_link'] == '/api/ai/archives/8/text'
-    assert result['url'] == 'https://example.com/a'
+    # Listings omit the source URL so small models present the WROLPi link instead.
+    assert 'url' not in result
+    assert lib.format_file_group(fg, include_url=True)['url'] == 'https://example.com/a'
 
 
 def test_format_file_groups_total():

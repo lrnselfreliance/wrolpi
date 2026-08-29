@@ -188,7 +188,7 @@ def search_videos(
     limit = int(limit) if limit else 20
     offset = int(offset) if offset else 0
     if not search_str and not tag_names and not channel_id and not censored and order in INDEXED_DATE_ORDERS:
-        # The Videos page as first opened: no filters, newest first.
+        # The Videos page with no filters, in date order.
         return _search_videos_by_date(order, limit, offset)
 
     params = dict(search_str=search_str, offset=offset)

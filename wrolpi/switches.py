@@ -96,15 +96,14 @@ async def switch_worker():
     # Wait for the switches to be changed.
     switches_changed: multiprocessing.Event = api_app.shared_ctx.switches_changed
 
+    # Must not block the event loop; `perpetual_signal` retries every 0.1s.
+    switches: dict = api_app.shared_ctx.switches
+    if not switches_changed.is_set() and not switches:
+        return
+
     switch_name = None
     try:
         # Get new switch and its context.  Handle each switch one at a time.
-        # This coroutine runs on the Sanic worker's event loop and must never block (a blocking
-        # `Event.wait` here stalls every request on this worker).  `perpetual_signal` re-runs it
-        # every 0.1s, so a non-blocking `is_set()` check is both cheap and prompt.
-        switches: dict = api_app.shared_ctx.switches
-        if not switches_changed.is_set() and not switches:
-            return
         with api_app.shared_ctx.switches_lock:
             switch_name, context = switches.popitem()
         # Call handler with the stored context, await coroutine, if any.

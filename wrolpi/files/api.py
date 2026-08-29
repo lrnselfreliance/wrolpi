@@ -163,8 +163,6 @@ async def worker_status(request: Request):
 )
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
-    # The query is synchronous SQLite; run it off the event loop so a slow search on a large
-    # library does not stall every other request on this Sanic worker.
     with timer('Searching all files', 'info', logger__=logger):
         file_groups, total = await asyncio.to_thread(
             lib.search_files, body.search_str, body.limit, body.offset, body.mimetypes, body.model,

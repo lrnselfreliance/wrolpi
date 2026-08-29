@@ -67,8 +67,7 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    # The query is synchronous SQLite; run it off the event loop so a slow search on a large
-    # library does not stall every other request on this Sanic worker.
+    # Synchronous SQLite query; keep it off the event loop.
     file_groups, videos_total = await asyncio.to_thread(
         lib.search_videos,
         body.search_str,

@@ -657,12 +657,27 @@ async def test_search_videos_default_page_pagination(test_session, video_factory
     await assert_video_search(order_by='-published_datetime', limit=2, offset=0, assert_total=6, assert_ids=newest[0:2])
     await assert_video_search(order_by='-published_datetime', limit=2, offset=2, assert_total=6, assert_ids=newest[2:4])
     await assert_video_search(order_by='-published_datetime', limit=2, offset=4, assert_total=6, assert_ids=newest[4:6])
+    # Past the end the fast path still reports the true total (the generic query has no rows to
+    # carry `COUNT(*) OVER()` in, so it reports 0 there; the fast path is the better behavior).
     await assert_video_search(order_by='-published_datetime', limit=2, offset=6, assert_total=6, assert_ids=[])
 
     # Oldest first: NULL dates first (SQLite sorts NULL lowest), ties broken by id ascending.
     oldest = [f.id, a.id, d.id, b.id, c.id, e.id]
     await assert_video_search(order_by='published_datetime', assert_total=6, assert_ids=oldest)
     await assert_video_search(order_by='published_datetime', limit=4, offset=2, assert_total=6, assert_ids=oldest[2:6])
+
+    # The fast path must return exactly what the generic query returns for the same request:
+    # same rows, same order (NULL placement, id tiebreaker, interleaved mimetypes), same paging.
+    def ids(order, limit, offset):
+        results, total = lib.search_videos(order=order, limit=limit, offset=offset)
+        return [i['id'] for i in results], total
+
+    for order in lib.INDEXED_DATE_ORDERS:
+        for limit, offset in ((24, 0), (2, 0), (2, 2), (4, 2), (1, 5)):
+            fast = ids(order, limit, offset)
+            with mock.patch.object(lib, 'INDEXED_DATE_ORDERS', ()):
+                generic = ids(order, limit, offset)
+            assert fast == generic, f'{order} limit={limit} offset={offset}: fast {fast} != generic {generic}'
 
 
 def test_cached_total(test_session):

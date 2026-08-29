@@ -690,3 +690,41 @@ def test_cached_total(test_session):
     assert lib._cached_total('k', compute) == 42
     assert len(calls) == 3
     lib._TOTALS_CACHE.clear()
+
+async def test_video_description_endpoint(async_client, test_session, video_factory):
+    """The description is served by its own endpoint, like comments and captions.  It comes from the
+    indexed `c_text`, falling back to the info json on disk for a video that was never indexed with one."""
+    video = video_factory(with_video_file=True, with_info_json={'description': 'from the info json'})
+    test_session.commit()
+    assert video.file_group.c_text == 'from the info json', 'indexing copies the description into c_text'
+
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/description')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {'description': 'from the info json'}
+
+    # A stale row (indexed before descriptions were stored) falls back to the file.
+    video.file_group.c_text = None
+    test_session.commit()
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/description')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {'description': 'from the info json'}
+
+    request, response = await async_client.get('/api/videos/123456/description')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_video_json_does_not_read_info_json(async_client, test_session, video_factory, assert_video_search):
+    """Video list and detail responses must never read the info json from disk.
+
+    Many videos have no description, so a fallback read from `__json__` would open and parse every
+    such video's info json on every list page, cold, for a field the list never displays."""
+    video = video_factory(with_video_file=True, with_info_json={'duration': 5})  # no description
+    test_session.commit()
+    assert not video.file_group.c_text
+
+    with mock.patch('modules.videos.models.Video.get_info_json', side_effect=AssertionError('read info json')):
+        await assert_video_search(assert_total=1, assert_ids=[video.id])
+        request, response = await async_client.get(f'/api/videos/{video.file_group_id}')
+        assert response.status_code == HTTPStatus.OK
+        assert 'description' not in response.json['file_group']['video']

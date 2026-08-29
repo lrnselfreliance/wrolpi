@@ -168,6 +168,11 @@ class VideoCaptionsResponse:
 
 
 @dataclass
+class VideoDescriptionResponse:
+    description: Optional[str]
+
+
+@dataclass
 class VideoSearchRequest:
     search_str: Optional[str] = None
     tags: List[str] = field(default_factory=list)

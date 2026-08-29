@@ -1,7 +1,8 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
-import {usePages, useDriveTemperature, useDriveHealth} from './customHooks';
+import {usePages, useDriveTemperature, useDriveHealth, useVideoExtras} from './customHooks';
+import {getVideoComments, getVideoDescription} from '../api';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -32,6 +33,12 @@ const makeWrapper = (initialParams = {}) => {
     };
     return Wrapper;
 };
+
+jest.mock('../api', () => ({
+    ...jest.requireActual('../api'),
+    getVideoComments: jest.fn(),
+    getVideoDescription: jest.fn(),
+}));
 
 // Mock Media so Paginator renders both mobile + tablet variants synchronously.
 jest.mock('../contexts/contexts', () => {
@@ -276,5 +283,27 @@ describe('Paginator rendering', () => {
         expect(screen.queryAllByText('1').length).toBeGreaterThan(0);
         expect(screen.queryAllByText('2').length).toBeGreaterThan(0);
         expect(screen.queryByText('3')).toBeNull();
+    });
+});
+
+describe('useVideoExtras', () => {
+    // The description is fetched on its own, like comments: the Video payload no longer carries it,
+    // so list pages never pay for it.
+    test('fetches comments and description for a video', async () => {
+        getVideoComments.mockResolvedValue({comments: [{id: 'c1', parent: 'root'}]});
+        getVideoDescription.mockResolvedValue({description: 'hello'});
+        const {result} = renderHook(() => useVideoExtras(7));
+        await act(async () => {
+        });
+        expect(getVideoComments).toHaveBeenCalledWith(7);
+        expect(getVideoDescription).toHaveBeenCalledWith(7);
+        expect(result.current.comments).toEqual([{id: 'c1', parent: 'root'}]);
+        expect(result.current.description).toBe('hello');
+    });
+
+    test('clears both when there is no video', () => {
+        const {result} = renderHook(() => useVideoExtras(null));
+        expect(result.current.comments).toBeNull();
+        expect(result.current.description).toBeNull();
     });
 });

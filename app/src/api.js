@@ -244,6 +244,14 @@ export async function getVideoComments(fileGroupId) {
     }
 }
 
+export async function getVideoDescription(fileGroupId) {
+    const response = await apiGet(`${VIDEOS_API}/${fileGroupId}/description`);
+    let data = await response.json();
+    return {
+        description: data.description,
+    }
+}
+
 export async function getVideoCaptions(fileGroupId) {
     const response = await apiGet(`${VIDEOS_API}/${fileGroupId}/captions`);
     let data = await response.json();

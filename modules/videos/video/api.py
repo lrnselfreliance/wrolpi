@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import Blueprint
@@ -57,7 +58,10 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    file_groups, videos_total = lib.search_videos(
+    # The query is synchronous SQLite; run it off the event loop so a slow search on a large
+    # library does not stall every other request on this Sanic worker.
+    file_groups, videos_total = await asyncio.to_thread(
+        lib.search_videos,
         body.search_str,
         body.offset,
         body.limit,

@@ -1149,9 +1149,12 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     return results, total
 
 
-def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List[dict], int]:
+def handle_file_group_search_results(statement: str, params: dict, total: int = None) -> Tuple[List[dict], int]:
     """
     Execute the provided SQL statement and fetch the Files returned.
+
+    The statement must select `id` and, unless `total` is provided by the caller, a `total` column
+    (typically `COUNT(*) OVER()`).
 
     WARNING: This expects specific queries to be executed and shouldn't be used for things not related to file search.
 
@@ -1160,7 +1163,8 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
     with get_db_curs() as curs:
         curs.execute(statement, params)
         results = [dict(i) for i in curs.fetchall()]
-        total = results[0]['total'] if results else 0
+        if total is None:
+            total = results[0]['total'] if results else 0
         ordered_ids = [i['id'] for i in results]
         extras = [dict(
             ts_rank=i.get('ts_rank'),

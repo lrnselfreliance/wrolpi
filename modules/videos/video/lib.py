@@ -1,7 +1,8 @@
 import asyncio
 import random
+import time
 from datetime import timedelta
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Callable
 
 import yt_dlp
 from sqlalchemy import or_
@@ -11,12 +12,12 @@ from modules.videos.models import Video, Channel
 from wrolpi import fts
 from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import download_manager
 from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
-from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
+from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR, PYTEST
 from ..cookies import cookies_unlocked, cookies_for_download
 from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 
@@ -86,6 +87,82 @@ JOIN_ORDERS = ('view_count', '-view_count')
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 24
 
+# Orders the unfiltered Videos page can serve straight from the (mimetype, effective_datetime) index.
+INDEXED_DATE_ORDERS = ('published_datetime', '-published_datetime')
+VIDEO_MIMETYPE_PREFIXES = ('video/', 'audio/')
+
+# The unfiltered Videos page total, cached for a short time.  Counting every video walks the whole
+# mimetype index, which costs seconds cold on a large library on a spinning disk; pagination can
+# tolerate a total that is a minute stale.  Bypassed under pytest so tests see exact totals.
+TOTALS_CACHE_SECONDS = 60
+_TOTALS_CACHE: Dict[str, Tuple[float, int]] = dict()
+
+
+def _cached_total(key: str, compute: Callable[[], int]) -> int:
+    if not PYTEST:
+        hit = _TOTALS_CACHE.get(key)
+        if hit and time.monotonic() - hit[0] < TOTALS_CACHE_SECONDS:
+            return hit[1]
+    total = compute()
+    _TOTALS_CACHE[key] = (time.monotonic(), total)
+    return total
+
+
+def _video_mimetypes() -> List[str]:
+    """Every distinct video/* and audio/* mimetype in the library (a handful; served by the mimetype index)."""
+    mimetypes = []
+    with get_db_curs() as curs:
+        for prefix in VIDEO_MIMETYPE_PREFIXES:
+            # '0' is the character after '/', so this is the half-open range of the prefix.
+            curs.execute('SELECT DISTINCT mimetype FROM file_group WHERE mimetype >= ? AND mimetype < ?',
+                         (prefix, prefix[:-1] + '0'))
+            mimetypes.extend(i[0] for i in curs.fetchall())
+    return mimetypes
+
+
+def _count_videos() -> int:
+    ranges = ' OR '.join(f'(mimetype >= :p{i} AND mimetype < :e{i})' for i in range(len(VIDEO_MIMETYPE_PREFIXES)))
+    params = dict()
+    for i, prefix in enumerate(VIDEO_MIMETYPE_PREFIXES):
+        params[f'p{i}'], params[f'e{i}'] = prefix, prefix[:-1] + '0'
+    with get_db_curs() as curs:
+        curs.execute(f'SELECT COUNT(*) FROM file_group WHERE {ranges}', params)
+        return curs.fetchone()[0]
+
+
+def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[dict], int]:
+    """The unfiltered Videos page, ordered by date, without visiting every video.
+
+    The generic query (`mimetype LIKE 'video/%' OR ...` + `COUNT(*) OVER()`) must visit every
+    video's index entry before it can apply LIMIT, which scales with the library rather than the
+    page.  Here each exact mimetype is a pure covering-index seek on (mimetype, effective_datetime)
+    that reads only `limit + offset` entries; those few rows are then merged.  Results must be
+    identical to the generic query's (same ORDER BY, including the id tiebreaker and NULL placement).
+    The total is a separate, cached count."""
+    order_by = VIDEO_ORDERS[order]
+    mimetypes = _video_mimetypes()
+    if not mimetypes:
+        return [], 0
+
+    n = limit + offset
+    params = {f'mt{i}': mimetype for i, mimetype in enumerate(mimetypes)}
+    params['offset'] = offset
+    members = '\n UNION ALL\n'.join(
+        f'SELECT * FROM (SELECT fg.id, fg.effective_datetime FROM file_group fg'
+        f' WHERE fg.mimetype = :mt{i} ORDER BY {order_by} LIMIT {n})'
+        for i in range(len(mimetypes))
+    )
+    stmt = f'''
+        SELECT fg.id
+        FROM ({members}) fg
+        ORDER BY {order_by}
+        LIMIT {limit} OFFSET :offset
+    '''.strip()
+    logger.debug(f'{stmt} {params}')
+
+    total = _cached_total('videos', _count_videos)
+    return handle_file_group_search_results(stmt, params, total=total)
+
 
 def search_videos(
         search_str: str = None,
@@ -109,7 +186,12 @@ def search_videos(
 
     # Explicit JSON nulls bypass the schema defaults; SQLite rejects LIMIT/OFFSET NULL.
     limit = int(limit) if limit else 20
-    params = dict(search_str=search_str, offset=int(offset) if offset else 0)
+    offset = int(offset) if offset else 0
+    if not search_str and not tag_names and not channel_id and not censored and order in INDEXED_DATE_ORDERS:
+        # The Videos page as first opened: no filters, newest first.
+        return _search_videos_by_date(order, limit, offset)
+
+    params = dict(search_str=search_str, offset=offset)
     if channel_id:
         wheres.append('v.channel_id = :channel_id')
         joins.append('LEFT JOIN channel c ON c.id = v.channel_id')

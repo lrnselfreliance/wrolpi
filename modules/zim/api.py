@@ -1,3 +1,4 @@
+import asyncio
 import urllib.parse
 from http import HTTPStatus
 
@@ -65,8 +66,9 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
 @validate(schema.ZimSearchRequest)
 async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
     session = request.ctx.session
-    results = lib.search_all_zims(session, body.search_str, tag_names=body.tag_names, offset=body.offset,
-                                  limit=body.limit)
+    # libzim searches are synchronous and slow on a Pi; keep them off the event loop.
+    results = await asyncio.to_thread(lib.search_all_zims, session, body.search_str, tag_names=body.tag_names,
+                                      offset=body.offset, limit=body.limit)
     return json_response({'zims': results})
 
 

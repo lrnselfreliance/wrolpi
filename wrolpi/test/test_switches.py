@@ -1,5 +1,7 @@
 import asyncio
 import multiprocessing
+import time
+from unittest import mock
 
 import pytest
 
@@ -75,3 +77,16 @@ async def test_invalid_activate_switch(await_switches):
 
     with pytest.raises(RuntimeError):
         switches.activate_switch('test1', 'bad context')
+
+
+@pytest.mark.asyncio
+async def test_switch_worker_does_not_block_event_loop(await_switches):
+    """With no switch pending (the normal state) `switch_worker` must return at once.
+
+    It runs on the Sanic worker's event loop every 0.1s; a blocking `Event.wait(timeout=1)` there
+    froze every request on that worker for up to a second, ~90% of the time."""
+    with mock.patch('wrolpi.switches.PYTEST', False):
+        start = time.perf_counter()
+        await switches.switch_worker()
+        elapsed = time.perf_counter() - start
+    assert elapsed < 0.5, f'switch_worker blocked for {elapsed:.2f}s with no switch pending'

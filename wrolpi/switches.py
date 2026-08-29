@@ -99,13 +99,12 @@ async def switch_worker():
     switch_name = None
     try:
         # Get new switch and its context.  Handle each switch one at a time.
-        # During testing, don't block the event loop - check for pending switches directly.
-        # In production, use blocking wait which is more efficient for long-running processes.
-        if PYTEST and not api_app.shared_ctx.switches:
-            return
-        else:
-            switches_changed.wait(timeout=1)
+        # This coroutine runs on the Sanic worker's event loop and must never block (a blocking
+        # `Event.wait` here stalls every request on this worker).  `perpetual_signal` re-runs it
+        # every 0.1s, so a non-blocking `is_set()` check is both cheap and prompt.
         switches: dict = api_app.shared_ctx.switches
+        if not switches_changed.is_set() and not switches:
+            return
         with api_app.shared_ctx.switches_lock:
             switch_name, context = switches.popitem()
         # Call handler with the stored context, await coroutine, if any.

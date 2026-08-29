@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import Request, Blueprint
@@ -46,7 +47,10 @@ doc_limit_limiter = api_param_limiter(100)
 async def search_docs(_: Request, body: schema.DocSearchRequest):
     limit = doc_limit_limiter(body.limit)
     offset = body.offset or 0
-    file_groups, total = _search_docs(
+    # The query is synchronous SQLite; run it off the event loop so a slow search on a large
+    # library does not stall every other request on this Sanic worker.
+    file_groups, total = await asyncio.to_thread(
+        _search_docs,
         search_str=body.search_str,
         author=body.author,
         subject=body.subject,

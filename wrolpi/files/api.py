@@ -1,3 +1,4 @@
+import asyncio
 import pathlib
 from http import HTTPStatus
 
@@ -162,10 +163,13 @@ async def worker_status(request: Request):
 )
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
+    # The query is synchronous SQLite; run it off the event loop so a slow search on a large
+    # library does not stall every other request on this Sanic worker.
     with timer('Searching all files', 'info', logger__=logger):
-        file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
-                                              body.tag_names, body.headline, body.months, body.from_year, body.to_year,
-                                              body.any_tag, body.order, body.url, body.suffix, body.path, body.deep)
+        file_groups, total = await asyncio.to_thread(
+            lib.search_files, body.search_str, body.limit, body.offset, body.mimetypes, body.model,
+            body.tag_names, body.headline, body.months, body.from_year, body.to_year,
+            body.any_tag, body.order, body.url, body.suffix, body.path, body.deep)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 

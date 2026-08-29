@@ -1,3 +1,4 @@
+import asyncio
 import multiprocessing
 import queue
 from http import HTTPStatus
@@ -60,8 +61,9 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     limit = archive_limit_limiter(body.limit)
     offset = body.offset or 0
 
-    file_groups, total = lib.search_archives(search_str, domain, limit, offset, body.order_by, body.tag_names,
-                                             body.headline, body.deep)
+    file_groups, total = await asyncio.to_thread(
+        lib.search_archives, search_str, domain, limit, offset, body.order_by, body.tag_names,
+        body.headline, body.deep)
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)
 

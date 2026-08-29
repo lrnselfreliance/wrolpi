@@ -82,7 +82,6 @@ class Video(ModelHelper, Base):
             codec_names=codec_names,
             codec_types=codec_types,
             comments_failed=self.comments_failed,
-            description=self.file_group.c_text or self.get_video_description(),
             have_comments=self.have_comments,
             id=self.id,
             info_json_file=self.info_json_file,
@@ -146,6 +145,13 @@ class Video(ModelHelper, Base):
         """
         if (info_json := self.get_info_json()) and (description := info_json.get('description')):
             return description
+
+    def get_description(self) -> Optional[str]:
+        """The indexed description (`FileGroup.c_text`), falling back to the info json on disk.
+
+        Served by its own endpoint (like comments and captions) so list responses never touch the
+        filesystem: `__json__` must stay free of disk reads."""
+        return self.file_group.c_text or self.get_video_description()
 
     def get_surrounding_videos(self):
         """

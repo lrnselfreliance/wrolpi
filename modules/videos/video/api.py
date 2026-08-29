@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import Blueprint
@@ -36,6 +37,15 @@ def video_get_comments(_: Request, file_group_id: int):
     return json_response({'comments': video.get_comments()})
 
 
+@video_bp.get('/<file_group_id:int>/description')
+@openapi.description('Get Video description')
+@openapi.response(HTTPStatus.OK, schema.VideoDescriptionResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+def video_get_description(_: Request, file_group_id: int):
+    video = lib.get_video(file_group_id)
+    return json_response({'description': video.get_description()})
+
+
 @video_bp.get('/<file_group_id:int>/captions')
 @openapi.description('Get Video captions')
 @openapi.response(HTTPStatus.OK, schema.VideoCaptionsResponse)
@@ -57,7 +67,9 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    file_groups, videos_total = lib.search_videos(
+    # Synchronous SQLite query; keep it off the event loop.
+    file_groups, videos_total = await asyncio.to_thread(
+        lib.search_videos,
         body.search_str,
         body.offset,
         body.limit,

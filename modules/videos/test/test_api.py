@@ -1,3 +1,6 @@
+import asyncio
+import time
+from unittest import mock
 import json
 from http import HTTPStatus
 from pathlib import Path
@@ -588,3 +591,155 @@ Another line of captions.
     # Assert FileGroup has correct number of files
     assert len(video.file_group.files) == file_count_before_caption + 1, \
         f'FileGroup should have {file_count_before_caption + 1} files after adding caption'
+
+
+@pytest.mark.asyncio
+async def test_search_videos_does_not_block_event_loop(async_client):
+    """A slow video search must not stall other requests on the same Sanic worker.
+
+    The search runs a synchronous SQLite query; on a large library it takes seconds cold.  If it
+    runs on the event loop, every other request on the worker waits for it."""
+    # The first request pays the test app's startup cost; keep that out of the measurement.
+    await async_client.get('/api/echo')
+
+    def slow_search(*_, **__):
+        time.sleep(0.5)  # a synchronous, blocking query
+        return [], 0
+
+    async def search():
+        return await async_client.post('/api/videos/search', content=json.dumps({}))
+
+    async def echo():
+        start = time.perf_counter()
+        _, response = await async_client.get('/api/echo')
+        return response, time.perf_counter() - start
+
+    with mock.patch('modules.videos.video.lib.search_videos', slow_search):
+        (_, search_response), (echo_response, echo_elapsed) = await asyncio.gather(search(), echo())
+
+    assert search_response.status_code == HTTPStatus.OK
+    assert echo_response.status_code == HTTPStatus.OK
+    assert echo_elapsed < 0.4, f'echo waited {echo_elapsed:.2f}s behind a blocking search'
+
+
+@pytest.mark.asyncio
+async def test_search_videos_default_page_pagination(test_session, video_factory, audio_factory, assert_video_search):
+    """The unfiltered Videos page (no search/tags/channel) pages through every video and audio file in
+    date order, including files sharing a date and files without one, and reports the true total.
+
+    This page takes a fast path (one index range per mimetype instead of scanning every video), so
+    it must produce exactly what the generic query produces."""
+    # Two files share a date, one has no published date at all, and both mimetypes are mixed in.
+    a = video_factory(title='a', upload_date='2025-01-01', with_video_file=True)
+    b = video_factory(title='b', upload_date='2025-01-03', with_video_file=True)
+    c = audio_factory(title='c', upload_date='2025-01-03', with_info_json=True)
+    d = video_factory(title='d', upload_date='2025-01-02', with_video_file=True)
+    e = audio_factory(title='e', upload_date='2025-01-04', with_info_json=True)
+    f = video_factory(title='f', with_video_file=True)  # no upload date
+    test_session.commit()
+    f.file_group.effective_datetime = None
+    test_session.commit()
+    test_session.refresh(f.file_group)
+    assert f.file_group.effective_datetime is None
+
+    from modules.videos.video import lib
+    with mock.patch.object(lib, '_search_videos_by_date', wraps=lib._search_videos_by_date) as fast_path:
+        await assert_video_search(order_by='-published_datetime', assert_total=6)
+        assert fast_path.called, 'the unfiltered date-ordered page should take the fast path'
+        fast_path.reset_mock()
+        await assert_video_search(order_by='-published_datetime', search_str='a', assert_total=1)
+        await assert_video_search(order_by='-size', assert_total=6)
+        assert not fast_path.called, 'searches and other orders use the generic query'
+
+    # Newest first: NULL dates last, ties broken by id ascending.
+    newest = [e.id, b.id, c.id, d.id, a.id, f.id]
+    await assert_video_search(order_by='-published_datetime', assert_total=6, assert_ids=newest)
+    await assert_video_search(order_by='-published_datetime', limit=2, offset=0, assert_total=6, assert_ids=newest[0:2])
+    await assert_video_search(order_by='-published_datetime', limit=2, offset=2, assert_total=6, assert_ids=newest[2:4])
+    await assert_video_search(order_by='-published_datetime', limit=2, offset=4, assert_total=6, assert_ids=newest[4:6])
+    # Past the end the fast path still reports the true total (the generic query has no rows to
+    # carry `COUNT(*) OVER()` in, so it reports 0 there; the fast path is the better behavior).
+    await assert_video_search(order_by='-published_datetime', limit=2, offset=6, assert_total=6, assert_ids=[])
+
+    # Oldest first: NULL dates first (SQLite sorts NULL lowest), ties broken by id ascending.
+    oldest = [f.id, a.id, d.id, b.id, c.id, e.id]
+    await assert_video_search(order_by='published_datetime', assert_total=6, assert_ids=oldest)
+    await assert_video_search(order_by='published_datetime', limit=4, offset=2, assert_total=6, assert_ids=oldest[2:6])
+
+    # The fast path must return exactly what the generic query returns for the same request:
+    # same rows, same order (NULL placement, id tiebreaker, interleaved mimetypes), same paging.
+    def ids(order, limit, offset):
+        results, total = lib.search_videos(order=order, limit=limit, offset=offset)
+        return [i['id'] for i in results], total
+
+    for order in lib.INDEXED_DATE_ORDERS:
+        for limit, offset in ((24, 0), (2, 0), (2, 2), (4, 2), (1, 5)):
+            fast = ids(order, limit, offset)
+            with mock.patch.object(lib, 'INDEXED_DATE_ORDERS', ()):
+                generic = ids(order, limit, offset)
+            assert fast == generic, f'{order} limit={limit} offset={offset}: fast {fast} != generic {generic}'
+
+
+def test_cached_total(test_session):
+    """The unfiltered Videos page total is cached briefly: counting every video is a full index scan
+    that costs seconds cold on a large library, and pagination can tolerate a slightly stale total."""
+    from modules.videos.video import lib
+    calls = []
+
+    def compute():
+        calls.append(1)
+        return 42
+
+    lib._TOTALS_CACHE.clear()
+    with mock.patch('modules.videos.video.lib.PYTEST', False):
+        assert lib._cached_total('k', compute) == 42
+        assert lib._cached_total('k', compute) == 42
+        assert len(calls) == 1, 'second call within the TTL should hit the cache'
+        # Expire the entry.
+        cached_at, total = lib._TOTALS_CACHE['k']
+        lib._TOTALS_CACHE['k'] = (cached_at - lib.TOTALS_CACHE_SECONDS - 1, total)
+        assert lib._cached_total('k', compute) == 42
+        assert len(calls) == 2, 'expired entry should be recomputed'
+
+    # Tests need exact totals, so the cache is bypassed under pytest.
+    assert lib._cached_total('k', compute) == 42
+    assert len(calls) == 3
+    lib._TOTALS_CACHE.clear()
+
+async def test_video_description_endpoint(async_client, test_session, video_factory):
+    """The description is served by its own endpoint, like comments and captions.  It comes from the
+    indexed `c_text`, falling back to the info json on disk for a video that was never indexed with one."""
+    video = video_factory(with_video_file=True, with_info_json={'description': 'from the info json'})
+    test_session.commit()
+    assert video.file_group.c_text == 'from the info json', 'indexing copies the description into c_text'
+
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/description')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {'description': 'from the info json'}
+
+    # A stale row (indexed before descriptions were stored) falls back to the file.
+    video.file_group.c_text = None
+    test_session.commit()
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/description')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {'description': 'from the info json'}
+
+    request, response = await async_client.get('/api/videos/123456/description')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_video_json_does_not_read_info_json(async_client, test_session, video_factory, assert_video_search):
+    """Video list and detail responses must never read the info json from disk.
+
+    Many videos have no description, so a fallback read from `__json__` would open and parse every
+    such video's info json on every list page, cold, for a field the list never displays."""
+    video = video_factory(with_video_file=True, with_info_json={'duration': 5})  # no description
+    test_session.commit()
+    assert not video.file_group.c_text
+
+    with mock.patch('modules.videos.models.Video.get_info_json', side_effect=AssertionError('read info json')):
+        await assert_video_search(assert_total=1, assert_ids=[video.id])
+        request, response = await async_client.get(f'/api/videos/{video.file_group_id}')
+        assert response.status_code == HTTPStatus.OK
+        assert 'description' not in response.json['file_group']['video']

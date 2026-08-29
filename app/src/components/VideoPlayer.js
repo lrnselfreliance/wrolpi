@@ -230,7 +230,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     // Get the Video's channel, fallback to the URL's channel id.
     const {channelId} = useParams();
     const {channel} = useChannel(video && video.channel_id ? video.channel_id : channelId);
-    const {comments} = useVideoExtras(videoFile?.id);
+    const {comments, description: videoDescription} = useVideoExtras(videoFile?.id);
     const {captions, captionsLoading, fetchCaptions} = useVideoCaptions(videoFile?.id);
 
     const mediaTitle = videoFile ? (videoFile.title || videoFile.stem || videoFile.name) : null;
@@ -343,10 +343,9 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         : [];
 
     let description = 'No description available.';
-    if (video && video['description']) {
+    if (videoDescription) {
         // Only replace empty description if there is one available.
-        description = video['description'];
-        description = formatVideoDescription(description, setVideoTime)
+        description = formatVideoDescription(videoDescription, setVideoTime)
     }
 
     const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));

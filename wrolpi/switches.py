@@ -96,16 +96,14 @@ async def switch_worker():
     # Wait for the switches to be changed.
     switches_changed: multiprocessing.Event = api_app.shared_ctx.switches_changed
 
+    # Must not block the event loop; `perpetual_signal` retries every 0.1s.
+    switches: dict = api_app.shared_ctx.switches
+    if not switches_changed.is_set() and not switches:
+        return
+
     switch_name = None
     try:
         # Get new switch and its context.  Handle each switch one at a time.
-        # During testing, don't block the event loop - check for pending switches directly.
-        # In production, use blocking wait which is more efficient for long-running processes.
-        if PYTEST and not api_app.shared_ctx.switches:
-            return
-        else:
-            switches_changed.wait(timeout=1)
-        switches: dict = api_app.shared_ctx.switches
         with api_app.shared_ctx.switches_lock:
             switch_name, context = switches.popitem()
         # Call handler with the stored context, await coroutine, if any.

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pathlib
 import re
@@ -597,8 +598,9 @@ async def get_status(request: Request):
     description='Get summary statistics of all files',
 )
 async def get_statistics(_):
-    file_statistics = get_file_statistics()
-    global_statistics = get_global_statistics()
+    # Full-table aggregates take many seconds cold on a large library; keep them off the event loop.
+    file_statistics = await asyncio.to_thread(get_file_statistics)
+    global_statistics = await asyncio.to_thread(get_global_statistics)
     return json_response({
         'file_statistics': file_statistics,
         'global_statistics': global_statistics,

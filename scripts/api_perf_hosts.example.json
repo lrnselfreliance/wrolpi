@@ -1,0 +1,29 @@
+{
+  "docker": {
+    "url": "https://192.0.2.10:8443",
+    "ssh": "user@192.0.2.10",
+    "ssh_opts": [],
+    "restart": "docker restart wrolpi-api-1",
+    "drop_caches": "sudo -n sh -c \"sync; echo 3 > /proc/sys/vm/drop_caches\""
+  },
+  "pi": {
+    "url": "https://192.0.2.11",
+    "ssh": "user@192.0.2.11",
+    "ssh_opts": [
+      "-o",
+      "IdentitiesOnly=yes"
+    ],
+    "restart": "sudo -n systemctl restart wrolpi-api",
+    "drop_caches": "sudo -n sh -c \"sync; echo 3 > /proc/sys/vm/drop_caches\""
+  },
+  "pi-limited-sudo": {
+    "url": "https://192.0.2.12",
+    "ssh": "wrolpi@192.0.2.12",
+    "ssh_opts": [
+      "-o",
+      "IdentitiesOnly=yes"
+    ],
+    "restart": "sudo -n systemctl stop wrolpi-api.service && sudo -n systemctl start wrolpi-api.service",
+    "drop_caches": null
+  }
+}

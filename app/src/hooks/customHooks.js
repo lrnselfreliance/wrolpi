@@ -29,6 +29,7 @@ import {
     getVideo,
     getVideoCaptions,
     getVideoComments,
+    getVideoDescription,
     getVideosStatistics,
     postDumpConfig,
     postImportConfig,
@@ -740,8 +741,10 @@ export const useVideo = (fileGroupId) => {
 }
 
 export const useVideoExtras = (fileGroupId) => {
-    // Fetches extra data to display on a Video's page.
+    // Fetches extra data to display on a Video's page.  These are served separately from the
+    // Video itself so list responses stay small and never read files from disk.
     const [comments, setComments] = useState(null);
+    const [description, setDescription] = useState(null);
 
     const fetchComments = async () => {
         try {
@@ -752,15 +755,26 @@ export const useVideoExtras = (fileGroupId) => {
         }
     }
 
+    const fetchDescription = async () => {
+        try {
+            const result = await getVideoDescription(fileGroupId);
+            setDescription(result.description);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     useEffect(() => {
         if (fileGroupId) {
             fetchComments();
+            fetchDescription();
         } else {
             setComments(null);
+            setDescription(null);
         }
     }, [fileGroupId]);
 
-    return {comments}
+    return {comments, description}
 }
 
 export const useVideoCaptions = (fileGroupId) => {

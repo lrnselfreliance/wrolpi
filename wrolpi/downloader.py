@@ -2136,6 +2136,11 @@ class DownloadManagerConfig(ConfigFile):
                             tag_names = existing.settings.pop('tag_names')
                             existing.tag_names = existing.tag_names or tag_names
                         existing.flush()
+                    elif existing.is_complete and not existing.frequency:
+                        # Completed once-downloads are never written to the config (see `dump_config`), so their
+                        # absence does not mean the user removed them.  Keep them: their `last_download_attempt`
+                        # is what the daily download limits count, and that count must survive a restart.
+                        continue
                     else:
                         logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
                         session.delete(existing)

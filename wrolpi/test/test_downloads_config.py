@@ -376,3 +376,57 @@ class TestDownloadManagerConfigEdgeCases:
         assert str(downloads[0].destination) == '/new/destination'
         assert downloads[0].last_successful_download is None
         assert downloads[0].next_download is None
+
+
+@pytest.mark.asyncio
+async def test_import_config_preserves_completed_once_downloads(test_session, test_directory, async_client,
+                                                                test_download_manager, test_download_manager_config):
+    """A completed once-download is never written to the config, so importing the config (which happens on every
+    startup) must not delete it: its `last_download_attempt` is what the daily download limits count."""
+    from datetime import timedelta
+
+    from wrolpi.dates import now
+
+    config = get_download_manager_config()
+    config_path = config.get_file()
+
+    recurring = Download(url='https://example.com/recurring', downloader='video', frequency=604800, status='new')
+    completed = Download(url='https://example.com/completed', downloader='video', status='complete',
+                         last_download_attempt=now() - timedelta(minutes=5),
+                         last_successful_download=now() - timedelta(minutes=5))
+    # A pending once-download that the config no longer lists is still deleted (the config is the source of truth).
+    removed = Download(url='https://example.com/removed', downloader='video', status='new')
+    test_session.add_all([recurring, completed, removed])
+    test_session.commit()
+
+    config_data = {
+        'version': 0,
+        'skip_urls': [],
+        'downloads': [{
+            'url': 'https://example.com/recurring',
+            'downloader': 'video',
+            'destination': None,
+            'frequency': 604800,
+            'last_successful_download': None,
+            'next_download': None,
+            'status': 'new',
+            'sub_downloader': None,
+            'settings': None,
+            'tag_names': [],
+        }]
+    }
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, 'w') as f:
+        yaml.dump(config_data, f)
+
+    config.initialize()
+    config.import_config()
+    assert config.successful_import is True
+
+    urls = {i.url for i in test_session.query(Download)}
+    assert urls == {'https://example.com/recurring', 'https://example.com/completed'}
+
+    # The completed download still counts toward today's per-domain limit.
+    global_count, domain_counts = test_download_manager.daily_download_counts(test_session)
+    assert global_count == 1
+    assert domain_counts == {'example.com': 1}

@@ -100,18 +100,24 @@ def _tool_result(call_id: str, content: str) -> dict:
 
 
 MODE_EXAMPLES = {
+    # The example's content must be TRUE (from the real help docs): when a user asks about the
+    # example's topic, a small model may answer straight from it without searching.
     'help': _example(
-        dict(role='user', content='How do I tag a video?'),
-        _tool_call('ex_help_1', 'search_help', '{"search_str": "tag video"}'),
+        dict(role='user', content='Why does my browser warn about the certificate?'),
+        _tool_call('ex_help_1', 'search_help', '{"search_str": "certificate"}'),
         _tool_result('ex_help_1',
-                     '{"results": [{"slug": "system/tags", "title": "Tags", "link": "/system/tags/",'
-                     ' "snippet": "…Tags group related content across the library…"}], "total": 1}'),
-        _tool_call('ex_help_2', 'get_help_doc', '{"slug": "system/tags"}'),
+                     '{"results": [{"slug": "system/certificates", "title": "HTTPS Certificates",'
+                     ' "link": "/system/certificates/",'
+                     ' "snippet": "…WROLPi generates its own Root CA certificate…"}], "total": 1}'),
+        _tool_call('ex_help_2', 'get_help_doc', '{"slug": "system/certificates"}'),
         _tool_result('ex_help_2',
-                     '{"content": "# Tags\\nOpen any video and press the tag button to add a tag.",'
-                     ' "next_offset": null, "total_chars": 62}'),
-        dict(role='assistant', content='Open any video and press the tag button to add a tag.'
-                                       '  See the Tags help page: /system/tags/'),
+                     '{"content": "# HTTPS Certificates\\nWROLPi is offline, so it cannot use a public'
+                     ' certificate authority.  It generates its own Root CA certificate which you install'
+                     ' once on each device that connects to it.", "next_offset": null, "total_chars": 205}'),
+        dict(role='assistant', content='WROLPi is offline, so it cannot use a public certificate'
+                                       ' authority; it signs its own certificate with a Root CA that you'
+                                       ' install once on each device.  The HTTPS Certificates help page'
+                                       ' explains how: /system/certificates/'),
     ),
     'research': _example(
         dict(role='user', content='Summarize the bakehouse channel'),
@@ -123,9 +129,9 @@ MODE_EXAMPLES = {
         _tool_result('ex_res_2',
                      '{"results": [{"id": 12, "kind": "video", "title": "Sourdough Basics",'
                      ' "link": "/videos/12", "channel": "Bakehouse", "duration": 900}], "total": 1}'),
-        dict(role='assistant', content='The Bakehouse channel (/videos/channel/7/video) has one video:'
-                                       ' Sourdough Basics (/videos/12), a 15 minute introduction to'
-                                       ' sourdough baking.'),
+        dict(role='assistant', content='The Bakehouse channel (/videos/channel/7/video) has one video:\\n'
+                                       '1. **Sourdough Basics** (/videos/12) — a 15 minute introduction'
+                                       ' to sourdough baking.'),
     ),
     'system': _example(
         dict(role='user', content='Is everything running?'),

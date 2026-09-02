@@ -20,6 +20,7 @@ def test_ai_config_defaults_and_update(test_ai_config):
     assert config.idle_unload_minutes == 15
     assert config.context_size is None
     assert config.max_tool_calls == 6
+    assert config.temperature == 0.3
 
     config.enabled = True
     config.active_model = 'Qwen3-1.7B-Q4_K_M.gguf'
@@ -161,3 +162,33 @@ async def test_ai_manage_endpoints(async_client, test_directory, test_ai_config)
     request, response = await async_client.post('/api/ai/manage/settings',
                                                 content=json.dumps(dict(idle_unload_minutes=0)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_effective_context_size(test_ai_config):
+    """Explicit ai.yaml value wins; else the active model's catalog default; else the small default."""
+    config = get_ai_config()
+    assert catalog.get_effective_context_size() == 8_192  # no model, no override
+
+    config.active_model = 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf'
+    assert catalog.get_effective_context_size() == 16_384  # the 4B's catalog default
+
+    config.context_size = 4_096
+    assert catalog.get_effective_context_size() == 4_096  # explicit override wins
+
+
+@pytest.mark.asyncio
+async def test_manage_settings_adopts_model_context(async_client, test_directory, test_ai_config):
+    """Selecting a model writes its catalog context default unless the request sets one."""
+    models_dir = test_directory / 'ai/models'
+    models_dir.mkdir(parents=True)
+    (models_dir / 'Qwen3-4B-Instruct-2507-Q4_K_M.gguf').write_bytes(b'GGUF')
+
+    content = dict(active_model='Qwen3-4B-Instruct-2507-Q4_K_M.gguf')
+    request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['context_size'] == 16_384
+
+    # An explicit context_size in the same request is respected.
+    content = dict(active_model='Qwen3-4B-Instruct-2507-Q4_K_M.gguf', context_size=4_096)
+    request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
+    assert response.json['context_size'] == 4_096

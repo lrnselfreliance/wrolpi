@@ -100,10 +100,15 @@ async def test_chat_tool_call_then_answer(async_client, ai_enabled, video_factor
     assert dict(events)['tool_result'] == dict(tool='search_videos', success=True)
     assert dict(events)['done'] == dict(content='Found one video.')
 
-    # The second llama call saw the system prompt, the user message, and the tool result.
+    # The second llama call saw the system prompt (with the live library map), the mode's
+    # worked example, the user message, and the tool result.
     second_call_messages = calls['messages'][1]
     assert second_call_messages[0]['role'] == 'system'
     assert 'librarian' in second_call_messages[0]['content']
+    assert 'Today is' in second_call_messages[0]['content']
+    assert "library contains" in second_call_messages[0]['content']
+    example = [m for m in second_call_messages if m.get('content') and 'Bakehouse' in str(m.get('content'))]
+    assert example, 'the research few-shot example is in context'
     assert second_call_messages[-1]['role'] == 'tool'
     assert 'pressure canning' in second_call_messages[-1]['content']
 
@@ -152,8 +157,9 @@ async def test_chat_invalid_tool_args(async_client, ai_enabled):
     assert results[0]['success'] is False  # invalid JSON arguments
     assert results[1]['success'] is False  # list_disks is not a help-mode tool
     assert events[-1] == ('done', dict(content='Sorry.'))
-    # The model saw instructive errors.
-    tool_messages = [m for m in calls['messages'][-1] if m['role'] == 'tool']
+    # The model saw instructive errors (skip the few-shot example's tool messages).
+    tool_messages = [m for m in calls['messages'][-1]
+                     if m['role'] == 'tool' and not str(m.get('tool_call_id', '')).startswith('ex_')]
     assert 'not valid JSON' in tool_messages[0]['content']
     assert 'Unknown tool' in tool_messages[1]['content']
 
@@ -187,3 +193,58 @@ async def test_chat_modes_endpoint(async_client):
     modes = {m['name']: m for m in response.json['modes']}
     assert set(modes) == {'help', 'research', 'system'}
     assert modes['research']['suggestions']
+
+
+def test_trim_history():
+    """Old turns are dropped first; fixed messages and the current turn are never trimmed."""
+    from modules.ai import chat
+    fixed = [dict(role='system', content='s' * 400), dict(role='user', content='current')]
+    history = [dict(role='user', content=f'old {i} ' + 'x' * 400) for i in range(10)]
+
+    # A huge budget keeps everything.
+    assert chat.trim_history(history, fixed, [], budget=10_000) == history
+
+    # A small budget drops the OLDEST turns.
+    trimmed = chat.trim_history(history, fixed, [], budget=400)
+    assert len(trimmed) < len(history)
+    assert trimmed == history[len(history) - len(trimmed):]
+
+    # A budget the fixed messages alone exceed empties the history without crashing.
+    assert chat.trim_history(history, fixed, [], budget=1) == []
+
+
+@pytest.mark.asyncio
+async def test_chat_context_full(async_client, ai_enabled):
+    """A conversation that cannot fit the model context gets a clear error, not a bad answer."""
+    from modules.ai import chat
+    get_ai_config().context_size = 1  # far below the reply reserve
+
+    patch, calls = _llama_script([dict(type='token', content='hi'), dict(type='stop', tool_calls=[])])
+    body = dict(mode='help', messages=[dict(role='user', content='hello')])
+    with patch:
+        request, response = await async_client.post('/api/chat/', content=json.dumps(body))
+    events = _parse_sse(response.text)
+    assert events[-1][0] == 'error'
+    assert 'no longer fits' in events[-1][1]['message']
+    assert calls['count'] == 0  # the model was never called
+
+
+@pytest.mark.asyncio
+async def test_chat_history_trimmed(async_client, ai_enabled):
+    """Old turns are dropped to fit the context; the current question always survives."""
+    get_ai_config().context_size = 4_096
+
+    patch, calls = _llama_script([dict(type='token', content='ok'), dict(type='stop', tool_calls=[])])
+    old_turns = []
+    for i in range(6):
+        old_turns += [dict(role='user', content=f'old question {i} ' + 'pad ' * 500),
+                      dict(role='assistant', content=f'old answer {i} ' + 'pad ' * 500)]
+    body = dict(mode='help', messages=old_turns + [dict(role='user', content='the current question')])
+    with patch:
+        request, response = await async_client.post('/api/chat/', content=json.dumps(body))
+    assert _parse_sse(response.text)[-1][0] == 'done'
+
+    sent = calls['messages'][0]
+    contents = [str(m.get('content')) for m in sent]
+    assert any('the current question' in c for c in contents)
+    assert not any('old question 0' in c for c in contents)  # oldest turn was trimmed

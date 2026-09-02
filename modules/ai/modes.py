@@ -133,14 +133,16 @@ MODE_EXAMPLES = {
                                        '1. **Sourdough Basics** (/videos/12) — a 15 minute introduction'
                                        ' to sourdough baking.'),
     ),
+    # No invented failures in the example: the model carries them into real diagnoses (it kept
+    # investigating a fictional failed service the first version of this example described).
     'system': _example(
         dict(role='user', content='Is everything running?'),
         _tool_call('ex_sys_1', 'get_system_status', '{}'),
         _tool_result('ex_sys_1',
                      '{"version": "0.28", "wrol_mode": false, "services": [{"name": "wrolpi-api",'
-                     ' "status": "running"}, {"name": "wrolpi-kiwix", "status": "failed"}], "errors": []}'),
-        dict(role='assistant', content='Almost: wrolpi-kiwix has failed; everything else is running.'
-                                       '  I can read its logs to find out why.'),
+                     ' "status": "running"}, {"name": "wrolpi-app", "status": "running"}], "errors": []}'),
+        dict(role='assistant', content='Yes — every service is running.  If something misbehaves anyway,'
+                                       ' tell me which page and I will read the right service\'s logs.'),
     ),
 }
 

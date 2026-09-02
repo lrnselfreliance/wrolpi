@@ -17,6 +17,7 @@ class AIConfigValidator:
     idle_unload_minutes: int = None
     context_size: Optional[int] = None
     max_tool_calls: int = None
+    temperature: float = None
 
 
 class AIConfig(ConfigFile):
@@ -28,6 +29,7 @@ class AIConfig(ConfigFile):
         idle_unload_minutes=15,
         context_size=None,  # None uses the active model's default from the catalog.
         max_tool_calls=6,
+        temperature=0.3,  # Low: tool-calling small models are far more reliable near 0.2-0.3.
     )
     validator = AIConfigValidator
 
@@ -75,6 +77,15 @@ class AIConfig(ConfigFile):
     @max_tool_calls.setter
     def max_tool_calls(self, value: int):
         self.update({'max_tool_calls': int(value)})
+
+    @property
+    def temperature(self) -> float:
+        # .get(): configs imported before this field existed lack the key.
+        return self._config.get('temperature', 0.3)
+
+    @temperature.setter
+    def temperature(self, value: float):
+        self.update({'temperature': float(value)})
 
 
 AI_CONFIG: AIConfig = AIConfig()

@@ -7,6 +7,7 @@ committed WROLPi public key.  The release process refreshes AI_MODELS from the p
 import json
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import psutil
 
@@ -106,3 +107,21 @@ def recommend_tier(total_ram_bytes: int = None) -> str:
     if gb < 24:
         return 'medium'
     return 'large'
+
+
+def get_model_default_context(name: str) -> Optional[int]:
+    """The bundled catalog's default context size for a model, if known."""
+    for model in AI_MODELS:
+        if model['name'] == name:
+            return model.get('default_context')
+    return None
+
+
+def get_effective_context_size() -> int:
+    """The context llama-server runs with: the explicit ai.yaml value, else the active model's
+    catalog default, else the conservative small-tier default.  start_llama_server.sh reads the
+    explicit value; manage_settings writes the model default there on model selection so the
+    script and this function agree."""
+    from modules.ai.config import get_ai_config
+    config = get_ai_config()
+    return config.context_size or get_model_default_context(config.active_model) or 8_192

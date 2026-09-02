@@ -46,9 +46,11 @@ esac
 
 # --jinja enables tool-call chat templates; mmap is llama.cpp's default so cold RAM cost is low.
 # Localhost only on native installs -- never exposed through Caddy.
+# --parallel 1: WROLPi is single-user; one slot gets the whole context.
 exec llama-server \
   --host "${LLAMA_HOST}" \
   --port "${LLAMA_PORT}" \
   --jinja \
+  --parallel 1 \
   -c "${CONTEXT_SIZE}" \
   -m "${MODEL}"

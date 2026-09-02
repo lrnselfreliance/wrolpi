@@ -82,6 +82,62 @@ MODES = {
     ),
 }
 
+
+def _example(*messages) -> list:
+    """A compact worked exchange (user -> tool call -> tool result -> answer) prepended to every
+    conversation.  Small models imitate far better than they obey; one example per mode is what
+    stops them answering from memory or quitting after the first tool call."""
+    return list(messages)
+
+
+def _tool_call(call_id: str, name: str, arguments: str) -> dict:
+    return dict(role='assistant', content=None, tool_calls=[
+        dict(id=call_id, type='function', function=dict(name=name, arguments=arguments))])
+
+
+def _tool_result(call_id: str, content: str) -> dict:
+    return dict(role='tool', tool_call_id=call_id, content=content)
+
+
+MODE_EXAMPLES = {
+    'help': _example(
+        dict(role='user', content='How do I tag a video?'),
+        _tool_call('ex_help_1', 'search_help', '{"search_str": "tag video"}'),
+        _tool_result('ex_help_1',
+                     '{"results": [{"slug": "system/tags", "title": "Tags", "link": "/system/tags/",'
+                     ' "snippet": "…Tags group related content across the library…"}], "total": 1}'),
+        _tool_call('ex_help_2', 'get_help_doc', '{"slug": "system/tags"}'),
+        _tool_result('ex_help_2',
+                     '{"content": "# Tags\\nOpen any video and press the tag button to add a tag.",'
+                     ' "next_offset": null, "total_chars": 62}'),
+        dict(role='assistant', content='Open any video and press the tag button to add a tag.'
+                                       '  See the Tags help page: /system/tags/'),
+    ),
+    'research': _example(
+        dict(role='user', content='Summarize the bakehouse channel'),
+        _tool_call('ex_res_1', 'list_collections', '{"kind": "channel"}'),
+        _tool_result('ex_res_1',
+                     '{"results": [{"id": 7, "name": "Bakehouse", "kind": "channel",'
+                     ' "link": "/videos/channel/7/video"}], "total": 1}'),
+        _tool_call('ex_res_2', 'search_videos', '{"channel_id": 7}'),
+        _tool_result('ex_res_2',
+                     '{"results": [{"id": 12, "kind": "video", "title": "Sourdough Basics",'
+                     ' "link": "/videos/12", "channel": "Bakehouse", "duration": 900}], "total": 1}'),
+        dict(role='assistant', content='The Bakehouse channel (/videos/channel/7/video) has one video:'
+                                       ' Sourdough Basics (/videos/12), a 15 minute introduction to'
+                                       ' sourdough baking.'),
+    ),
+    'system': _example(
+        dict(role='user', content='Is everything running?'),
+        _tool_call('ex_sys_1', 'get_system_status', '{}'),
+        _tool_result('ex_sys_1',
+                     '{"version": "0.28", "wrol_mode": false, "services": [{"name": "wrolpi-api",'
+                     ' "status": "running"}, {"name": "wrolpi-kiwix", "status": "failed"}], "errors": []}'),
+        dict(role='assistant', content='Almost: wrolpi-kiwix has failed; everything else is running.'
+                                       '  I can read its logs to find out why.'),
+    ),
+}
+
 # Suggestion chips shown by the Chat tab; small models do much better when the opening message
 # matches what the mode's prompt was tuned for.
 MODE_SUGGESTIONS = {

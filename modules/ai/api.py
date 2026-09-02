@@ -619,6 +619,10 @@ async def manage_settings(_: Request, body: schema.AIManageSettingsRequest):
         if body.active_model and not (catalog.get_models_directory() / body.active_model).is_file():
             raise ValidationError(f'Model is not downloaded: {body.active_model}')
         config.active_model = body.active_model
+        # Each model has its own context default (the 4B runs 16k, the small tier 8k); selecting
+        # a model adopts it unless this request also sets context_size explicitly.
+        if body.context_size is None and (default := catalog.get_model_default_context(body.active_model)):
+            config.context_size = default
     if body.enabled is not None:
         config.enabled = body.enabled
     if body.idle_unload_minutes is not None:

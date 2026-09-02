@@ -28,8 +28,10 @@ from wrolpi.common import aiohttp_post, logger
 from wrolpi.errors import APIError, ValidationError
 
 from . import agent, service
+from .catalog import get_effective_context_size
 from .config import get_ai_config
-from .modes import MODE_SUGGESTIONS, MODES
+from .context import get_library_context
+from .modes import MODE_EXAMPLES, MODE_SUGGESTIONS, MODES
 
 chat_bp = Blueprint('AIChat', url_prefix='/api/chat')
 
@@ -38,6 +40,26 @@ logger = logger.getChild(__name__)
 # The whole conversation turn (all tool calls and answers) must finish within this.
 CHAT_TIMEOUT_SECONDS = 600
 FALLBACK_MESSAGE = "I couldn't complete that request.  Try rephrasing, or a more specific question."
+# Tokens kept free for the model's reply when budgeting the prompt.
+REPLY_RESERVE_TOKENS = 768
+CONTEXT_FULL_MESSAGE = ('This conversation no longer fits the model\'s context.'
+                        '  Start a new conversation and ask a more specific question.')
+
+
+def estimate_tokens(messages: List[dict], tools: List[dict]) -> int:
+    """A deliberate overestimate (~4 chars/token) of what one completion request costs."""
+    return (len(json.dumps(messages)) + len(json.dumps(tools, default=str))) // 4
+
+
+def trim_history(history: List[dict], fixed: List[dict], tools: List[dict], budget: int) -> List[dict]:
+    """Drop the oldest conversation turns until fixed + history fits the budget.
+
+    `fixed` (system prompt, library map, few-shot example, and the current user message) is never
+    trimmed; old turns are the least valuable tokens in the request."""
+    history = list(history)
+    while history and estimate_tokens(fixed + history, tools) > budget:
+        history.pop(0)
+    return history
 
 
 class AIDisabled(APIError):
@@ -67,7 +89,16 @@ async def llama_chat_stream(messages: List[dict], tools: List[dict]) -> AsyncGen
     Yields {'type': 'token', 'content': str} for answer fragments, then exactly one
     {'type': 'stop', 'tool_calls': [...]} where tool_calls is empty for a final answer.
     Patched in tests."""
-    body = dict(messages=messages, stream=True)
+    config = get_ai_config()
+    body = dict(
+        messages=messages,
+        stream=True,
+        # Low temperature: tool calls from small models are far more reliable near 0.2-0.3.
+        temperature=config.temperature,
+        # Reuse the KV cache for the stable prefix (system prompt + example); on slow CPUs
+        # re-processing that prefix is most of the latency.
+        cache_prompt=True,
+    )
     if tools:
         body['tools'] = tools
 
@@ -142,13 +173,35 @@ async def post_chat(request: Request, body: ChatRequest):
             await _send_event(response, 'error', dict(message='The AI service could not be started.'))
             return
 
-        messages = [dict(role='system', content=mode['system_prompt'])]
-        messages += [dict(role=m.get('role', 'user'), content=m.get('content', '')) for m in body.messages]
+        # System prompt + the live library map, so exact names, counts, and today's date are in
+        # context before the first token; then the mode's worked example, then the conversation.
+        system_content = mode['system_prompt']
+        if library_context := get_library_context():
+            system_content += f'\n\n{library_context}'
+        fixed = [dict(role='system', content=system_content)]
+        fixed += MODE_EXAMPLES.get(body.mode, [])
+
+        history = [dict(role=m.get('role', 'user'), content=m.get('content', '')) for m in body.messages]
+        # The current user message is never trimmed away.
+        current, history = history[-1], history[:-1]
+        fixed.append(current)
+
+        budget = get_effective_context_size() - REPLY_RESERVE_TOKENS
+        history = trim_history(history, fixed, tools, budget)
+        if estimate_tokens(fixed + history, tools) > budget:
+            await _send_event(response, 'error', dict(message=CONTEXT_FULL_MESSAGE))
+            return
+        messages = fixed[:-1] + history + [current]
 
         final_answer = []
         for _ in range(max_tool_calls + 1):
             if time.time() > deadline:
                 await _send_event(response, 'error', dict(message=FALLBACK_MESSAGE))
+                return
+
+            # Tool results grow the request; refuse to overflow the model's context mid-loop.
+            if estimate_tokens(messages, tools) > budget:
+                await _send_event(response, 'error', dict(message=CONTEXT_FULL_MESSAGE))
                 return
 
             service.record_llm_activity()

@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Header, Icon, Modal} from "./ui";
+import {Button, Header, Icon, IconButton, Modal} from "./ui";
 import QRCode from "react-qr-code";
 import {sendNotification} from "../api";
 
@@ -20,7 +20,11 @@ export const ShareEveryoneButton = ({url, size, onClick}) => {
     </Button>
 }
 
-export const ShareButton = () => {
+/*
+ * `asIcon` is for the navbar corner, where the trigger sits beside other bare glyphs and a
+ * boxed button would not match; everywhere else it is a real button, matching its siblings.
+ */
+export const ShareButton = ({asIcon = false}) => {
     const [open, setOpen] = React.useState(false);
 
     const handleOpen = (e) => {
@@ -56,8 +60,10 @@ export const ShareButton = () => {
                 <Button role='cancel' onClick={handleClose}>Close</Button>
             </Modal.Actions>
         </Modal>
-        <a href='#' onClick={handleOpen}>
-            <Icon name='share' size='large'/>
-        </a>
+        {asIcon
+            ? <a href='#' onClick={handleOpen}>
+                <Icon name='share' size='large'/>
+            </a>
+            : <IconButton icon='share' label='Share' size='small' onClick={handleOpen}/>}
     </>
 }

@@ -558,7 +558,7 @@ export function FilePreviewProvider({children}) {
 
         // Single flex toolbar — same button order at every viewport size.
         // `flex-wrap: wrap` lets the tags selector drop to a second line on narrow screens
-        // while the button groups stay together and in order: [file actions] [tags] [open/close].
+        // while the buttons stay together, Open first: [open + file actions] [tags].
         setPreviewModal(<Modal size='fullscreen'
                                open={true}
                                onClose={e => handleClose(e)}
@@ -567,6 +567,7 @@ export function FilePreviewProvider({children}) {
             <Modal.Actions>
                 <div className='preview-toolbar'>
                     <div className='preview-toolbar-group'>
+                        {openButton}
                         {downloadButton}
                         {directoryButton}
                         <ShareButton/>
@@ -576,9 +577,6 @@ export function FilePreviewProvider({children}) {
                                                  title='Add to Playlist'/>}
                     </div>
                     <div className='preview-toolbar-tags'>{tagsDisplay}</div>
-                    <div className='preview-toolbar-group'>
-                        {openButton}
-                    </div>
                 </div>
             </Modal.Actions>
             {content}

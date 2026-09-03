@@ -100,3 +100,45 @@ describe('preview gate remounting (source contract)', () => {
         expect(rebuild.length).toBeGreaterThan(0);
     });
 });
+
+describe('IframePreview color scheme', () => {
+    /*
+     * The previewed file is a bare document with no styles of its own, so it renders with the
+     * browser's default stylesheet for whatever color-scheme the iframe element declares.  If
+     * the scheme does not follow the theme, one combination is always unreadable: a dark page
+     * scheme with a white iframe renders the browser's light text on white.
+     */
+    const {render} = require('@testing-library/react');
+    const {ThemeContext} = require('../contexts/contexts');
+    const {IframePreview} = require('./FilePreview');
+
+    const renderWithTheme = (isDark) => render(
+        <ThemeContext.Provider value={{isDark, mediaFilterEnabled: false}}>
+            <IframePreview url='/media/config/wrolpi.yaml'/>
+        </ThemeContext.Provider>
+    );
+
+    test('dark themes render the document dark with a dark background', () => {
+        const {container} = renderWithTheme(true);
+        const iframe = container.querySelector('iframe');
+        expect(iframe.style.colorScheme).toEqual('dark');
+    });
+
+    test('the dark background is the theme panel color', () => {
+        /*
+         * Read off the source because jsdom's CSSOM drops var() declarations entirely, so a
+         * rendered iframe in jsdom cannot show the background it gets in a real browser.
+         */
+        const fs = require('fs');
+        const path = require('path');
+        const source = fs.readFileSync(path.join(__dirname, 'FilePreview.js'), 'utf8');
+        expect(source).toContain(`backgroundColor: isDark ? 'var(--panel)' : '#ffffff'`);
+    });
+
+    test('the light theme renders the document black-on-white', () => {
+        const {container} = renderWithTheme(false);
+        const iframe = container.querySelector('iframe');
+        expect(iframe.style.colorScheme).toEqual('light');
+        expect(iframe.style.backgroundColor).toEqual('rgb(255, 255, 255)');
+    });
+});

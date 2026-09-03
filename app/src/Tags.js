@@ -583,7 +583,9 @@ export function AddTagsButton({
         <IconButton
             icon={active ? 'tags' : 'tag'}
             label={active ? 'Tags applied' : 'Add tag'}
-            role='primary'
+            // Violet is the tagging color everywhere: the file browser's Tag button already
+            // wears it, so this button matches rather than reading as a generic primary action.
+            color='violet'
             onClick={handleOpen}
             type='button'
             disabled={disabled}

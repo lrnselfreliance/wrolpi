@@ -65,8 +65,10 @@ MODES = {
         system_prompt=(
             f'{COMMON_PROMPT}'
             ' Your job is to troubleshoot the user\'s WROLPi.'
-            ' Start every diagnosis with get_system_status; read a failing service\'s logs with'
-            ' get_service_logs; check drives with list_disks.'
+            ' You never know the current state of this system from memory or from example'
+            ' conversations: EVERY answer about services, disks, or health starts with a fresh'
+            ' get_system_status call.  Read a failing service\'s logs with get_service_logs;'
+            ' check drives with list_disks.'
             ' You CANNOT execute commands or change anything — you can only read.'
             ' Only suggest commands that appear in the help documentation: find them with search_help,'
             ' quote them exactly, and include the help page link.'
@@ -141,8 +143,8 @@ MODE_EXAMPLES = {
         _tool_result('ex_sys_1',
                      '{"version": "0.28", "wrol_mode": false, "services": [{"name": "wrolpi-api",'
                      ' "status": "running"}, {"name": "wrolpi-app", "status": "running"}], "errors": []}'),
-        dict(role='assistant', content='Yes — every service is running.  If something misbehaves anyway,'
-                                       ' tell me which page and I will read the right service\'s logs.'),
+        dict(role='assistant', content='The status shows both services (wrolpi-api, wrolpi-app)'
+                                       ' running on version 0.28, with no errors reported.'),
     ),
 }
 

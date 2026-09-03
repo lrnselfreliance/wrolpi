@@ -432,7 +432,7 @@ export function NavBar() {
         <NavIconWrapper>{driveHealthIcon}</NavIconWrapper>
         <NavIconWrapper>{powerIcon}</NavIconWrapper>
         <NavIconWrapper>{warningIcon}</NavIconWrapper>
-        <NavIconWrapper><ShareButton/></NavIconWrapper>
+        <NavIconWrapper><ShareButton asIcon/></NavIconWrapper>
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
         <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
     </React.Fragment>;

@@ -119,8 +119,11 @@ function IframePreview({url, gatePdf}) {
             <iframe title='textModal' src={url}
                     style={{
                         height: '100%', width: '100%', border: 'none',
-                        // Use white to avoid iframe displaying with dark-theme.
+                        // A same-origin document inherits the page's color-scheme, so the
+                        // browser's default stylesheet paints plain text light in dark themes.
+                        // Force a light scheme so text is always black on the white background.
                         backgroundColor: '#ffffff',
+                        colorScheme: 'light',
                     }}/>
         </div>
     </MediaGate>

@@ -1,5 +1,5 @@
 import asyncio
-import time
+import threading
 from unittest import mock
 import json
 from http import HTTPStatus
@@ -598,28 +598,40 @@ async def test_search_videos_does_not_block_event_loop(async_client):
     """A slow video search must not stall other requests on the same Sanic worker.
 
     The search runs a synchronous SQLite query; on a large library it takes seconds cold.  If it
-    runs on the event loop, every other request on the worker waits for it."""
-    # The first request pays the test app's startup cost; keep that out of the measurement.
+    runs on the event loop, every other request on the worker waits for it.
+
+    The search is held open with an Event and the test asserts the echo completes while the search
+    is still inside the query, rather than timing the echo against a wall-clock threshold, so the
+    test cannot flake on a loaded CI machine.  The events are only ever waited on off the event
+    loop, so a regression (query on the loop) cannot deadlock the test; it fails the ordering
+    assertion instead."""
     await async_client.get('/api/echo')
 
+    entered = threading.Event()  # the handler has reached the search query.
+    release = threading.Event()  # the test is done measuring; let the query return.
+    finished = threading.Event()  # the search query has returned.
+
     def slow_search(*_, **__):
-        time.sleep(0.5)  # a synchronous, blocking query
+        entered.set()
+        release.wait(timeout=30)
+        finished.set()
         return [], 0
 
-    async def search():
-        return await async_client.post('/api/videos/search', content=json.dumps({}))
-
-    async def echo():
-        start = time.perf_counter()
-        _, response = await async_client.get('/api/echo')
-        return response, time.perf_counter() - start
-
     with mock.patch('modules.videos.video.lib.search_videos', slow_search):
-        (_, search_response), (echo_response, echo_elapsed) = await asyncio.gather(search(), echo())
+        search_task = asyncio.create_task(
+            async_client.post('/api/videos/search', content=json.dumps({})))
+        try:
+            # Do not send the echo until the search request is provably inside the query.
+            assert await asyncio.to_thread(entered.wait, 30), 'the search request never started'
+            _, echo_response = await asyncio.wait_for(async_client.get('/api/echo'), timeout=30)
+            assert not finished.is_set(), \
+                'echo only completed after the search query returned; the search blocked the event loop'
+        finally:
+            release.set()
+        _, search_response = await search_task
 
-    assert search_response.status_code == HTTPStatus.OK
     assert echo_response.status_code == HTTPStatus.OK
-    assert echo_elapsed < 0.4, f'echo waited {echo_elapsed:.2f}s behind a blocking search'
+    assert search_response.status_code == HTTPStatus.OK
 
 
 @pytest.mark.asyncio

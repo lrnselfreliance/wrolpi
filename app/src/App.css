@@ -266,6 +266,10 @@ pre.wrap-text {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5em;
+    /* Fill the actions row: `.wrolpi-modal-actions` packs its children to the right, which
+       is where a confirming button belongs but strands this toolbar.  At full width the
+       toolbar's own layout wins and everything reads from the left. */
+    flex: 1 1 100%;
 }
 
 .preview-toolbar-group {
@@ -279,6 +283,14 @@ pre.wrap-text {
     /* rem so the basis grows with the tags it holds. */
     flex: 1 1 12.5rem;
     min-width: 0;
+}
+
+/* On a phone the tags selector always gets its own line rather than squeezing in beside
+   the buttons.  700px is the app's `tablet` breakpoint (`AppMedia` in contexts.js). */
+@media (max-width: 699px) {
+    .preview-toolbar-tags {
+        flex-basis: 100%;
+    }
 }
 
 /* Caps preview content to fit inside the file-preview Modal.

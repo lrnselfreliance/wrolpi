@@ -100,8 +100,8 @@ function getEpubViewerURL(previewFile) {
  * A component rather than part of `getIframePreviewModal` because it reads the theme: the
  * modal builders are plain functions called from an event handler, where hooks cannot run.
  */
-function IframePreview({url, gatePdf}) {
-    const {mediaFilterEnabled} = React.useContext(ThemeContext);
+export function IframePreview({url, gatePdf}) {
+    const {isDark, mediaFilterEnabled} = React.useContext(ThemeContext);
 
     /*
      * `gatePdf` only for PDFs.  Text and the EPUB viewer are documents of our own, which the
@@ -119,8 +119,12 @@ function IframePreview({url, gatePdf}) {
             <iframe title='textModal' src={url}
                     style={{
                         height: '100%', width: '100%', border: 'none',
-                        // Use white to avoid iframe displaying with dark-theme.
-                        backgroundColor: '#ffffff',
+                        // A same-origin document has no styles of its own; it renders with the
+                        // browser's default stylesheet for whatever color-scheme this element
+                        // declares.  Pin the scheme to the theme so text is light-on-dark under
+                        // the dark themes and black-on-white under light, never white-on-white.
+                        backgroundColor: isDark ? 'var(--panel)' : '#ffffff',
+                        colorScheme: isDark ? 'dark' : 'light',
                     }}/>
         </div>
     </MediaGate>
@@ -554,7 +558,7 @@ export function FilePreviewProvider({children}) {
 
         // Single flex toolbar — same button order at every viewport size.
         // `flex-wrap: wrap` lets the tags selector drop to a second line on narrow screens
-        // while the button groups stay together and in order: [file actions] [tags] [open/close].
+        // while the buttons stay together, Open first: [open + file actions] [tags].
         setPreviewModal(<Modal size='fullscreen'
                                open={true}
                                onClose={e => handleClose(e)}
@@ -563,6 +567,7 @@ export function FilePreviewProvider({children}) {
             <Modal.Actions>
                 <div className='preview-toolbar'>
                     <div className='preview-toolbar-group'>
+                        {openButton}
                         {downloadButton}
                         {directoryButton}
                         <ShareButton/>
@@ -572,9 +577,6 @@ export function FilePreviewProvider({children}) {
                                                  title='Add to Playlist'/>}
                     </div>
                     <div className='preview-toolbar-tags'>{tagsDisplay}</div>
-                    <div className='preview-toolbar-group'>
-                        {openButton}
-                    </div>
                 </div>
             </Modal.Actions>
             {content}

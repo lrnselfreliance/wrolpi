@@ -3941,7 +3941,7 @@ describe('the icon-only triggers in the navbar corner are reachable', () => {
      * classes I expected the components to have, so reverting SearchIconButton to the old
      * `item` left it green -- it was measuring my markup, not the app's.
      */
-    const corner = <NavIconWrapper><ShareButton/></NavIconWrapper>;
+    const corner = <NavIconWrapper><ShareButton asIcon/></NavIconWrapper>;
 
     const triggers = {
         share: '.wrolpi-navbar-icon a',

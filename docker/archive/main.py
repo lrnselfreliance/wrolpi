@@ -76,8 +76,12 @@ if not BROWSER_EXEC.is_file():
 
 # Increase response timeout, archiving can take several minutes.
 RESPONSE_TIMEOUT = 10 * 60
+# The API sends uploaded singlefiles base64-encoded in JSON (a 33% size increase).  Sanic's default
+# 100MB limit rejects large uploads with a 413 before the handler runs.
+REQUEST_MAX_SIZE = 500 * 1024 * 1024
 config = {
     'RESPONSE_TIMEOUT': RESPONSE_TIMEOUT,
+    'REQUEST_MAX_SIZE': REQUEST_MAX_SIZE,
 }
 
 app = Sanic('archive')

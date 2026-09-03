@@ -100,8 +100,8 @@ function getEpubViewerURL(previewFile) {
  * A component rather than part of `getIframePreviewModal` because it reads the theme: the
  * modal builders are plain functions called from an event handler, where hooks cannot run.
  */
-function IframePreview({url, gatePdf}) {
-    const {mediaFilterEnabled} = React.useContext(ThemeContext);
+export function IframePreview({url, gatePdf}) {
+    const {isDark, mediaFilterEnabled} = React.useContext(ThemeContext);
 
     /*
      * `gatePdf` only for PDFs.  Text and the EPUB viewer are documents of our own, which the
@@ -119,11 +119,12 @@ function IframePreview({url, gatePdf}) {
             <iframe title='textModal' src={url}
                     style={{
                         height: '100%', width: '100%', border: 'none',
-                        // A same-origin document inherits the page's color-scheme, so the
-                        // browser's default stylesheet paints plain text light in dark themes.
-                        // Force a light scheme so text is always black on the white background.
-                        backgroundColor: '#ffffff',
-                        colorScheme: 'light',
+                        // A same-origin document has no styles of its own; it renders with the
+                        // browser's default stylesheet for whatever color-scheme this element
+                        // declares.  Pin the scheme to the theme so text is light-on-dark under
+                        // the dark themes and black-on-white under light, never white-on-white.
+                        backgroundColor: isDark ? 'var(--panel)' : '#ffffff',
+                        colorScheme: isDark ? 'dark' : 'light',
                     }}/>
         </div>
     </MediaGate>

@@ -186,7 +186,10 @@ describe('<EditRSSDownloadForm />', () => {
                     "720p",
                     "480p",
                     "maximum"
-                ]
+                ],
+                video_codecs: ["h264"],
+                audio_codecs: ["aac"],
+                transcode: true,
             },
             sub_downloader: "video",
             tag_names: ['Automotive'],
@@ -265,6 +268,9 @@ describe('<EditRSSDownloadForm />', () => {
                 video_format: 'mp4',
                 minimum_duration: null,
                 maximum_duration: null,
+                video_codecs: ['h264'],
+                audio_codecs: ['aac'],
+                transcode: true,
             });
         });
     });

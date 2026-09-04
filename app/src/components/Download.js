@@ -26,11 +26,13 @@ import {
     defaultAudioFormatOption,
     defaultVideoFormatOption,
     defaultVideoResolutionOptions,
+    downloadAudioCodecOptions,
     downloadAudioFormatOptions,
     Downloaders,
     downloadFormatOptions,
     downloadOrderOptions,
     downloadResolutionOptions,
+    downloadVideoCodecOptions,
     extendedFrequencyOptions,
     frequencyOptions,
     weeklyOption
@@ -434,6 +436,72 @@ export function AudioFormatSelectorForm({form, name = 'audio_format', path = 'se
     </div>
 }
 
+export function VideoCodecSelectorForm({form, name = 'video_codecs', path = 'settings.video_codecs'}) {
+    return <div>
+        <InfoHeader
+            headerSize='h5'
+            headerContent='Video Codecs'
+            popupContent='Prefer these video codecs, in order.  A preferred codec at a lower resolution is
+             chosen over other codecs at a higher resolution.  Leave empty to accept any codec.'
+            for_='video_codecs_input'
+        />
+        <MultiSelectField
+            form={form}
+            name={name}
+            path={path}
+            options={downloadVideoCodecOptions}
+        />
+    </div>
+}
+
+export function AudioCodecSelectorForm({form, name = 'audio_codecs', path = 'settings.audio_codecs'}) {
+    return <div>
+        <InfoHeader
+            headerSize='h5'
+            headerContent='Audio Codecs'
+            popupContent='Prefer these audio codecs, in order.  Leave empty to accept any codec.'
+            for_='audio_codecs_input'
+        />
+        <MultiSelectField
+            form={form}
+            name={name}
+            path={path}
+            options={downloadAudioCodecOptions}
+        />
+    </div>
+}
+
+/** Codec preference selectors with the transcode/strict toggles.  Strict is moot while transcode
+ * is enabled (the transcode guarantees the codec), so it is disabled then. */
+export function CodecSettingsForm({form, codecsPathPrefix = 'settings.'}) {
+    const [transcodeProps] = form.getCustomProps({name: 'transcode', path: `${codecsPathPrefix}transcode`});
+    const [strictProps] = form.getCustomProps({name: 'strict_codecs', path: `${codecsPathPrefix}strict_codecs`});
+    return <Stack gap='md'>
+        <Group grow align='flex-start' wrap='wrap'>
+            <VideoCodecSelectorForm form={form} path={`${codecsPathPrefix}video_codecs`}/>
+            <AudioCodecSelectorForm form={form} path={`${codecsPathPrefix}audio_codecs`}/>
+        </Group>
+        <Group grow align='flex-start' wrap='wrap'>
+            <Toggle
+                label='Transcode to preferred codecs'
+                checked={!!transcodeProps.value}
+                disabled={form.disabled}
+                onChange={transcodeProps.onChange}
+                info='If no preferred codec is available, convert the video after downloading.
+                 Transcoding is slow and slightly reduces quality.'
+            />
+            <Toggle
+                label='Fail if codecs unavailable'
+                checked={!!strictProps.value}
+                disabled={form.disabled || !!transcodeProps.value}
+                onChange={strictProps.onChange}
+                info='Fail the download when no preferred codec is available, instead of falling
+                 back to any codec.  Not necessary when transcoding is enabled.'
+            />
+        </Group>
+    </Stack>
+}
+
 function VideoDurationLimit({form, name, path, label, helpContent, placeholder, helpPosition}) {
     return <NumberField
         form={form}
@@ -478,6 +546,7 @@ function AdvancedVideoSettings({form, isVideoLevel = false, isConfigLoaded = tru
 
     return <SimpleAccordion title='Advanced Settings'>
         <Stack gap='md'>
+            <CodecSettingsForm form={form}/>
             <Group grow align='flex-start' wrap='wrap'>
                 <AudioOnlyToggleLikeVideoSetting form={form} name='writesubtitles' path='settings.writesubtitles'
                                                  label='Download subtitles' icon='closed captioning'/>

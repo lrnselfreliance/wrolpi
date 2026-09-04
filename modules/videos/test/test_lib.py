@@ -542,6 +542,54 @@ async def test_get_download_defaults_endpoint(async_client, test_directory, test
     assert 'writesubtitles' in data
     assert 'continue_dl' in data
     assert 'nooverwrites' in data
+    assert 'video_codecs' in data
+    assert 'audio_codecs' in data
+    assert 'transcode' in data
+    assert 'strict_codecs' in data
     # Should NOT contain global-only settings
     assert 'file_name_format' not in data
     assert 'quiet' not in data
+
+
+def test_codec_config_properties(test_directory, test_videos_downloader_config):
+    """The codec settings default to off and round-trip through the config."""
+    config = lib.get_videos_downloader_config()
+    assert config.video_codecs == []
+    assert config.audio_codecs == []
+    assert config.transcode is False
+    assert config.strict_codecs is False
+
+    config.video_codecs = ['h264', 'vp9']
+    config.audio_codecs = ['aac']
+    config.transcode = True
+    config.strict_codecs = True
+    assert config.video_codecs == ['h264', 'vp9']
+    assert config.audio_codecs == ['aac']
+    assert config.transcode is True
+    assert config.strict_codecs is True
+
+    effective = lib.get_effective_video_settings()
+    assert effective['video_codecs'] == ['h264', 'vp9']
+    assert effective['transcode'] is True
+
+    # A download-level override wins.
+    effective = lib.get_effective_video_settings({'video_codecs': ['av1'], 'transcode': False})
+    assert effective['video_codecs'] == ['av1']
+    assert effective['transcode'] is False
+    assert effective['audio_codecs'] == ['aac']
+
+
+def test_download_settings_codec_validation():
+    """DownloadSettings accepts only known codec names."""
+    from wrolpi.schema import DownloadSettings
+    from wrolpi.errors import ValidationError
+
+    settings = DownloadSettings(video_codecs=['h264', 'vp9'], audio_codecs=['aac'],
+                                transcode=True, strict_codecs=True)
+    assert settings.video_codecs == ['h264', 'vp9']
+
+    with pytest.raises(ValidationError):
+        DownloadSettings(video_codecs=['divx'])
+
+    with pytest.raises(ValidationError):
+        DownloadSettings(audio_codecs=['wma'])

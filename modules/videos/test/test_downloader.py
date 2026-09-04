@@ -1027,6 +1027,10 @@ async def test_channel_passes_all_inheritable_settings_to_video(test_session, ch
         'writesubtitles': False,
         'sleep_requests': 3.0,
         'user_agent': 'TestBot/1.0',
+        'video_codecs': ['h264'],
+        'audio_codecs': ['aac'],
+        'transcode': True,
+        'strict_codecs': True,
     }
 
     download = Download(
@@ -1056,7 +1060,8 @@ async def test_channel_passes_all_inheritable_settings_to_video(test_session, ch
         result = channel_downloader.finalize_download(test_session, download, executed)
 
     # Verify all channel-level inheritable settings are passed through
-    for key in ('video_resolutions', 'video_format', 'writesubtitles', 'sleep_requests', 'user_agent'):
+    for key in ('video_resolutions', 'video_format', 'writesubtitles', 'sleep_requests', 'user_agent',
+                'video_codecs', 'audio_codecs', 'transcode', 'strict_codecs'):
         assert key in result.settings, f'{key} missing from DownloadResult.settings'
         assert result.settings[key] == channel_settings[key], \
             f'{key}: expected {channel_settings[key]}, got {result.settings[key]}'
@@ -1499,3 +1504,231 @@ def test_prepare_uses_existing_video_location(test_session, video_factory):
 def test_is_youtube_url(url, expected):
     """is_youtube_url matches YouTube hosts (and subdomains) but rejects lookalike hosts."""
     assert is_youtube_url(url) is expected
+
+
+def test_format_selector_with_codecs():
+    """Codec preferences generate codec-major selectors: a preferred codec at a lower resolution
+    beats a non-preferred codec at a higher resolution.  The legacy resolution selectors are
+    appended as a fallback unless strict."""
+    from modules.videos.downloader import VIDEO_CODEC_YT_DLP_PATTERNS, AUDIO_CODEC_YT_DLP_PATTERNS
+
+    h264 = VIDEO_CODEC_YT_DLP_PATTERNS['h264']
+    aac = AUDIO_CODEC_YT_DLP_PATTERNS['aac']
+    legacy = format_selector(['1080p', '720p'])
+
+    selector = format_selector(['1080p', '720p'], video_codecs=['h264'], audio_codecs=['aac'])
+    expected = '/'.join([
+        f"bestvideo[height=1080][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[height=1080][vcodec~='{h264}']+bestaudio",
+        f"bestvideo[width=1080][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[width=1080][vcodec~='{h264}']+bestaudio",
+        f"bestvideo[height=720][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[height=720][vcodec~='{h264}']+bestaudio",
+        f"bestvideo[width=720][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[width=720][vcodec~='{h264}']+bestaudio",
+        legacy,
+    ])
+    assert selector == expected
+    assert ',' not in selector
+
+    # Strict drops the any-codec audio fallbacks and the legacy tail.
+    strict = format_selector(['1080p', '720p'], video_codecs=['h264'], audio_codecs=['aac'],
+                             strict_codecs=True)
+    expected_strict = '/'.join([
+        f"bestvideo[height=1080][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[width=1080][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[height=720][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+        f"bestvideo[width=720][vcodec~='{h264}']+bestaudio[acodec~='{aac}']",
+    ])
+    assert strict == expected_strict
+    assert ',' not in strict
+
+    # Codec-major: every h264 selector comes before the first vp9 selector.
+    vp9 = VIDEO_CODEC_YT_DLP_PATTERNS['vp9']
+    two = format_selector(['1080p'], video_codecs=['h264', 'vp9'], strict_codecs=True)
+    assert two.rindex(h264) < two.index(vp9)
+    assert two.count('bestvideo') == 4  # (height + width) x 2 codecs, one audio selector each.
+
+    # No codecs at all: byte-identical to the legacy selector.
+    assert format_selector(['1080p', '720p']) == legacy
+
+    # Only audio codecs: video is unfiltered but audio is preferred.
+    audio_only_pref = format_selector(['720p'], audio_codecs=['opus'])
+    assert "bestvideo[height=720]+bestaudio[acodec~='^opus']" in audio_only_pref
+    assert audio_only_pref.endswith(format_selector(['720p']))
+
+    # 'maximum' has no dimension filter.
+    maximum = format_selector(['maximum'], video_codecs=['h264'], strict_codecs=True)
+    assert maximum == f"bestvideo[vcodec~='{h264}']+bestaudio"
+
+
+def test_format_selector_codec_patterns_are_safe():
+    """Codec regex patterns are embedded in `-f` bracket filters; a comma would make yt-dlp
+    download every matching format, and a slash would break the fallback chain."""
+    from modules.videos.downloader import VIDEO_CODEC_YT_DLP_PATTERNS, AUDIO_CODEC_YT_DLP_PATTERNS
+
+    for pattern in (*VIDEO_CODEC_YT_DLP_PATTERNS.values(), *AUDIO_CODEC_YT_DLP_PATTERNS.values()):
+        assert ',' not in pattern
+        assert '/' not in pattern
+
+
+@pytest.mark.asyncio
+async def test_video_download_requests_codec_format(test_session, test_directory, mock_video_extract_info,
+                                                    video_download_manager, mock_video_process_runner,
+                                                    image_file, simple_channel, test_videos_downloader_config):
+    """Codec settings change the `-f` selector; the legacy selectors remain as fallbacks."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    image_file.rename(video_path.with_suffix('.jpg'))
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    settings = {'video_codecs': ['h264'], 'audio_codecs': ['aac']}
+
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+        mock_video_process_runner.assert_called_once()
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    format_arg = cmd[cmd.index('-f') + 1]
+    resolutions = get_videos_downloader_config().video_resolutions
+    assert format_arg == format_selector(resolutions, video_codecs=['h264'], audio_codecs=['aac'])
+    assert "vcodec~=" in format_arg
+    # The legacy selectors are still offered as a fallback (strict is off).
+    assert format_arg.endswith(format_selector(resolutions))
+
+
+@pytest.mark.asyncio
+async def test_strict_codecs_unavailable_fails_download(test_session, test_directory, mock_video_extract_info,
+                                                        video_download_manager, mock_video_process_runner,
+                                                        image_file, simple_channel,
+                                                        test_videos_downloader_config):
+    """With strict_codecs, yt-dlp's "Requested format is not available" fails the download
+    permanently (the source will never grow new formats)."""
+    from wrolpi.cmd import CommandResult
+
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+    video_path = simple_channel.directory / 'a video.mp4'
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    settings = {'video_codecs': ['h264'], 'strict_codecs': True}
+
+    mock_video_process_runner.return_value = CommandResult(
+        return_code=1, cancelled=False, stdout=b'',
+        stderr=b'ERROR: [youtube] 31jPEBiAC3c: Requested format is not available.', elapsed=0)
+
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+    download = test_session.query(Download).one()
+    assert download.is_failed, f'Download should have failed permanently, got {download.status}'
+    assert 'transcoding is disabled' in download.error
+
+
+@pytest.mark.asyncio
+async def test_codecs_unavailable_defers_without_strict(test_session, test_directory, mock_video_extract_info,
+                                                        video_download_manager, mock_video_process_runner,
+                                                        image_file, simple_channel,
+                                                        test_videos_downloader_config):
+    """The same yt-dlp failure without strict_codecs is deferred (retried), as before."""
+    from wrolpi.cmd import CommandResult
+
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+    video_path = simple_channel.directory / 'a video.mp4'
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+
+    mock_video_process_runner.return_value = CommandResult(
+        return_code=1, cancelled=False, stdout=b'',
+        stderr=b'ERROR: [youtube] 31jPEBiAC3c: Requested format is not available.', elapsed=0)
+
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name,
+                                               settings={'video_codecs': ['h264']})
+        await video_download_manager.wait_for_all_downloads()
+
+    download = test_session.query(Download).one()
+    assert download.is_deferred, f'Download should defer without strict_codecs, got {download.status}'
+
+
+@pytest.mark.asyncio
+async def test_enforce_codecs():
+    """enforce_codecs transcodes, fails, or keeps the file depending on the effective settings."""
+    import pathlib
+    from modules.videos.downloader import enforce_codecs
+
+    video_path = pathlib.Path('/tmp/video.webm')
+    poster_path = pathlib.Path('/tmp/video.jpg')
+    video_paths = [video_path, poster_path]
+    vp9_ffprobe = {'streams': [
+        {'codec_type': 'video', 'codec_name': 'vp9'},
+        {'codec_type': 'audio', 'codec_name': 'opus'},
+    ]}
+
+    with mock.patch('modules.videos.downloader.get_or_create_ffprobe_json',
+                    new_callable=mock.AsyncMock) as mock_ffprobe, \
+            mock.patch('modules.videos.downloader.transcode_video_file',
+                       new_callable=mock.AsyncMock) as mock_transcode:
+        mock_ffprobe.return_value = (vp9_ffprobe, None)
+
+        # Codecs match: nothing happens.
+        effective = {'video_codecs': ['vp9'], 'audio_codecs': ['opus']}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result == (video_path, video_paths)
+        mock_transcode.assert_not_called()
+
+        # Mismatch with neither transcode nor strict: file is kept.
+        effective = {'video_codecs': ['h264']}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result == (video_path, video_paths)
+        mock_transcode.assert_not_called()
+
+        # Mismatch with strict: permanent failure.
+        effective = {'video_codecs': ['h264'], 'strict_codecs': True}
+        with pytest.raises(UnrecoverableDownloadError):
+            await enforce_codecs(video_path, video_paths, effective)
+        mock_transcode.assert_not_called()
+
+        # Mismatch with transcode: the file is transcoded and the paths updated.
+        new_path = video_path.with_suffix('.mp4')
+        mock_transcode.return_value = new_path
+        effective = {'video_codecs': ['h264'], 'audio_codecs': ['aac'], 'transcode': True,
+                     'video_format': 'mp4'}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result == (new_path, [new_path, poster_path])
+        mock_transcode.assert_called_once_with(video_path, 'h264', 'aac', container='mp4')
+
+        # Transcode wins over strict.
+        mock_transcode.reset_mock()
+        mock_transcode.return_value = new_path
+        effective = {'video_codecs': ['h264'], 'transcode': True, 'strict_codecs': True,
+                     'video_format': 'mp4'}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result[0] == new_path
+        mock_transcode.assert_called_once()
+
+        # No supported transcode target: file is kept, no error.
+        mock_transcode.reset_mock()
+        effective = {'video_codecs': ['av1'], 'transcode': True}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result == (video_path, video_paths)
+        mock_transcode.assert_not_called()

@@ -569,6 +569,10 @@ class VideoDownloaderConfigValidator:
     sleep_requests: float = 0.75
     audio_only: bool = False
     audio_format: str = 'mp3'
+    video_codecs: List[str] = field(default_factory=list)
+    audio_codecs: List[str] = field(default_factory=list)
+    transcode: bool = False
+    strict_codecs: bool = False
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -600,6 +604,10 @@ class VideoDownloaderConfig(ConfigFile):
         sleep_requests=0.75,
         audio_only=False,
         audio_format='mp3',
+        video_codecs=[],
+        audio_codecs=[],
+        transcode=False,
+        strict_codecs=False,
     )
     validator = VideoDownloaderConfigValidator
 
@@ -715,6 +723,38 @@ class VideoDownloaderConfig(ConfigFile):
     def audio_format(self, value: str):
         self.update({**self._config, 'audio_format': value})
 
+    @property
+    def video_codecs(self) -> List[str]:
+        return self._config.get('video_codecs', [])
+
+    @video_codecs.setter
+    def video_codecs(self, value: List[str]):
+        self.update({**self._config, 'video_codecs': value})
+
+    @property
+    def audio_codecs(self) -> List[str]:
+        return self._config.get('audio_codecs', [])
+
+    @audio_codecs.setter
+    def audio_codecs(self, value: List[str]):
+        self.update({**self._config, 'audio_codecs': value})
+
+    @property
+    def transcode(self) -> bool:
+        return self._config.get('transcode', False)
+
+    @transcode.setter
+    def transcode(self, value: bool):
+        self.update({**self._config, 'transcode': value})
+
+    @property
+    def strict_codecs(self) -> bool:
+        return self._config.get('strict_codecs', False)
+
+    @strict_codecs.setter
+    def strict_codecs(self, value: bool):
+        self.update({**self._config, 'strict_codecs': value})
+
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
         self.successful_import = True
@@ -744,6 +784,7 @@ INHERITABLE_VIDEO_SETTINGS = {
     'video_resolutions', 'video_format', 'writesubtitles', 'writeautomaticsub',
     'writethumbnail', 'writeinfojson', 'yt_dlp_extra_args', 'sleep_requests',
     'user_agent', 'continue_dl', 'nooverwrites', 'audio_only', 'audio_format',
+    'video_codecs', 'audio_codecs', 'transcode', 'strict_codecs',
 }
 
 # Subset of inheritable settings allowed at channel/RSS level.
@@ -767,6 +808,10 @@ def _extract_global_inheritable(config: VideoDownloaderConfig) -> dict:
         'nooverwrites': config.nooverwrites,
         'audio_only': config.audio_only,
         'audio_format': config.audio_format,
+        'video_codecs': config.video_codecs,
+        'audio_codecs': config.audio_codecs,
+        'transcode': config.transcode,
+        'strict_codecs': config.strict_codecs,
     }
 
 

@@ -36,7 +36,7 @@ from wrolpi.files.worker import file_worker
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, update_view_counts_and_censored, \
-    ffmpeg_video_complete
+    ffmpeg_video_complete, get_or_create_ffprobe_json
 from .errors import UnknownChannel, ChannelDirectoryConflict, ChannelNameConflict, ChannelURLConflict, \
     ChannelSourceIdConflict
 from .cookies import cookies_unlocked, cookies_for_download
@@ -45,6 +45,8 @@ from .lib import get_videos_downloader_config, get_effective_video_settings, CHA
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
+from .transcode import codecs_match, get_transcode_target, transcode_video_file, \
+    TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS
 from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
@@ -153,20 +155,118 @@ VIDEO_RESOLUTION_MAP = {
     'maximum': ['bestvideo*+bestaudio/best'],
 }
 
+# yt-dlp `vcodec`/`acodec` values vary by extractor (avc1.64001f, vp09.00.10.08, mp4a.40.2, ...);
+# match them by prefix regex.  These are used inside `-f` bracket filters, so they must never
+# contain a comma or a forward slash.
+VIDEO_CODEC_YT_DLP_PATTERNS = {
+    'h264': r'^(avc|h264)',
+    'hevc': r'^(hev|hvc|h265|hevc)',
+    'vp9': r'^vp0?9',
+    'av1': r'^av0?1',
+    'vp8': r'^vp0?8',
+}
+AUDIO_CODEC_YT_DLP_PATTERNS = {
+    'aac': r'^(aac|mp4a\.40)',
+    'opus': r'^opus',
+    'mp3': r'^(mp3|mp4a\.69|mp4a\.6b)',
+    'vorbis': r'^vorbis',
+}
+RESOLUTION_HEIGHTS = {'360p': 360, '480p': 480, '720p': 720, '1080p': 1080,
+                      '1440p': 1440, '2160p': 2160, 'maximum': None}
+
 # VTT is the only format that a browser can use to display captions on a <video/>.
 DEFAULT_CAPTION_FORMAT = 'vtt'
 DEFAULT_POSTER_FORMAT = 'jpg'
 DEFAULT_CHANNEL_DOWNLOAD_ORDER = 'newest'
 
 
-def format_selector(video_resolutions: List[str]) -> str:
-    """Flatten the requested resolutions into a single yt-dlp `-f` format selector.
+def format_selector(video_resolutions: List[str], video_codecs: List[str] = None,
+                    audio_codecs: List[str] = None, strict_codecs: bool = False) -> str:
+    """Flatten the requested resolutions (and codec preferences) into a single yt-dlp `-f`
+    format selector.
 
     The selectors are joined with "/" so yt-dlp downloads only the first one that matches.
     Joining with "," would instead ask yt-dlp to download *every* matching selector, which
     downloads (and post-processes) the same video once per match.
+
+    Codec preference is codec-major: a preferred codec at a lower resolution beats a
+    non-preferred codec at a higher resolution.  Unless `strict_codecs`, the legacy
+    resolution selectors are appended as a fallback so a video is still downloaded when no
+    preferred codec is available.
     """
-    return '/'.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+    legacy = '/'.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+    if not video_codecs and not audio_codecs:
+        return legacy
+
+    audio_selectors = [f"bestaudio[acodec~='{AUDIO_CODEC_YT_DLP_PATTERNS[i]}']" for i in audio_codecs or []]
+    if not strict_codecs or not audio_codecs:
+        audio_selectors.append('bestaudio')
+
+    video_filters = [f"[vcodec~='{VIDEO_CODEC_YT_DLP_PATTERNS[i]}']" for i in video_codecs] \
+        if video_codecs else ['']
+    selectors = []
+    for video_filter in video_filters:
+        for resolution in video_resolutions:
+            height = RESOLUTION_HEIGHTS[resolution]
+            dimensions = [f'[height={height}]', f'[width={height}]'] if height else ['']
+            for dimension in dimensions:
+                for audio_selector in audio_selectors:
+                    selectors.append(f'bestvideo{dimension}{video_filter}+{audio_selector}')
+    if not strict_codecs:
+        selectors.append(legacy)
+    return '/'.join(selectors)
+
+
+async def enforce_codecs(video_path: pathlib.Path, video_paths: List[pathlib.Path], effective: dict) \
+        -> Tuple[pathlib.Path, List[pathlib.Path]]:
+    """Verify the downloaded file's codecs against the effective codec preferences.
+
+    The format selector already prefers matching sources, but the legacy fallback selectors (and
+    lying extractor metadata) can still deliver a non-preferred codec.  On mismatch: transcode when
+    enabled, fail permanently when strict, otherwise keep the file (best-effort preference).
+
+    Runs before the Video record is created and holds no DB session, so ffmpeg may run for a long
+    time without blocking writers.
+    """
+    video_codecs = effective.get('video_codecs') or []
+    audio_codecs = effective.get('audio_codecs') or []
+    transcode = effective.get('transcode', False)
+    strict_codecs = effective.get('strict_codecs', False) and not transcode
+
+    data, _ = await get_or_create_ffprobe_json(video_path)
+    video_match, audio_match = codecs_match(data, video_codecs, audio_codecs)
+    if video_match and audio_match:
+        return video_path, video_paths
+
+    if transcode:
+        target_vcodec = None if video_match else get_transcode_target(video_codecs, TRANSCODE_VIDEO_TARGETS)
+        target_acodec = None if audio_match else get_transcode_target(audio_codecs, TRANSCODE_AUDIO_TARGETS)
+        if not target_vcodec and not target_acodec:
+            logger.warning(f'Cannot transcode {video_path}: none of the preferred codecs'
+                           f' (video={video_codecs}, audio={audio_codecs}) is a supported transcode target')
+            return video_path, video_paths
+        try:
+            from wrolpi.events import Events
+            Events.send_user_notify(f'Transcoding {video_path.name}')
+        except Exception:
+            # Events are best-effort; never let them break a download.
+            logger.debug(f'Failed to send transcode event for {video_path}', exc_info=True)
+        new_path = await transcode_video_file(video_path, target_vcodec, target_acodec,
+                                              container=effective.get('video_format') or 'mp4')
+        await get_or_create_ffprobe_json(new_path)  # Refresh the sidecar for the new streams.
+        video_paths = [new_path if i == video_path else i for i in video_paths]
+        return new_path, video_paths
+
+    if strict_codecs:
+        actual_video = [i.get('codec_name') for i in data.get('streams', []) if i.get('codec_type') == 'video']
+        actual_audio = [i.get('codec_name') for i in data.get('streams', []) if i.get('codec_type') == 'audio']
+        raise UnrecoverableDownloadError(
+            f'Downloaded video has codecs (video={actual_video}, audio={actual_audio}) but strict codecs'
+            f' (video={video_codecs}, audio={audio_codecs}) was required and transcoding is disabled')
+
+    logger.warning(f'{video_path} does not match preferred codecs'
+                   f' (video={video_codecs}, audio={audio_codecs}); keeping it as downloaded')
+    return video_path, video_paths
 
 
 def get_youtube_video_id(url: str) -> Optional[str]:
@@ -936,6 +1036,11 @@ class VideoDownloader(Downloader, ABC):
         effective = get_effective_video_settings(settings)
         audio_only = effective.get('audio_only', False)
         audio_format = effective.get('audio_format', 'mp3')
+        video_codecs = effective.get('video_codecs') or []
+        audio_codecs = effective.get('audio_codecs') or []
+        transcode = effective.get('transcode', False)
+        # Transcoding guarantees the codec, so strict is only meaningful without it.
+        strict_codecs = effective.get('strict_codecs', False) and not transcode
 
         # download_for_log carries .id (for progress) and .url (for log messages).
         # Falling back to a stub keeps unit tests viable.
@@ -943,7 +1048,8 @@ class VideoDownloader(Downloader, ABC):
 
         try:
             video_resolutions = effective['video_resolutions']
-            video_resolutions_str = format_selector(video_resolutions)
+            video_resolutions_str = format_selector(video_resolutions, video_codecs=video_codecs,
+                                                    audio_codecs=audio_codecs, strict_codecs=strict_codecs)
             video_format = effective['video_format']
             video_path, entry = prepare_video_filename(url, out_dir, video_resolutions_str, video_format,
                                                       audio_only=audio_only, audio_format=audio_format)
@@ -971,7 +1077,14 @@ class VideoDownloader(Downloader, ABC):
                 '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
             )
             if audio_only:
-                cmd = (*cmd, '-f', 'bestaudio', '-x', '--audio-format', audio_format)
+                audio_selector = 'bestaudio'
+                if audio_codecs:
+                    audio_selectors = [f"bestaudio[acodec~='{AUDIO_CODEC_YT_DLP_PATTERNS[i]}']"
+                                       for i in audio_codecs]
+                    if not strict_codecs:
+                        audio_selectors.append('bestaudio')
+                    audio_selector = '/'.join(audio_selectors)
+                cmd = (*cmd, '-f', audio_selector, '-x', '--audio-format', audio_format)
             else:
                 cmd = (*cmd,
                        '-f', video_resolutions_str,
@@ -1022,6 +1135,11 @@ class VideoDownloader(Downloader, ABC):
                 error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {result.return_code}'
                 if _bot_blocked(error):
                     raise BotBlockedDownloadError(f'Bot detection or invalid cookies: {error}')
+                if strict_codecs and 'Requested format is not available' in error:
+                    # The source will not grow new formats; do not retry.
+                    raise UnrecoverableDownloadError(
+                        f'None of the requested codecs (video={video_codecs}, audio={audio_codecs}) are'
+                        f' available for this video, and transcoding is disabled: {url}')
                 return DownloadResult(success=False, error=error, location=location)
 
             output_format = audio_output_extension(audio_format) if audio_only else video_format
@@ -1060,6 +1178,9 @@ class VideoDownloader(Downloader, ABC):
             video_paths = glob_shared_stem(video_path)
             video_paths = self._delete_part_files(video_path, video_paths)
             video_paths = self.normalize_video_file_names(video_path, video_paths)
+
+            if not audio_only and (video_codecs or audio_codecs):
+                video_path, video_paths = await enforce_codecs(video_path, video_paths, effective)
 
             if is_youtube_url(url):
                 # YouTube auto-captions pin the text to the bottom-left; center them at the source.  Runs

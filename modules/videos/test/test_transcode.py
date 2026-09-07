@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from modules.videos.transcode import codecs_match, get_stream_codec_names, get_transcode_target, \
-    transcode_video_file, TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS
+    transcode_can_satisfy_codecs, transcode_video_file, TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS
 from wrolpi.cmd import CommandResult
 
 
@@ -53,6 +53,21 @@ def test_get_transcode_target():
     assert get_transcode_target(['opus', 'aac'], TRANSCODE_AUDIO_TARGETS) == 'opus'
 
 
+@pytest.mark.parametrize('video_codecs,audio_codecs,expected', [
+    ([], [], True),  # Nothing to satisfy.
+    (['h264'], [], True),
+    (['av1', 'h264'], [], True),  # h264 is a target.
+    (['av1'], [], False),  # No target can produce av1.
+    (['h264'], ['aac'], True),
+    (['h264'], ['vorbis'], False),  # No target can produce vorbis.
+    ([], ['aac'], True),
+    (['av1'], ['aac'], False),  # Both lists must be satisfiable.
+])
+def test_transcode_can_satisfy_codecs(video_codecs, audio_codecs, expected):
+    """Strict is only suppressed by transcode when every preference list has a transcode target."""
+    assert transcode_can_satisfy_codecs(video_codecs, audio_codecs) is expected
+
+
 @pytest.mark.asyncio
 async def test_transcode_video_file(test_directory):
     """A webm is transcoded to an mp4 with the same stem; the original file and its stale
@@ -80,6 +95,8 @@ async def test_transcode_video_file(test_directory):
     cmd = mock_run.call_args[0][0]
     assert '-c:v' in cmd and cmd[cmd.index('-c:v') + 1] == 'libx264'
     assert '-c:a' in cmd and cmd[cmd.index('-c:a') + 1] == 'aac'
+    # Attached-picture streams are excluded; a missing audio stream is tolerated.
+    assert '0:V:0' in cmd and '0:a:0?' in cmd
 
 
 @pytest.mark.asyncio

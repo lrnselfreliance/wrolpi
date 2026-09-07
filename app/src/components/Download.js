@@ -471,8 +471,7 @@ export function AudioCodecSelectorForm({form, name = 'audio_codecs', path = 'set
     </div>
 }
 
-/** Codec preference selectors with the transcode/strict toggles.  Strict is moot while transcode
- * is enabled (the transcode guarantees the codec), so it is disabled then. */
+/** Codec preference selectors with the transcode/strict toggles. */
 export function CodecSettingsForm({form, codecsPathPrefix = 'settings.'}) {
     const [transcodeProps] = form.getCustomProps({name: 'transcode', path: `${codecsPathPrefix}transcode`});
     const [strictProps] = form.getCustomProps({name: 'strict_codecs', path: `${codecsPathPrefix}strict_codecs`});
@@ -493,10 +492,10 @@ export function CodecSettingsForm({form, codecsPathPrefix = 'settings.'}) {
             <Toggle
                 label='Fail if codecs unavailable'
                 checked={!!strictProps.value}
-                disabled={form.disabled || !!transcodeProps.value}
+                disabled={form.disabled}
                 onChange={strictProps.onChange}
                 info='Fail the download when no preferred codec is available, instead of falling
-                 back to any codec.  Not necessary when transcoding is enabled.'
+                 back to any codec.  Ignored when transcoding can produce a preferred codec.'
             />
         </Group>
     </Stack>

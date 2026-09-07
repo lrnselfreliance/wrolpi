@@ -1607,6 +1607,45 @@ async def test_video_download_requests_codec_format(test_session, test_directory
 
 
 @pytest.mark.asyncio
+async def test_strict_selector_when_transcode_cannot_satisfy(test_session, test_directory,
+                                                             mock_video_extract_info,
+                                                             video_download_manager,
+                                                             mock_video_process_runner, image_file,
+                                                             simple_channel,
+                                                             test_videos_downloader_config):
+    """Transcode suppresses strict only when it can produce a preferred codec; av1 has no
+    transcode target, so strict still removes the fallback selectors."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    image_file.rename(video_path.with_suffix('.jpg'))
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    settings = {'video_codecs': ['av1'], 'strict_codecs': True, 'transcode': True}
+
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename, \
+            mock.patch('modules.videos.downloader.enforce_codecs', new_callable=mock.AsyncMock) as mock_enforce:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+        mock_enforce.side_effect = lambda path, paths, effective: (path, paths)
+
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+        mock_video_process_runner.assert_called_once()
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    format_arg = cmd[cmd.index('-f') + 1]
+    resolutions = get_videos_downloader_config().video_resolutions
+    assert format_arg == format_selector(resolutions, video_codecs=['av1'], strict_codecs=True)
+    # No fallback to the legacy selectors.
+    assert not format_arg.endswith(format_selector(resolutions))
+
+
+@pytest.mark.asyncio
 async def test_strict_codecs_unavailable_fails_download(test_session, test_directory, mock_video_extract_info,
                                                         video_download_manager, mock_video_process_runner,
                                                         image_file, simple_channel,
@@ -1636,7 +1675,7 @@ async def test_strict_codecs_unavailable_fails_download(test_session, test_direc
 
     download = test_session.query(Download).one()
     assert download.is_failed, f'Download should have failed permanently, got {download.status}'
-    assert 'transcoding is disabled' in download.error
+    assert 'transcoding cannot produce them' in download.error
 
 
 @pytest.mark.asyncio
@@ -1717,7 +1756,7 @@ async def test_enforce_codecs():
         assert result == (new_path, [new_path, poster_path])
         mock_transcode.assert_called_once_with(video_path, 'h264', 'aac', container='mp4')
 
-        # Transcode wins over strict.
+        # Transcode wins over strict when it can produce the preferred codec.
         mock_transcode.reset_mock()
         mock_transcode.return_value = new_path
         effective = {'video_codecs': ['h264'], 'transcode': True, 'strict_codecs': True,
@@ -1731,4 +1770,22 @@ async def test_enforce_codecs():
         effective = {'video_codecs': ['av1'], 'transcode': True}
         result = await enforce_codecs(video_path, video_paths, effective)
         assert result == (video_path, video_paths)
+        mock_transcode.assert_not_called()
+
+        # Regression: strict must hold when transcode cannot produce the preferred codec.
+        effective = {'video_codecs': ['av1'], 'transcode': True, 'strict_codecs': True}
+        with pytest.raises(UnrecoverableDownloadError):
+            await enforce_codecs(video_path, video_paths, effective)
+        mock_transcode.assert_not_called()
+
+        # No partial transcode: an unfixable video mismatch (av1) blocks the audio-only
+        # conversion; the file is kept as-is (or fails when strict).
+        effective = {'video_codecs': ['av1'], 'audio_codecs': ['aac'], 'transcode': True}
+        result = await enforce_codecs(video_path, video_paths, effective)
+        assert result == (video_path, video_paths)
+        mock_transcode.assert_not_called()
+        effective = {'video_codecs': ['av1'], 'audio_codecs': ['aac'], 'transcode': True,
+                     'strict_codecs': True}
+        with pytest.raises(UnrecoverableDownloadError):
+            await enforce_codecs(video_path, video_paths, effective)
         mock_transcode.assert_not_called()

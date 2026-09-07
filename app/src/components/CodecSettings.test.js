@@ -24,18 +24,21 @@ describe('CodecSettingsForm', () => {
         expect(screen.getByText('Fail if codecs unavailable')).toBeInTheDocument();
     });
 
-    it('disables the strict toggle while transcode is enabled', () => {
-        const form = createCodecForm({settings: {transcode: true, strict_codecs: false}});
+    it('keeps the strict toggle usable while transcode is enabled', () => {
+        // Strict still matters with transcode on: a preference with no transcode target
+        // (e.g. av1) cannot be fixed by transcoding, so the backend honors strict then.
+        const form = createCodecForm({settings: {transcode: true, strict_codecs: true}});
 
         renderUI(<CodecSettingsForm form={form}/>);
 
         const toggles = screen.getAllByTestId('toggle');
         const [transcodeToggle, strictToggle] = toggles.map(i => i.querySelector('input') || i);
         expect(transcodeToggle).toBeChecked();
-        expect(strictToggle).toBeDisabled();
+        expect(strictToggle).toBeChecked();
+        expect(strictToggle).not.toBeDisabled();
     });
 
-    it('enables the strict toggle while transcode is disabled', async () => {
+    it('toggling strict updates the form', async () => {
         const form = createCodecForm({settings: {transcode: false, strict_codecs: false}});
 
         renderUI(<CodecSettingsForm form={form}/>);

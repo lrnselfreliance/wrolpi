@@ -46,7 +46,7 @@ from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
 from .transcode import codecs_match, get_transcode_target, transcode_video_file, \
-    TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS
+    transcode_can_satisfy_codecs, TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS
 from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
@@ -168,7 +168,7 @@ VIDEO_CODEC_YT_DLP_PATTERNS = {
 AUDIO_CODEC_YT_DLP_PATTERNS = {
     'aac': r'^(aac|mp4a\.40)',
     'opus': r'^opus',
-    'mp3': r'^(mp3|mp4a\.69|mp4a\.6b)',
+    'mp3': r'^(mp3|mp4a\.69|mp4a\.6[bB])',  # extractors report both mp4a.6b and mp4a.6B
     'vorbis': r'^vorbis',
 }
 RESOLUTION_HEIGHTS = {'360p': 360, '480p': 480, '720p': 720, '1080p': 1080,
@@ -231,7 +231,7 @@ async def enforce_codecs(video_path: pathlib.Path, video_paths: List[pathlib.Pat
     video_codecs = effective.get('video_codecs') or []
     audio_codecs = effective.get('audio_codecs') or []
     transcode = effective.get('transcode', False)
-    strict_codecs = effective.get('strict_codecs', False) and not transcode
+    strict_codecs = effective.get('strict_codecs', False)
 
     data, _ = await get_or_create_ffprobe_json(video_path)
     video_match, audio_match = codecs_match(data, video_codecs, audio_codecs)
@@ -241,28 +241,30 @@ async def enforce_codecs(video_path: pathlib.Path, video_paths: List[pathlib.Pat
     if transcode:
         target_vcodec = None if video_match else get_transcode_target(video_codecs, TRANSCODE_VIDEO_TARGETS)
         target_acodec = None if audio_match else get_transcode_target(audio_codecs, TRANSCODE_AUDIO_TARGETS)
-        if not target_vcodec and not target_acodec:
-            logger.warning(f'Cannot transcode {video_path}: none of the preferred codecs'
-                           f' (video={video_codecs}, audio={audio_codecs}) is a supported transcode target')
-            return video_path, video_paths
-        try:
-            from wrolpi.events import Events
-            Events.send_user_notify(f'Transcoding {video_path.name}')
-        except Exception:
-            # Events are best-effort; never let them break a download.
-            logger.debug(f'Failed to send transcode event for {video_path}', exc_info=True)
-        new_path = await transcode_video_file(video_path, target_vcodec, target_acodec,
-                                              container=effective.get('video_format') or 'mp4')
-        await get_or_create_ffprobe_json(new_path)  # Refresh the sidecar for the new streams.
-        video_paths = [new_path if i == video_path else i for i in video_paths]
-        return new_path, video_paths
+        # Transcode only when it can fix every mismatched stream: converting just the audio of a
+        # video whose codec preference has no target would report success while leaving the video
+        # codec wrong.  An unfixable mismatch falls through to strict/keep below.
+        if (video_match or target_vcodec) and (audio_match or target_acodec):
+            try:
+                from wrolpi.events import Events
+                Events.send_user_notify(f'Transcoding {video_path.name}')
+            except Exception:
+                # Events are best-effort; never let them break a download.
+                logger.debug(f'Failed to send transcode event for {video_path}', exc_info=True)
+            new_path = await transcode_video_file(video_path, target_vcodec, target_acodec,
+                                                  container=effective.get('video_format') or 'mp4')
+            await get_or_create_ffprobe_json(new_path)  # Refresh the sidecar for the new streams.
+            video_paths = [new_path if i == video_path else i for i in video_paths]
+            return new_path, video_paths
+        logger.warning(f'Cannot transcode {video_path}: a mismatched preference'
+                       f' (video={video_codecs}, audio={audio_codecs}) has no supported transcode target')
 
     if strict_codecs:
         actual_video = [i.get('codec_name') for i in data.get('streams', []) if i.get('codec_type') == 'video']
         actual_audio = [i.get('codec_name') for i in data.get('streams', []) if i.get('codec_type') == 'audio']
         raise UnrecoverableDownloadError(
             f'Downloaded video has codecs (video={actual_video}, audio={actual_audio}) but strict codecs'
-            f' (video={video_codecs}, audio={audio_codecs}) was required and transcoding is disabled')
+            f' (video={video_codecs}, audio={audio_codecs}) was required and transcoding cannot produce them')
 
     logger.warning(f'{video_path} does not match preferred codecs'
                    f' (video={video_codecs}, audio={audio_codecs}); keeping it as downloaded')
@@ -1039,8 +1041,10 @@ class VideoDownloader(Downloader, ABC):
         video_codecs = effective.get('video_codecs') or []
         audio_codecs = effective.get('audio_codecs') or []
         transcode = effective.get('transcode', False)
-        # Transcoding guarantees the codec, so strict is only meaningful without it.
-        strict_codecs = effective.get('strict_codecs', False) and not transcode
+        # Strict is suppressed only when transcoding could actually produce every preferred
+        # codec; a preference like av1-only has no transcode target, so strict must hold.
+        strict_codecs = effective.get('strict_codecs', False) \
+            and not (transcode and transcode_can_satisfy_codecs(video_codecs, audio_codecs))
 
         # download_for_log carries .id (for progress) and .url (for log messages).
         # Falling back to a stub keeps unit tests viable.
@@ -1139,7 +1143,7 @@ class VideoDownloader(Downloader, ABC):
                     # The source will not grow new formats; do not retry.
                     raise UnrecoverableDownloadError(
                         f'None of the requested codecs (video={video_codecs}, audio={audio_codecs}) are'
-                        f' available for this video, and transcoding is disabled: {url}')
+                        f' available for this video, and transcoding cannot produce them: {url}')
                 return DownloadResult(success=False, error=error, location=location)
 
             output_format = audio_output_extension(audio_format) if audio_only else video_format

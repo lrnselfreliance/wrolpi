@@ -1,3 +1,4 @@
+import os
 import pathlib
 import shutil
 from typing import List, Optional, Tuple
@@ -24,9 +25,8 @@ FFPROBE_AUDIO_CODEC_NAMES = {
     'vorbis': {'vorbis'},
 }
 
-# Codecs which can be a transcode *target*, mapped to their ffmpeg encoder args.  Encoding VP9/AV1
-# in software is impractically slow on a Raspberry Pi, so only widely-playable targets are offered;
-# these maps are the extension point for adding more targets later.
+# Codecs which can be a transcode *target*, mapped to their ffmpeg encoder args.  VP9/AV1/HEVC are
+# omitted because software encoding them is impractically slow on a Raspberry Pi.
 TRANSCODE_VIDEO_TARGETS = {
     'h264': ('-c:v', 'libx264', '-preset', 'medium', '-crf', '23'),
 }
@@ -85,6 +85,14 @@ def get_transcode_target(preferences: List[str], targets: dict) -> Optional[str]
     return None
 
 
+def transcode_can_satisfy_codecs(video_codecs: List[str], audio_codecs: List[str]) -> bool:
+    """True only if transcoding could produce a preferred codec for every non-empty preference
+    list.  When False, enabling transcode cannot guarantee the preferences (e.g. av1-only), so
+    strict_codecs must still be honored."""
+    return ((not video_codecs or get_transcode_target(video_codecs, TRANSCODE_VIDEO_TARGETS) is not None)
+            and (not audio_codecs or get_transcode_target(audio_codecs, TRANSCODE_AUDIO_TARGETS) is not None))
+
+
 async def transcode_video_file(video_path: pathlib.Path,
                                target_vcodec: Optional[str] = None,
                                target_acodec: Optional[str] = None,
@@ -116,9 +124,11 @@ async def transcode_video_file(video_path: pathlib.Path,
 
     final_path = video_path.with_suffix(f'.{container}')
     tmp_path = video_path.with_suffix(f'.transcode.{container}')
+    # 0:V:0 excludes attached-picture streams (embedded thumbnails); 0:a:0? tolerates a video
+    # with no audio stream.
     cmd = (FFMPEG_BIN, '-y',
            '-i', video_path,
-           '-map', '0:v:0', '-map', '0:a:0',
+           '-map', '0:V:0', '-map', '0:a:0?',
            *video_args,
            *audio_args,
            '-movflags', '+faststart',
@@ -134,10 +144,27 @@ async def transcode_video_file(video_path: pathlib.Path,
         tmp_path.unlink(missing_ok=True)
         raise
 
+    # fsync before the rename: a Pi losing power after the rename must not be left with a
+    # truncated final file.
+    fd = os.open(tmp_path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
     # The old ffprobe sidecar describes the old streams.
     video_path.with_suffix('.ffprobe.json').unlink(missing_ok=True)
     tmp_path.rename(final_path)
     if final_path != video_path:
         video_path.unlink()
     final_path.chmod(DEFAULT_FILE_PERMISSIONS)
+
+    # fsync the directory so the rename itself is durable.
+    fd = os.open(video_path.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass  # Some filesystems refuse directory fsync; the rename is still atomic.
+    finally:
+        os.close(fd)
     return final_path

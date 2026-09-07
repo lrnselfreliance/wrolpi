@@ -69,7 +69,7 @@ def test_transcode_can_satisfy_codecs(video_codecs, audio_codecs, expected):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file(test_directory):
+async def test_transcode_video_file(test_directory, async_client):
     """A webm is transcoded to an mp4 with the same stem; the original file and its stale
     ffprobe sidecar are removed."""
     video_path = test_directory / 'video.webm'
@@ -100,7 +100,7 @@ async def test_transcode_video_file(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file_copies_matching_stream(test_directory):
+async def test_transcode_video_file_copies_matching_stream(test_directory, async_client):
     """Only the mismatching stream is re-encoded; the other stream is copied."""
     video_path = test_directory / 'video.mp4'
     video_path.write_bytes(b'fake video data')
@@ -119,7 +119,7 @@ async def test_transcode_video_file_copies_matching_stream(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file_forces_supported_container(test_directory):
+async def test_transcode_video_file_forces_supported_container(test_directory, async_client):
     """webm cannot contain h264/aac; the container is forced to mp4."""
     video_path = test_directory / 'video.webm'
     video_path.write_bytes(b'fake video data')
@@ -135,7 +135,7 @@ async def test_transcode_video_file_forces_supported_container(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file_failure_removes_tmp(test_directory):
+async def test_transcode_video_file_failure_removes_tmp(test_directory, async_client):
     """A failed ffmpeg leaves the original file untouched and no temporary file behind."""
     video_path = test_directory / 'video.webm'
     video_path.write_bytes(b'fake video data')
@@ -154,7 +154,7 @@ async def test_transcode_video_file_failure_removes_tmp(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file_disk_space_guard(test_directory):
+async def test_transcode_video_file_disk_space_guard(test_directory, async_client):
     """Transcoding is refused when the disk is nearly full."""
     video_path = test_directory / 'video.webm'
     video_path.write_bytes(b'fake video data' * 1000)
@@ -165,6 +165,47 @@ async def test_transcode_video_file_disk_space_guard(test_directory):
         with pytest.raises(RuntimeError, match='free space'):
             await transcode_video_file(video_path, target_vcodec='h264')
     mock_run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_transcode_lock_serializes(test_directory, async_client):
+    """Only one transcode runs at a time machine-wide: while the shared lock is held (by any
+    Sanic worker), a transcode waits, and it releases the lock when done."""
+    import asyncio
+    from wrolpi.api_utils import api_app
+
+    video_path = test_directory / 'video.webm'
+    video_path.write_bytes(b'fake video data')
+
+    async def fake_run_command(cmd, **kwargs):
+        pathlib.Path(cmd[-1]).write_bytes(b'transcoded data')
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    lock = api_app.shared_ctx.transcode_lock
+    assert lock.acquire(block=False), 'Test could not take the transcode lock'
+    released = False
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command) as mock_run:
+        task = asyncio.create_task(transcode_video_file(video_path, target_vcodec='h264'))
+        try:
+            await asyncio.sleep(0.5)
+            mock_run.assert_not_called()  # Still waiting for the lock.
+            assert not task.done()
+
+            lock.release()
+            released = True
+            result = await asyncio.wait_for(task, timeout=10)
+        finally:
+            if not released:
+                lock.release()
+            if not task.done():
+                task.cancel()
+
+    assert result == test_directory / 'video.mp4'
+    mock_run.assert_called_once()
+
+    # The lock was released after the transcode.
+    assert lock.acquire(block=False), 'transcode_video_file did not release the lock'
+    lock.release()
 
 
 @pytest.mark.asyncio

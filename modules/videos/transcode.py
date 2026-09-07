@@ -1,3 +1,4 @@
+import asyncio
 import os
 import pathlib
 import shutil
@@ -6,9 +7,12 @@ from typing import List, Optional, Tuple
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import run_command
 from wrolpi.common import logger
-from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
+from wrolpi.vars import DEFAULT_FILE_PERMISSIONS, PYTEST
 
 logger = logger.getChild(__name__)
+
+# How often a waiting worker re-checks the machine-wide transcode lock.
+TRANSCODE_LOCK_POLL_SECONDS = 0.1 if PYTEST else 10
 
 # ffprobe `codec_name` values that satisfy each user-selectable codec preference.
 FFPROBE_VIDEO_CODEC_NAMES = {
@@ -93,15 +97,32 @@ def transcode_can_satisfy_codecs(video_codecs: List[str], audio_codecs: List[str
             and (not audio_codecs or get_transcode_target(audio_codecs, TRANSCODE_AUDIO_TARGETS) is not None))
 
 
+async def _acquire_transcode_lock():
+    """Block (asynchronously) until this process holds the machine-wide transcode lock.
+
+    Sanic runs multiple worker processes, so an asyncio primitive cannot serialize transcodes;
+    the multiprocessing.Lock in shared_ctx can.  Polled rather than blocking-acquired because a
+    transcode can hold the lock for hours and the event loop must stay responsive."""
+    from wrolpi.api_utils import api_app
+    lock = api_app.shared_ctx.transcode_lock
+    if not lock.acquire(block=False):
+        logger.info('Waiting for another transcode to finish')
+        while not lock.acquire(block=False):
+            await asyncio.sleep(TRANSCODE_LOCK_POLL_SECONDS)
+    return lock
+
+
 async def transcode_video_file(video_path: pathlib.Path,
                                target_vcodec: Optional[str] = None,
                                target_acodec: Optional[str] = None,
                                container: str = 'mp4') -> pathlib.Path:
     """Transcode a video file in place (same stem, possibly a new container extension).
 
-    Only the stream(s) with a target are re-encoded; the other stream is copied.  The output is
-    written to a temporary file in the same directory, then atomically renamed over the final
-    path.  The original file is deleted if the extension changed.  Returns the final path.
+    Only one transcode runs at a time machine-wide (across all Sanic workers); this call waits
+    for its turn.  Only the stream(s) with a target are re-encoded; the other stream is copied.
+    The output is written to a temporary file in the same directory, then atomically renamed over
+    the final path.  The original file is deleted if the extension changed.  Returns the final
+    path.
 
     @raise RuntimeError: when ffmpeg fails, or there is not enough free disk space.
     """
@@ -113,6 +134,16 @@ async def transcode_video_file(video_path: pathlib.Path,
         logger.info(f'Forcing mp4 container for transcode of {video_path} ({container} is not supported)')
         container = 'mp4'
 
+    lock = await _acquire_transcode_lock()
+    try:
+        return await _transcode_video_file(video_path, target_vcodec, target_acodec, container)
+    finally:
+        lock.release()
+
+
+async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
+                                target_acodec: Optional[str], container: str) -> pathlib.Path:
+    """The ffmpeg work of `transcode_video_file`; the caller holds the transcode lock."""
     source_size = video_path.stat().st_size
     free = shutil.disk_usage(video_path.parent).free
     if free < MINIMUM_FREE_SPACE_RATIO * source_size:

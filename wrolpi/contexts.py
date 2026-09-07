@@ -69,6 +69,10 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.perpetual_tasks_lock = multiprocessing.Lock()
 
     # Switches
+    # Transcoding saturates every core; only one ffmpeg transcode may run machine-wide,
+    # across all Sanic workers.
+    app.shared_ctx.transcode_lock = multiprocessing.Lock()
+
     app.shared_ctx.switches = manager.dict()
     app.shared_ctx.switches_lock = multiprocessing.Lock()
     app.shared_ctx.switches_changed = multiprocessing.Event()

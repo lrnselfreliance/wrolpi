@@ -64,7 +64,7 @@ import {QueryContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
-import {VideoFormatSelectorForm, VideoResolutionSelectorForm} from "./Download";
+import {CodecSettingsForm, VideoFormatSelectorForm, VideoResolutionSelectorForm} from "./Download";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
 
 export function VideoWrapper() {
@@ -350,6 +350,10 @@ export function VideosSettingsPage() {
         download_missing_video_comments: false,
         user_agent: '',
         sleep_requests: 0.75,
+        video_codecs: [],
+        audio_codecs: [],
+        transcode: false,
+        strict_codecs: false,
     };
 
     const configSubmitter = async () => {
@@ -396,6 +400,7 @@ export function VideosSettingsPage() {
                     />
                     <VideoFileNameForm form={configForm}/>
                 </div>
+                <CodecSettingsForm form={configForm} codecsPathPrefix=''/>
                 <div style={settingsGridStyle}>
                     <ToggleForm
                         form={configForm}

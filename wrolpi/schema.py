@@ -323,6 +323,10 @@ class DownloadSettings:
     nooverwrites: Optional[bool] = None
     audio_only: Optional[bool] = None
     audio_format: Optional[str] = None
+    video_codecs: Optional[List[str]] = None
+    audio_codecs: Optional[List[str]] = None
+    transcode: Optional[bool] = None
+    strict_codecs: Optional[bool] = None
 
     def __post_init__(self):
         if self.excluded_urls and self.excluded_urls.endswith(','):
@@ -359,6 +363,14 @@ class DownloadSettings:
         valid_resolutions = ('360p', '480p', '720p', '1080p', '1440p', '2160p', 'maximum')
         if not all(i in valid_resolutions for i in self.video_resolutions):
             raise ValidationError(f'Download order must be one of 360p, 480p, 720p, 1080p, 1440p, 2160p, or maximum.')
+
+        valid_video_codecs = ('h264', 'vp9', 'av1', 'vp8', 'hevc')
+        if not all(i in valid_video_codecs for i in self.video_codecs or []):
+            raise ValidationError(f'Video codecs must be of: {", ".join(valid_video_codecs)}')
+
+        valid_audio_codecs = ('aac', 'opus', 'mp3', 'vorbis')
+        if not all(i in valid_audio_codecs for i in self.audio_codecs or []):
+            raise ValidationError(f'Audio codecs must be of: {", ".join(valid_audio_codecs)}')
 
 
 @dataclass

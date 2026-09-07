@@ -143,6 +143,21 @@ export const downloadAudioFormatOptions = [
 
 export const defaultAudioFormatOption = 'mp3';
 
+export const downloadVideoCodecOptions = [
+    {key: 'h264', text: 'h264 (avc1)', value: 'h264'},
+    {key: 'vp9', text: 'vp9', value: 'vp9'},
+    {key: 'av1', text: 'av1', value: 'av1'},
+    {key: 'vp8', text: 'vp8', value: 'vp8'},
+    {key: 'hevc', text: 'hevc (h265)', value: 'hevc'},
+];
+
+export const downloadAudioCodecOptions = [
+    {key: 'aac', text: 'aac', value: 'aac'},
+    {key: 'opus', text: 'opus', value: 'opus'},
+    {key: 'mp3', text: 'mp3', value: 'mp3'},
+    {key: 'vorbis', text: 'vorbis', value: 'vorbis'},
+];
+
 export const Downloaders = {
     Archive: 'archive',
     File: 'file',

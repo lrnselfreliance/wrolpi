@@ -100,9 +100,8 @@ def transcode_can_satisfy_codecs(video_codecs: List[str], audio_codecs: List[str
 async def _acquire_transcode_lock():
     """Block (asynchronously) until this process holds the machine-wide transcode lock.
 
-    Sanic runs multiple worker processes, so an asyncio primitive cannot serialize transcodes;
-    the multiprocessing.Lock in shared_ctx can.  Polled rather than blocking-acquired because a
-    transcode can hold the lock for hours and the event loop must stay responsive."""
+    Polled with sleep instead of a blocking acquire so a multi-hour ffmpeg hold elsewhere does
+    not stall this worker's event loop."""
     from wrolpi.api_utils import api_app
     lock = api_app.shared_ctx.transcode_lock
     if not lock.acquire(block=False):
@@ -144,6 +143,15 @@ async def transcode_video_file(video_path: pathlib.Path,
 async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
                                 target_acodec: Optional[str], container: str) -> pathlib.Path:
     """The ffmpeg work of `transcode_video_file`; the caller holds the transcode lock."""
+    # Notify here, after the lock: the wait for another transcode can last hours, and the user
+    # should hear "Transcoding" only when this file's work actually begins.
+    try:
+        from wrolpi.events import Events
+        Events.send_user_notify(f'Transcoding {video_path.name}')
+    except Exception:
+        # Events are best-effort; never let them break a download.
+        logger.debug(f'Failed to send transcode event for {video_path}', exc_info=True)
+
     source_size = video_path.stat().st_size
     free = shutil.disk_usage(video_path.parent).free
     if free < MINIMUM_FREE_SPACE_RATIO * source_size:

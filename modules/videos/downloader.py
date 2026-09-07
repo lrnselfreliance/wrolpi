@@ -245,12 +245,6 @@ async def enforce_codecs(video_path: pathlib.Path, video_paths: List[pathlib.Pat
         # video whose codec preference has no target would report success while leaving the video
         # codec wrong.  An unfixable mismatch falls through to strict/keep below.
         if (video_match or target_vcodec) and (audio_match or target_acodec):
-            try:
-                from wrolpi.events import Events
-                Events.send_user_notify(f'Transcoding {video_path.name}')
-            except Exception:
-                # Events are best-effort; never let them break a download.
-                logger.debug(f'Failed to send transcode event for {video_path}', exc_info=True)
             new_path = await transcode_video_file(video_path, target_vcodec, target_acodec,
                                                   container=effective.get('video_format') or 'mp4')
             await get_or_create_ffprobe_json(new_path)  # Refresh the sidecar for the new streams.

@@ -169,8 +169,10 @@ async def test_transcode_video_file_disk_space_guard(test_directory, async_clien
 
 @pytest.mark.asyncio
 async def test_transcode_lock_serializes(test_directory, async_client):
-    """Only one transcode runs at a time machine-wide: while the shared lock is held (by any
-    Sanic worker), a transcode waits, and it releases the lock when done."""
+    """A transcode waits while `shared_ctx.transcode_lock` is held and releases it when done.
+
+    This exercises the wait/release logic in-process; cross-process sharing of the lock is
+    provided by Sanic's shared_ctx (created before workers fork) and is not proven here."""
     import asyncio
     from wrolpi.api_utils import api_app
 

@@ -523,7 +523,6 @@ export const useSearchArchives = (defaultLimit) => {
 
     const localSearchArchives = async () => {
         setArchives(null);
-        setTotalPages(0);
         try {
             let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline,
                 deep);
@@ -594,7 +593,6 @@ export const useSearchDocs = (defaultLimit) => {
 
     const localSearchDocs = async () => {
         setDocs(null);
-        setTotalPages(0);
         try {
             const mimetype = docFilterToMimetype(filter);
             let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject,
@@ -657,7 +655,6 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const localSearchVideos = async () => {
         setVideos(null);
         setLoading(true);
-        setTotalPages(0);
         try {
             let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline,
                 censored, deep);

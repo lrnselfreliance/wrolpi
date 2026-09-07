@@ -12,7 +12,8 @@ from wrolpi.collections.models import Collection
 from wrolpi.collections.types import collection_type_registry
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
-from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
+from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype, cached_search_total, \
+    search_filter_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,19 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
                 .subquery()
             query = query.filter(FileGroup.id.in_(tagged_fg_ids))
 
-        total = query.count()
+        unfiltered = not (search_str or author or subject or language or mimetype or tag_names)
+        if unfiltered:
+            total = cached_search_total(
+                search_filter_cache_key('docs'),
+                lambda: session.query(func.count(Doc.id)).scalar() or 0,
+            )
+        else:
+            cache_key = search_filter_cache_key(
+                'docs', search_str=search_str, author=author, subject=subject,
+                language=language, mimetype=mimetype, tag_names=tag_names, deep=deep,
+            )
+            # Count before ORDER BY / LIMIT; cache by filters not page.
+            total = cached_search_total(cache_key, lambda q=query: q.count())
 
         # Ordering.
         if order_by == 'rank' and fts_sq is not None:

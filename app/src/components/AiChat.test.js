@@ -66,8 +66,8 @@ describe('AiChat', () => {
         streamChat.mockImplementation(async ({mode, messages}, onEvent) => {
             expect(mode).toBe('research');
             expect(messages[messages.length - 1]).toEqual({role: 'user', content: 'find canning'});
-            onEvent('tool_call', {tool: 'search_videos', args: {search_str: 'canning'}});
-            onEvent('tool_result', {tool: 'search_videos', success: true});
+            onEvent('tool_call', {tool: 'search_files', args: {search_str: 'canning', kind: 'video'}});
+            onEvent('tool_result', {tool: 'search_files', success: true});
             onEvent('token', {content: 'One video: '});
             onEvent('token', {content: '/videos/123'});
             onEvent('done', {content: 'One video: /videos/123'});
@@ -80,7 +80,7 @@ describe('AiChat', () => {
         fireEvent.change(screen.getByLabelText('Chat message'), {target: {value: 'find canning'}});
         fireEvent.click(screen.getByText('Send'));
 
-        await waitFor(() => expect(screen.getByText(/using search videos/)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/using search files/)).toBeInTheDocument());
         await waitFor(() => expect(screen.getByRole('link', {name: '/videos/123'})).toBeInTheDocument());
         expect(streamChat).toHaveBeenCalledTimes(1);
     });

@@ -18,7 +18,7 @@ EXPECTED_TOOLS = {
     'get_doc', 'get_zim_entry',
     'list_collections', 'list_zim_files', 'list_files',
     'get_statistics', 'get_inventory', 'get_inventory_items', 'get_status',
-    'list_tags', 'search_suggestions', 'list_downloads', 'get_map_overview', 'search_places',
+    'list_tags', 'list_downloads', 'get_map_overview', 'search_places',
     'search_files', 'get_file', 'read_content',
 }
 

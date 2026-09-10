@@ -26,15 +26,17 @@ import requests
 
 requests.packages.urllib3.disable_warnings()  # noqa  Self-signed certs.
 
-# (mode, question, expected first tools (any of), expect a WROLPi link in the answer)
+# (mode, question, expected first tools (any of; None = answerable from context, no tool expected),
+#  expect a WROLPi link in the answer)
 QUESTIONS = [
     ('help', 'How do I download videos?', {'search_help'}, True),
     ('help', 'What are Tags?', {'search_help'}, True),
     ('help', 'How do I add my own files to WROLPi?', {'search_help'}, True),
-    ('research', 'What are my three newest archives?', {'search_archives'}, True),
-    ('research', 'What video channels do I have?', {'list_collections', 'search_videos'}, False),
-    ('research', 'Find videos about cooking', {'search_videos', 'search_all'}, False),
-    ('research', 'Summarize my newest videos', {'search_videos'}, True),
+    ('research', 'What are my three newest archives?', {'search_files'}, True),
+    # The library map in the prompt already names the channels; no tool call is needed.
+    ('research', 'What video channels do I have?', None, False),
+    ('research', 'Find videos about cooking', {'search_files'}, False),
+    ('research', 'Summarize my newest videos', {'search_files'}, True),
     ('system', 'Is everything running?', {'get_system_status', 'list_services'}, False),
     ('system', 'How full are my drives?', {'get_system_status', 'list_disks'}, False),
     ('system', 'Why would downloads fail?', {'get_system_status', 'search_help'}, False),
@@ -73,10 +75,11 @@ def score(result: dict, expected_tools: set, expect_link: bool) -> dict:
     answer = result.get('answer') or ''
     checks = {
         'done': result.get('error') is None and bool(answer),
-        'used_tool': bool(result['tools']),
-        'right_tool': bool(result['tools']) and result['tools'][0] in expected_tools,
         'no_external_urls': not EXTERNAL_URL.search(answer),
     }
+    if expected_tools is not None:
+        checks['used_tool'] = bool(result['tools'])
+        checks['right_tool'] = bool(result['tools']) and result['tools'][0] in expected_tools
     if expect_link:
         checks['has_link'] = bool(RELATIVE_LINK.search(answer))
     return checks

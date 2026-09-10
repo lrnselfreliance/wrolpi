@@ -8,199 +8,6 @@ from modules.ai import lib
 
 
 @pytest.mark.asyncio
-async def test_ai_search_all(async_client, test_session, video_factory, archive_factory):
-    """Global search returns lean results of every kind with links and a total."""
-    video_factory(title='canning tomatoes')
-    archive_factory(domain='example.com', title='canning peppers', contents='all about canning peppers')
-    test_session.commit()
-
-    request, response = await async_client.post('/api/ai/search', content=json.dumps(dict(search_str='canning')))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] == 2
-    kinds = {i['kind'] for i in response.json['results']}
-    assert kinds == {'video', 'archive'}
-    for result in response.json['results']:
-        assert result['link']
-        assert result['id']
-
-
-@pytest.mark.asyncio
-async def test_ai_search_all_limit(async_client, test_session, archive_factory):
-    """The limit is clamped and the total reports all matches so the model narrows, not pages."""
-    for i in range(3):
-        archive_factory(domain='example.com', title=f'gardening {i}', contents='gardening guide')
-    test_session.commit()
-
-    content = dict(search_str='gardening', limit=1)
-    request, response = await async_client.post('/api/ai/search', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert len(response.json['results']) == 1
-    assert response.json['total'] == 3
-
-    # An excessive limit is clamped to the maximum.
-    content = dict(search_str='gardening', limit=10_000)
-    request, response = await async_client.post('/api/ai/search', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-
-
-@pytest.mark.asyncio
-async def test_ai_search_videos(async_client, test_session, video_factory):
-    """Video search returns lean video results with captions links."""
-    video_factory(title='sourdough starter', with_caption_file=True)
-    video_factory(title='unrelated')
-    test_session.commit()
-
-    content = dict(search_str='sourdough')
-    request, response = await async_client.post('/api/ai/videos/search', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] == 1
-    result = response.json['results'][0]
-    assert result['kind'] == 'video'
-    assert result['link'] == f'/videos/{result["id"]}'
-    assert 'captions_link' not in result  # derivable from the id; kept out of listings
-
-
-@pytest.mark.asyncio
-async def test_ai_get_video(async_client, test_session, video_factory):
-    """A single video can be fetched by its FileGroup ID."""
-    video = video_factory(title='wood stove install')
-    test_session.commit()
-    file_group_id = video.file_group_id
-
-    request, response = await async_client.get(f'/api/ai/videos/{file_group_id}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['id'] == file_group_id
-    assert response.json['kind'] == 'video'
-    assert response.json['link'] == f'/videos/{file_group_id}'
-
-    # Fetching does not mark the video viewed.
-    test_session.expire_all()
-    assert video.file_group.viewed is None
-
-    request, response = await async_client.get('/api/ai/videos/123456')
-    assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-@pytest.mark.asyncio
-async def test_ai_get_video_captions(async_client, test_session, video_factory):
-    """Captions are returned as timestamped, paged text."""
-    video = video_factory(title='captioned', with_caption_file=True)
-    test_session.commit()
-
-    request, response = await async_client.get(f'/api/ai/videos/{video.file_group_id}/captions')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['content'].startswith('[00:00:0')
-    assert response.json['total_chars'] > 0
-
-    # An offset beyond the end returns an empty page, never an error.
-    offset = response.json['total_chars'] + 100
-    request, response = await async_client.get(f'/api/ai/videos/{video.file_group_id}/captions?offset={offset}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['content'] == ''
-    assert response.json['next_offset'] is None
-
-
-@pytest.mark.asyncio
-async def test_ai_search_archives(async_client, test_session, archive_factory):
-    """Archive search supports the domain filter and returns text links."""
-    archive_factory(domain='example.com', title='pressure canning', contents='pressure canning guide')
-    archive_factory(domain='other.org', title='water bath canning', contents='water bath canning guide')
-    test_session.commit()
-
-    content = dict(search_str='canning', domain='example.com')
-    request, response = await async_client.post('/api/ai/archives/search', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] == 1
-    result = response.json['results'][0]
-    assert result['kind'] == 'archive'
-    assert 'text_link' not in result  # derivable from the id; kept out of listings
-
-
-@pytest.mark.asyncio
-async def test_ai_get_archive_text(async_client, test_session, archive_factory):
-    """Archive text is served from the readability text file and paged."""
-    contents = 'word ' * 2_000  # 10,000 chars, more than two pages.
-    archive = archive_factory(domain='example.com', title='long read', contents=contents)
-    test_session.commit()
-    file_group_id = archive.file_group_id
-
-    request, response = await async_client.get(f'/api/ai/archives/{file_group_id}/text')
-    assert response.status_code == HTTPStatus.OK
-    assert len(response.json['content']) == lib.PAGE_SIZE
-    assert response.json['next_offset'] == lib.PAGE_SIZE
-    assert response.json['total_chars'] == len(contents)
-
-    # The second page continues where the first ended.
-    request, response = await async_client.get(
-        f'/api/ai/archives/{file_group_id}/text?offset={response.json["next_offset"]}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['content'] == contents[lib.PAGE_SIZE:2 * lib.PAGE_SIZE]
-
-    request, response = await async_client.get('/api/ai/archives/123456/text')
-    assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-@pytest.mark.asyncio
-async def test_ai_get_archive(async_client, test_session, archive_factory):
-    """A single archive can be fetched with its history of snapshots."""
-    archive_factory(domain='example.com', url='https://example.com/a', title='first', contents='one')
-    archive = archive_factory(domain='example.com', url='https://example.com/a', title='second', contents='two')
-    test_session.commit()
-
-    request, response = await async_client.get(f'/api/ai/archives/{archive.file_group_id}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['kind'] == 'archive'
-    assert response.json['link'] == f'/archives/{archive.file_group_id}'
-    # History holds the OTHER snapshots of the URL, not the archive itself.
-    assert [i['title'] for i in response.json['history']] == ['first']
-
-    request, response = await async_client.get('/api/ai/archives/123456')
-    assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-@pytest.mark.asyncio
-async def test_ai_get_video_comments(async_client, test_session, video_factory):
-    """Video comments render as paged author lines."""
-    info_json = dict(duration=5, comments=[
-        dict(author='alice', text='great video'),
-        dict(author='bob', text='thanks'),
-    ])
-    video = video_factory(title='commented', with_info_json=info_json)
-    test_session.commit()
-
-    request, response = await async_client.get(f'/api/ai/videos/{video.file_group_id}/comments')
-    assert response.status_code == HTTPStatus.OK
-    assert 'alice: great video' in response.json['content']
-    assert 'bob: thanks' in response.json['content']
-
-    # No comments is an empty page, not an error.
-    no_comments = video_factory(title='quiet')
-    test_session.commit()
-    request, response = await async_client.get(f'/api/ai/videos/{no_comments.file_group_id}/comments')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['content'] == ''
-
-
-@pytest.mark.asyncio
-async def test_ai_search_docs(async_client, test_session, test_directory, example_epub, refresh_files):
-    """Docs can be searched and fetched with links."""
-    await refresh_files()
-
-    content = dict(search_str='WROLPi')
-    request, response = await async_client.post('/api/ai/docs/search', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] >= 1
-    result = response.json['results'][0]
-    assert result['kind'] == 'doc'
-    assert result['link'] == f'/docs/{result["id"]}'
-
-    request, response = await async_client.get(f'/api/ai/docs/{result["id"]}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['id'] == result['id']
-    assert response.json['kind'] == 'doc'
-
-
-@pytest.mark.asyncio
 async def test_ai_zims(async_client, test_session, test_zim):
     """Zims can be listed, searched, and their entries read as paged text."""
     request, response = await async_client.get('/api/ai/zims')
@@ -247,26 +54,6 @@ async def test_ai_list_collections(async_client, test_session, archive_factory):
     request, response = await async_client.get('/api/ai/collections?kind=channel')
     assert response.status_code == HTTPStatus.OK
     assert response.json['total'] == 0
-
-
-@pytest.mark.asyncio
-async def test_ai_inventories(async_client, food_inventory_factory):
-    """Inventories are listed lean, and fetched in full by slug."""
-    slug = food_inventory_factory(items=[dict(name='rice', count=2)])
-
-    request, response = await async_client.get('/api/ai/inventories')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] >= 1
-    lean = next(i for i in response.json['results'] if i['slug'] == slug)
-    assert lean['item_count'] == 1
-    assert 'items' not in lean
-
-    request, response = await async_client.get(f'/api/ai/inventories/{slug}')
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['inventory']['items'][0]['name'] == 'rice'
-
-    request, response = await async_client.get('/api/ai/inventories/no-such-inventory')
-    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
@@ -478,39 +265,6 @@ async def test_ai_map(async_client, test_session, test_directory, make_files_str
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-@pytest.mark.asyncio
-async def test_ai_search_suggestions(async_client, test_session, video_factory, archive_factory, channel_factory,
-                                     tag_factory):
-    """Suggestions name the channels/domains/authors/subjects matching a term and estimate result counts."""
-    channel = channel_factory(name='Wild Cooking')
-    video_factory(channel_id=channel.id, title='cooking rice')
-    archive_factory(domain='cooking.example.com', title='cooking beans', contents='beans')
-    tag = await tag_factory('recipes')
-    test_session.commit()
-
-    content = dict(search_str='cooking')
-    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    ch, = response.json['channels']
-    assert ch['name'] == 'Wild Cooking' and ch['id'] == channel.id and ch['link'].startswith('/videos/channel/')
-    dom, = response.json['domains']
-    assert dom['name'] == 'cooking.example.com'
-    assert response.json['authors'] == [] and response.json['subjects'] == []
-    assert response.json['estimates']['file_groups'] == 2
-    assert 'file_groups_deep' in response.json['estimates']
-    assert response.json['estimates']['zims'] == []
-
-    # Tag names narrow the estimate.
-    content = dict(search_str='cooking', tag_names=[tag.name])
-    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['estimates']['file_groups'] == 0
-
-    # Something to search for is required.
-    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps({}))
-    assert response.status_code == HTTPStatus.BAD_REQUEST
-
-
 def test_ai_format_download_error_tail():
     """Download errors are tracebacks; the model gets the end (the exception message), not the start."""
     from modules.ai.api import _format_download, DOWNLOAD_ERROR_LENGTH
@@ -578,10 +332,20 @@ async def test_ai_search_files_kinds(async_client, test_session, video_factory, 
     assert {'id', 'kind', 'title', 'link'} <= set(result)
     assert 'captions_link' not in result and 'size' not in result and 'mimetype' not in result
 
-    # Something to search by is required.
+    # No filters at all browses the newest items.
     request, response = await async_client.post('/api/ai/files/search', content=json.dumps({}))
-    assert response.status_code == HTTPStatus.OK  # browse newest
+    assert response.status_code == HTTPStatus.OK
     assert response.json['total'] == 3
+
+    # The limit is clamped and total reports every match so the model narrows instead of paging.
+    data = await search(search_str='cooking', limit=1)
+    assert len(data['results']) == 1 and data['total'] == 3
+    data = await search(search_str='cooking', limit=10_000)
+    assert len(data['results']) == 3
+
+    # An unknown kind is refused.
+    request, response = await async_client.post('/api/ai/files/search', content=json.dumps(dict(kind='song')))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio
@@ -651,6 +415,20 @@ async def test_ai_read_content(async_client, test_session, video_factory, archiv
     request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content')
     assert response.status_code == HTTPStatus.OK
     assert response.json['content'].startswith('[00:00:0')
+    assert response.json['total_chars'] > 0
+
+    # An offset beyond the end returns an empty page, never an error.
+    offset = response.json['total_chars'] + 100
+    request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content?offset={offset}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['content'] == '' and response.json['next_offset'] is None
+
+    # A video without comments is an empty page, not an error.
+    quiet = video_factory(title='quiet')
+    test_session.commit()
+    request, response = await async_client.get(f'/api/ai/files/{quiet.file_group_id}/content?part=comments')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['content'] == ''
 
     request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content?part=comments')
     assert response.status_code == HTTPStatus.OK

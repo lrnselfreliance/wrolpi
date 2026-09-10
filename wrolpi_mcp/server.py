@@ -1,8 +1,8 @@
 """WROLPi MCP Server — exposes WROLPi content to LLMs via the Model Context Protocol.
 
 A thin proxy: every tool is one call to the WROLPi API's /api/ai blueprint, which owns (and
-tests) the lean result shapes, links, and paging that used to live here.  External clients
-(Claude etc.) and WROLPi's local assistant share that one behavior."""
+tests) the lean result shapes, links, and paging.  External clients (Claude etc.) and WROLPi's
+local assistant share the same compact, kind-generic tools."""
 import json
 import logging
 import sys
@@ -23,7 +23,8 @@ mcp = FastMCP(
     instructions=(
         "WROLPi is an offline digital library containing videos, archived web pages, "
         "ebooks, Zim encyclopedias (Wikipedia, etc.), maps, and documents. "
-        "Use these tools to search and retrieve content from the library. "
+        "Use search_files to find content of any kind, get_file for details, and read_content "
+        "for captions, page text, or comments. "
         "IMPORTANT: When presenting results to the user, ALWAYS include the 'WROLPi Link' "
         "for every item. Never use the 'Source URL' — only use the local WROLPi Link. "
         "When calling tools, use the top-level ID (FileGroup ID)."
@@ -156,154 +157,27 @@ def _render_zim_entries(data: dict) -> str:
     return text
 
 
-# ---------------------------------------------------------------------------
-# Search tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def search(
-    query: str,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-    mimetypes: list[str] | None = None,
-    tag_names: list[str] | None = None,
-) -> str:
-    """Search all WROLPi content (videos, archives, ebooks, and other files).
-
-    Args:
-        query: Text to search for across titles, content, and metadata.
-        limit: Maximum number of results to return.
-        offset: Number of results to skip (for pagination).
-        mimetypes: Filter by MIME types, e.g. ["video/mp4", "text/html"].
-        tag_names: Filter by tag names.
-    """
-    body = {"search_str": query, "limit": limit, "offset": offset}
-    if tag_names:
-        body["tag_names"] = tag_names
-    # mimetypes are no longer a filter; a kind is.  Map the common prefixes.
-    if mimetypes:
-        kinds = {("video" if m.startswith("video/") else "archive" if m == "text/html" else "doc") for m in mimetypes}
-        if len(kinds) == 1:
-            body["kind"] = kinds.pop()
-    return _render_results(await api_post("/api/ai/files/search", json=body))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def search_videos(
-    query: str,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-    channel_id: int | None = None,
-    tag_names: list[str] | None = None,
-) -> str:
-    """Search downloaded videos by title and captions.
-
-    Args:
-        query: Text to search for in video titles and captions.
-        limit: Maximum number of results.
-        offset: Pagination offset.
-        channel_id: Filter to a specific channel by ID.
-        tag_names: Filter by tag names.
-    """
-    body = {"search_str": query, "limit": limit, "offset": offset, "kind": "video"}
-    if channel_id is not None:
-        body["channel"] = str(channel_id)
-    if tag_names:
-        body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/files/search", json=body))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def search_archives(
-    query: str,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-    domain: str | None = None,
-    tag_names: list[str] | None = None,
-) -> str:
-    """Search archived web pages (saved with SingleFile).
-
-    Args:
-        query: Text to search for in archived page titles and content.
-        limit: Maximum number of results.
-        offset: Pagination offset.
-        domain: Filter to a specific domain (e.g. "example.com").
-        tag_names: Filter by tag names.
-    """
-    body = {"search_str": query, "limit": limit, "offset": offset, "kind": "archive"}
-    if domain:
-        body["domain"] = domain
-    if tag_names:
-        body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/files/search", json=body))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def search_docs(
-    query: str | None = None,
-    author: str | None = None,
-    subject: str | None = None,
-    language: str | None = None,
-    mimetype: str | None = None,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-    tag_names: list[str] | None = None,
-) -> str:
-    """Search documents (ebooks, PDFs, comics, office docs) in the library.
-
-    At least one of query, author, subject, or tag_names should be provided.
-
-    Args:
-        query: Text to search for in document titles and content.
-        author: Filter by author name (partial match).
-        subject: Filter by subject (partial match).
-        language: Filter by language code (exact match, e.g. "en").
-        mimetype: Filter by MIME type prefix (e.g. "application/epub", "application/pdf").
-        limit: Maximum number of results.
-        offset: Pagination offset.
-        tag_names: Filter by tag names.
-    """
-    body = {"limit": limit, "offset": offset, "kind": "doc"}
-    if query:
-        body["search_str"] = query
-    if author:
-        body["author"] = author
-    if subject:
-        body["subject"] = subject
-    if tag_names:
-        body["tag_names"] = tag_names
-    # language and mimetype are accepted for compatibility; the consolidated search does not filter on them.
-    return _render_results(await api_post("/api/ai/files/search", json=body))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_doc(file_group_id: int) -> str:
-    """Get detailed information about a specific document (ebook, PDF, comic, etc.).
-
-    Args:
-        file_group_id: The top-level ID from search results (this is the FileGroup ID).
-    """
-    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
-
-
 @mcp.tool(annotations={"readOnlyHint": True})
 async def search_zim(
-    zim_id: int,
     query: str,
+    zim_id: int | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> str:
-    """Search within a Zim encyclopedia (e.g. Wikipedia, Wiktionary).
+    """Search the Zim encyclopedias (Wikipedia, Wiktionary, etc.).
 
-    Use list_zim_files first to find the zim_id.
+    Without zim_id this searches the Zims that have 'search by default' enabled; pass a zim_id
+    (from list_zim_files) to search one specific Zim.  Read a result with get_zim_entry.
 
     Args:
-        zim_id: ID of the Zim file to search.
         query: Text to search for.
-        limit: Maximum number of results.
+        zim_id: ID of one Zim file to search; omit to search the default Zims.
+        limit: Maximum results (per Zim when searching several).
         offset: Pagination offset.
     """
-    body = {"search_str": query, "zim_id": zim_id, "limit": limit, "offset": offset}
+    body = {"search_str": query, "limit": limit, "offset": offset}
+    if zim_id is not None:
+        body["zim_id"] = zim_id
     try:
         data = await api_post("/api/ai/zims/search", json=body)
     except httpx.HTTPStatusError as e:
@@ -311,90 +185,6 @@ async def search_zim(
             return f"Zim ID {zim_id} not found. Use list_zim_files to find valid Zim IDs."
         raise
     return _render_zim_entries(data)
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def search_default_zims(
-    query: str,
-    limit: int = DEFAULT_LIMIT,
-    offset: int = 0,
-) -> str:
-    """Search only the Zim encyclopedias that have 'search by default' enabled.
-
-    This does NOT search all Zim files. To search a specific Zim, use list_zim_files
-    to find its ID, then use search_zim.
-
-    Args:
-        query: Text to search for.
-        limit: Maximum results per Zim file.
-        offset: Pagination offset.
-    """
-    body = {"search_str": query, "limit": limit, "offset": offset}
-    return _render_zim_entries(await api_post("/api/ai/zims/search", json=body))
-
-
-# ---------------------------------------------------------------------------
-# Content retrieval tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_video(file_group_id: int) -> str:
-    """Get detailed information about a specific video.
-
-    Args:
-        file_group_id: The FileGroup ID from search results.
-    """
-    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_video_captions(file_group_id: int) -> str:
-    """Get the subtitle/caption text of a video. Useful for understanding video content without watching.
-
-    Args:
-        file_group_id: The FileGroup ID from search results.
-    """
-    text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "text"})
-    return text or "No captions available for this video."
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_video_comments(file_group_id: int) -> str:
-    """Get comments/discussion for a video.
-
-    Args:
-        file_group_id: The FileGroup ID from search results.
-    """
-    text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "comments"})
-    return text or "No comments available for this video."
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_archive(file_group_id: int) -> str:
-    """Get details about an archived web page, including its history of snapshots.
-
-    Args:
-        file_group_id: The FileGroup ID from search results.
-    """
-    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_archive_text(file_group_id: int) -> str:
-    """Get the readable plain text content of an archived web page.
-
-    This returns the Readability-extracted text, which is clean and suitable for reading.
-
-    Args:
-        file_group_id: The FileGroup ID from search results.
-    """
-    try:
-        text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "text"})
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            return f"Could not retrieve text content for archive {file_group_id}. Try get_archive for metadata."
-        raise
-    return text
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -423,7 +213,7 @@ async def get_zim_entry(zim_id: int, entry_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Kind-generic tools (the compact set the built-in assistant uses)
+# Library tools (the same compact set the built-in assistant uses)
 # ---------------------------------------------------------------------------
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -539,6 +329,27 @@ async def list_files(path: str = "", offset: int = 0) -> str:
     if (next_offset := data.get("next_offset")) is not None:
         lines.append(f"More entries available: call list_files again with offset={next_offset}")
     return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def read_file(path: str) -> str:
+    """Read a plain-text file from the media directory by its relative path (from list_files).
+
+    Args:
+        path: File path relative to the media directory, e.g. "notes/todo.txt".  Text files only.
+    """
+    try:
+        text = await _read_paged("/api/ai/files/read", params={"path": path})
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (400, 404):
+            detail = ""
+            try:
+                detail = e.response.json().get("error") or ""
+            except Exception:
+                pass
+            return f"Could not read {path}: {detail or 'not a readable text file'}"
+        raise
+    return text or f"{path} is empty."
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -698,8 +509,15 @@ async def get_statistics() -> str:
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
-async def get_inventory() -> str:
-    """List all inventories (emergency supplies, food storage, etc.)."""
+async def get_inventory(inventory_slug: str | None = None) -> str:
+    """List the inventories (emergency supplies, food storage, etc.), or read one in full.
+
+    Args:
+        inventory_slug: The slug of one inventory to read with every item; omit to list them all.
+    """
+    if inventory_slug:
+        data = await api_get("/api/ai/inventories", params={"slug": inventory_slug})
+        return json.dumps(data, indent=2, default=str)
     data = await api_get("/api/ai/inventories")
     inventories = data.get("results") or []
     if not inventories:
@@ -711,17 +529,6 @@ async def get_inventory() -> str:
             parts.append(f"  Items: {inventory['item_count']}")
         lines.append("\n".join(parts))
     return "\n\n".join(lines)
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_inventory_items(inventory_slug: str) -> str:
-    """Get all items in a specific inventory.
-
-    Args:
-        inventory_slug: The inventory slug (from get_inventory results).
-    """
-    data = await api_get("/api/ai/inventories", params={"slug": inventory_slug})
-    return json.dumps(data, indent=2, default=str)
 
 
 @mcp.tool(annotations={"readOnlyHint": True})

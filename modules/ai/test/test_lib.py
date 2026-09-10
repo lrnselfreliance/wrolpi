@@ -53,15 +53,21 @@ def test_format_file_group_video():
     assert result['id'] == 42
     assert result['kind'] == 'video'
     assert result['link'] == '/videos/42'
-    assert result['captions_link'] == '/api/ai/videos/42/captions'
     assert result['channel'] == 'Homesteading'
-    assert result['duration'] == 4021
+    assert result['duration'] == '1:07:01'
+    assert result['published'] == '2024-01-02'
     assert result['headline'] == 'pressure <b>canning</b>'
     assert result['tags'] == ['food']
     # Listing descriptions are truncated.
     assert len(result['description']) == lib.LISTING_DESCRIPTION_LENGTH + 1
     # Empty fields are omitted.
     assert 'author' not in result and 'url' not in result
+    # Listings leave out what the model can derive or does not need to choose an item.
+    assert 'captions_link' not in result and 'size' not in result and 'mimetype' not in result
+    # Details add them back.
+    detail = lib.format_file_group(fg, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
+    assert detail['size'] == 1000 and detail['mimetype'] == 'video/mp4'
+    assert len(detail['description']) == 500
 
 
 def test_format_file_group_archive():
@@ -69,7 +75,7 @@ def test_format_file_group_archive():
     result = lib.format_file_group(fg)
     assert result['kind'] == 'archive'
     assert result['link'] == '/archives/8'
-    assert result['text_link'] == '/api/ai/archives/8/text'
+    assert 'text_link' not in result
     # Listings omit the source URL so small models present the WROLPi link instead.
     assert 'url' not in result
     assert lib.format_file_group(fg, include_url=True)['url'] == 'https://example.com/a'
@@ -107,6 +113,17 @@ def test_html_to_text():
     text = lib.html_to_text(html)
     assert 'Hello' in text and 'World' in text
     assert 'evil' not in text and 'menu' not in text and '.x{}' not in text
+
+
+def test_format_duration_and_date():
+    assert lib.format_duration(59) == '0:59'
+    assert lib.format_duration(692) == '11:32'
+    assert lib.format_duration(4021) == '1:07:01'
+    assert lib.format_duration(None) is None and lib.format_duration('x') is None
+    import datetime
+    assert lib.format_date(datetime.datetime(2024, 1, 2, 13, 4, 5)) == '2024-01-02'
+    assert lib.format_date('2024-01-02T13:04:05+00:00') == '2024-01-02'
+    assert lib.format_date(None) is None
 
 
 def test_format_caption_chunks():

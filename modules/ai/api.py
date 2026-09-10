@@ -8,6 +8,7 @@ import asyncio
 import mimetypes
 import pathlib
 from http import HTTPStatus
+from typing import Optional
 
 from sanic import Blueprint, Request
 from sanic_ext import validate
@@ -20,6 +21,7 @@ from modules.map import lib as map_lib
 from modules.map import search as map_search
 from modules.map.pins import get_map_pins_config
 from modules.videos.channel.lib import search_channels_by_name
+from modules.videos.models import Video
 from modules.zim.models import Zims
 from modules.docs.lib import _doc_response, _get_doc, _search_docs
 from modules.inventory.common import get_inventory_configs
@@ -34,6 +36,7 @@ from wrolpi.common import api_param_limiter, get_media_directory, get_relative_t
 from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile, ValidationError
 from wrolpi.files.lib import search_files, search_file_suggestion_count, HIDDEN_DIRECTORIES, HIDDEN_FILES
+from wrolpi.files.models import FileGroup
 from wrolpi.vars import DOCKERIZED, IS_RPI4
 from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
@@ -118,7 +121,7 @@ async def search_videos(_: Request, body: schema.AIVideoSearchRequest):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_video(_: Request, file_group_id: int):
     video, _prev, _next = videos_lib.get_video_for_app(file_group_id, skip_viewed=True)
-    result = lib.format_file_group(video, description_length=lib.DETAIL_DESCRIPTION_LENGTH)
+    result = lib.format_file_group(video, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
     return json_response(result)
 
 
@@ -195,20 +198,7 @@ async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(request: Request, file_group_id: int):
     archive = archive_lib.get_archive_by_file_group_id(request.ctx.session, file_group_id, skip_viewed=True)
-    result = lib.format_file_group(archive.file_group.__json__(),
-                                   description_length=lib.DETAIL_DESCRIPTION_LENGTH, include_url=True)
-    history = []
-    for snapshot in archive.history[:10]:
-        fg = snapshot.file_group.__json__()
-        history.append({k: v for k, v in dict(
-            id=fg.get('id'),
-            title=fg.get('title') or fg.get('name'),
-            published=fg.get('published_datetime'),
-            link=lib.wrolpi_link(fg),
-        ).items() if v is not None})
-    if history:
-        result['history'] = history
-    return json_response(result)
+    return json_response(_archive_detail(archive))
 
 
 @ai_bp.get('/archives/<file_group_id:int>/text')
@@ -269,7 +259,7 @@ async def get_doc(request: Request, file_group_id: int):
     file_group = response['file_group']
     # Merge the Doc's details into the FileGroup dict so the lean formatter can use them.
     file_group['doc'] = response['doc']
-    result = lib.format_file_group(file_group, description_length=lib.DETAIL_DESCRIPTION_LENGTH)
+    result = lib.format_file_group(file_group, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
     return json_response(result)
 
 
@@ -372,36 +362,47 @@ async def list_collections(request: Request):
     return json_response(dict(results=results, total=len(results)))
 
 
-@ai_bp.get('/inventories')
-@openapi.definition(
-    summary='List inventories',
-    description='List the inventories (food storage, emergency supplies, etc.). Use the slug with'
-                ' get_inventory to read the items.',
-)
-@openapi.operation('list_inventories')
-async def list_inventories(_: Request):
-    inventories = get_inventory_configs().all_inventories()
-    results = [{k: v for k, v in dict(
+def _lean_inventories() -> list:
+    return [{k: v for k, v in dict(
         slug=i.get('slug'),
         name=i.get('name'),
         type=i.get('type'),
         item_count=len(i.get('items') or []),
-    ).items() if v is not None} for i in inventories]
+    ).items() if v is not None} for i in get_inventory_configs().all_inventories()]
+
+
+def _inventory_by_slug(slug: str) -> dict:
+    inventory = get_inventory_configs().get_inventory(slug)
+    if inventory is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    return inventory
+
+
+@ai_bp.get('/inventories')
+@openapi.definition(
+    summary='Get inventories',
+    description='Without slug: list the inventories (food storage, emergency supplies, etc.) with item counts.'
+                ' With slug: that inventory in full, every item and field.',
+)
+@openapi.operation('get_inventory')
+@openapi.parameter('slug', str, 'query')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_inventory(request: Request):
+    if slug := request.args.get('slug'):
+        return json_response(dict(inventory=_inventory_by_slug(slug)))
+    results = _lean_inventories()
     return json_response(dict(results=results, total=len(results)))
 
 
 @ai_bp.get('/inventories/<slug:str>')
 @openapi.definition(
     summary='Get one inventory',
-    description='Get one inventory in full (its fields and every item) by its slug from list_inventories.',
+    description='Get one inventory in full (its fields and every item) by its slug.',
 )
-@openapi.operation('get_inventory')
+@openapi.operation('get_inventory_items')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_inventory(_: Request, slug: str):
-    inventory = get_inventory_configs().get_inventory(slug)
-    if inventory is None:
-        raise UnknownInventory(f'No inventory: {slug}')
-    return json_response(dict(inventory=inventory))
+async def get_inventory_items(_: Request, slug: str):
+    return json_response(dict(inventory=_inventory_by_slug(slug)))
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +772,213 @@ async def search_suggestions(request: Request, body: schema.AISearchSuggestionsR
         subjects=subjects,
         estimates=dict(file_groups=counts['file_groups'], file_groups_deep=counts['file_groups_deep'], zims=zims),
     ))
+
+
+# ---------------------------------------------------------------------------
+# Consolidated, kind-generic endpoints.  Small models carry every tool definition on every request,
+# so one search / one detail / one reader replaces the per-kind trio.
+# ---------------------------------------------------------------------------
+
+FILE_KINDS = ('video', 'archive', 'doc')
+# Name matches offered alongside search results so the model can narrow without another tool.
+MATCHES_PER_GROUP = 3
+
+
+def _archive_detail(archive) -> dict:
+    result = lib.format_file_group(archive.file_group.__json__(),
+                                   description_length=lib.DETAIL_DESCRIPTION_LENGTH, include_url=True, detail=True)
+    history = []
+    for snapshot in archive.history[:10]:
+        fg = snapshot.file_group.__json__()
+        history.append({k: v for k, v in dict(
+            id=fg.get('id'),
+            title=fg.get('title') or fg.get('name'),
+            published=lib.format_date(fg.get('published_datetime')),
+            link=lib.wrolpi_link(fg),
+        ).items() if v is not None})
+    if history:
+        result['history'] = history
+    return result
+
+
+def _video_detail(video: Video) -> dict:
+    fg = video.__json__()
+    try:
+        fg['video']['description'] = video.get_description()
+    except Exception as e:
+        logger.debug(f'Could not read description of {video}', exc_info=e)
+    result = lib.format_file_group(fg, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
+    result['has_captions'] = bool(video.caption_paths)
+    if video.have_comments:
+        result['has_comments'] = True
+    return result
+
+
+def _doc_detail(session, file_group_id: int) -> dict:
+    response = _doc_response(_get_doc(session, file_group_id))
+    file_group = response['file_group']
+    file_group['doc'] = response['doc']
+    return lib.format_file_group(file_group, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
+
+
+async def _resolve_channel_id(session, channel: str) -> Optional[int]:
+    """A channel given as a numeric id or a (partial) name; None when nothing matches."""
+    channel = (channel or '').strip()
+    if not channel:
+        return None
+    if channel.isdigit():
+        return int(channel)
+    matches = await search_channels_by_name(session, channel, limit=1, order_by_video_count=True)
+    return matches[0].id if matches else None
+
+
+@ai_bp.post('/files/search')
+@openapi.definition(
+    summary='Search the library',
+    description='Search videos, archived web pages, and documents/ebooks by title and content. Omit search_str to'
+                ' browse the newest items. kind narrows to video, archive, or doc. channel (a channel name from'
+                ' the library list, or its id) applies to videos; domain (a site name) to archives; author and'
+                ' subject to documents; a filter for another kind is ignored. Results carry an id for get_file'
+                ' and read_content, and a WROLPi link. matches lists channels/domains/authors whose names fit'
+                ' the term: use one to narrow when total is large.',
+    body=schema.AIFileSearchRequest,
+)
+@openapi.operation('search_files')
+@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
+@validate(schema.AIFileSearchRequest)
+async def search_files_endpoint(request: Request, body: schema.AIFileSearchRequest):
+    session = request.ctx.session
+    kind = (body.kind or '').strip().lower() or None
+    if kind and kind not in FILE_KINDS:
+        raise ValidationError(f'kind must be one of {", ".join(FILE_KINDS)}')
+    # A kind-specific filter implies the kind.
+    if not kind:
+        if body.channel:
+            kind = 'video'
+        elif body.domain:
+            kind = 'archive'
+        elif body.author or body.subject:
+            kind = 'doc'
+
+    limit = ai_limiter(body.limit)
+    offset = body.offset or 0
+    searched = bool(body.search_str)
+    narrowed = False
+
+    if kind == 'video':
+        channel_id = None
+        if body.channel:
+            channel_id = await _resolve_channel_id(session, body.channel)
+            if channel_id is None:
+                result = lib.format_file_groups([], 0, searched=True)
+                result['hint'] = (f'No channel matches "{body.channel}". Use the exact channel name from the'
+                                  ' library list, or search without channel.')
+                return json_response(result)
+            narrowed = True
+        file_groups, total = videos_lib.search_videos(
+            search_str=body.search_str, offset=offset, limit=limit, channel_id=channel_id,
+            tag_names=body.tag_names, headline=True)
+    elif kind == 'archive':
+        narrowed = bool(body.domain)
+        file_groups, total = archive_lib.search_archives(
+            body.search_str, body.domain, limit, offset, None, body.tag_names, headline=True)
+    elif kind == 'doc':
+        narrowed = bool(body.author or body.subject)
+        file_groups, total = _search_docs(
+            search_str=body.search_str, author=body.author, subject=body.subject, limit=limit, offset=offset,
+            order_by='rank' if body.search_str else 'published_datetime', tag_names=body.tag_names)
+    else:
+        file_groups, total = search_files(body.search_str, limit, offset, tag_names=body.tag_names, headline=True)
+
+    result = lib.format_file_groups(file_groups, total, searched=searched)
+
+    if searched and not narrowed:
+        matches = dict()
+        channels = await search_channels_by_name(session, body.search_str, limit=MATCHES_PER_GROUP,
+                                                 order_by_video_count=True)
+        if channels and kind in (None, 'video'):
+            matches['channels'] = [dict(id=i.id, name=i.name) for i in channels]
+        domains = await search_domains_by_name(session, body.search_str, limit=MATCHES_PER_GROUP)
+        if domains and kind in (None, 'archive'):
+            matches['domains'] = [dict(name=i['domain']) for i in domains]
+        if kind in (None, 'doc'):
+            authors = await search_authors_by_name(session, body.search_str, limit=MATCHES_PER_GROUP)
+            subjects = await search_subjects_by_name(session, body.search_str, limit=MATCHES_PER_GROUP)
+            if authors:
+                matches['authors'] = [dict(name=i['name']) for i in authors]
+            if subjects:
+                matches['subjects'] = [dict(name=i['name']) for i in subjects]
+        if matches:
+            result['matches'] = matches
+
+    return json_response(result)
+
+
+@ai_bp.get('/files/<file_group_id:int>')
+@openapi.definition(
+    summary='Get one file',
+    description='Details of one item by the id from search results, whatever its kind: title, link, date,'
+                ' channel or author, tags, size, full description; for videos whether captions and comments'
+                ' exist; for archived pages the source URL and earlier snapshots.',
+)
+@openapi.operation('get_file')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_file(request: Request, file_group_id: int):
+    session = request.ctx.session
+    file_group = FileGroup.find_by_id(session, file_group_id)
+    if file_group.model == 'video':
+        return json_response(_video_detail(Video.find_by_file_group_id(session, file_group_id)))
+    if file_group.model == 'archive':
+        archive = archive_lib.get_archive_by_file_group_id(session, file_group_id, skip_viewed=True)
+        return json_response(_archive_detail(archive))
+    if file_group.model == 'doc':
+        return json_response(_doc_detail(session, file_group_id))
+    return json_response(lib.format_file_group(file_group.__json__(),
+                                               description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True))
+
+
+CONTENT_PARTS = ('text', 'comments')
+
+
+@ai_bp.get('/files/<file_group_id:int>/content')
+@openapi.definition(
+    summary='Read a file\'s content',
+    description='Read what an item says, by its id: part=text gives a video\'s timestamped captions or an'
+                ' archived page\'s plain text; part=comments gives a video\'s downloaded comments. Long content'
+                ' is paged: request again with offset=next_offset to continue.',
+)
+@openapi.operation('read_content')
+@openapi.parameter('part', str, 'query')
+@openapi.parameter('offset', int, 'query')
+@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def read_content(request: Request, file_group_id: int):
+    part = (request.args.get('part') or 'text').strip().lower()
+    if part not in CONTENT_PARTS:
+        raise ValidationError(f'part must be one of {", ".join(CONTENT_PARTS)}')
+    session = request.ctx.session
+    file_group = FileGroup.find_by_id(session, file_group_id)
+    kind = file_group.model or 'file'
+
+    text = None
+    if kind == 'video':
+        video = Video.find_by_file_group_id(session, file_group_id)
+        if part == 'text':
+            text = lib.format_caption_chunks(video.get_caption_chunks())
+        else:
+            lines = []
+            for comment in video.get_comments() or []:
+                author = comment.get('author') or 'unknown'
+                if body := (comment.get('text') or '').strip():
+                    lines.append(f'{author}: {body}')
+            text = '\n'.join(lines)
+    elif kind == 'archive' and part == 'text':
+        archive = archive_lib.get_archive_by_file_group_id(session, file_group_id, skip_viewed=True)
+        text = lib.read_archive_text(archive)
+
+    if text is None:
+        raise UnknownFile(f'This is a {kind}; it has no {part} to read')
+    return json_response(lib.paginate_text(text, _offset(request)))
 
 
 # ---------------------------------------------------------------------------

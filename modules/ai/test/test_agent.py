@@ -36,17 +36,17 @@ async def test_tool_definitions_from_spec(tool_definitions):
     assert not any(t.path.startswith('/api/chat') for t in tools.values())
 
     # Body, query, and path parameters all appear in the flat schema.
-    schema = tools['search_videos'].parameters_schema()
+    schema = tools['search_files'].parameters_schema()
     assert schema['properties']['search_str'] == {'type': 'string'}
     assert schema['properties']['tag_names'] == {'type': 'array', 'items': {'type': 'string'}}
-    schema = tools['get_video_captions'].parameters_schema()
+    schema = tools['read_content'].parameters_schema()
     assert schema['required'] == ['file_group_id']
     assert schema['properties']['offset'] == {'type': 'integer'}
 
     # OpenAI tool format.
-    openai_tool = tools['search_all'].as_openai_tool()
+    openai_tool = tools['search_files'].as_openai_tool()
     assert openai_tool['type'] == 'function'
-    assert openai_tool['function']['name'] == 'search_all'
+    assert openai_tool['function']['name'] == 'search_files'
 
 
 def _endpoint_shim(async_client):
@@ -70,8 +70,8 @@ async def test_execute_tool(async_client, tool_definitions, video_factory, test_
 
     with _endpoint_shim(async_client):
         # A real search through the blueprint.
-        success, result = await agent.execute_tool(research_tools, 'search_videos',
-                                                   dict(search_str='canning'))
+        success, result = await agent.execute_tool(research_tools, 'search_files',
+                                                   dict(search_str='canning', kind='video'))
         assert success is True
         result = json.loads(result)
         assert result['total'] == 1
@@ -86,20 +86,20 @@ async def test_execute_tool(async_client, tool_definitions, video_factory, test_
         assert success is False and 'Unknown tool' in error
 
         # Unknown argument names the accepted ones.
-        success, error = await agent.execute_tool(research_tools, 'search_videos', dict(query='x'))
+        success, error = await agent.execute_tool(research_tools, 'search_files', dict(query='x'))
         assert success is False and 'accepts' in error and 'search_str' in error
 
         # Missing required path parameter.
-        success, error = await agent.execute_tool(research_tools, 'get_video_captions', {})
+        success, error = await agent.execute_tool(research_tools, 'read_content', {})
         assert success is False and 'Missing required' in error
 
         # Wrong type.
-        success, error = await agent.execute_tool(research_tools, 'get_video_captions',
+        success, error = await agent.execute_tool(research_tools, 'read_content',
                                                   dict(file_group_id='banana'))
         assert success is False and 'must be a integer' in error
 
         # An endpoint error comes back as a message, not an exception.
-        success, error = await agent.execute_tool(research_tools, 'get_video_captions',
+        success, error = await agent.execute_tool(research_tools, 'read_content',
                                                   dict(file_group_id=123456))
         assert success is False and 'error' in error.lower()
 
@@ -129,7 +129,7 @@ async def test_execute_tool_result_truncated(async_client, tool_definitions, arc
     archive = test_session.query(Archive).one()
 
     with _endpoint_shim(async_client):
-        success, result = await agent.execute_tool(MODES['research']['tools'], 'get_archive_text',
+        success, result = await agent.execute_tool(MODES['research']['tools'], 'read_content',
                                                    dict(file_group_id=archive.file_group_id))
         assert success is True
         assert len(result) <= agent.TOOL_RESULT_MAX_CHARS + 100

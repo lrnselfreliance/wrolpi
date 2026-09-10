@@ -587,41 +587,6 @@ async def list_tags() -> str:
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
-async def search_suggestions(query: str, tag_names: list[str] | None = None) -> str:
-    """Preview what a search would find before running it.
-
-    Returns the channels, domains (archived sites), authors, and subjects whose names match the query,
-    and estimates of how many files and Zim entries the search would return.  Use the channel ID with
-    search_videos, the domain with search_archives, the author/subject with search_docs.
-
-    Args:
-        query: The term the user wants to search for.
-        tag_names: Narrow the file estimate to items with these tags.
-    """
-    body = {"search_str": query}
-    if tag_names:
-        body["tag_names"] = tag_names
-    data = await api_post("/api/ai/search/suggestions", json=body)
-    lines = []
-    for channel in data.get("channels") or []:
-        lines.append(f"  Channel: {channel['name']}  (ID: {channel['id']})  LINK: {_link(channel.get('link'))}")
-    for domain in data.get("domains") or []:
-        lines.append(f"  Domain: {domain['name']}")
-    for author in data.get("authors") or []:
-        lines.append(f"  Author: {author['name']}")
-    for subject in data.get("subjects") or []:
-        lines.append(f"  Subject: {subject['name']}")
-    if not lines:
-        lines.append("  No matching channels, domains, authors, or subjects.")
-    estimates = data.get("estimates") or {}
-    lines.append(f"\nEstimated matching files: {estimates.get('file_groups', 0)}"
-                 f" (deep content search: {estimates.get('file_groups_deep', 0)})")
-    for zim in estimates.get("zims") or []:
-        lines.append(f"  Zim '{zim.get('title')}' (ID {zim.get('id')}): ~{zim.get('estimate', 0)} entries")
-    return "\n".join(lines)
-
-
-@mcp.tool(annotations={"readOnlyHint": True})
 async def list_downloads(status: str | None = None, limit: int = DEFAULT_LIMIT) -> str:
     """Read the WROLPi download queue: summary, recurring downloads (channels, feeds), and one-time downloads.
 

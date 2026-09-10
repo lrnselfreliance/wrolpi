@@ -22,7 +22,6 @@ from modules.map import search as map_search
 from modules.map.pins import get_map_pins_config
 from modules.videos.channel.lib import search_channels_by_name
 from modules.videos.models import Video
-from modules.zim.models import Zims
 from modules.docs.lib import _doc_response, _get_doc, _search_docs
 from modules.inventory.common import get_inventory_configs
 from modules.inventory.errors import UnknownInventory
@@ -35,7 +34,7 @@ from wrolpi.common import api_param_limiter, get_media_directory, get_relative_t
     wrol_mode_enabled
 from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile, ValidationError
-from wrolpi.files.lib import search_files, search_file_suggestion_count, HIDDEN_DIRECTORIES, HIDDEN_FILES
+from wrolpi.files.lib import search_files, HIDDEN_DIRECTORIES, HIDDEN_FILES
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import DOCKERIZED, IS_RPI4
 from wrolpi.version import __version__
@@ -64,205 +63,6 @@ def _offset(request: Request) -> int:
         return 0
 
 
-@ai_bp.post('/search')
-@openapi.definition(
-    summary='Search all WROLPi content',
-    description='Search everything in the library at once: videos, archived web pages, ebooks, PDFs, and other'
-                ' files. search_str is optional: omit it to browse the newest items. Prefer the type-specific search'
-                ' (videos/archives/docs) when the user asks about one kind of content. When total is large,'
-                ' narrow the query instead of paging.',
-    body=schema.AISearchRequest,
-)
-@openapi.operation('search_all')
-@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
-@validate(schema.AISearchRequest)
-async def search_all(_: Request, body: schema.AISearchRequest):
-    file_groups, total = search_files(
-        body.search_str,
-        ai_limiter(body.limit),
-        body.offset or 0,
-        mimetypes=body.mimetypes,
-        tag_names=body.tag_names,
-        headline=True,
-    )
-    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
-
-
-@ai_bp.post('/videos/search')
-@openapi.definition(
-    summary='Search videos',
-    description='Search downloaded videos (and audio) by title and captions. Returns lean results with a'
-                ' WROLPi link and a captions_link for each video. search_str is optional: omit it to browse the'
-                ' newest videos, or pass channel_id (from list_collections) to browse one channel.',
-    body=schema.AIVideoSearchRequest,
-)
-@openapi.operation('search_videos')
-@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
-@validate(schema.AIVideoSearchRequest)
-async def search_videos(_: Request, body: schema.AIVideoSearchRequest):
-    file_groups, total = videos_lib.search_videos(
-        search_str=body.search_str,
-        offset=body.offset or 0,
-        limit=ai_limiter(body.limit),
-        channel_id=body.channel_id,
-        tag_names=body.tag_names,
-        headline=True,
-    )
-    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
-
-
-@ai_bp.get('/videos/<file_group_id:int>')
-@openapi.definition(
-    summary='Get one video',
-    description='Get details about one video by its ID from search results: title, channel, description,'
-                ' duration, link, and a captions_link to read what is said in the video.',
-)
-@openapi.operation('get_video')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_video(_: Request, file_group_id: int):
-    video, _prev, _next = videos_lib.get_video_for_app(file_group_id, skip_viewed=True)
-    result = lib.format_file_group(video, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
-    return json_response(result)
-
-
-@ai_bp.get('/videos/<file_group_id:int>/captions')
-@openapi.definition(
-    summary='Get video captions',
-    description='Read the timestamped captions of a video by its ID; use this to learn what is said in a video'
-                ' without watching it. Long captions are paged: request again with offset=next_offset to'
-                ' continue reading.',
-)
-@openapi.operation('get_video_captions')
-@openapi.parameter('offset', int, 'query')
-@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_video_captions(request: Request, file_group_id: int):
-    video = videos_lib.get_video(file_group_id)
-    text = lib.format_caption_chunks(video.get_caption_chunks())
-    return json_response(lib.paginate_text(text, _offset(request)))
-
-
-@ai_bp.get('/videos/<file_group_id:int>/comments')
-@openapi.definition(
-    summary='Get video comments',
-    description='Read the downloaded comments of a video by its ID. Long comment threads are paged:'
-                ' request again with offset=next_offset to continue reading.',
-)
-@openapi.operation('get_video_comments')
-@openapi.parameter('offset', int, 'query')
-@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_video_comments(request: Request, file_group_id: int):
-    video = videos_lib.get_video(file_group_id)
-    comments = video.get_comments() or []
-    lines = []
-    for comment in comments:
-        author = comment.get('author') or 'unknown'
-        text = (comment.get('text') or '').strip()
-        if text:
-            lines.append(f'{author}: {text}')
-    return json_response(lib.paginate_text('\n'.join(lines), _offset(request)))
-
-
-@ai_bp.post('/archives/search')
-@openapi.definition(
-    summary='Search archived web pages',
-    description='Search archived web pages (saved with SingleFile) by title and content. Returns lean results'
-                ' with a WROLPi link and a text_link to read each page. search_str is optional: omit it to browse'
-                ' the newest pages. Filter with domain (the exact name from list_collections) for one site.',
-    body=schema.AIArchiveSearchRequest,
-)
-@openapi.operation('search_archives')
-@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
-@validate(schema.AIArchiveSearchRequest)
-async def search_archives(_: Request, body: schema.AIArchiveSearchRequest):
-    file_groups, total = archive_lib.search_archives(
-        body.search_str,
-        body.domain,
-        ai_limiter(body.limit),
-        body.offset or 0,
-        None,  # order: default (most recently published)
-        body.tag_names,
-        headline=True,
-    )
-    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
-
-
-@ai_bp.get('/archives/<file_group_id:int>')
-@openapi.definition(
-    summary='Get one archived web page',
-    description='Get details about one archived web page by its ID from search results: title, source URL,'
-                ' its WROLPi link, a text_link to read it, and earlier snapshots of the same page.',
-)
-@openapi.operation('get_archive')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_archive(request: Request, file_group_id: int):
-    archive = archive_lib.get_archive_by_file_group_id(request.ctx.session, file_group_id, skip_viewed=True)
-    return json_response(_archive_detail(archive))
-
-
-@ai_bp.get('/archives/<file_group_id:int>/text')
-@openapi.definition(
-    summary='Read an archived web page',
-    description='Read the plain text content of an archived web page by its ID. Long pages are paged: request'
-                ' again with offset=next_offset to continue reading.',
-)
-@openapi.operation('get_archive_text')
-@openapi.parameter('offset', int, 'query')
-@openapi.response(HTTPStatus.OK, schema.AIPagedTextResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_archive_text(request: Request, file_group_id: int):
-    archive = archive_lib.get_archive_by_file_group_id(request.ctx.session, file_group_id, skip_viewed=True)
-    text = lib.read_archive_text(archive)
-    if text is None:
-        raise UnknownFile(f'No readable text for archive {file_group_id}')
-    return json_response(lib.paginate_text(text, _offset(request)))
-
-
-@ai_bp.post('/docs/search')
-@openapi.definition(
-    summary='Search documents and ebooks',
-    description='Search documents (ebooks, PDFs, comics, office docs) by title, content, author, or subject.'
-                ' Returns lean results with a WROLPi link for each document. Provide at least one of'
-                ' search_str, author, subject, or tag_names.',
-    body=schema.AIDocSearchRequest,
-)
-@openapi.operation('search_docs')
-@openapi.response(HTTPStatus.OK, schema.AISearchResponse)
-@validate(schema.AIDocSearchRequest)
-async def search_docs(_: Request, body: schema.AIDocSearchRequest):
-    file_groups, total = _search_docs(
-        search_str=body.search_str,
-        author=body.author,
-        subject=body.subject,
-        language=body.language,
-        mimetype=body.mimetype,
-        limit=ai_limiter(body.limit),
-        offset=body.offset or 0,
-        order_by='rank' if body.search_str else 'published_datetime',
-        tag_names=body.tag_names,
-    )
-    return json_response(lib.format_file_groups(file_groups, total, searched=bool(body.search_str)))
-
-
-@ai_bp.get('/docs/<file_group_id:int>')
-@openapi.definition(
-    summary='Get one document',
-    description='Get details about one document (ebook, PDF, comic, etc.) by its ID from search results:'
-                ' title, author, subject, description, and its WROLPi link.',
-)
-@openapi.operation('get_doc')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_doc(request: Request, file_group_id: int):
-    doc = _get_doc(request.ctx.session, file_group_id)
-    response = _doc_response(doc)
-    file_group = response['file_group']
-    # Merge the Doc's details into the FileGroup dict so the lean formatter can use them.
-    file_group['doc'] = response['doc']
-    result = lib.format_file_group(file_group, description_length=lib.DETAIL_DESCRIPTION_LENGTH, detail=True)
-    return json_response(result)
-
-
 @ai_bp.get('/zims')
 @openapi.definition(
     summary='List Zim encyclopedias',
@@ -289,9 +89,8 @@ async def list_zims(request: Request):
 @ai_bp.post('/zims/search')
 @openapi.definition(
     summary='Search Zim encyclopedias',
-    description='Search Zim encyclopedias (Wikipedia, etc.). Without zim_id this searches only the Zims that'
-                ' have search-by-default enabled; pass zim_id (from list_zims) to search one specific Zim.'
-                ' Use the returned link (or zim_id and path) to read a full entry.',
+    description='Search the Zim encyclopedias (Wikipedia, etc.) enabled for search; pass zim_id to search one.'
+                ' Read a result in full with get_zim_entry (zim_id and path).',
     body=schema.AIZimSearchRequest,
 )
 @openapi.operation('search_zims')
@@ -316,9 +115,8 @@ async def search_zims(request: Request, body: schema.AIZimSearchRequest):
 @ai_bp.get('/zims/<zim_id:int>/entry')
 @openapi.definition(
     summary='Read a Zim entry',
-    description='Read one article from a Zim encyclopedia as plain text. Pass the path from Zim search'
-                ' results. Long articles are paged: request again with offset=next_offset to continue'
-                ' reading.',
+    description='Read one Zim article as plain text by zim_id and the path from search_zims. Paged: request'
+                ' again with offset=next_offset.',
 )
 @openapi.operation('get_zim_entry')
 @openapi.parameter('path', str, 'query')
@@ -340,8 +138,8 @@ async def get_zim_entry(request: Request, zim_id: int):
 @openapi.definition(
     summary='List collections',
     description='List collections in the library. Filter with kind: "channel" (video channels), "domain"'
-                ' (archived websites), or "playlist". Use a channel\'s id with search_videos, or a domain\'s'
-                ' name with search_archives.',
+                ' (archived websites), or "playlist". Use a channel\'s name or id, or a domain\'s name, as the'
+                ' channel or domain filter of search_files.',
 )
 @openapi.operation('list_collections')
 @openapi.parameter('kind', str, 'query')
@@ -392,17 +190,6 @@ async def get_inventory(request: Request):
         return json_response(dict(inventory=_inventory_by_slug(slug)))
     results = _lean_inventories()
     return json_response(dict(results=results, total=len(results)))
-
-
-@ai_bp.get('/inventories/<slug:str>')
-@openapi.definition(
-    summary='Get one inventory',
-    description='Get one inventory in full (its fields and every item) by its slug.',
-)
-@openapi.operation('get_inventory_items')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_inventory_items(_: Request, slug: str):
-    return json_response(dict(inventory=_inventory_by_slug(slug)))
 
 
 # ---------------------------------------------------------------------------
@@ -696,9 +483,8 @@ async def get_map_overview(request: Request):
 @ai_bp.get('/map/search')
 @openapi.definition(
     summary='Search places on the map',
-    description='Find towns, cities, and landmarks by name in the downloaded maps\' place index. Each result'
-                ' has coordinates and a WROLPi map link. Pass lat and lon to rank nearest first. Results are'
-                ' empty when no map has a search index (see get_map_overview).',
+    description='Find towns, cities, and landmarks by name in the downloaded maps. Each result has coordinates'
+                ' and a map link. Pass lat and lon to rank nearest first.',
 )
 @openapi.operation('search_places')
 @openapi.parameter('q', str, 'query')
@@ -728,50 +514,6 @@ async def search_places(request: Request):
         link=_map_link(i.get('lat'), i.get('lon')),
     ).items() if v is not None} for i in data.get('results') or []]
     return json_response(dict(results=results, total=data.get('total', len(results))))
-
-
-@ai_bp.post('/search/suggestions')
-@openapi.definition(
-    summary='Preview what a search would find',
-    description='Before searching, learn which channels, domains (archived sites), authors, and subjects match'
-                ' a term, and how many files and Zim entries a search would return. Use the channel id with'
-                ' search_videos, the domain name with search_archives, the author/subject with search_docs.'
-                ' tag_names narrows the file estimate to tagged items.',
-    body=schema.AISearchSuggestionsRequest,
-)
-@openapi.operation('search_suggestions')
-@validate(schema.AISearchSuggestionsRequest)
-async def search_suggestions(request: Request, body: schema.AISearchSuggestionsRequest):
-    if not body.search_str and not body.tag_names:
-        raise ValidationError('search_str or tag_names is required')
-    session = request.ctx.session
-    search_str = body.search_str or ''
-
-    channels = await search_channels_by_name(session, search_str, order_by_video_count=True)
-    domains = await search_domains_by_name(session, search_str)
-    authors = await search_authors_by_name(session, search_str)
-    subjects = await search_subjects_by_name(session, search_str)
-
-    counts = await search_file_suggestion_count(body.search_str, body.tag_names, [])
-    zims = []
-    if body.search_str:
-        def estimate():
-            with_counts = Zims.estimate(session, body.search_str)
-            return [dict(id=zim.id, title=lib.zim_metadata_dict(zim.zim_metadata).get('title') or zim.path.name,
-                         estimate=count) for zim, count in with_counts.items()]
-
-        try:
-            zims = await asyncio.to_thread(estimate)
-        except Exception as e:
-            logger.debug('AI suggestions could not estimate Zims', exc_info=e)
-
-    return json_response(dict(
-        channels=[dict(id=i.id, name=i.name, link=f'/videos/channel/{i.id}/video') for i in channels],
-        domains=[dict(id=i['id'], name=i['domain']) for i in domains],
-        authors=authors,
-        subjects=subjects,
-        estimates=dict(file_groups=counts['file_groups'], file_groups_deep=counts['file_groups_deep'], zims=zims),
-    ))
 
 
 # ---------------------------------------------------------------------------
@@ -835,12 +577,10 @@ async def _resolve_channel_id(session, channel: str) -> Optional[int]:
 @ai_bp.post('/files/search')
 @openapi.definition(
     summary='Search the library',
-    description='Search videos, archived web pages, and documents/ebooks by title and content. Omit search_str to'
-                ' browse the newest items. kind narrows to video, archive, or doc. channel (a channel name from'
-                ' the library list, or its id) applies to videos; domain (a site name) to archives; author and'
-                ' subject to documents; a filter for another kind is ignored. Results carry an id for get_file'
-                ' and read_content, and a WROLPi link. matches lists channels/domains/authors whose names fit'
-                ' the term: use one to narrow when total is large.',
+    description='Search videos, archived web pages, and documents by title and content; omit search_str to'
+                ' browse the newest. kind: video, archive, or doc. channel (name or id) is for videos, domain for'
+                ' archives, author/subject for docs. Each result has an id for get_file/read_content and a link.'
+                ' matches names channels/domains/authors that fit the term: narrow with one when total is large.',
     body=schema.AIFileSearchRequest,
 )
 @openapi.operation('search_files')
@@ -917,9 +657,8 @@ async def search_files_endpoint(request: Request, body: schema.AIFileSearchReque
 @ai_bp.get('/files/<file_group_id:int>')
 @openapi.definition(
     summary='Get one file',
-    description='Details of one item by the id from search results, whatever its kind: title, link, date,'
-                ' channel or author, tags, size, full description; for videos whether captions and comments'
-                ' exist; for archived pages the source URL and earlier snapshots.',
+    description='Details of one item by its id, any kind: title, link, date, channel/author, tags, size, full'
+                ' description; videos say whether captions/comments exist; archives include earlier snapshots.',
 )
 @openapi.operation('get_file')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
@@ -943,9 +682,8 @@ CONTENT_PARTS = ('text', 'comments')
 @ai_bp.get('/files/<file_group_id:int>/content')
 @openapi.definition(
     summary='Read a file\'s content',
-    description='Read what an item says, by its id: part=text gives a video\'s timestamped captions or an'
-                ' archived page\'s plain text; part=comments gives a video\'s downloaded comments. Long content'
-                ' is paged: request again with offset=next_offset to continue.',
+    description='Read an item by its id: part=text is a video\'s captions or an archived page\'s text;'
+                ' part=comments is a video\'s comments. Paged: request again with offset=next_offset.',
 )
 @openapi.operation('read_content')
 @openapi.parameter('part', str, 'query')
@@ -1063,11 +801,9 @@ def _resolve_media_path(relative: str | None, verb: str) -> pathlib.Path:
 @ai_bp.get('/files/list')
 @openapi.definition(
     summary='List a directory',
-    description='List the directories and files directly inside one directory of the media directory, by its'
-                ' relative path (omit path for the top level). Directories come first, then files, each with its'
-                ' relative path to pass to list_files or read_file. Big directories are paged: request again'
-                ' with offset=next_offset to continue. Use search when looking for content by topic; use this'
-                ' when the user asks what is in a folder or how files are organized.',
+    description='List one directory of the media directory by relative path (omit for the top level):'
+                ' directories first, then files, each with a path for list_files or read_file. Paged by offset.'
+                ' For "what is in this folder"; use search_files for content by topic.',
 )
 @openapi.operation('list_files')
 @openapi.parameter('path', str, 'query')
@@ -1120,9 +856,8 @@ async def list_files(request: Request):
 @ai_bp.get('/files/read')
 @openapi.definition(
     summary='Read a text file',
-    description='Read a plain-text file from the media directory by its relative path (from search result'
-                ' links, collection directories, or list_files). Only text files can be read. Long files are'
-                ' paged: request again with offset=next_offset to continue reading.',
+    description='Read a plain-text file from the media directory by its relative path (from list_files).'
+                ' Text files only. Paged: request again with offset=next_offset.',
 )
 @openapi.operation('read_file')
 @openapi.parameter('path', str, 'query')

@@ -40,9 +40,11 @@ async def test_ai_zims(async_client, test_session, test_zim):
 
 
 @pytest.mark.asyncio
-async def test_ai_list_collections(async_client, test_session, archive_factory):
-    """Collections can be listed and filtered by kind."""
+async def test_ai_list_collections(async_client, test_session, archive_factory, channel_factory):
+    """Collections are listed paged, filtered by kind, and searchable by name."""
     archive_factory(domain='example.com', title='a page', contents='contents')
+    for name in ('Alpha Cooking', 'Beta Cooking', 'Gamma Woodwork'):
+        channel_factory(name=name)
     test_session.commit()
 
     request, response = await async_client.get('/api/ai/collections?kind=domain')
@@ -50,10 +52,21 @@ async def test_ai_list_collections(async_client, test_session, archive_factory):
     assert response.json['total'] == 1
     assert response.json['results'][0]['name'] == 'example.com'
     assert response.json['results'][0]['kind'] == 'domain'
+    assert response.json['next_offset'] is None
 
-    request, response = await async_client.get('/api/ai/collections?kind=channel')
+    # Paged, with the full total so the model knows how many there are.
+    request, response = await async_client.get('/api/ai/collections?kind=channel&limit=2')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['total'] == 0
+    assert response.json['total'] == 3 and len(response.json['results']) == 2
+    assert response.json['next_offset'] == 2
+    request, response = await async_client.get('/api/ai/collections?kind=channel&limit=2&offset=2')
+    assert [i['name'] for i in response.json['results']] == ['Gamma Woodwork']
+    assert response.json['next_offset'] is None
+
+    # Name search.
+    request, response = await async_client.get('/api/ai/collections?search_str=cooking')
+    assert response.status_code == HTTPStatus.OK
+    assert sorted(i['name'] for i in response.json['results']) == ['Alpha Cooking', 'Beta Cooking']
 
 
 @pytest.mark.asyncio

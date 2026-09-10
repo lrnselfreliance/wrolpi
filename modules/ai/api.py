@@ -137,17 +137,26 @@ async def get_zim_entry(request: Request, zim_id: int):
 @ai_bp.get('/collections')
 @openapi.definition(
     summary='List collections',
-    description='List collections in the library. Filter with kind: "channel" (video channels), "domain"'
-                ' (archived websites), or "playlist". Use a channel\'s name or id, or a domain\'s name, as the'
-                ' channel or domain filter of search_files.',
+    description='List collections in the library, paged. Filter with kind: "channel" (video channels),'
+                ' "domain" (archived websites), or "playlist"; search_str matches names. Use a channel\'s'
+                ' name or id, or a domain\'s name, as the channel or domain filter of search_files.',
 )
 @openapi.operation('list_collections')
 @openapi.parameter('kind', str, 'query')
+@openapi.parameter('search_str', str, 'query')
+@openapi.parameter('limit', int, 'query')
+@openapi.parameter('offset', int, 'query')
 async def list_collections(request: Request):
     kind = request.args.get('kind')
-    collections = search_collections(request.ctx.session, kind=kind)
+    search_str = request.args.get('search_str') or None
+    try:
+        limit = ai_limiter(int(request.args.get('limit', 0)) or None)
+    except ValueError:
+        raise ValidationError('limit must be an integer')
+    offset = _offset(request)
+    collections = search_collections(request.ctx.session, kind=kind, search_str=search_str)
     results = []
-    for collection in collections:
+    for collection in collections[offset:offset + limit]:
         # Channels have a browsable page; a real link stops the model inventing one.
         link = f"/videos/channel/{collection['id']}/video" if collection.get('kind') == 'channel' else None
         results.append({k: v for k, v in dict(
@@ -157,7 +166,8 @@ async def list_collections(request: Request):
             directory=collection.get('directory'),
             link=link,
         ).items() if v is not None})
-    return json_response(dict(results=results, total=len(results)))
+    next_offset = offset + limit if offset + limit < len(collections) else None
+    return json_response(dict(results=results, total=len(collections), next_offset=next_offset))
 
 
 def _lean_inventories() -> list:

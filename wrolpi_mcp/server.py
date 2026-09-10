@@ -276,13 +276,25 @@ async def read_content(file_group_id: int, part: str = "text") -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool(annotations={"readOnlyHint": True})
-async def list_collections(kind: str | None = None) -> str:
-    """List all collections (channels, domains, etc.) in the library.
+async def list_collections(
+    kind: str | None = None,
+    query: str | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> str:
+    """List collections (video channels, archived domains, playlists) in the library, paged.
 
     Args:
-        kind: Filter by collection kind: "channel", "domain", or None for all.
+        kind: Filter by collection kind: "channel", "domain", "playlist", or None for all.
+        query: Match collection names containing this text.
+        limit: Maximum results.
+        offset: Pagination offset (from a previous listing's "next offset").
     """
-    params = {"kind": kind} if kind else None
+    params = {"limit": limit, "offset": offset}
+    if kind:
+        params["kind"] = kind
+    if query:
+        params["search_str"] = query
     data = await api_get("/api/ai/collections", params=params)
     collections = data.get("results") or []
     if not collections:
@@ -294,6 +306,8 @@ async def list_collections(kind: str | None = None) -> str:
             parts.append(f"  Directory: {collection['directory']}")
         lines.append("\n".join(parts))
     lines.append(f"\nTotal: {data.get('total', len(collections))}")
+    if (next_offset := data.get("next_offset")) is not None:
+        lines.append(f"More available: call list_collections again with offset={next_offset}")
     return "\n\n".join(lines)
 
 

@@ -73,18 +73,43 @@ def wrolpi_link(fg: dict) -> Optional[str]:
 
 
 def _truncate(text: Optional[str], length: int) -> Optional[str]:
-    if text and len(text) > length:
-        return text[:length] + '…'
-    return text
+    if not text:
+        return None
+    return text if len(text) <= length else text[:length] + '…'
+
+
+def format_duration(seconds) -> Optional[str]:
+    """Seconds as H:MM:SS (or M:SS), which a model reads more reliably than raw seconds."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        return None
+    if seconds < 0:
+        return None
+    hours, rest = divmod(seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f'{hours}:{minutes:02d}:{secs:02d}' if hours else f'{minutes}:{secs:02d}'
+
+
+def format_date(value) -> Optional[str]:
+    """Only the date of a datetime (or ISO string); the time of day is noise for the model."""
+    if not value:
+        return None
+    if hasattr(value, 'date'):
+        return value.date().isoformat()
+    return str(value)[:10]
 
 
 def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LENGTH,
-                      include_url: bool = False) -> dict:
+                      include_url: bool = False, detail: bool = False) -> dict:
     """Format a FileGroup JSON dict into the lean, flat shape the model consumes.
 
-    Empty fields are omitted so results stay compact on small contexts.  The source URL is
-    omitted unless requested (archive detail): given both, small models present the familiar
-    external URL instead of the WROLPi link.
+    Listings (detail=False) carry only what the model needs to choose an item: id, kind, title,
+    link, date, channel/author, duration, tags, and the search headline.  Details (detail=True)
+    add size, mimetype, and the longer description.  Everything the model can derive from the id
+    (captions/text endpoints) is left out.  Empty fields are omitted so results stay compact on
+    small contexts.  The source URL is omitted unless requested (archive detail): given both,
+    small models present the familiar external URL instead of the WROLPi link.
     """
     kind = file_group_kind(fg)
     result = dict(
@@ -92,13 +117,14 @@ def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LE
         kind=kind,
         title=fg.get('title') or fg.get('name'),
         link=wrolpi_link(fg),
-        mimetype=fg.get('mimetype'),
-        size=fg.get('size'),
-        published=fg.get('published_datetime'),
+        published=format_date(fg.get('published_datetime')),
         author=fg.get('author'),
         tags=fg.get('tags') or None,
         url=fg.get('url') if include_url else None,
     )
+    if detail:
+        result['mimetype'] = fg.get('mimetype')
+        result['size'] = fg.get('size')
 
     # FTS headline (content match context), if the search requested headlines.
     headline = fg.get('d_headline') or fg.get('b_headline') or fg.get('c_headline')
@@ -107,8 +133,7 @@ def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LE
 
     video = fg.get('video')
     if kind == 'video':
-        result['duration'] = fg.get('length')
-        result['captions_link'] = f'/api/ai/videos/{fg["id"]}/captions' if fg.get('id') else None
+        result['duration'] = format_duration(fg.get('length'))
         if isinstance(video, dict):
             channel = video.get('channel')
             if isinstance(channel, dict):
@@ -116,9 +141,6 @@ def format_file_group(fg: dict, description_length: int = LISTING_DESCRIPTION_LE
             elif video.get('channel_id'):
                 result['channel_id'] = video['channel_id']
             result['description'] = _truncate(video.get('description'), description_length)
-
-    if kind == 'archive' and fg.get('id'):
-        result['text_link'] = f'/api/ai/archives/{fg["id"]}/text'
 
     if kind == 'doc':
         doc = fg.get('doc') or {}

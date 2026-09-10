@@ -62,6 +62,12 @@ def build_library_context() -> str:
         lines.append(f'- {_capped_names(zim_titles, "Zim encyclopedias")}')
 
     try:
+        from wrolpi import tags
+        lines.append(f'- {_capped_names([i["name"] for i in tags.get_tags()], "Tags")}')
+    except Exception as e:
+        logger.debug('Library context could not list tags', exc_info=e)
+
+    try:
         from modules.inventory.common import get_inventory_configs
         inventories = [i.get('name') for i in get_inventory_configs().all_inventories()]
         lines.append(f'- {_capped_names(inventories, "Inventories")}')

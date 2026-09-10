@@ -89,3 +89,16 @@ class AIListFilesResponse:
 class AISearchSuggestionsRequest:
     search_str: Optional[str] = None
     tag_names: List[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class AIFileSearchRequest:
+    search_str: Optional[str] = None
+    kind: Optional[str] = None
+    channel: Optional[str] = None
+    domain: Optional[str] = None
+    author: Optional[str] = None
+    subject: Optional[str] = None
+    tag_names: Optional[List[str]] = None
+    limit: int = 5
+    offset: int = 0

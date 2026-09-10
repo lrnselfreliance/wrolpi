@@ -9,10 +9,11 @@ from modules.ai import context
 
 @pytest.mark.asyncio
 async def test_build_library_context(async_client, test_session, video_factory, archive_factory,
-                                     test_zim, food_inventory_factory):
+                                     test_zim, food_inventory_factory, tag_factory):
     """The map carries today's date, counts, and exact names."""
     from wrolpi.collections.models import Collection
     test_session.add(Collection(name='Talking Sasquach', kind='channel'))
+    await tag_factory('Food Preservation')
     video_factory(title='a video')
     archive_factory(domain='example.com', title='a page', contents='contents')
     food_inventory_factory(name='Pantry')
@@ -25,6 +26,7 @@ async def test_build_library_context(async_client, test_session, video_factory, 
     assert 'example.com' in text
     assert 'WROLPi example ZIM' in text
     assert 'Pantry' in text
+    assert 'Tags (1): Food Preservation' in text
     assert 'user spellings may differ' in text
 
 

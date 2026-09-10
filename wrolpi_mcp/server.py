@@ -44,6 +44,8 @@ _FIELD_LABELS = (
     ('duration', 'Duration'),
     ('published', 'Published'),
     ('channel', 'Channel'),
+    ('has_captions', 'Has captions'),
+    ('has_comments', 'Has comments'),
     ('author', 'Author'),
     ('subject', 'Subject'),
     ('language', 'Language'),
@@ -54,9 +56,9 @@ _FIELD_LABELS = (
 )
 
 _KIND_HINTS = {
-    'video': 'use this for get_video, get_video_captions, get_video_comments',
-    'archive': 'use this for get_archive, get_archive_text',
-    'doc': 'use this for get_doc',
+    'video': 'use this for get_file, read_content (captions/comments)',
+    'archive': 'use this for get_file, read_content (page text)',
+    'doc': 'use this for get_file',
 }
 
 
@@ -84,6 +86,10 @@ def _render_result(item: dict) -> str:
             parts.append(f'{label}: {value}')
     if tags := item.get('tags'):
         parts.append(f'Tags: {", ".join(map(str, tags))}')
+    if history := item.get('history'):
+        parts.append(f'Earlier snapshots ({len(history)}):')
+        for snapshot in history:
+            parts.append(f'  - {snapshot.get("title", "Untitled")} (ID: {snapshot.get("id")}, {snapshot.get("published", "?")})')
     return '\n'.join(parts)
 
 
@@ -95,6 +101,13 @@ def _render_results(data: dict) -> str:
     text = '\n\n'.join(sections)
     if (total := data.get('total')) is not None:
         text += f'\n\nTotal matching: {total}'
+    if matches := data.get('matches'):
+        text += '\n\nNames matching the term (use to narrow the search):'
+        for channel in matches.get('channels') or []:
+            text += f"\n  channel: {channel.get('name')} (ID: {channel.get('id')})"
+        for group in ('domains', 'authors', 'subjects'):
+            for item in matches.get(group) or []:
+                text += f"\n  {group[:-1]}: {item.get('name')}"
     return text
 
 
@@ -165,11 +178,14 @@ async def search(
         tag_names: Filter by tag names.
     """
     body = {"search_str": query, "limit": limit, "offset": offset}
-    if mimetypes:
-        body["mimetypes"] = mimetypes
     if tag_names:
         body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/search", json=body))
+    # mimetypes are no longer a filter; a kind is.  Map the common prefixes.
+    if mimetypes:
+        kinds = {("video" if m.startswith("video/") else "archive" if m == "text/html" else "doc") for m in mimetypes}
+        if len(kinds) == 1:
+            body["kind"] = kinds.pop()
+    return _render_results(await api_post("/api/ai/files/search", json=body))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -189,12 +205,12 @@ async def search_videos(
         channel_id: Filter to a specific channel by ID.
         tag_names: Filter by tag names.
     """
-    body = {"search_str": query, "limit": limit, "offset": offset}
+    body = {"search_str": query, "limit": limit, "offset": offset, "kind": "video"}
     if channel_id is not None:
-        body["channel_id"] = channel_id
+        body["channel"] = str(channel_id)
     if tag_names:
         body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/videos/search", json=body))
+    return _render_results(await api_post("/api/ai/files/search", json=body))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -214,12 +230,12 @@ async def search_archives(
         domain: Filter to a specific domain (e.g. "example.com").
         tag_names: Filter by tag names.
     """
-    body = {"search_str": query, "limit": limit, "offset": offset}
+    body = {"search_str": query, "limit": limit, "offset": offset, "kind": "archive"}
     if domain:
         body["domain"] = domain
     if tag_names:
         body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/archives/search", json=body))
+    return _render_results(await api_post("/api/ai/files/search", json=body))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -247,20 +263,17 @@ async def search_docs(
         offset: Pagination offset.
         tag_names: Filter by tag names.
     """
-    body = {"limit": limit, "offset": offset}
+    body = {"limit": limit, "offset": offset, "kind": "doc"}
     if query:
         body["search_str"] = query
     if author:
         body["author"] = author
     if subject:
         body["subject"] = subject
-    if language:
-        body["language"] = language
-    if mimetype:
-        body["mimetype"] = mimetype
     if tag_names:
         body["tag_names"] = tag_names
-    return _render_results(await api_post("/api/ai/docs/search", json=body))
+    # language and mimetype are accepted for compatibility; the consolidated search does not filter on them.
+    return _render_results(await api_post("/api/ai/files/search", json=body))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -270,7 +283,7 @@ async def get_doc(file_group_id: int) -> str:
     Args:
         file_group_id: The top-level ID from search results (this is the FileGroup ID).
     """
-    return _render_result(await api_get(f"/api/ai/docs/{file_group_id}"))
+    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -331,7 +344,7 @@ async def get_video(file_group_id: int) -> str:
     Args:
         file_group_id: The FileGroup ID from search results.
     """
-    return _render_result(await api_get(f"/api/ai/videos/{file_group_id}"))
+    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -341,7 +354,7 @@ async def get_video_captions(file_group_id: int) -> str:
     Args:
         file_group_id: The FileGroup ID from search results.
     """
-    text = await _read_paged(f"/api/ai/videos/{file_group_id}/captions")
+    text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "text"})
     return text or "No captions available for this video."
 
 
@@ -352,7 +365,7 @@ async def get_video_comments(file_group_id: int) -> str:
     Args:
         file_group_id: The FileGroup ID from search results.
     """
-    text = await _read_paged(f"/api/ai/videos/{file_group_id}/comments")
+    text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "comments"})
     return text or "No comments available for this video."
 
 
@@ -363,13 +376,7 @@ async def get_archive(file_group_id: int) -> str:
     Args:
         file_group_id: The FileGroup ID from search results.
     """
-    data = await api_get(f"/api/ai/archives/{file_group_id}")
-    parts = [_render_result(data)]
-    if history := data.get("history"):
-        parts.append(f"\nArchive history ({len(history)} snapshots):")
-        for snapshot in history:
-            parts.append(f"  - {snapshot.get('title', 'Untitled')} (ID: {snapshot.get('id')})")
-    return "\n".join(parts)
+    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
@@ -382,7 +389,7 @@ async def get_archive_text(file_group_id: int) -> str:
         file_group_id: The FileGroup ID from search results.
     """
     try:
-        text = await _read_paged(f"/api/ai/archives/{file_group_id}/text")
+        text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": "text"})
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             return f"Could not retrieve text content for archive {file_group_id}. Try get_archive for metadata."
@@ -413,6 +420,65 @@ async def get_zim_entry(zim_id: int, entry_path: str) -> str:
                                   max_chars=MAX_CONTENT_CHARS - len(text))
     link = _link(first.get("link"))
     return f"LINK: {link}\n\n{text}"
+
+
+# ---------------------------------------------------------------------------
+# Kind-generic tools (the compact set the built-in assistant uses)
+# ---------------------------------------------------------------------------
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def search_files(
+    query: str | None = None,
+    kind: str | None = None,
+    channel: str | None = None,
+    domain: str | None = None,
+    author: str | None = None,
+    subject: str | None = None,
+    tag_names: list[str] | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> str:
+    """Search the whole library (videos, archived web pages, documents/ebooks) in one call.
+
+    Args:
+        query: Text to search for in titles and content.  Omit to browse the newest items.
+        kind: Narrow to "video", "archive", or "doc".
+        channel: A video channel name (or id); implies kind=video.
+        domain: An archived site name, e.g. "example.com"; implies kind=archive.
+        author: Document author (partial match); implies kind=doc.
+        subject: Document subject (partial match); implies kind=doc.
+        tag_names: Only items with these tags.
+        limit: Maximum results.
+        offset: Pagination offset.
+    """
+    body = {k: v for k, v in dict(search_str=query, kind=kind, channel=channel, domain=domain, author=author,
+                                  subject=subject, tag_names=tag_names, limit=limit, offset=offset).items()
+            if v not in (None, [], "")}
+    return _render_results(await api_post("/api/ai/files/search", json=body))
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_file(file_group_id: int) -> str:
+    """Get details about one item of any kind (video, archived page, document) by its ID from search results."""
+    return _render_result(await api_get(f"/api/ai/files/{file_group_id}"))
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def read_content(file_group_id: int, part: str = "text") -> str:
+    """Read what an item says: a video's captions or an archived page's text (part="text"), or a video's
+    comments (part="comments").
+
+    Args:
+        file_group_id: The ID from search results.
+        part: "text" (default) or "comments".
+    """
+    try:
+        text = await _read_paged(f"/api/ai/files/{file_group_id}/content", params={"part": part})
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return f"No {part} available for item {file_group_id}. Try get_file for its details."
+        raise
+    return text or f"No {part} available for item {file_group_id}."
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +755,7 @@ async def get_inventory_items(inventory_slug: str) -> str:
     Args:
         inventory_slug: The inventory slug (from get_inventory results).
     """
-    data = await api_get(f"/api/ai/inventories/{inventory_slug}")
+    data = await api_get("/api/ai/inventories", params={"slug": inventory_slug})
     return json.dumps(data, indent=2, default=str)
 
 

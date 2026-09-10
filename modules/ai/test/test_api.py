@@ -57,7 +57,7 @@ async def test_ai_search_videos(async_client, test_session, video_factory):
     result = response.json['results'][0]
     assert result['kind'] == 'video'
     assert result['link'] == f'/videos/{result["id"]}'
-    assert result['captions_link'] == f'/api/ai/videos/{result["id"]}/captions'
+    assert 'captions_link' not in result  # derivable from the id; kept out of listings
 
 
 @pytest.mark.asyncio
@@ -113,7 +113,7 @@ async def test_ai_search_archives(async_client, test_session, archive_factory):
     assert response.json['total'] == 1
     result = response.json['results'][0]
     assert result['kind'] == 'archive'
-    assert result['text_link'] == f'/api/ai/archives/{result["id"]}/text'
+    assert 'text_link' not in result  # derivable from the id; kept out of listings
 
 
 @pytest.mark.asyncio
@@ -519,3 +519,176 @@ def test_ai_format_download_error_tail():
     assert formatted['error'].endswith('ValueError: the real reason')
     assert len(formatted['error']) == DOWNLOAD_ERROR_LENGTH + 1
     assert 'error' not in _format_download(dict(id=2, url='https://example.com', status='new', error=None))
+
+
+# ---------------------------------------------------------------------------
+# Consolidated, kind-generic endpoints for small models.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_ai_search_files_kinds(async_client, test_session, video_factory, archive_factory, channel_factory):
+    """One search covers every kind; kind narrows it; channel accepts a name or an id."""
+    channel = channel_factory(name='Wild Cooking')
+    video_factory(channel_id=channel.id, title='cooking rice')
+    video_factory(title='cooking beans video')
+    archive_factory(domain='cooking.example.com', title='cooking beans', contents='beans')
+    test_session.commit()
+
+    async def search(**body):
+        request, response = await async_client.post('/api/ai/files/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        return response.json
+
+    data = await search(search_str='cooking')
+    assert data['total'] == 3
+    assert {i['kind'] for i in data['results']} == {'video', 'archive'}
+    # The matching channel and domain are offered so the model can narrow without another tool.
+    assert [i['name'] for i in data['matches']['channels']] == ['Wild Cooking']
+    assert data['matches']['channels'][0]['id'] == channel.id
+    assert [i['name'] for i in data['matches']['domains']] == ['cooking.example.com']
+
+    data = await search(search_str='cooking', kind='video')
+    assert data['total'] == 2 and all(i['kind'] == 'video' for i in data['results'])
+
+    data = await search(search_str='cooking', kind='archive')
+    assert data['total'] == 1 and data['results'][0]['kind'] == 'archive'
+
+    # channel by exact name, partial name, and numeric id; channel implies kind=video.
+    for channel_ref in ('Wild Cooking', 'wild', str(channel.id)):
+        data = await search(search_str='cooking', channel=channel_ref)
+        assert data['total'] == 1, channel_ref
+        assert data['results'][0]['title'] == 'cooking rice'
+        assert 'matches' not in data  # already narrowed to one channel
+
+    # domain implies kind=archive.
+    data = await search(domain='cooking.example.com')
+    assert data['total'] == 1 and data['results'][0]['kind'] == 'archive'
+
+    # A filter that does not apply to the kind is ignored, not fatal.
+    data = await search(search_str='cooking', kind='archive', channel='Wild Cooking')
+    assert data['total'] == 1 and data['results'][0]['kind'] == 'archive'
+
+    # An unknown channel name gives no results and a hint, not an error.
+    data = await search(search_str='cooking', channel='No Such Channel')
+    assert data['total'] == 0 and data['results'] == []
+    assert 'channel' in data['hint'].lower()
+
+    # Listings are slim: ids, titles, links, kind; no links the model can derive.
+    result = data = (await search(search_str='cooking', kind='video'))['results'][0]
+    assert {'id', 'kind', 'title', 'link'} <= set(result)
+    assert 'captions_link' not in result and 'size' not in result and 'mimetype' not in result
+
+    # Something to search by is required.
+    request, response = await async_client.post('/api/ai/files/search', content=json.dumps({}))
+    assert response.status_code == HTTPStatus.OK  # browse newest
+    assert response.json['total'] == 3
+
+
+@pytest.mark.asyncio
+async def test_ai_search_files_docs(async_client, test_session, test_directory, example_epub, refresh_files):
+    """kind=doc searches documents; author/subject imply kind=doc."""
+    await refresh_files()
+    request, response = await async_client.post('/api/ai/files/search', content=json.dumps(dict(search_str='WROLPi', kind='doc')))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['total'] >= 1
+    doc = response.json['results'][0]
+    assert doc['kind'] == 'doc' and doc['link'] == f'/docs/{doc["id"]}'
+
+    # get_file returns the doc detail through the generic route.
+    request, response = await async_client.get(f'/api/ai/files/{doc["id"]}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['kind'] == 'doc' and response.json['id'] == doc['id']
+
+
+@pytest.mark.asyncio
+async def test_ai_get_file(async_client, test_session, video_factory, archive_factory, make_files_structure, tag_factory):
+    """get_file dispatches on the file's model and carries more than the listing row."""
+    tag = await tag_factory('food')
+    video = video_factory(title='wood stove install', with_caption_file=True)
+    video.file_group.add_tag(test_session, tag.id)
+    archive_factory(domain='example.com', url='https://example.com/a', title='first', contents='one')
+    archive = archive_factory(domain='example.com', url='https://example.com/a', title='second', contents='two')
+    test_session.commit()
+
+    request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['kind'] == 'video'
+    assert response.json['link'] == f'/videos/{video.file_group_id}'
+    assert response.json['has_captions'] is True
+    assert response.json['tags'] == ['food']
+    assert response.json['mimetype'].startswith('video/')
+    # Fetching does not mark the video viewed.
+    test_session.expire_all()
+    assert video.file_group.viewed is None
+
+    request, response = await async_client.get(f'/api/ai/files/{archive.file_group_id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['kind'] == 'archive'
+    assert response.json['url'] == 'https://example.com/a'
+    assert [i['title'] for i in response.json['history']] == ['first']
+
+    # A plain file (no model) still resolves with a media link.
+    from wrolpi.files.lib import upsert_file
+    path, = make_files_structure({'photos/a.png': 'not really a png'})
+    fg = await upsert_file(path)
+    request, response = await async_client.get(f'/api/ai/files/{fg.id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['link'] == '/media/photos/a.png'
+
+    request, response = await async_client.get('/api/ai/files/123456')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_ai_read_content(async_client, test_session, video_factory, archive_factory):
+    """read_content serves captions/comments for videos and text for archives, paged."""
+    info_json = dict(duration=5, comments=[dict(author='alice', text='great video')])
+    video = video_factory(title='captioned', with_caption_file=True, with_info_json=info_json)
+    contents = 'word ' * 2_000
+    archive = archive_factory(domain='example.com', title='long read', contents=contents)
+    test_session.commit()
+
+    request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['content'].startswith('[00:00:0')
+
+    request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content?part=comments')
+    assert response.status_code == HTTPStatus.OK
+    assert 'alice: great video' in response.json['content']
+
+    request, response = await async_client.get(f'/api/ai/files/{archive.file_group_id}/content')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['content']) == lib.PAGE_SIZE
+    assert response.json['next_offset'] == lib.PAGE_SIZE
+    request, response = await async_client.get(
+        f'/api/ai/files/{archive.file_group_id}/content?offset={response.json["next_offset"]}')
+    assert response.json['content'] == contents[lib.PAGE_SIZE:2 * lib.PAGE_SIZE]
+
+    # An archive has no comments; the error says what the file is.
+    request, response = await async_client.get(f'/api/ai/files/{archive.file_group_id}/content?part=comments')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert 'archive' in response.json['error'].lower()
+
+    request, response = await async_client.get(f'/api/ai/files/{video.file_group_id}/content?part=bogus')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    request, response = await async_client.get('/api/ai/files/123456/content')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_ai_get_inventory_optional_slug(async_client, food_inventory_factory):
+    """Without a slug the inventories are listed lean; with one, the inventory is returned in full."""
+    slug = food_inventory_factory(items=[dict(name='rice', count=2)])
+
+    request, response = await async_client.get('/api/ai/inventories')
+    assert response.status_code == HTTPStatus.OK
+    lean = next(i for i in response.json['results'] if i['slug'] == slug)
+    assert lean['item_count'] == 1 and 'items' not in lean
+
+    request, response = await async_client.get(f'/api/ai/inventories?slug={slug}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['inventory']['items'][0]['name'] == 'rice'
+
+    request, response = await async_client.get('/api/ai/inventories?slug=no-such-inventory')
+    assert response.status_code == HTTPStatus.NOT_FOUND

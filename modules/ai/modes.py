@@ -56,7 +56,6 @@ MODES = {
             'search_zims',
             'get_zim_entry',
             'list_collections',
-            'list_inventories',
             'get_inventory',
             'list_files',
             'read_file',

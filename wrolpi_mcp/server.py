@@ -442,6 +442,40 @@ async def list_collections(kind: str | None = None) -> str:
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
+async def list_files(path: str = "", offset: int = 0) -> str:
+    """List the directories and files inside one directory of the WROLPi media directory.
+
+    Use this to explore how the library is organized on disk (e.g. "videos/", "archive/", a channel's
+    directory).  Directories are listed first, then files.  Every entry's relative path can be passed
+    back to list_files to descend.  Large directories are paged; call again with the returned offset.
+
+    Args:
+        path: Directory relative to the media directory (e.g. "videos/SomeChannel").  Empty for the top level.
+        offset: Number of entries to skip (from a previous listing's "next offset").
+    """
+    try:
+        data = await api_get("/api/ai/files/list", params={"path": path, "offset": offset})
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return f"No such directory: {path or '/'}"
+        raise
+    lines = [f"Directory: {data.get('path') or '/'}"]
+    for directory in data.get("directories") or []:
+        lines.append(f"  [dir]  {directory['path']}")
+    for file in data.get("files") or []:
+        size = file.get("size")
+        size_text = f"{size / (1024 * 1024):,.1f} MB" if size and size >= 1024 * 1024 else f"{size or 0:,} B"
+        mimetype = file.get("mimetype") or "unknown"
+        lines.append(f"  [file] {file['path']}  ({mimetype}, {size_text})")
+    if not (data.get("directories") or data.get("files")):
+        lines.append("  (empty)")
+    lines.append(f"\nTotal entries: {data.get('total', 0)}")
+    if (next_offset := data.get("next_offset")) is not None:
+        lines.append(f"More entries available: call list_files again with offset={next_offset}")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
 async def list_zim_files() -> str:
     """List all available Zim encyclopedias (Wikipedia, Wiktionary, etc.).
 

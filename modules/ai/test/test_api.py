@@ -306,3 +306,80 @@ async def test_ai_read_file_refuses_escapes(async_client, test_directory):
     (test_directory / 'config/wrolpi.yaml').write_text('secret: hunter2')
     request, response = await async_client.get('/api/ai/files/read?path=config/wrolpi.yaml')
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_ai_list_files(async_client, test_directory):
+    """Directories in the media directory can be listed: directories first, then files, both sorted."""
+    (test_directory / 'videos/channel').mkdir(parents=True)
+    (test_directory / 'videos/channel/b.mp4').write_bytes(b'x' * 10)
+    (test_directory / 'videos/channel/a.mp4').write_bytes(b'x' * 20)
+    (test_directory / 'videos/channel/a.en.vtt').write_text('WEBVTT')
+    (test_directory / 'videos/channel/.DS_Store').write_bytes(b'\x00')  # macOS junk is hidden
+    (test_directory / 'videos/other').mkdir()
+    (test_directory / 'notes.txt').write_text('hi')
+    (test_directory / 'lost+found').mkdir()  # hidden
+    (test_directory / 'config').mkdir(exist_ok=True)  # hidden: may hold secrets
+
+    # The root is listed when no path is given.
+    request, response = await async_client.get('/api/ai/files/list')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['path'] == ''
+    assert [i['path'] for i in response.json['directories']] == ['videos/']
+    assert [i['path'] for i in response.json['files']] == ['notes.txt']
+    assert response.json['total'] == 2
+    assert response.json['next_offset'] is None
+
+    request, response = await async_client.get('/api/ai/files/list?path=videos/channel')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['path'] == 'videos/channel/'
+    assert response.json['directories'] == []
+    assert [(i['path'], i['size']) for i in response.json['files']] == [
+        ('videos/channel/a.en.vtt', 6),
+        ('videos/channel/a.mp4', 20),
+        ('videos/channel/b.mp4', 10),
+    ]
+    assert response.json['files'][1]['mimetype'] == 'video/mp4'
+
+    # Trailing slashes and leading slashes are tolerated.
+    request, response = await async_client.get('/api/ai/files/list?path=/videos/')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == ['videos/channel/', 'videos/other/']
+    assert response.json['files'] == []
+
+    # Missing directory, and a file rather than a directory.
+    request, response = await async_client.get('/api/ai/files/list?path=nope')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    request, response = await async_client.get('/api/ai/files/list?path=notes.txt')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_ai_list_files_paged(async_client, test_directory):
+    """Big directories are paged so a single listing cannot blow the model's context."""
+    from modules.ai.api import LIST_PAGE_SIZE
+    (test_directory / 'big').mkdir()
+    for i in range(LIST_PAGE_SIZE + 5):
+        (test_directory / f'big/{i:04d}.txt').write_text('x')
+
+    request, response = await async_client.get('/api/ai/files/list?path=big')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['files']) == LIST_PAGE_SIZE
+    assert response.json['total'] == LIST_PAGE_SIZE + 5
+    assert response.json['next_offset'] == LIST_PAGE_SIZE
+
+    request, response = await async_client.get(f'/api/ai/files/list?path=big&offset={LIST_PAGE_SIZE}')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['name'] for i in response.json['files']] == [f'{i:04d}.txt' for i in range(LIST_PAGE_SIZE, LIST_PAGE_SIZE + 5)]
+    assert response.json['next_offset'] is None
+
+
+@pytest.mark.asyncio
+async def test_ai_list_files_refuses_escapes(async_client, test_directory):
+    """Listings outside the media directory, and inside the config directory, are refused."""
+    request, response = await async_client.get('/api/ai/files/list?path=../')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    (test_directory / 'config').mkdir(exist_ok=True)
+    request, response = await async_client.get('/api/ai/files/list?path=config')
+    assert response.status_code == HTTPStatus.BAD_REQUEST

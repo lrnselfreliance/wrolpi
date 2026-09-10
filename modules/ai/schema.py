@@ -74,3 +74,12 @@ class AIPagedTextResponse:
     content: str = ''
     next_offset: Optional[int] = None
     total_chars: int = 0
+
+
+@dataclasses.dataclass
+class AIListFilesResponse:
+    path: str = ''
+    directories: list = dataclasses.field(default_factory=list)
+    files: list = dataclasses.field(default_factory=list)
+    total: int = 0
+    next_offset: Optional[int] = None

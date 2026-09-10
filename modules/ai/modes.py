@@ -58,6 +58,7 @@ MODES = {
             'list_collections',
             'list_inventories',
             'get_inventory',
+            'list_files',
             'read_file',
         ),
     ),

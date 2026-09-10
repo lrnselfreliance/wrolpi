@@ -83,3 +83,9 @@ class AIListFilesResponse:
     files: list = dataclasses.field(default_factory=list)
     total: int = 0
     next_offset: Optional[int] = None
+
+
+@dataclasses.dataclass
+class AISearchSuggestionsRequest:
+    search_str: Optional[str] = None
+    tag_names: List[str] = dataclasses.field(default_factory=list)

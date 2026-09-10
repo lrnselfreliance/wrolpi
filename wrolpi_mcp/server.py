@@ -499,6 +499,164 @@ async def list_zim_files() -> str:
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
+async def list_tags() -> str:
+    """List every tag in the library with how many files, Zim entries, channels, and domains carry it.
+
+    Tag names can be passed as tag_names to the search tools.  Users tag what they care about, so this
+    is a good map of their interests.  Also returns the most recently used tag names.
+    """
+    data = await api_get("/api/ai/tags")
+    results = data.get("results") or []
+    if not results:
+        return "No tags found."
+    lines = []
+    for tag in results:
+        counts = ", ".join(f"{tag.get(k, 0)} {k.replace('_', ' ')}" for k in
+                           ("file_groups", "zim_entries", "channels", "domains") if tag.get(k))
+        lines.append(f"  {tag['name']}" + (f"  ({counts})" if counts else "  (unused)"))
+    text = f"Tags ({data.get('total', len(results))}):\n" + "\n".join(lines)
+    if recent := data.get("recent"):
+        text += f"\n\nRecently used: {', '.join(recent)}"
+    return text
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def search_suggestions(query: str, tag_names: list[str] | None = None) -> str:
+    """Preview what a search would find before running it.
+
+    Returns the channels, domains (archived sites), authors, and subjects whose names match the query,
+    and estimates of how many files and Zim entries the search would return.  Use the channel ID with
+    search_videos, the domain with search_archives, the author/subject with search_docs.
+
+    Args:
+        query: The term the user wants to search for.
+        tag_names: Narrow the file estimate to items with these tags.
+    """
+    body = {"search_str": query}
+    if tag_names:
+        body["tag_names"] = tag_names
+    data = await api_post("/api/ai/search/suggestions", json=body)
+    lines = []
+    for channel in data.get("channels") or []:
+        lines.append(f"  Channel: {channel['name']}  (ID: {channel['id']})  LINK: {_link(channel.get('link'))}")
+    for domain in data.get("domains") or []:
+        lines.append(f"  Domain: {domain['name']}")
+    for author in data.get("authors") or []:
+        lines.append(f"  Author: {author['name']}")
+    for subject in data.get("subjects") or []:
+        lines.append(f"  Subject: {subject['name']}")
+    if not lines:
+        lines.append("  No matching channels, domains, authors, or subjects.")
+    estimates = data.get("estimates") or {}
+    lines.append(f"\nEstimated matching files: {estimates.get('file_groups', 0)}"
+                 f" (deep content search: {estimates.get('file_groups_deep', 0)})")
+    for zim in estimates.get("zims") or []:
+        lines.append(f"  Zim '{zim.get('title')}' (ID {zim.get('id')}): ~{zim.get('estimate', 0)} entries")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_downloads(status: str | None = None, limit: int = DEFAULT_LIMIT) -> str:
+    """Read the WROLPi download queue: summary, recurring downloads (channels, feeds), and one-time downloads.
+
+    Use this when the user asks what is downloading, what failed and why, or what is scheduled.
+    Downloads cannot be started, stopped, or retried from here.
+
+    Args:
+        status: Only show downloads with this status: new, pending, failed, deferred, or complete.
+        limit: Maximum recurring and one-time downloads to show (each).
+    """
+    params = {"limit": limit}
+    if status:
+        params["status"] = status
+    data = await api_get("/api/ai/downloads", params=params)
+    summary = data.get("summary") or {}
+    lines = ["Summary: " + ", ".join(f"{k}={v}" for k, v in summary.items())]
+
+    def render(download: dict) -> str:
+        parts = [f"  [{download.get('status')}] {download.get('url')}  (ID: {download.get('id')},"
+                 f" {download.get('downloader')})"]
+        if download.get("frequency"):
+            parts.append(f"      every {download['frequency']}s, next: {download.get('next_download') or 'unscheduled'}")
+        if download.get("destination"):
+            parts.append(f"      destination: {download['destination']}")
+        if download.get("tag_names"):
+            parts.append(f"      tags: {', '.join(download['tag_names'])}")
+        if download.get("error"):
+            parts.append(f"      error: {download['error']}")
+        return "\n".join(parts)
+
+    recurring = data.get("recurring") or []
+    once = data.get("once") or []
+    lines.append(f"\nRecurring downloads ({len(recurring)} shown):")
+    lines.extend(render(i) for i in recurring) if recurring else lines.append("  none")
+    lines.append(f"\nOne-time downloads ({len(once)} shown, {data.get('pending_once', 0)} pending):")
+    lines.extend(render(i) for i in once) if once else lines.append("  none")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_map_overview() -> str:
+    """Describe the maps on this WROLPi: downloaded map regions, whether each has a place-search index,
+    subscribed regions, and the user's saved pins (with links)."""
+    data = await api_get("/api/ai/map")
+    lines = ["Map files:"]
+    files = data.get("files") or []
+    for file in files:
+        size_gb = (file.get("size") or 0) / (1024 ** 3)
+        index = "searchable" if file.get("has_search_index") else "no search index"
+        lines.append(f"  {file['name']}  ({size_gb:,.2f} GB, {index})")
+    if not files:
+        lines.append("  none")
+    subscriptions = data.get("subscriptions") or []
+    names = [i.get("name") or i.get("region") if isinstance(i, dict) else str(i) for i in subscriptions]
+    lines.append(f"\nSubscribed regions: {', '.join(names) if names else 'none'}")
+    lines.append("\nPins:")
+    pins = data.get("pins") or []
+    for pin in pins:
+        lines.append(f"  {pin.get('label') or 'Unlabeled'}  ({pin.get('lat')}, {pin.get('lon')})"
+                     f"  LINK: {_link(pin.get('link'))}")
+    if not pins:
+        lines.append("  none")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def search_places(
+    query: str,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> str:
+    """Find towns, cities, and landmarks by name in the downloaded maps.  Each result links to the WROLPi map.
+
+    Args:
+        query: Place name (prefix match), e.g. "Portland".
+        limit: Maximum results.
+        offset: Pagination offset.
+        lat: Latitude to rank nearby places first.
+        lon: Longitude to rank nearby places first.
+    """
+    params = {"q": query, "limit": limit, "offset": offset}
+    if lat is not None and lon is not None:
+        params.update(lat=lat, lon=lon)
+    data = await api_get("/api/ai/map/search", params=params)
+    results = data.get("results") or []
+    if not results:
+        return "No places found. The maps may have no search index (see get_map_overview)."
+    lines = []
+    for i, place in enumerate(results, 1):
+        detail = ", ".join(str(place[k]) for k in ("kind", "region") if place.get(k))
+        if place.get("population"):
+            detail += f", pop. {place['population']:,}"
+        lines.append(f"{i}. {place['name']}  ({detail})  at {place.get('lat')}, {place.get('lon')}"
+                     f"  LINK: {_link(place.get('link'))}")
+    lines.append(f"\nTotal matching: {data.get('total', len(results))}")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
 async def get_statistics() -> str:
     """Get an overview of what content is stored in the WROLPi library.
 

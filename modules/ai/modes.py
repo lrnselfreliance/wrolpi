@@ -60,6 +60,10 @@ MODES = {
             'get_inventory',
             'list_files',
             'read_file',
+            'list_tags',
+            'search_suggestions',
+            'get_map_overview',
+            'search_places',
         ),
     ),
     'system': dict(

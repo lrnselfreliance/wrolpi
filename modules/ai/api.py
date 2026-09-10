@@ -4,6 +4,8 @@ This blueprint IS the AI tool catalog: the agent loop generates its tool definit
 endpoints' OpenAPI operations, and the external MCP server proxies them.  Every endpoint is
 read-only; descriptions are written for the model, not for humans.
 """
+import mimetypes
+import pathlib
 from http import HTTPStatus
 
 from sanic import Blueprint, Request
@@ -22,7 +24,7 @@ from wrolpi.collections.lib import search_collections
 from wrolpi.common import api_param_limiter, get_media_directory, logger, wrol_mode_enabled
 from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile, ValidationError
-from wrolpi.files.lib import search_files
+from wrolpi.files.lib import search_files, HIDDEN_DIRECTORIES, HIDDEN_FILES
 from wrolpi.vars import DOCKERIZED, IS_RPI4
 from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
@@ -39,6 +41,8 @@ ai_limiter = api_param_limiter(25, default=5)
 
 # Refuse to serve files this large through the text reader; real content is paged anyway.
 MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024
+# Directory listings are paged by entry count so one big channel can't fill the model's context.
+LIST_PAGE_SIZE = 100
 
 
 def _offset(request: Request) -> int:
@@ -639,12 +643,82 @@ async def manage_settings(_: Request, body: schema.AIManageSettingsRequest):
     ))
 
 
+def _resolve_media_path(relative: str | None, verb: str) -> pathlib.Path:
+    """Resolve a relative path inside the media directory, refusing escapes and the config directory."""
+    media_directory = get_media_directory().resolve()
+    path = (media_directory / (relative or '').strip('/')).resolve()
+    if path != media_directory and not str(path).startswith(f'{media_directory}/'):
+        raise InvalidFile(f'Cannot {verb} outside the media directory')
+    # The config directory can contain secrets (Wi-Fi credentials, API keys); never serve it.
+    config_directory = media_directory / 'config'
+    if path == config_directory or str(path).startswith(f'{config_directory}/'):
+        raise InvalidFile(f'Cannot {verb} config files')
+    return path
+
+
+@ai_bp.get('/files/list')
+@openapi.definition(
+    summary='List a directory',
+    description='List the directories and files directly inside one directory of the media directory, by its'
+                ' relative path (omit path for the top level). Directories come first, then files, each with its'
+                ' relative path to pass to list_files or read_file. Big directories are paged: request again'
+                ' with offset=next_offset to continue. Use search when looking for content by topic; use this'
+                ' when the user asks what is in a folder or how files are organized.',
+)
+@openapi.operation('list_files')
+@openapi.parameter('path', str, 'query')
+@openapi.parameter('offset', int, 'query')
+@openapi.response(HTTPStatus.OK, schema.AIListFilesResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def list_files(request: Request):
+    relative = request.args.get('path') or ''
+    media_directory = get_media_directory().resolve()
+    directory = _resolve_media_path(relative, 'list')
+    if not directory.is_dir():
+        raise UnknownFile(f'No such directory: {relative}')
+
+    def relative_path(path: pathlib.Path) -> str:
+        rel = str(path.relative_to(media_directory))
+        return f'{rel}/' if path.is_dir() else rel
+
+    directories, files = [], []
+    for child in directory.iterdir():
+        if child.is_dir():
+            # The config directory is never served (see _resolve_media_path), so don't advertise it.
+            if child.name not in HIDDEN_DIRECTORIES and child != media_directory / 'config':
+                directories.append(child)
+        elif child.name not in HIDDEN_FILES:
+            files.append(child)
+    directories.sort(key=lambda i: i.name.lower())
+    files.sort(key=lambda i: i.name.lower())
+
+    entries = [dict(name=i.name, path=relative_path(i)) for i in directories]
+    for file in files:
+        try:
+            size = file.stat().st_size
+        except OSError:
+            size = None
+        entries.append(dict(name=file.name, path=relative_path(file), size=size,
+                            mimetype=mimetypes.guess_type(file.name)[0]))
+
+    offset = _offset(request)
+    page = entries[offset:offset + LIST_PAGE_SIZE]
+    next_offset = offset + LIST_PAGE_SIZE if offset + LIST_PAGE_SIZE < len(entries) else None
+    return json_response(dict(
+        path=relative_path(directory) if directory != media_directory else '',
+        directories=[i for i in page if 'size' not in i],
+        files=[i for i in page if 'size' in i],
+        total=len(entries),
+        next_offset=next_offset,
+    ))
+
+
 @ai_bp.get('/files/read')
 @openapi.definition(
     summary='Read a text file',
     description='Read a plain-text file from the media directory by its relative path (from search result'
-                ' links or collection directories). Only text files can be read. Long files are paged:'
-                ' request again with offset=next_offset to continue reading.',
+                ' links, collection directories, or list_files). Only text files can be read. Long files are'
+                ' paged: request again with offset=next_offset to continue reading.',
 )
 @openapi.operation('read_file')
 @openapi.parameter('path', str, 'query')
@@ -656,13 +730,7 @@ async def read_file(request: Request):
     if not relative:
         raise InvalidFile('path query parameter is required')
 
-    media_directory = get_media_directory().resolve()
-    path = (media_directory / relative.lstrip('/')).resolve()
-    if not str(path).startswith(f'{media_directory}/'):
-        raise InvalidFile('Cannot read outside the media directory')
-    # The config directory can contain secrets (Wi-Fi credentials, API keys); never serve it.
-    if str(path).startswith(f'{media_directory / "config"}/'):
-        raise InvalidFile('Cannot read config files')
+    path = _resolve_media_path(relative, 'read')
     if not path.is_file():
         raise UnknownFile(f'No such file: {relative}')
     if path.stat().st_size > MAX_TEXT_FILE_SIZE:

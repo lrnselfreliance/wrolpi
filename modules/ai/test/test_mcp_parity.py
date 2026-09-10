@@ -1,29 +1,26 @@
 """Guards for the wrolpi_mcp thin proxy.
 
 The MCP server's venv (with the `mcp` package) is separate from the API's, so these are source
-scans: external clients depend on the tool names, and the proxy must only reach the tested
-/api/ai blueprint (plus the two whole-API reads that predate it)."""
+scans: the tool set is deliberate (no per-kind duplicates of the generic tools), and the proxy
+must only reach the tested /api/ai blueprint (plus the whole-API statistics read)."""
 import re
 
 from wrolpi.vars import PROJECT_DIR
 
 MCP_SERVER = PROJECT_DIR / 'wrolpi_mcp/server.py'
 
-# The tool names external clients (Claude etc.) already use.  Renaming one breaks them.
+# The MCP mirrors the compact catalog the built-in assistant uses, plus the read-only listings
+# (collections, zims, tags, downloads, map, statistics, status) that only external clients need.
 EXPECTED_TOOLS = {
-    'search', 'search_videos', 'search_archives', 'search_docs',
-    'search_zim', 'search_default_zims',
-    'get_video', 'get_video_captions', 'get_video_comments',
-    'get_archive', 'get_archive_text',
-    'get_doc', 'get_zim_entry',
-    'list_collections', 'list_zim_files', 'list_files',
-    'get_statistics', 'get_inventory', 'get_inventory_items', 'get_status',
-    'list_tags', 'list_downloads', 'get_map_overview', 'search_places',
     'search_files', 'get_file', 'read_content',
+    'search_zim', 'get_zim_entry', 'list_zim_files',
+    'list_collections', 'list_tags', 'list_files', 'read_file',
+    'list_downloads', 'get_map_overview', 'search_places',
+    'get_statistics', 'get_inventory', 'get_status',
 }
 
 
-def test_mcp_tool_names_unchanged():
+def test_mcp_tool_set():
     text = MCP_SERVER.read_text()
     tools = set(re.findall(r'@mcp\.tool[^\n]*\)\nasync def (\w+)\(', text))
     assert tools == EXPECTED_TOOLS

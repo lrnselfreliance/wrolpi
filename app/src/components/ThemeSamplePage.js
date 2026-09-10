@@ -742,15 +742,15 @@ export function ThemeSamplePage() {
             <ChatMessage message={{
                 role: 'assistant',
                 content: 'I found one video: Pressure Canning Basics — /videos/123',
-                activity: [{tool: 'search_videos', pending: false, success: true}],
+                activity: [{tool: 'search_files', pending: false, success: true}],
             }}/>
             <ChatMessage message={{
                 role: 'assistant', content: '',
-                activity: [{tool: 'search_archives', pending: true}], streaming: true,
+                activity: [{tool: 'search_files', pending: true}], streaming: true,
             }}/>
             <ChatMessage message={{
                 role: 'assistant', content: '',
-                activity: [{tool: 'get_video_captions', pending: false, success: false}],
+                activity: [{tool: 'read_content', pending: false, success: false}],
                 error: 'The AI failed to answer.  Check the logs.',
             }}/>
         </Section>

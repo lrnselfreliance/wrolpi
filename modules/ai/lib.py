@@ -158,7 +158,7 @@ def format_file_groups(file_groups: list, total: int, searched: bool = False) ->
     if searched and total == 0:
         # Small models give up on one empty search; steer the retry.
         result['hint'] = ('No matches. Names may be spelled differently: try fewer or different'
-                          ' words, list_collections for exact channel/domain names, or omit'
+                          ' words, use the exact channel/website names from the library list, or omit'
                           ' search_str to browse the newest items.')
     return result
 

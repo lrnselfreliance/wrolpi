@@ -29,39 +29,26 @@ MODES = {
         system_prompt=(
             f'{COMMON_PROMPT}'
             ' Your job is to be the librarian: find and summarize content from the user\'s library.'
-            ' Search first, then read captions, page text, or entries when the user wants detail.'
-            ' When the user asks about a channel, website, or their whole library, call'
-            ' list_collections first to learn the exact names (spellings often differ).'
-            ' list_collections only gives names — it never tells you what content exists.  You have'
-            ' not summarized a channel until you have called search_videos with its channel_id (and'
-            ' NO search_str) and read the resulting titles.'
-            ' To browse everything of one kind (e.g. "summarize my archives"), call the search tool'
-            ' WITHOUT search_str — that lists the newest items.'
-            ' When a search finds nothing, do not give up: retry with fewer or different words, or'
-            ' browse with list_collections.'
+            ' Search first with search_files, then read captions, page text, or entries with read_content'
+            ' when the user wants detail.  The library list above has the exact channel, website, and'
+            ' Zim names (spellings often differ): pass a channel or domain name to search_files directly.'
+            ' To summarize a channel or browse everything of one kind, call search_files WITHOUT search_str'
+            ' and with the channel, domain, or kind; that lists the newest items.'
+            ' When a search finds nothing, do not give up: retry with fewer or different words, or drop the'
+            ' filters.  When it offers matches, narrow with one of them.'
             ' ALWAYS include the WROLPi link for every item you mention, exactly as the tools return it.'
             ' Never give external URLs.  When a search returns a large total, narrow the query instead'
             ' of paging.'
         ),
         tools=(
-            'search_all',
-            'search_videos',
-            'get_video',
-            'get_video_captions',
-            'search_archives',
-            'get_archive_text',
-            'search_docs',
-            'get_doc',
-            'list_zims',
+            'search_files',
+            'get_file',
+            'read_content',
             'search_zims',
             'get_zim_entry',
-            'list_collections',
             'get_inventory',
             'list_files',
             'read_file',
-            'list_tags',
-            'search_suggestions',
-            'get_map_overview',
             'search_places',
         ),
     ),
@@ -127,15 +114,11 @@ MODE_EXAMPLES = {
     ),
     'research': _example(
         dict(role='user', content='Summarize the bakehouse channel'),
-        _tool_call('ex_res_1', 'list_collections', '{"kind": "channel"}'),
+        _tool_call('ex_res_1', 'search_files', '{"channel": "Bakehouse"}'),
         _tool_result('ex_res_1',
-                     '{"results": [{"id": 7, "name": "Bakehouse", "kind": "channel",'
-                     ' "link": "/videos/channel/7/video"}], "total": 1}'),
-        _tool_call('ex_res_2', 'search_videos', '{"channel_id": 7}'),
-        _tool_result('ex_res_2',
                      '{"results": [{"id": 12, "kind": "video", "title": "Sourdough Basics",'
-                     ' "link": "/videos/12", "channel": "Bakehouse", "duration": 900}], "total": 1}'),
-        dict(role='assistant', content='The Bakehouse channel (/videos/channel/7/video) has one video:\\n'
+                     ' "link": "/videos/12", "channel": "Bakehouse", "duration": "15:00"}], "total": 1}'),
+        dict(role='assistant', content='The Bakehouse channel has one video:\\n'
                                        '1. **Sourdough Basics** (/videos/12) — a 15 minute introduction'
                                        ' to sourdough baking.'),
     ),

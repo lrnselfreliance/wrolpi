@@ -82,7 +82,7 @@ async def test_chat_tool_call_then_answer(async_client, ai_enabled, video_factor
 
     patch, calls = _llama_script(
         [dict(type='stop', tool_calls=[
-            dict(id='call_1', name='search_videos', arguments='{"search_str": "canning"}')])],
+            dict(id='call_1', name='search_files', arguments='{"search_str": "canning", "kind": "video"}')])],
         [dict(type='token', content='Found '), dict(type='token', content='one video.'),
          dict(type='stop', tool_calls=[])],
     )
@@ -96,8 +96,8 @@ async def test_chat_tool_call_then_answer(async_client, ai_enabled, video_factor
     names = [e for e, _ in events if e != 'status']
     assert names == ['tool_call', 'tool_result', 'token', 'token', 'done']
     tool_call = dict(events)['tool_call']
-    assert tool_call == dict(tool='search_videos', args=dict(search_str='canning'))
-    assert dict(events)['tool_result'] == dict(tool='search_videos', success=True)
+    assert tool_call == dict(tool='search_files', args=dict(search_str='canning', kind='video'))
+    assert dict(events)['tool_result'] == dict(tool='search_files', success=True)
     assert dict(events)['done'] == dict(content='Found one video.')
 
     # The second llama call saw the system prompt (with the live library map), the mode's

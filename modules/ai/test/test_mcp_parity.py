@@ -16,7 +16,7 @@ EXPECTED_TOOLS = {
     'get_video', 'get_video_captions', 'get_video_comments',
     'get_archive', 'get_archive_text',
     'get_doc', 'get_zim_entry',
-    'list_collections', 'list_zim_files',
+    'list_collections', 'list_zim_files', 'list_files',
     'get_statistics', 'get_inventory', 'get_inventory_items', 'get_status',
 }
 

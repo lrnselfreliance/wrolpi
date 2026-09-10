@@ -4,6 +4,7 @@ This blueprint IS the AI tool catalog: the agent loop generates its tool definit
 endpoints' OpenAPI operations, and the external MCP server proxies them.  Every endpoint is
 read-only; descriptions are written for the model, not for humans.
 """
+import asyncio
 import mimetypes
 import pathlib
 from http import HTTPStatus
@@ -13,18 +14,26 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.archive import lib as archive_lib
+from modules.archive.lib import search_domains_by_name
+from modules.docs.lib import search_authors_by_name, search_subjects_by_name
+from modules.map import lib as map_lib
+from modules.map import search as map_search
+from modules.map.pins import get_map_pins_config
+from modules.videos.channel.lib import search_channels_by_name
+from modules.zim.models import Zims
 from modules.docs.lib import _doc_response, _get_doc, _search_docs
 from modules.inventory.common import get_inventory_configs
 from modules.inventory.errors import UnknownInventory
 from modules.videos.video import lib as videos_lib
 from modules.zim import lib as zim_lib
-from wrolpi import flags
+from wrolpi import flags, tags
 from wrolpi.api_utils import json_response
 from wrolpi.collections.lib import search_collections
-from wrolpi.common import api_param_limiter, get_media_directory, logger, wrol_mode_enabled
+from wrolpi.common import api_param_limiter, get_media_directory, get_relative_to_media_directory, logger, \
+    wrol_mode_enabled
 from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, SearchEmpty, UnknownFile, ValidationError
-from wrolpi.files.lib import search_files, HIDDEN_DIRECTORIES, HIDDEN_FILES
+from wrolpi.files.lib import search_files, search_file_suggestion_count, HIDDEN_DIRECTORIES, HIDDEN_FILES
 from wrolpi.vars import DOCKERIZED, IS_RPI4
 from wrolpi.version import __version__
 from wrolpi.schema import JSONErrorResponse
@@ -575,6 +584,193 @@ async def ai_list_disks(_: Request):
         errors.append('Could not reach the Controller for SMART status')
 
     return json_response(ret)
+
+
+# Errors on downloads can be long tracebacks; the model only needs the gist.
+DOWNLOAD_ERROR_LENGTH = 300
+MAP_LINK_ZOOM = 12
+
+
+def _map_link(lat, lon) -> str:
+    return f'/map?lat={lat}&lon={lon}&z={MAP_LINK_ZOOM}'
+
+
+@ai_bp.get('/tags')
+@openapi.definition(
+    summary='List tags',
+    description='List every tag in the library with how many files, Zim entries, channels, and domains carry'
+                ' it, plus the most recently used tag names. Use a tag name in the tag_names filter of the'
+                ' search tools. Users tag things they care about, so tags are a good map of their interests.',
+)
+@openapi.operation('list_tags')
+async def list_tags(_: Request):
+    results = [dict(
+        name=i['name'],
+        file_groups=i['file_group_count'],
+        zim_entries=i['zim_entry_count'],
+        channels=i['channel_count'],
+        domains=i['domain_count'],
+    ) for i in tags.get_tags()]
+    return json_response(dict(results=results, recent=tags.get_recent_tags(), total=len(results)))
+
+
+def _format_download(download: dict) -> dict:
+    error = download.get('error')
+    if error and len(error) > DOWNLOAD_ERROR_LENGTH:
+        # Errors are usually tracebacks; the exception message at the end is the useful part.
+        error = '…' + error[-DOWNLOAD_ERROR_LENGTH:]
+    destination = download.get('destination')
+    return {k: v for k, v in dict(
+        id=download.get('id'),
+        url=download.get('url'),
+        status=download.get('status'),
+        downloader=download.get('downloader'),
+        sub_downloader=download.get('sub_downloader'),
+        frequency=download.get('frequency'),
+        destination=str(get_relative_to_media_directory(destination)) if destination else None,
+        collection_id=download.get('collection_id'),
+        tag_names=download.get('tag_names') or None,
+        next_download=download.get('next_download'),
+        last_successful_download=download.get('last_successful_download'),
+        error=error,
+    ).items() if v is not None}
+
+
+@ai_bp.get('/downloads')
+@openapi.definition(
+    summary='List downloads',
+    description='Read the download queue: a summary (pending count, whether downloading is disabled or'
+                ' stopped, daily limit), the recurring downloads (channels, feeds; frequency is in seconds),'
+                ' and the newest one-time downloads. Filter with status: new, pending, failed, deferred, or'
+                ' complete. Use this when the user asks what is downloading, why a download failed, or what'
+                ' is scheduled. You cannot start, stop, or retry downloads.',
+)
+@openapi.operation('list_downloads')
+@openapi.parameter('status', str, 'query')
+@openapi.parameter('limit', int, 'query')
+async def list_downloads(request: Request):
+    status = request.args.get('status')
+    try:
+        limit = ai_limiter(int(request.args.get('limit', 0)) or None)
+    except ValueError:
+        raise ValidationError('limit must be an integer')
+    summary = download_manager.get_summary()
+    data = download_manager.get_fe_downloads()
+
+    def select(downloads: list) -> list:
+        if status:
+            downloads = [i for i in downloads if i.get('status') == status]
+        return [_format_download(i) for i in downloads[:limit]]
+
+    return json_response(dict(
+        summary=summary,
+        recurring=select(data['recurring_downloads']),
+        once=select(data['once_downloads']),
+        pending_once=data.get('pending_once_downloads', 0),
+    ))
+
+
+@ai_bp.get('/map')
+@openapi.definition(
+    summary='Get map overview',
+    description='What maps this WROLPi has: the downloaded map files (regions) and whether each has a place'
+                ' search index, the map regions subscribed for updates, and the user\'s saved pins with a'
+                ' link to each. Use search_places to look up a town or landmark.',
+)
+@openapi.operation('get_map_overview')
+async def get_map_overview(request: Request):
+    files = [dict(name=i['name'], path=i['path'], size=i['size'], has_search_index=i['has_search_index'])
+             for i in map_lib.get_pmtiles_files()]
+    pins = [dict(id=i.get('id'), label=i.get('label'), lat=i.get('lat'), lon=i.get('lon'),
+                 link=_map_link(i.get('lat'), i.get('lon')))
+            for i in get_map_pins_config().pins]
+    return json_response(dict(
+        files=files,
+        subscriptions=map_lib.get_map_subscriptions(request.ctx.session),
+        pins=pins,
+        search_indexes=map_search.get_search_status(),
+    ))
+
+
+@ai_bp.get('/map/search')
+@openapi.definition(
+    summary='Search places on the map',
+    description='Find towns, cities, and landmarks by name in the downloaded maps\' place index. Each result'
+                ' has coordinates and a WROLPi map link. Pass lat and lon to rank nearest first. Results are'
+                ' empty when no map has a search index (see get_map_overview).',
+)
+@openapi.operation('search_places')
+@openapi.parameter('q', str, 'query')
+@openapi.parameter('limit', int, 'query')
+@openapi.parameter('offset', int, 'query')
+@openapi.parameter('lat', float, 'query')
+@openapi.parameter('lon', float, 'query')
+async def search_places(request: Request):
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        raise ValidationError('q query parameter is required')
+    try:
+        limit = ai_limiter(int(request.args.get('limit', 0)) or None)
+        lat = float(request.args.get('lat')) if request.args.get('lat') is not None else None
+        lon = float(request.args.get('lon')) if request.args.get('lon') is not None else None
+    except ValueError:
+        raise ValidationError('limit, lat, and lon must be numbers')
+    data = await asyncio.to_thread(map_search.search_places, q, limit=limit, offset=_offset(request),
+                                   lat=lat, lon=lon)
+    results = [{k: v for k, v in dict(
+        name=i.get('name'),
+        kind=i.get('kind_detail') or i.get('kind'),
+        region=i.get('region'),
+        population=i.get('population'),
+        lat=i.get('lat'),
+        lon=i.get('lon'),
+        link=_map_link(i.get('lat'), i.get('lon')),
+    ).items() if v is not None} for i in data.get('results') or []]
+    return json_response(dict(results=results, total=data.get('total', len(results))))
+
+
+@ai_bp.post('/search/suggestions')
+@openapi.definition(
+    summary='Preview what a search would find',
+    description='Before searching, learn which channels, domains (archived sites), authors, and subjects match'
+                ' a term, and how many files and Zim entries a search would return. Use the channel id with'
+                ' search_videos, the domain name with search_archives, the author/subject with search_docs.'
+                ' tag_names narrows the file estimate to tagged items.',
+    body=schema.AISearchSuggestionsRequest,
+)
+@openapi.operation('search_suggestions')
+@validate(schema.AISearchSuggestionsRequest)
+async def search_suggestions(request: Request, body: schema.AISearchSuggestionsRequest):
+    if not body.search_str and not body.tag_names:
+        raise ValidationError('search_str or tag_names is required')
+    session = request.ctx.session
+    search_str = body.search_str or ''
+
+    channels = await search_channels_by_name(session, search_str, order_by_video_count=True)
+    domains = await search_domains_by_name(session, search_str)
+    authors = await search_authors_by_name(session, search_str)
+    subjects = await search_subjects_by_name(session, search_str)
+
+    counts = await search_file_suggestion_count(body.search_str, body.tag_names, [])
+    zims = []
+    if body.search_str:
+        def estimate():
+            with_counts = Zims.estimate(session, body.search_str)
+            return [dict(id=zim.id, title=lib.zim_metadata_dict(zim.zim_metadata).get('title') or zim.path.name,
+                         estimate=count) for zim, count in with_counts.items()]
+
+        try:
+            zims = await asyncio.to_thread(estimate)
+        except Exception as e:
+            logger.debug('AI suggestions could not estimate Zims', exc_info=e)
+
+    return json_response(dict(
+        channels=[dict(id=i.id, name=i.name, link=f'/videos/channel/{i.id}/video') for i in channels],
+        domains=[dict(id=i['id'], name=i['domain']) for i in domains],
+        authors=authors,
+        subjects=subjects,
+        estimates=dict(file_groups=counts['file_groups'], file_groups_deep=counts['file_groups_deep'], zims=zims),
+    ))
 
 
 # ---------------------------------------------------------------------------

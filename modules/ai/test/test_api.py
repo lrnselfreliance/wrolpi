@@ -383,3 +383,139 @@ async def test_ai_list_files_refuses_escapes(async_client, test_directory):
     (test_directory / 'config').mkdir(exist_ok=True)
     request, response = await async_client.get('/api/ai/files/list?path=config')
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_ai_list_tags(async_client, test_session, tag_factory, video_factory):
+    """Tags are listed with what they are applied to, plus the recently used names."""
+    one = await tag_factory('one')
+    await tag_factory('two')
+    video = video_factory(title='tagged video')
+    video.file_group.add_tag(test_session, one.id)
+    test_session.commit()
+
+    request, response = await async_client.get('/api/ai/tags')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['total'] == 2
+    assert [i['name'] for i in response.json['results']] == ['one', 'two']
+    assert response.json['results'][0]['file_groups'] == 1
+    assert response.json['results'][1]['file_groups'] == 0
+    assert response.json['recent'] == ['one']
+
+
+@pytest.mark.asyncio
+async def test_ai_list_downloads(async_client, test_session, test_download_manager, test_downloader,
+                                 test_directory):
+    """The download queue is summarized with lean, relative-path entries; status can filter."""
+    test_download_manager.create_download(test_session, 'https://example.com/once', test_downloader.name,
+                                          destination=test_directory / 'archive/example.com')
+    test_download_manager.recurring_download(test_session, 'https://example.com/feed', 86400,
+                                             test_downloader.name)
+    test_session.commit()
+
+    request, response = await async_client.get('/api/ai/downloads')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['summary']['recurring'] == 1
+    assert 'disabled' in response.json['summary']
+    once, = response.json['once']
+    assert once['url'] == 'https://example.com/once'
+    assert once['destination'] == 'archive/example.com'
+    assert once['status'] == 'new'
+    assert once['downloader'] == test_downloader.name
+    recurring, = response.json['recurring']
+    assert recurring['url'] == 'https://example.com/feed'
+    assert recurring['frequency'] == 86400
+
+    # Filter by status.
+    request, response = await async_client.get('/api/ai/downloads?status=complete')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['once'] == [] and response.json['recurring'] == []
+
+
+@pytest.mark.asyncio
+async def test_ai_map(async_client, test_session, test_directory, make_files_structure):
+    """The map overview reports map files, subscriptions, pins, and search indexes; places can be searched."""
+    from modules.map.pins import get_map_pins_config
+    from modules.map.test.test_search import _create_test_search_db
+
+    make_files_structure(['map/oregon.pmtiles'])
+    _create_test_search_db(test_directory / 'map/oregon.search.db', [
+        ('Portland', 'city', 45.5, -122.6, 6, 'places', 'city', 650000, 'Oregon'),
+        ('Port Orford', 'town', 42.7, -124.5, 9, 'places', 'town', 1100, 'Oregon'),
+    ])
+    get_map_pins_config().add_pin(45.1, -122.2, 'Home')
+
+    request, response = await async_client.get('/api/ai/map')
+    assert response.status_code == HTTPStatus.OK
+    files, = response.json['files']
+    assert files['name'] == 'oregon.pmtiles' and files['has_search_index'] is True
+    assert response.json['subscriptions'] == []
+    pin, = response.json['pins']
+    assert pin['label'] == 'Home' and pin['link'] == '/map?lat=45.1&lon=-122.2&z=12'
+
+    request, response = await async_client.get('/api/ai/map/search?q=port')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['total'] == 2
+    first = response.json['results'][0]
+    assert first['name'] == 'Portland'
+    assert first['region'] == 'Oregon'
+    assert first['link'] == '/map?lat=45.5&lon=-122.6&z=12'
+
+    # Proximity ranking within an importance tier: equal min_zoom, nearest first.
+    _create_test_search_db(test_directory / 'map/coast.search.db', [
+        ('Port A', 'town', 42.0, -124.0, 9, 'places', 'town', 100, 'Oregon'),
+        ('Port B', 'town', 44.0, -124.0, 9, 'places', 'town', 100, 'Oregon'),
+    ])
+    request, response = await async_client.get('/api/ai/map/search?q=port%20b&lat=44.0&lon=-124.0')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['results'][0]['name'] == 'Port B'
+    request, response = await async_client.get('/api/ai/map/search?q=port&lat=42.0&lon=-124.0&limit=2')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['results']) == 2 and response.json['total'] == 4
+
+    # q is required.
+    request, response = await async_client.get('/api/ai/map/search')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_ai_search_suggestions(async_client, test_session, video_factory, archive_factory, channel_factory,
+                                     tag_factory):
+    """Suggestions name the channels/domains/authors/subjects matching a term and estimate result counts."""
+    channel = channel_factory(name='Wild Cooking')
+    video_factory(channel_id=channel.id, title='cooking rice')
+    archive_factory(domain='cooking.example.com', title='cooking beans', contents='beans')
+    tag = await tag_factory('recipes')
+    test_session.commit()
+
+    content = dict(search_str='cooking')
+    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    ch, = response.json['channels']
+    assert ch['name'] == 'Wild Cooking' and ch['id'] == channel.id and ch['link'].startswith('/videos/channel/')
+    dom, = response.json['domains']
+    assert dom['name'] == 'cooking.example.com'
+    assert response.json['authors'] == [] and response.json['subjects'] == []
+    assert response.json['estimates']['file_groups'] == 2
+    assert 'file_groups_deep' in response.json['estimates']
+    assert response.json['estimates']['zims'] == []
+
+    # Tag names narrow the estimate.
+    content = dict(search_str='cooking', tag_names=[tag.name])
+    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['estimates']['file_groups'] == 0
+
+    # Something to search for is required.
+    request, response = await async_client.post('/api/ai/search/suggestions', content=json.dumps({}))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_ai_format_download_error_tail():
+    """Download errors are tracebacks; the model gets the end (the exception message), not the start."""
+    from modules.ai.api import _format_download, DOWNLOAD_ERROR_LENGTH
+    error = 'Traceback (most recent call last):\n' + ('  File "x.py"\n' * 100) + 'ValueError: the real reason'
+    formatted = _format_download(dict(id=1, url='https://example.com', status='failed', error=error))
+    assert formatted['error'].endswith('ValueError: the real reason')
+    assert len(formatted['error']) == DOWNLOAD_ERROR_LENGTH + 1
+    assert 'error' not in _format_download(dict(id=2, url='https://example.com', status='new', error=None))

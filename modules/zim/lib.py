@@ -593,11 +593,12 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
         file.unlink()
         deleted_count += 1
 
-    # Refresh synchronously to clean up DB before returning.
-    await file_worker.refresh_sync(list(outdated))
+    if deleted_count:
+        # Refresh synchronously to clean up DB before returning.
+        await file_worker.refresh_sync(list(outdated))
 
-    # Trigger Kiwix restart so the deleted zim files are no longer served.
-    restart_kiwix_handler.activate_switch()
+        # Trigger Kiwix restart so the deleted zim files are no longer served.
+        restart_kiwix_handler.activate_switch()
 
     return deleted_count
 

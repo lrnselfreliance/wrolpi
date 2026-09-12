@@ -282,15 +282,17 @@ async def start_single_tasks(app: Sanic):
                 get_download_cache_config().import_config()
                 logger.debug('download cache config imported')
 
-    from modules.zim.lib import flag_outdated_zim_files
-    try:
-        flag_outdated_zim_files()
-    except Exception as e:
-        logger.error('Failed to flag outdated Zims', exc_info=e)
-
     logger.debug('start_single_tasks waiting for db...')
     async with flags.db_up.wait_for():
         logger.debug('start_single_tasks db is up')
+
+    # The disk scan must overwrite the DB-restored `outdated_zims` value, so restore first (idempotent), then scan.
+    from modules.zim.lib import flag_outdated_zim_files
+    try:
+        flags.init_flags()
+        flag_outdated_zim_files()
+    except Exception as e:
+        logger.error('Failed to flag outdated Zims', exc_info=e)
 
     # Import configs that require the database.
     if wrolpi_config.successful_import and not wrolpi_config.wrol_mode:

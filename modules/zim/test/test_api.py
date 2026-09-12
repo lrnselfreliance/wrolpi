@@ -5,6 +5,7 @@ import pytest
 
 from modules.zim import lib
 from modules.zim.models import Zim
+from wrolpi import flags
 from wrolpi.downloader import Download
 
 
@@ -247,6 +248,23 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
     assert wikipedia_two.is_file()
     assert asdf.is_file()
     assert empty.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_outdated_zims_clears_stale_flag(test_session, test_directory, test_zim_bytes, async_client,
+                                                     flags_lock):
+    """Deleting outdated Zims always leaves the `outdated_zims` flag matching disk, even when nothing was deleted."""
+    (test_directory / 'zims').mkdir(parents=True)
+    (test_directory / 'zims/wikipedia_en_all_maxi_2023-02.zim').write_bytes(test_zim_bytes)
+    flags.outdated_zims.set()
+
+    request, response = await async_client.get('/api/zim/outdated')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['outdated'] == []
+
+    request, response = await async_client.delete('/api/zim/outdated')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not flags.outdated_zims.is_set(), 'Flag should be recomputed even when nothing was deleted'
 
 
 @pytest.mark.asyncio

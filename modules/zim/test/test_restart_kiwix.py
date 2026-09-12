@@ -128,3 +128,20 @@ async def test_remove_outdated_zim_files_triggers_restart(async_client, test_ses
     # Verify the switch was activated
     switches = dict(api_app.shared_ctx.switches) if api_app.shared_ctx.switches else {}
     assert 'restart_kiwix' in switches
+
+
+@pytest.mark.asyncio
+async def test_remove_outdated_zim_files_no_restart_when_nothing_deleted(async_client, test_session, test_directory,
+                                                                        zim_path_factory, await_switches):
+    """Clearing a stale flag must not restart Kiwix when no file was deleted."""
+    zim_dir = test_directory / 'zims'
+    zim_dir.mkdir(exist_ok=True)
+    (zim_dir / 'wikipedia_en_all_maxi_2020-02.zim').write_bytes(zim_path_factory().read_bytes())
+
+    await await_switches()
+
+    deleted_count = await lib.remove_outdated_zim_files(zim_dir)
+
+    assert deleted_count == 0
+    switches = dict(api_app.shared_ctx.switches) if api_app.shared_ctx.switches else {}
+    assert 'restart_kiwix' not in switches

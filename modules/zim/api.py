@@ -200,10 +200,11 @@ async def get_outdated_zims(_: Request):
     summary='Remove all outdated Zims, if any.'
 )
 async def delete_outdated_zims(_: Request):
-    deleted_count = await lib.remove_outdated_zim_files()
-    # Always recompute: the persisted flag may be stale (file removed manually), and the user expects
-    # the banner to go away after clicking Delete.
-    lib.flag_outdated_zim_files()
+    try:
+        deleted_count = await lib.remove_outdated_zim_files()
+    finally:
+        # The flag must match disk whether or not the delete succeeded.
+        lib.flag_outdated_zim_files()
     if deleted_count:
         Events.send_deleted(f'Deleted {deleted_count} outdated Zims')
     return response.empty(HTTPStatus.NO_CONTENT)

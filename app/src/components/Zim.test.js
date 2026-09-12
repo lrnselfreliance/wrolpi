@@ -74,13 +74,7 @@ describe('the Zim catalog language dropdown', () => {
     });
 });
 
-/*
- * The Dashboard's "Outdated Zim Files" banner.
- *
- * The banner is shown from the persisted `outdated_zims` flag, but the modal lists files from a live
- * GET /api/zim/outdated.  Those two disagreed on a real device: the flag was stale, the scan returned
- * nothing, and the modal showed an endless placeholder with a Delete button and no files under it.
- */
+// The Dashboard's "Outdated Zim Files" banner: its modal must always show a fresh scan, and say when it is empty.
 import {OutdatedZimsMessage} from './Zim';
 import {fireEvent, waitFor} from '@testing-library/react';
 import {getOutdatedZims} from '../api';

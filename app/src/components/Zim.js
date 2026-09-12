@@ -64,7 +64,7 @@ export const OutdatedZimsMessage = ({onClick}) => {
 
     const onOpen = async () => {
         setOpen(true);
-        // The flag that shows this banner is persisted and can be stale; always show a fresh scan.
+        // The list must reflect disk now, not page load.
         await fetchOutdatedZims();
     }
 

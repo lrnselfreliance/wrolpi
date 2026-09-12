@@ -253,11 +253,7 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
 @pytest.mark.asyncio
 async def test_delete_outdated_zims_clears_stale_flag(test_session, test_directory, test_zim_bytes, async_client,
                                                      flags_lock):
-    """A stale `outdated_zims` flag is cleared when the user deletes outdated Zims and none exist.
-
-    The flag is persisted in the DB and restored on startup, so it can outlive the file that set it (the user
-    deleted it manually, or a stale value was restored).  The Dashboard shows the "Outdated Zim Files" banner from
-    the flag, but the modal lists files from a live scan, so the two must agree after a delete."""
+    """Deleting outdated Zims always leaves the `outdated_zims` flag matching disk, even when nothing was deleted."""
     (test_directory / 'zims').mkdir(parents=True)
     (test_directory / 'zims/wikipedia_en_all_maxi_2023-02.zim').write_bytes(test_zim_bytes)
     flags.outdated_zims.set()

@@ -73,3 +73,49 @@ describe('the Zim catalog language dropdown', () => {
         expect(screen.getByPlaceholderText('Language')).toBeInTheDocument();
     });
 });
+
+/*
+ * The Dashboard's "Outdated Zim Files" banner.
+ *
+ * The banner is shown from the persisted `outdated_zims` flag, but the modal lists files from a live
+ * GET /api/zim/outdated.  Those two disagreed on a real device: the flag was stale, the scan returned
+ * nothing, and the modal showed an endless placeholder with a Delete button and no files under it.
+ */
+import {OutdatedZimsMessage} from './Zim';
+import {fireEvent, waitFor} from '@testing-library/react';
+import {getOutdatedZims} from '../api';
+
+jest.mock('../api', () => ({
+    ...jest.requireActual('../api'),
+    getOutdatedZims: jest.fn(),
+    deleteOutdatedZims: jest.fn(),
+}));
+
+describe('the outdated Zims banner', () => {
+    beforeEach(() => getOutdatedZims.mockReset());
+
+    it('tells the user when the live scan finds nothing to delete', async () => {
+        getOutdatedZims.mockResolvedValue({outdated: [], current: ['zims/wikipedia_en_all_maxi_2024-01.zim']});
+        render(<OutdatedZimsMessage/>);
+
+        fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+
+        await waitFor(() => expect(screen.getByText(/No outdated Zim files were found/)).toBeInTheDocument());
+    });
+
+    it('re-scans when the modal is opened, so the list is not the one from page load', async () => {
+        getOutdatedZims.mockResolvedValue({outdated: [], current: []});
+        render(<OutdatedZimsMessage/>);
+        await waitFor(() => expect(getOutdatedZims).toHaveBeenCalledTimes(1));
+
+        getOutdatedZims.mockResolvedValue({
+            outdated: ['zims/wikipedia_en_all_maxi_2023-12.zim'],
+            current: ['zims/wikipedia_en_all_maxi_2024-01.zim'],
+        });
+        fireEvent.click(screen.getByRole('button', {name: 'Delete'}));
+
+        await waitFor(() => expect(getOutdatedZims).toHaveBeenCalledTimes(2));
+        expect(await screen.findByText('zims/wikipedia_en_all_maxi_2023-12.zim')).toBeInTheDocument();
+        expect(screen.getByText('zims/wikipedia_en_all_maxi_2024-01.zim')).toBeInTheDocument();
+    });
+});

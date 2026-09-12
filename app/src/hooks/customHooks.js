@@ -1981,7 +1981,7 @@ export const useOutdatedZims = () => {
         localFetchOutdatedZims();
     }, []);
 
-    return {outdated, current}
+    return {outdated, current, fetchOutdatedZims: localFetchOutdatedZims}
 }
 
 export const useVINDecoder = (defaultVINNumber = '') => {

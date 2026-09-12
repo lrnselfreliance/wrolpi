@@ -58,9 +58,15 @@ import {HeadlineText} from "./Headline";
 export const OutdatedZimsMessage = ({onClick}) => {
     const [open, setOpen] = React.useState(false);
 
-    const {outdated, current} = useOutdatedZims();
+    const {outdated, current, fetchOutdatedZims} = useOutdatedZims();
 
     const onClose = () => setOpen(false);
+
+    const onOpen = async () => {
+        setOpen(true);
+        // The flag that shows this banner is persisted and can be stale; always show a fresh scan.
+        await fetchOutdatedZims();
+    }
 
     const handleDelete = async () => {
         try {
@@ -102,13 +108,17 @@ export const OutdatedZimsMessage = ({onClick}) => {
             <Header as='h3'>To Keep</Header>
             {current.map(i => <pre key={i}>{i}</pre>)}
         </>
+    } else if (outdated && outdated.length === 0) {
+        modalContent = <p>
+            No outdated Zim files were found. Click Delete to clear this message.
+        </p>
     }
 
     return <Message kind='info' icon='question' title='Outdated Zim Files'>
         New Zim files have been downloaded. Outdated Zim files can be removed.
         <p></p>
 
-        <Button role='danger' onClick={() => setOpen(true)}>Delete</Button>
+        <Button role='danger' onClick={onOpen}>Delete</Button>
         <Modal size='small' open={open}
                onClose={onClose}
                title='Delete'

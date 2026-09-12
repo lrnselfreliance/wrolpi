@@ -30,7 +30,8 @@ from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
-from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
+    search_filter_cache_key, count_file_groups
 from wrolpi.files.models import FileGroup
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import tag_append_sub_select_where
@@ -1407,9 +1408,8 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     # which case we behave as if no search was requested.
     file_group_search = fts.file_group_search(search_str, deep=deep) if search_str else None
     if file_group_search:
-        # A search_str was provided by the user, modify the query to filter by it.  The rank and
-        # snippets come from a subquery because FTS5 auxiliary functions (snippet) cannot appear
-        # in a query that also uses window functions (COUNT(*) OVER()).
+        # A search_str was provided by the user, modify the query to filter by it.  Rank and
+        # snippets come from a subquery (FTS5 auxiliary functions cannot mix with some SELECT shapes).
         headline_selects = fts.file_group_headline_selects() if headline else ''
         fts_join = f'''JOIN (
                 SELECT fts.rowid AS id, {file_group_search.rank_select}{headline_selects}
@@ -1425,14 +1425,22 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
                 fts.b_headline, fts.c_headline, fts.d_headline,
                 fg.title AS title_headline'''
 
+    null_filter = None
     if order:
         try:
             order_by = ARCHIVE_ORDERS[order]
         except KeyError:
             raise InvalidOrderBy(f'Invalid order byy {order}')
         if order in NO_NULL_ORDERS:
-            wheres.append(NO_NULL_ORDERS[order])
+            null_filter = NO_NULL_ORDERS[order]
+            wheres.append(null_filter)
 
+    if not file_group_search and order in ('rank', '-rank'):
+        # Rank without a search used to ORDER BY the windowed total (a constant).
+        order_by = ARCHIVE_ORDERS['-published_datetime'] if order == 'rank' \
+            else ARCHIVE_ORDERS['published_datetime']
+
+    tag_names = tag_names or []
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
     if domain:
@@ -1442,8 +1450,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
             "a.collection_id = (select id from collection where collection.name = :domain and collection.kind = 'domain' LIMIT 1)")
 
     select_columns = f"{select_columns}," if select_columns else ""
-    wheres = '\n AND '.join(wheres)
-    where = f'WHERE\n{wheres}' if wheres else ''
+    where = ('WHERE\n' + '\n AND '.join(wheres)) if wheres else ''
     if where or fts_join:
         from_clause = f'''FROM archive a
             LEFT JOIN file_group fg ON fg.id = a.file_group_id
@@ -1459,7 +1466,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
             SELECT
                 a.file_group_id AS id, -- always get `file_group.id` for `handle_file_group_search_results`
                 {select_columns}
-                COUNT(*) OVER() AS total
+                fg.id AS _fg_id
                 {headline_columns}
             {from_clause}
             {where}
@@ -1468,7 +1475,33 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    results, total = handle_file_group_search_results(stmt, params)
+    unfiltered = not search_str and not tag_names and not domain and not null_filter
+    if unfiltered:
+        total = cached_search_total(
+            search_filter_cache_key('archives'),
+            lambda: count_file_groups('SELECT COUNT(*) AS total FROM archive', dict()),
+        )
+    else:
+        if file_group_search:
+            count_from = f'''FROM archive a
+            LEFT JOIN file_group fg ON fg.id = a.file_group_id
+            {file_group_search.join}'''
+            count_wheres = list(wheres)
+            count_wheres.append(file_group_search.where)
+            count_where = ('WHERE\n' + '\n AND '.join(count_wheres)) if count_wheres else ''
+            count_stmt = f'SELECT COUNT(*) AS total {count_from} {count_where}'
+        else:
+            # Same filters as the page, but do not walk the date index just to count.
+            count_from = '''FROM archive a
+            LEFT JOIN file_group fg ON fg.id = a.file_group_id'''
+            count_stmt = f'SELECT COUNT(*) AS total {count_from} {where}'
+        cache_key = search_filter_cache_key(
+            'archives', search_str=search_str, domain=domain, tag_names=tag_names,
+            deep=deep, null_filter=null_filter,
+        )
+        total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, params))
+
+    results, total = handle_file_group_search_results(stmt, params, total=total)
 
     if file_group_search and headline and results:
         # Highlight the plain titles like the FTS snippets above (Postgres used ts_headline).

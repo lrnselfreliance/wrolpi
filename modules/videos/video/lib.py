@@ -1,8 +1,7 @@
 import asyncio
 import random
-import time
 from datetime import timedelta
-from typing import Tuple, Optional, List, Dict, Callable
+from typing import Tuple, Optional, List
 
 import yt_dlp
 from sqlalchemy import or_
@@ -14,10 +13,11 @@ from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import download_manager
-from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
+    search_filter_cache_key, count_file_groups
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
-from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR, PYTEST
+from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
 from ..cookies import cookies_unlocked, cookies_for_download
 from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 
@@ -91,22 +91,6 @@ VIDEO_QUERY_LIMIT = 24
 INDEXED_DATE_ORDERS = ('published_datetime', '-published_datetime')
 VIDEO_MIMETYPE_PREFIXES = ('video/', 'audio/')
 
-# The unfiltered Videos page total, cached for a short time.  Counting every video walks the whole
-# mimetype index, which costs seconds cold on a large library on a spinning disk; pagination can
-# tolerate a total that is a minute stale.  Bypassed under pytest so tests see exact totals.
-TOTALS_CACHE_SECONDS = 60
-_TOTALS_CACHE: Dict[str, Tuple[float, int]] = dict()
-
-
-def _cached_total(key: str, compute: Callable[[], int]) -> int:
-    if not PYTEST:
-        hit = _TOTALS_CACHE.get(key)
-        if hit and time.monotonic() - hit[0] < TOTALS_CACHE_SECONDS:
-            return hit[1]
-    total = compute()
-    _TOTALS_CACHE[key] = (time.monotonic(), total)
-    return total
-
 
 def _video_mimetypes() -> List[str]:
     """Every distinct video/* and audio/* mimetype in the library (a handful; served by the mimetype index)."""
@@ -133,12 +117,11 @@ def _count_videos() -> int:
 def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[dict], int]:
     """The unfiltered Videos page, ordered by date, without visiting every video.
 
-    The generic query (`mimetype LIKE 'video/%' OR ...` + `COUNT(*) OVER()`) must visit every
-    video's index entry before it can apply LIMIT, which scales with the library rather than the
-    page.  Here each exact mimetype is a pure covering-index seek on (mimetype, effective_datetime)
-    that reads only `limit + offset` entries; those few rows are then merged.  Results must be
-    identical to the generic query's (same ORDER BY, including the id tiebreaker and NULL placement).
-    The total is a separate, cached count."""
+    The generic query (`mimetype LIKE 'video/%' OR ...`) plus a windowed COUNT used to visit every
+    video before LIMIT.  Here each exact mimetype is a covering-index seek on
+    (mimetype, effective_datetime) that reads only `limit + offset` entries; those few rows are
+    then merged.  Results must be identical to the generic query's (same ORDER BY, including the
+    id tiebreaker and NULL placement).  The total is a separate, cached count."""
     order_by = VIDEO_ORDERS[order]
     mimetypes = _video_mimetypes()
     if not mimetypes:
@@ -160,7 +143,7 @@ def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[di
     '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    total = _cached_total('videos', _count_videos)
+    total = cached_search_total(search_filter_cache_key('videos'), _count_videos)
     return handle_file_group_search_results(stmt, params, total=total)
 
 
@@ -199,17 +182,15 @@ def search_videos(
         params['channel_id'] = channel_id
 
     # `deep` searches d_text (captions) as well; the default abc search is much smaller and faster.
-    # The subquery join is required: snippet() cannot coexist with COUNT(*) OVER() in one SELECT.
+    # Rank/snippets come from a subquery so they stay valid if a caller adds window functions.
     fts_search = fts.file_group_search_join(search_str, deep=deep, headlines=bool(headline)) \
         if search_str else None
     if fts_search:
-        # A search_str was provided by the user, modify the query to filter by it.
-        select_columns = f'fg.id, {fts_search.rank_select}, COUNT(*) OVER() AS total'
+        select_columns = f'fg.id, {fts_search.rank_select}'
         joins.append(fts_search.join)
         params.update(fts_search.params)
     else:
-        # No (usable) search_str provided.  Get id and total only.
-        select_columns = 'fg.id, COUNT(*) OVER() AS total'
+        select_columns = 'fg.id'
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
@@ -222,21 +203,27 @@ def search_videos(
     # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
     # whitelist.
     order_by = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+    null_filter = None
     if order:
         try:
             order_by = VIDEO_ORDERS[order]
         except KeyError:
             raise
         if order in NO_NULL_ORDERS:
-            wheres.append(NO_NULL_ORDERS[order])
+            null_filter = NO_NULL_ORDERS[order]
+            wheres.append(null_filter)
         if order in JOIN_ORDERS:
             join_video = True
+
+    effective_order = order or DEFAULT_VIDEO_ORDER
+    if not fts_search and effective_order in ('rank', '-rank'):
+        # Rank without a search used to ORDER BY the windowed total (a constant).  Equivalent: id.
+        order_by = 'fg.id ASC' if effective_order == '-rank' else 'fg.id DESC'
 
     if join_video:
         joins.insert(0, 'LEFT JOIN video v on v.file_group_id = fg.id')
 
-    wheres = '\n AND '.join(wheres)
-    where = f'WHERE\n{wheres}' if wheres else ''
+    where = ('WHERE\n' + '\n AND '.join(wheres)) if wheres else ''
     join = '\n'.join(joins)
     stmt = f'''
         SELECT
@@ -250,7 +237,35 @@ def search_videos(
     '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    results, total = handle_file_group_search_results(stmt, params)
+    unfiltered = (not search_str and not tag_names and not channel_id and not censored
+                  and not null_filter)
+    if unfiltered:
+        total = cached_search_total(search_filter_cache_key('videos'), _count_videos)
+    else:
+        if fts_search:
+            fts_count = fts.file_group_search(search_str, deep=deep)
+            count_joins = [j for j in joins if 'file_group_fts' not in j]
+            if fts_count:
+                count_joins.append(fts_count.join)
+            count_wheres = [w for w in wheres]
+            if fts_count:
+                count_wheres.append(fts_count.where)
+            count_join = '\n'.join(count_joins)
+            count_where = ('WHERE\n' + '\n AND '.join(count_wheres)) if count_wheres else ''
+            count_stmt = f'SELECT COUNT(*) AS total FROM file_group fg {count_join} {count_where}'
+            count_params = dict(params)
+            if fts_count:
+                count_params.update(fts_count.params)
+        else:
+            count_stmt = f'SELECT COUNT(*) AS total FROM file_group fg {join} {where}'
+            count_params = params
+        cache_key = search_filter_cache_key(
+            'videos', search_str=search_str, channel_id=channel_id, tag_names=tag_names,
+            censored=censored, deep=deep, null_filter=null_filter,
+        )
+        total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, count_params))
+
+    results, total = handle_file_group_search_results(stmt, params, total=total)
     return results, total
 
 

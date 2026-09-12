@@ -158,6 +158,10 @@ async def test_search_offset(test_session, archive_factory, async_client):
     await check_results(async_client, data, list(range(300, 280, -1)))
     data = {'search_str': None, 'offset': 500}
     await check_results(async_client, data, [])
+    # Past the last page still reports the true total (a separate COUNT, not COUNT(*) OVER()).
+    request, response = await async_client.post('/api/archive/search', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['totals']['file_groups'] == 500
 
 
 @pytest.mark.asyncio

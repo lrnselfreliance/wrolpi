@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import time
 import urllib.parse
 import zipfile
 from itertools import zip_longest
@@ -56,7 +57,8 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
            'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
-           'get_normalized_ignored_directories', 'sanitize_ignored_directories']
+           'get_normalized_ignored_directories', 'sanitize_ignored_directories',
+           'cached_search_total', 'search_filter_cache_key', 'count_file_groups']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -1038,6 +1040,45 @@ async def search_directories_by_name(session: Session, name: str, excluded: List
     return directories
 
 
+# Pagination totals: counting a large library is a full index walk that costs seconds cold on a
+# spinning disk.  Pagination can tolerate a total that is a minute stale.  Bypassed under pytest
+# so tests see exact totals.  Keyed by filters, never by offset/limit/order (except filters that
+# an order implies, e.g. viewed IS NOT NULL).
+SEARCH_TOTALS_CACHE_SECONDS = 60
+_SEARCH_TOTALS_CACHE: Dict[str, Tuple[float, int]] = dict()
+
+
+def cached_search_total(key: str, compute: Callable[[], int]) -> int:
+    """Return `compute()`; cache the result briefly unless running under pytest."""
+    if not PYTEST:
+        hit = _SEARCH_TOTALS_CACHE.get(key)
+        if hit and time.monotonic() - hit[0] < SEARCH_TOTALS_CACHE_SECONDS:
+            return hit[1]
+    total = compute()
+    _SEARCH_TOTALS_CACHE[key] = (time.monotonic(), total)
+    return total
+
+
+def search_filter_cache_key(corpus: str, **filters) -> str:
+    """Stable cache key for a search total.  Omits empty/false filters."""
+    payload = {'corpus': corpus}
+    for k, v in filters.items():
+        if v in (None, '', [], (), False):
+            continue
+        if isinstance(v, (list, tuple, set)):
+            v = sorted(v)
+        payload[k] = v
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+def count_file_groups(statement: str, params: dict) -> int:
+    """Run a `SELECT COUNT(*) AS total ...` statement and return the integer."""
+    with get_db_curs() as curs:
+        curs.execute(statement, params)
+        row = curs.fetchone()
+        return int(row['total'])
+
+
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
@@ -1127,25 +1168,56 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     elif order == '-viewed':
         order_by = 'viewed ASC NULLS LAST, 1 ASC'
 
-    if order and not search_str:
+    viewed_only = bool(order and not search_str)
+    if viewed_only:
         # Only filter out unviewed files if search_str is not provided.
         wheres.append('viewed IS NOT NULL')
 
-    wheres = '\n AND '.join(wheres)
-    selects = f"{', '.join(selects)}, " if selects else ""
+    where_sql = ('WHERE\n' + '\n AND '.join(wheres)) if wheres else ''
+    extra_selects = f', {", ".join(selects)}' if selects else ''
     join = '\n'.join(joins)
     stmt = f'''
-        SELECT fg.id, {selects} COUNT(*) OVER() AS total
+        SELECT fg.id{extra_selects}
             {headline}
         FROM file_group fg
         {join}
-        {f"WHERE {wheres}" if wheres else ""}
+        {where_sql}
         ORDER BY {order_by}
         LIMIT :limit OFFSET :offset
     '''
     logger.debug(stmt)
 
-    results, total = handle_file_group_search_results(stmt, params)
+    # COUNT(*) OVER() in the page query forces SQLite to visit every match before LIMIT.
+    # Count separately (and cache) so the page can use the datetime/id index.
+    if not search_str and not tag_names and not mimetypes and not model and not months \
+            and not from_year and not to_year and not any_tag and not url and not suffix \
+            and not path and not viewed_only:
+        count_stmt = 'SELECT COUNT(*) AS total FROM file_group'
+        count_params = dict()
+    elif fts_search:
+        # Count via a direct FTS join (no ranking) rather than the snippet subquery.
+        fts_count = fts.file_group_search(search_str, deep=deep)
+        count_wheres = list(wheres)
+        if fts_count:
+            count_wheres.append(fts_count.where)
+        count_where_sql = ('WHERE\n' + '\n AND '.join(count_wheres)) if count_wheres else ''
+        count_join = fts_count.join if fts_count else ''
+        count_stmt = f'SELECT COUNT(*) AS total FROM file_group fg {count_join} {count_where_sql}'
+        count_params = dict(params)
+        if fts_count:
+            count_params.update(fts_count.params)
+    else:
+        count_stmt = f'SELECT COUNT(*) AS total FROM file_group fg {join} {where_sql}'
+        count_params = params
+
+    cache_key = search_filter_cache_key(
+        'files', search_str=search_str, mimetypes=mimetypes, model=model,
+        tag_names=tag_names, months=months, from_year=from_year, to_year=to_year,
+        any_tag=any_tag, url=url, suffix=suffix, path=path, deep=deep,
+        viewed_only=viewed_only,
+    )
+    total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, count_params))
+    results, total = handle_file_group_search_results(stmt, params, total=total)
     return results, total
 
 
@@ -1153,8 +1225,8 @@ def handle_file_group_search_results(statement: str, params: dict, total: int = 
     """
     Execute the provided SQL statement and fetch the Files returned.
 
-    The statement must select `id` and, unless `total` is provided by the caller, a `total` column
-    (typically `COUNT(*) OVER()`).
+    The statement must select `id`.  Pass `total` from a separate COUNT (callers should not use
+    `COUNT(*) OVER()` in the page query; it prevents SQLite from applying LIMIT via an index).
 
     WARNING: This expects specific queries to be executed and shouldn't be used for things not related to file search.
 

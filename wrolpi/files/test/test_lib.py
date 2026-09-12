@@ -1101,6 +1101,11 @@ async def test_file_search_date_range(async_client, test_session, example_pdf, e
     files, total = lib.search_files('', 10, 0)
     assert total == 2, 'Should only be 2 files.'
 
+    # Past the last page still reports the true total (count is a separate query).
+    files, total = lib.search_files('', 10, 10)
+    assert files == []
+    assert total == 2
+
     # PDF was published in December.
     files, total = lib.search_files('', 10, 0, months=[12, ])
     assert total == 1, 'Only PDF should be from December 2022'
@@ -1118,6 +1123,15 @@ async def test_file_search_date_range(async_client, test_session, example_pdf, e
     files, total = lib.search_files('', 10, 0, to_year=2022)
     assert total == 1
     assert files[0]['id'] == pdf.id
+
+
+def test_search_filter_cache_key():
+    """Totals are cached by filters, not by page or sort direction."""
+    a = lib.search_filter_cache_key('videos', deep=False, tag_names=[], search_str='')
+    b = lib.search_filter_cache_key('videos')
+    assert a == b
+    assert lib.search_filter_cache_key('videos', tag_names=['b', 'a']) == \
+           lib.search_filter_cache_key('videos', tag_names=['a', 'b'])
 
 
 def test_replace_file(test_directory):

@@ -669,8 +669,7 @@ async def test_search_videos_default_page_pagination(test_session, video_factory
     await assert_video_search(order_by='-published_datetime', limit=2, offset=0, assert_total=6, assert_ids=newest[0:2])
     await assert_video_search(order_by='-published_datetime', limit=2, offset=2, assert_total=6, assert_ids=newest[2:4])
     await assert_video_search(order_by='-published_datetime', limit=2, offset=4, assert_total=6, assert_ids=newest[4:6])
-    # Past the end the fast path still reports the true total (the generic query has no rows to
-    # carry `COUNT(*) OVER()` in, so it reports 0 there; the fast path is the better behavior).
+    # Past the end both the date fast path and the generic query report the true total.
     await assert_video_search(order_by='-published_datetime', limit=2, offset=6, assert_total=6, assert_ids=[])
 
     # Oldest first: NULL dates first (SQLite sorts NULL lowest), ties broken by id ascending.
@@ -691,32 +690,38 @@ async def test_search_videos_default_page_pagination(test_session, video_factory
                 generic = ids(order, limit, offset)
             assert fast == generic, f'{order} limit={limit} offset={offset}: fast {fast} != generic {generic}'
 
+    # Generic orders used to report total=0 past the last page because COUNT(*) OVER() had no
+    # rows to ride on.  A separate COUNT reports the true total, like the date fast path.
+    await assert_video_search(order_by='-download_datetime', limit=2, offset=6, assert_total=6, assert_ids=[])
+    await assert_video_search(order_by='-size', limit=2, offset=6, assert_total=6, assert_ids=[])
+
 
 def test_cached_total(test_session):
-    """The unfiltered Videos page total is cached briefly: counting every video is a full index scan
-    that costs seconds cold on a large library, and pagination can tolerate a slightly stale total."""
-    from modules.videos.video import lib
+    """Search totals are cached briefly: counting a large library is a full index scan
+    that costs seconds cold, and pagination can tolerate a slightly stale total."""
+    from wrolpi.files import lib as files_lib
     calls = []
 
     def compute():
         calls.append(1)
         return 42
 
-    lib._TOTALS_CACHE.clear()
-    with mock.patch('modules.videos.video.lib.PYTEST', False):
-        assert lib._cached_total('k', compute) == 42
-        assert lib._cached_total('k', compute) == 42
+    files_lib._SEARCH_TOTALS_CACHE.clear()
+    with mock.patch('wrolpi.files.lib.PYTEST', False):
+        assert files_lib.cached_search_total('k', compute) == 42
+        assert files_lib.cached_search_total('k', compute) == 42
         assert len(calls) == 1, 'second call within the TTL should hit the cache'
         # Expire the entry.
-        cached_at, total = lib._TOTALS_CACHE['k']
-        lib._TOTALS_CACHE['k'] = (cached_at - lib.TOTALS_CACHE_SECONDS - 1, total)
-        assert lib._cached_total('k', compute) == 42
+        cached_at, total = files_lib._SEARCH_TOTALS_CACHE['k']
+        files_lib._SEARCH_TOTALS_CACHE['k'] = (
+            cached_at - files_lib.SEARCH_TOTALS_CACHE_SECONDS - 1, total)
+        assert files_lib.cached_search_total('k', compute) == 42
         assert len(calls) == 2, 'expired entry should be recomputed'
 
     # Tests need exact totals, so the cache is bypassed under pytest.
-    assert lib._cached_total('k', compute) == 42
-    assert len(calls) == 3
-    lib._TOTALS_CACHE.clear()
+    assert files_lib.cached_search_total('k', compute) == 42
+    assert len(calls) == 3, 'pytest should bypass the cache'
+
 
 async def test_video_description_endpoint(async_client, test_session, video_factory):
     """The description is served by its own endpoint, like comments and captions.  It comes from the

@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
+
 import pytest
+from sqlalchemy import text
 
 from modules.docs.lib import is_valid_author, split_authors, get_or_create_author_collection, \
     get_or_create_subject_collection, normalize_author, normalize_subject, split_subjects, is_valid_subject, \
@@ -334,3 +337,40 @@ async def test_search_docs_no_hint_when_no_query(test_session, test_directory):
     results, _ = _search_docs(mimetype='application/pdf')
     assert results and results[0]['id'] == fg.id
     assert 'section_hint' not in results[0]
+
+
+@pytest.mark.asyncio
+async def test_search_docs_browse_walks_file_group_date_index(test_session, test_directory, doc_factory):
+    """The unfiltered docs browse drives from file_group's date index and probes doc's covering index.
+
+    Driving from `doc` probes every (large) file_group row for the sort key; that took ~60 seconds
+    cold on a spinning disk with 20k docs and a 10 GB database, before any row was returned."""
+    from modules.docs.lib import _doc_browse_sql
+
+    docs = [doc_factory() for _ in range(3)]
+    docs[0].file_group.published_datetime = None
+    docs[1].file_group.published_datetime = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    docs[2].file_group.published_datetime = datetime(2021, 1, 1, tzinfo=timezone.utc)
+    test_session.commit()
+
+    sql = _doc_browse_sql('published_datetime')
+    plan = ' '.join(row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {sql}'),
+                                                            dict(limit=20, offset=0)).fetchall())
+    assert 'file_group_published_datetime_idx' in plan, plan
+    assert 'sqlite_autoindex_doc_1' in plan, plan
+    assert 'INTEGER PRIMARY KEY' not in plan, plan
+    assert 'TEMP B-TREE' not in plan, plan
+
+    # Newest first, NULL published dates last, same as the filtered ORM path.
+    results, total = _search_docs()
+    assert total == 3
+    assert [i['id'] for i in results] == [docs[2].file_group_id, docs[1].file_group_id, docs[0].file_group_id]
+
+    # Paging still works on the fast path.
+    results, total = _search_docs(limit=1, offset=1)
+    assert total == 3
+    assert [i['id'] for i in results] == [docs[1].file_group_id]
+
+    # Filtered searches are unaffected.
+    results, total = _search_docs(mimetype='application/pdf')
+    assert total == 3

@@ -348,6 +348,28 @@ def _get_doc(session, file_group_id: int):
     return doc
 
 
+# ORDER BY clauses for the unfiltered docs browse.  Only orderings that walk a `file_group` index
+# qualify; the rest keep the ORM query.
+DOC_BROWSE_ORDERS = {
+    'published_datetime': 'fg.published_datetime DESC NULLS LAST, fg.id DESC',
+    'id': 'fg.id DESC',
+}
+
+
+def _doc_browse_sql(order_by: str) -> Optional[str]:
+    """SQL for a page of FileGroup ids when browsing docs with no filters, or None when `order_by` has no fast path.
+
+    CROSS JOIN pins file_group as the outer table so SQLite walks its date index and probes doc's covering
+    (file_group_id) index -- both sides stay index-only.  Driving from `doc` probes every (large) file_group row
+    for the sort key, which took ~60 seconds cold on a spinning disk with 20k docs in a 10 GB database.  Same
+    approach as the archive browse."""
+    order = DOC_BROWSE_ORDERS.get(order_by)
+    if not order:
+        return None
+    return f'''SELECT fg.id AS id FROM file_group fg CROSS JOIN doc d ON d.file_group_id = fg.id
+        ORDER BY {order} LIMIT :limit OFFSET :offset'''
+
+
 def _search_docs(search_str=None, author=None, subject=None, language=None, mimetype=None,
                  limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False):
     from .models import Doc
@@ -418,7 +440,17 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         else:
             query = query.order_by(desc(FileGroup.id))
 
-        file_groups = query.offset(offset).limit(limit).all()
+        # Unfiltered browse: the ORM query above orders by a file_group column (or falls back to id) so the
+        # index-walking SQL returns the same page without probing every file_group row.
+        browse_sql = None
+        if unfiltered and order_by not in ('size', 'title'):
+            browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
+        if browse_sql:
+            fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
+            by_id = {fg.id: fg for fg in session.query(FileGroup).filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
+            file_groups = [by_id[i] for i in fg_ids]
+        else:
+            file_groups = query.offset(offset).limit(limit).all()
         fg_ids = [fg.id for fg in file_groups]
         results = [fg.__json__() for fg in file_groups]
 

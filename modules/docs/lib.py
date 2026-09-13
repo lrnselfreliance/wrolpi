@@ -348,6 +348,26 @@ def _get_doc(session, file_group_id: int):
     return doc
 
 
+# ORDER BY clauses for the unfiltered docs browse.  Only orderings that walk a `file_group` index
+# qualify; the rest keep the ORM query.
+DOC_BROWSE_ORDERS = {
+    'published_datetime': 'fg.published_datetime DESC NULLS LAST, fg.id DESC',
+    'id': 'fg.id DESC',
+}
+
+
+def _doc_browse_sql(order_by: str) -> Optional[str]:
+    """SQL for a page of FileGroup ids when browsing docs with no filters, or None when `order_by` has no fast path.
+
+    CROSS JOIN pins file_group as the outer table: SQLite walks its index in sort order and probes doc's covering
+    (file_group_id) index, so no file_group row is read for the sort key."""
+    order = DOC_BROWSE_ORDERS.get(order_by)
+    if not order:
+        return None
+    return f'''SELECT fg.id AS id FROM file_group fg CROSS JOIN doc d ON d.file_group_id = fg.id
+        ORDER BY {order} LIMIT :limit OFFSET :offset'''
+
+
 def _search_docs(search_str=None, author=None, subject=None, language=None, mimetype=None,
                  limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False):
     from .models import Doc
@@ -418,7 +438,16 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         else:
             query = query.order_by(desc(FileGroup.id))
 
-        file_groups = query.offset(offset).limit(limit).all()
+        # `size` sorts on a doc column and `title` has no file_group index, so neither may fall back to `id`.
+        browse_sql = None
+        if unfiltered and order_by not in ('size', 'title'):
+            browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
+        if browse_sql:
+            fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
+            by_id = {fg.id: fg for fg in session.query(FileGroup).filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
+            file_groups = [by_id[i] for i in fg_ids]
+        else:
+            file_groups = query.offset(offset).limit(limit).all()
         fg_ids = [fg.id for fg in file_groups]
         results = [fg.__json__() for fg in file_groups]
 

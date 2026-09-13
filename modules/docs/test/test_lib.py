@@ -341,10 +341,8 @@ async def test_search_docs_no_hint_when_no_query(test_session, test_directory):
 
 @pytest.mark.asyncio
 async def test_search_docs_browse_walks_file_group_date_index(test_session, test_directory, doc_factory):
-    """The unfiltered docs browse drives from file_group's date index and probes doc's covering index.
-
-    Driving from `doc` probes every (large) file_group row for the sort key; that took ~60 seconds
-    cold on a spinning disk with 20k docs and a 10 GB database, before any row was returned."""
+    """The unfiltered docs browse walks file_group's date index and probes doc's covering index: no file_group
+    primary-key probe and no temp sort tree.  Ordering (NULLS LAST) and paging match the ORM path."""
     from modules.docs.lib import _doc_browse_sql
 
     docs = [doc_factory() for _ in range(3)]
@@ -357,7 +355,7 @@ async def test_search_docs_browse_walks_file_group_date_index(test_session, test
     plan = ' '.join(row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {sql}'),
                                                             dict(limit=20, offset=0)).fetchall())
     assert 'file_group_published_datetime_idx' in plan, plan
-    assert 'sqlite_autoindex_doc_1' in plan, plan
+    assert 'SEARCH d USING COVERING INDEX' in plan and '(file_group_id=?)' in plan, plan
     assert 'INTEGER PRIMARY KEY' not in plan, plan
     assert 'TEMP B-TREE' not in plan, plan
 

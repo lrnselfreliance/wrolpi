@@ -359,10 +359,8 @@ DOC_BROWSE_ORDERS = {
 def _doc_browse_sql(order_by: str) -> Optional[str]:
     """SQL for a page of FileGroup ids when browsing docs with no filters, or None when `order_by` has no fast path.
 
-    CROSS JOIN pins file_group as the outer table so SQLite walks its date index and probes doc's covering
-    (file_group_id) index -- both sides stay index-only.  Driving from `doc` probes every (large) file_group row
-    for the sort key, which took ~60 seconds cold on a spinning disk with 20k docs in a 10 GB database.  Same
-    approach as the archive browse."""
+    CROSS JOIN pins file_group as the outer table: SQLite walks its index in sort order and probes doc's covering
+    (file_group_id) index, so no file_group row is read for the sort key."""
     order = DOC_BROWSE_ORDERS.get(order_by)
     if not order:
         return None
@@ -440,8 +438,7 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         else:
             query = query.order_by(desc(FileGroup.id))
 
-        # Unfiltered browse: the ORM query above orders by a file_group column (or falls back to id) so the
-        # index-walking SQL returns the same page without probing every file_group row.
+        # `size` sorts on a doc column and `title` has no file_group index, so neither may fall back to `id`.
         browse_sql = None
         if unfiltered and order_by not in ('size', 'title'):
             browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')

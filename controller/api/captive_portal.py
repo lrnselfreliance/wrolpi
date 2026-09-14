@@ -67,7 +67,7 @@ async def portal_continue(request: Request):
 async def probe(request: Request):
     """
     A connectivity probe.  Anything but the expected reply makes the phone show the portal, so
-    redirect until this client has loaded the portal page, then give the reply it expects.
+    redirect until this client has tapped Continue on the portal, then give the reply it expects.
     """
     if not is_captive_portal_enabled():
         raise HTTPException(status_code=404)

@@ -28,8 +28,8 @@ PROBE_HOSTS = (
 )
 
 # Paths those probes request, and the reply each OS takes as "online".  The Controller redirects a
-# probe to the portal until the client has loaded the portal page, then returns the expected
-# reply so the OS shows its "Done" button and keeps using the hotspot.
+# probe to the portal until the client taps Continue, then returns the expected reply so the OS
+# shows its "Done" button and keeps using the hotspot.
 # `/` is not listed: the dashboard already answers it with HTML, which a probe treats as a portal.
 PROBE_SUCCESS_RESPONSES = {
     '/hotspot-detect.html': (200, 'text/html',  # Apple
@@ -56,8 +56,7 @@ INCLUDE_FILE = DNSMASQ_SHARED_DIR / '50-wrolpi-captive-portal.conf'
 DEFAULT_HOTSPOT_IP = '10.42.0.1'
 
 PORTAL_PATH = '/portal'
-# A full-page navigation the user makes from the portal.  Phones only re-probe (and offer
-# "Done") after a navigation, so the client is acknowledged here, never on viewing the page.
+# Where Continue leads.  Phones only re-probe (and offer "Done") after a full-page navigation.
 PORTAL_CONTINUE_PATH = '/portal/continue'
 
 
@@ -140,7 +139,7 @@ def dnsmasq_config_ip() -> Optional[str]:
 
 
 # Clients (by hotspot IP) which tapped Continue on the portal page.  Their later probes get the
-# success reply.  Reset whenever the hotspot starts so a new session shows the page again.
+# success reply.  Cleared when the hotspot starts or stops so a new session shows the page again.
 _acknowledged_clients: set[str] = set()
 
 

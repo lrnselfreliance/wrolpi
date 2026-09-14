@@ -1089,6 +1089,14 @@ class TestStartHotspot:
         assert 'address=/captive.apple.com/10.42.1.1' in captive_portal.INCLUDE_FILE.read_text()
         assert run.call_args_list[-1][0][0] == ["nmcli", "connection", "up", "Hotspot"]
 
+    def test_stop_forgets_acknowledged_clients(self):
+        """A later joiner reusing the lease must see the portal page, not a silent success."""
+        captive_portal.acknowledge_client('10.42.0.210')
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("subprocess.run", return_value=mock.Mock(returncode=0, stdout="", stderr="")):
+            assert stop_hotspot()["success"] is True
+        assert not captive_portal.is_client_acknowledged('10.42.0.210')
+
     def test_start_forgets_acknowledged_clients(self, reset_runtime_config):
         """A new hotspot session shows every device the portal page again."""
         captive_portal.acknowledge_client('10.42.0.210')

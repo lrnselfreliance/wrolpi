@@ -595,6 +595,8 @@ def stop_hotspot() -> dict:
         return {"success": False, "error": "Not available in Docker mode"}
 
     logger.info("Stopping hotspot (turning WiFi radio off)")
+    # The session is over; a lease reused later must see the portal page again.
+    captive_portal_lib.reset_acknowledged_clients()
     try:
         # Turn off the radio to disconnect hotspot
         result = subprocess.run(

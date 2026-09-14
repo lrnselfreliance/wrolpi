@@ -157,7 +157,7 @@ class HotspotStatusResponse(BaseModel):
     ssid: Optional[str] = Field(default=None, description="Hotspot SSID when enabled")
     device: Optional[str] = Field(default=None, description="WiFi device name")
     ip: Optional[str] = Field(default=None, description="Hotspot IPv4 address when enabled")
-    captive_portal: bool = Field(default=False, description="Whether the captive portal is enabled")
+    captive_portal: bool = Field(default=True, description="Whether the captive portal is enabled")
     portal_url: Optional[str] = Field(default=None, description="Landing page URL when the hotspot is up")
 
 

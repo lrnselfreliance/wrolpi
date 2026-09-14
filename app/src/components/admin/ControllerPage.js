@@ -19,7 +19,7 @@ import {
     toast,
 } from "../ui";
 import {APIButton, BluetoothToggle, DesktopToggle, DirectorySearch, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle, VncToggle,} from "../Common";
-import {useDockerized, useMediaDirectory} from "../../hooks/customHooks";
+import {useDockerized, useHotspot, useMediaDirectory} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
 import {
     addFstabEntry,
@@ -1463,8 +1463,8 @@ function HotspotSettingsForm() {
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [qrOpen, setQrOpen] = React.useState(false);
-    // Hotspot clients need this address to reach the WROLPi; the captive portal page tells them.
     const [hotspotStatus, setHotspotStatus] = React.useState(null);
+    const {on: hotspotOn} = useHotspot();
 
     React.useEffect(() => {
         const fetchSettings = async () => {
@@ -1487,7 +1487,7 @@ function HotspotSettingsForm() {
         fetchSettings();
     }, []);
 
-    // The address is only meaningful while the hotspot is up; it is optional information.
+    // Re-read the address whenever the sibling HotspotToggle starts or stops the hotspot.
     React.useEffect(() => {
         if (dockerized) {
             return;
@@ -1507,7 +1507,7 @@ function HotspotSettingsForm() {
         return () => {
             cancelled = true;
         };
-    }, [dockerized]);
+    }, [dockerized, hotspotOn]);
 
     // The supported protocols depend on the selected device's hardware.
     React.useEffect(() => {

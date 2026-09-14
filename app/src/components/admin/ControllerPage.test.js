@@ -159,8 +159,9 @@ describe('ControllerPage', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         // Reset useDockerized to false for regular tests
-        const {useDockerized} = require('../../hooks/customHooks');
+        const {useDockerized, useHotspot} = require('../../hooks/customHooks');
         useDockerized.mockReturnValue(false);
+        useHotspot.mockReturnValue({on: true, setHotspot: jest.fn()});
         // resetMocks clears module-factory implementations, so configure hotspot mocks here.
         const controllerApi = require('../../api/controller');
         controllerApi.getHotspotSettings.mockResolvedValue(
@@ -284,6 +285,37 @@ describe('ControllerPage', () => {
         expect(screen.getByText(/Welcome page: http:\/\/10\.42\.0\.1\/portal/)).toBeInTheDocument();
     });
 
+    test('hotspot address is re-read when the hotspot is toggled', async () => {
+        const controllerApi = require('../../api/controller');
+        const {useHotspot} = require('../../hooks/customHooks');
+        useHotspot.mockReturnValue({on: false, setHotspot: jest.fn()});
+        controllerApi.getHotspotStatus.mockResolvedValue(
+            {enabled: false, available: true, device: 'wlan0', ip: null, captive_portal: true, portal_url: null});
+        const {rerender} = renderControllerPage();
+        await screen.findByLabelText('Captive portal');
+        expect(controllerApi.getHotspotStatus).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText('10.42.0.1')).not.toBeInTheDocument();
+
+        // The sibling HotspotToggle starts the hotspot.
+        useHotspot.mockReturnValue({on: true, setHotspot: jest.fn()});
+        controllerApi.getHotspotStatus.mockResolvedValue(
+            {enabled: true, available: true, device: 'wlan0', ip: '10.42.0.1', captive_portal: true,
+                portal_url: 'http://10.42.0.1/portal'});
+        rerender(
+            <BrowserRouter>
+                <MantineProvider theme={mantineTheme} cssVariablesResolver={cssVariablesResolver}>
+                    <ThemeContext.Provider value={defaultTheme}>
+                        <SettingsContext.Provider value={defaultSettings}>
+                            <ControllerPage/>
+                        </SettingsContext.Provider>
+                    </ThemeContext.Provider>
+                </MantineProvider>
+            </BrowserRouter>
+        );
+        expect(await screen.findByText('10.42.0.1')).toBeInTheDocument();
+        expect(controllerApi.getHotspotStatus).toHaveBeenCalledTimes(2);
+    });
+
     test('hotspot protocol dropdown only offers WPA2 on a Raspberry Pi', async () => {
         const {getHotspotProtocols} = require('../../api/controller');
         getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2']});
@@ -303,6 +335,7 @@ describe('DiskSection primary unmount', () => {
     const controllerApi = require('../../api/controller');
 
     beforeEach(() => {
+        require('../../hooks/customHooks').useHotspot.mockReturnValue({on: false, setHotspot: jest.fn()});
         controllerApi.getDisks.mockResolvedValue([
             {
                 name: 'sda1',
@@ -381,8 +414,9 @@ describe('groupServices', () => {
 describe('ControllerPage in Docker mode', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        const {useDockerized} = require('../../hooks/customHooks');
+        const {useDockerized, useHotspot} = require('../../hooks/customHooks');
         useDockerized.mockReturnValue(true);
+        useHotspot.mockReturnValue({on: false, setHotspot: jest.fn()});
     });
 
     test('hides reboot/shutdown buttons in Docker mode', async () => {

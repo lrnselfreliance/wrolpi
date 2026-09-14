@@ -1000,14 +1000,31 @@ class TestStartHotspot:
     def test_writes_captive_portal_config_before_creating_hotspot(self, reset_runtime_config):
         """dnsmasq reads the include at activation, so it must exist before `nmcli ... hotspot`."""
         include = captive_portal.INCLUDE_FILE
-        result, run = self._start_with_nmcli()
+        seen = {}
+        results = iter([
+            mock.Mock(returncode=0, stdout="", stderr=""),  # radio on
+            mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr=""),  # device ready
+            mock.Mock(returncode=0, stdout="", stderr=""),  # nmcli device wifi hotspot
+            mock.Mock(returncode=0, stdout="", stderr=""),  # modify
+            mock.Mock(returncode=0, stdout="", stderr=""),  # up
+            mock.Mock(returncode=0, stdout=HOTSPOT_IP_JSON, stderr=""),  # ip addr
+        ])
+
+        def run(cmd, **kwargs):
+            if 'hotspot' in cmd:
+                # Observe the include at the moment NetworkManager (and its dnsmasq) start.
+                seen['include_at_create'] = include.read_text() if include.exists() else None
+            return next(results)
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False), \
+                mock.patch("subprocess.run", side_effect=run), \
+                mock.patch("time.sleep"):
+            result = start_hotspot()
+
         assert result["success"] is True
-        assert include.exists()
-        assert 'address=/captive.apple.com/10.42.0.1' in include.read_text()
-        # The address is only read after the hotspot exists; the include was written before that.
-        hotspot_call_index = next(i for i, c in enumerate(run.call_args_list) if 'hotspot' in c[0][0])
-        ip_call_index = next(i for i, c in enumerate(run.call_args_list) if c[0][0][0] == 'ip')
-        assert hotspot_call_index < ip_call_index
+        assert seen['include_at_create'] is not None
+        assert 'address=/captive.apple.com/10.42.0.1' in seen['include_at_create']
 
     def test_disabled_removes_captive_portal_config(self, reset_runtime_config):
         include = captive_portal.INCLUDE_FILE
@@ -1028,6 +1045,49 @@ class TestStartHotspot:
         # Re-activated once more so dnsmasq re-reads the corrected include.
         ups = [c for c in run.call_args_list if c[0][0][:3] == ['nmcli', 'connection', 'up']]
         assert len(ups) == 2
+
+    def test_reactivation_failure_is_logged(self, reset_runtime_config, caplog):
+        """dnsmasq keeps the old address if the corrective `up` fails; say so."""
+        other = '[{"ifname": "wlan0", "addr_info": [{"family": "inet", "local": "10.42.1.1"}]}]'
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        ip_addr = mock.Mock(returncode=0, stdout=other, stderr="")
+        failed_up = mock.Mock(returncode=4, stdout="", stderr="Error: Connection activation failed")
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False), \
+                mock.patch("subprocess.run", side_effect=[ok, device_ready, ok, ok, ok, ip_addr, failed_up]), \
+                mock.patch("time.sleep"):
+            result = start_hotspot()
+        assert result["success"] is True
+        assert "Could not re-activate hotspot for captive portal" in caplog.text
+        assert "Connection activation failed" in caplog.text
+
+    def test_wpa3_reverted_hotspot_still_gets_captive_portal_ip(self, reset_runtime_config):
+        """A WPA3 failure that reverts to WPA2 leaves the hotspot up; it still needs the right address."""
+        other = '[{"ifname": "wlan0", "addr_info": [{"family": "inet", "local": "10.42.1.1"}]}]'
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        sae_failed = mock.Mock(returncode=1, stdout="", stderr="Error: sae unsupported")
+        ip_addr = mock.Mock(returncode=0, stdout=other, stderr="")
+
+        def mock_get_config(key, default=None):
+            return {'hotspot.protocol': 'wpa3'}.get(key, default)
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config), \
+                mock.patch("subprocess.run", side_effect=[
+                    ok, device_ready, ok,  # radio, ready, hotspot
+                    sae_failed,  # modify to sae fails
+                    ok, ok,  # revert modify, revert up
+                    ip_addr, ok,  # captive portal: read address, re-activate
+                ]) as run, \
+                mock.patch("time.sleep"):
+            result = start_hotspot()
+        assert result["success"] is False
+        assert "reverted to WPA2" in result["error"]
+        assert 'address=/captive.apple.com/10.42.1.1' in captive_portal.INCLUDE_FILE.read_text()
+        assert run.call_args_list[-1][0][0] == ["nmcli", "connection", "up", "Hotspot"]
 
     def test_no_reactivation_when_ip_matches(self, reset_runtime_config):
         result, run = self._start_with_nmcli()

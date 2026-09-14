@@ -530,6 +530,8 @@ def start_hotspot() -> dict:
                         capture_output=True, text=True, timeout=30,
                     )
                 if revert_modify.returncode == 0 and revert_up.returncode == 0:
+                    # The hotspot is up (as WPA2), so it still needs its captive portal address.
+                    _fix_captive_portal_ip(device)
                     return {"success": False,
                             "error": f"WPA3 is not supported by {device}; hotspot reverted to WPA2: {error}"}
                 revert_error = (revert_modify.stderr if revert_modify.returncode != 0 else revert_up.stderr).strip()
@@ -572,7 +574,10 @@ def _fix_captive_portal_ip(device: str):
     if not captive_portal_lib.apply_dnsmasq_config(ip):
         return
     try:
-        subprocess.run(["nmcli", "connection", "up", "Hotspot"], capture_output=True, text=True, timeout=30)
+        up = subprocess.run(["nmcli", "connection", "up", "Hotspot"], capture_output=True, text=True, timeout=30)
+        if up.returncode != 0:
+            logger.warning("Could not re-activate hotspot for captive portal; dnsmasq still serves the old"
+                           " address: %s", up.stderr.strip())
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         logger.warning("Could not re-activate hotspot for captive portal: %s", e)
 

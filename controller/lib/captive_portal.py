@@ -1,16 +1,6 @@
 """
-Hotspot captive portal.
-
-Phones confirm Internet access after joining WiFi by fetching a fixed plain-HTTP URL and
-expecting a fixed reply.  Any other reply means "there is a sign-in page here", and the phone
-shows it.  The hotspot's DNS (NetworkManager's dnsmasq) answers those probe hostnames with the
-hotspot's own address, the probes land on the Controller (port 80), and the Controller redirects
-them to a landing page that shows the WROLPi's address.
-
-Only the probe hostnames are hijacked.  NetworkManager's shared mode forwards other names (and
-traffic) to whatever uplink the WROLPi has, and a wildcard would break that.
-
-Native RPi/Debian only: Docker has no hotspot, no host NetworkManager, and no port 80.
+Hotspot captive portal: the dnsmasq include which points OS connectivity-probe hostnames at this
+WROLPi, so devices that join the hotspot are shown its address.  Native only (Docker has no hotspot).
 """
 import json
 import logging
@@ -22,7 +12,8 @@ from controller.lib.config import get_config_value, is_docker_mode
 
 logger = logging.getLogger(__name__)
 
-# Hostnames the major operating systems probe.  Resolved to the hotspot IP by dnsmasq.
+# Hostnames the major operating systems probe for Internet access.  Only these are hijacked: a
+# wildcard would break the hotspot's forwarding of everything else to the WROLPi's uplink.
 PROBE_HOSTS = (
     'captive.apple.com',  # iOS / macOS
     'connectivitycheck.gstatic.com',  # Android

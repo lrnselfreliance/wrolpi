@@ -36,6 +36,7 @@ from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
 from wrolpi.log_levels import int_to_name
+from wrolpi.speedtest import speedtest_bp
 from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
@@ -44,6 +45,9 @@ from wrolpi.version import __version__
 logger = logger.getChild(__name__)
 
 api_app.config.FALLBACK_ERROR_FORMAT = 'json'
+# Caddy is the single proxy in front of the API; trust its X-Forwarded-For so request.remote_addr
+# is the browser's address (used by the speed test).
+api_app.config.PROXIES_COUNT = 1
 
 api_bp = Blueprint('RootAPI', url_prefix='/api')
 
@@ -57,6 +61,7 @@ api_app.blueprint(files_bp)
 api_app.blueprint(flasher_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
+api_app.blueprint(speedtest_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
 

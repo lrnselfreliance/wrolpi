@@ -49,18 +49,28 @@
     </style>
 </head>
 <body>
+    {% if connected %}
+    <h1>You are connected</h1>
+    <p class="muted">Tap <strong>Done</strong> in the corner of this window to keep using the
+        <strong>{{ ssid }}</strong> hotspot.</p>
+    {% else %}
     <h1>This is your WROLPi</h1>
     <p class="muted">You are connected to the <strong>{{ ssid }}</strong> hotspot.</p>
+    {% endif %}
 
     <p>The address of this WROLPi is</p>
     <div class="address">{{ ip }}</div>
 
+    {% if connected %}
     <a class="btn" href="https://{{ ip }}/">Open WROLPi</a>
     <a class="btn secondary" href="https://{{ ip }}/controller/">Open the Controller</a>
+    {% else %}
+    {# A real navigation: phones only re-check the network (and offer "Done") after one. #}
+    <a class="btn" href="{{ continue_path }}">Continue</a>
+    {% endif %}
 
     <div class="note muted">
-        <p>Tap <strong>Done</strong> to stay connected, then open your browser to
-            <strong>https://{{ ip }}</strong>.</p>
+        <p>Open your browser to <strong>https://{{ ip }}</strong> to use WROLPi.</p>
         <p>Your browser will warn about the certificate the first time. That is expected for an
             offline WROLPi; continue to the site.</p>
         <p>This hotspot does not provide Internet access.</p>

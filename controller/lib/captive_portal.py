@@ -19,6 +19,7 @@ PROBE_HOSTS = (
     'captive.g.aaplimg.com',  # the CDN name captive.apple.com aliases to
     'connectivitycheck.gstatic.com',  # Android
     'connectivitycheck.android.com',  # Android (older)
+    'clients3.google.com',  # Android (older)
     'www.msftconnecttest.com',  # Windows 10+
     'www.msftncsi.com',  # Windows 7/8
     'detectportal.firefox.com',  # Firefox
@@ -55,6 +56,9 @@ INCLUDE_FILE = DNSMASQ_SHARED_DIR / '50-wrolpi-captive-portal.conf'
 DEFAULT_HOTSPOT_IP = '10.42.0.1'
 
 PORTAL_PATH = '/portal'
+# A full-page navigation the user makes from the portal.  Phones only re-probe (and offer
+# "Done") after a navigation, so the client is acknowledged here, never on viewing the page.
+PORTAL_CONTINUE_PATH = '/portal/continue'
 
 
 def is_captive_portal_enabled() -> bool:
@@ -135,13 +139,13 @@ def dnsmasq_config_ip() -> Optional[str]:
     return None
 
 
-# Clients (by hotspot IP) which have loaded the portal page.  Their later probes get the success
-# reply.  Reset whenever the hotspot starts so a new session shows the page again.
+# Clients (by hotspot IP) which tapped Continue on the portal page.  Their later probes get the
+# success reply.  Reset whenever the hotspot starts so a new session shows the page again.
 _acknowledged_clients: set[str] = set()
 
 
 def acknowledge_client(ip: str):
-    """The client at `ip` has seen the portal page; its probes now say "online"."""
+    """The client at `ip` tapped Continue on the portal page; its probes now say "online"."""
     if ip:
         _acknowledged_clients.add(ip)
 

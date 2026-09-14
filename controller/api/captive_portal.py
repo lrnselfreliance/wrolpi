@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from controller.lib.admin import get_hotspot_device, get_hotspot_ssid
 from controller.lib.captive_portal import (
+    PORTAL_CONTINUE_PATH,
     PORTAL_PATH,
     PROBE_PATHS,
     PROBE_SUCCESS_RESPONSES,
@@ -34,19 +35,33 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 NO_STORE = {"Cache-Control": "no-store"}
 
 
-@router.get(PORTAL_PATH, include_in_schema=False)
-async def portal(request: Request):
-    """The landing page: this WROLPi's address and links to WROLPi and the Controller."""
+def _render_portal(request: Request, connected: bool):
     if is_docker_mode():
         raise HTTPException(status_code=404)
     ip = get_hotspot_ip(get_hotspot_device())
     if not ip:
         # Hotspot is down; a page with the wrong address is worse than none.
         raise HTTPException(status_code=404)
-    # The phone has seen the address; let its next probe succeed so it offers "Done".
-    acknowledge_client(request.client.host if request.client else None)
-    context = {"ip": ip, "ssid": get_hotspot_ssid()}
+    context = {"ip": ip, "ssid": get_hotspot_ssid(), "connected": connected,
+               "continue_path": PORTAL_CONTINUE_PATH}
     return templates.TemplateResponse(request, "portal.html", context, headers=NO_STORE)
+
+
+@router.get(PORTAL_PATH, include_in_schema=False)
+async def portal(request: Request):
+    """The welcome page: this WROLPi's address and a Continue button."""
+    return _render_portal(request, connected=False)
+
+
+@router.get(PORTAL_CONTINUE_PATH, include_in_schema=False)
+async def portal_continue(request: Request):
+    """
+    The page after Continue.  The phone re-probes after this navigation; the client is now
+    acknowledged so that probe succeeds and the sheet offers "Done".
+    """
+    response = _render_portal(request, connected=True)  # 404s first if the hotspot is down
+    acknowledge_client(request.client.host if request.client else None)
+    return response
 
 
 async def probe(request: Request):

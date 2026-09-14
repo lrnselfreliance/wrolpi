@@ -12,6 +12,7 @@ from controller.lib.captive_portal import (
     DEFAULT_HOTSPOT_IP,
     FRIENDLY_NAME,
     PROBE_HOSTS,
+    PORTAL_CONTINUE_PATH,
     PROBE_PATHS,
     PROBE_SUCCESS_RESPONSES,
     acknowledge_client,
@@ -169,12 +170,37 @@ class TestProbeRedirects:
 
 
 class TestAcknowledgedClients:
-    """Once a client has seen the portal page, its probes say "online" so the OS offers Done."""
+    """Once a client taps Continue, its probes say "online" so the OS offers Done."""
 
-    @pytest.mark.parametrize("path", PROBE_PATHS)
-    def test_probe_succeeds_after_portal_seen(self, test_client, path):
+    def test_viewing_the_portal_does_not_acknowledge(self, test_client):
+        """iOS fetches the page in the background before showing it; only a tap counts."""
         with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value='10.42.0.1'):
             assert test_client.get('/portal').status_code == 200
+        assert not is_client_acknowledged('testclient')
+        assert test_client.get('/hotspot-detect.html', follow_redirects=False).status_code == 302
+
+    def test_continue_page(self, test_client):
+        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value='10.42.0.1'):
+            response = test_client.get(PORTAL_CONTINUE_PATH)
+        assert response.status_code == 200
+        assert response.headers['cache-control'] == 'no-store'
+        assert 'Done' in response.text
+        assert '10.42.0.1' in response.text
+        assert 'https://10.42.0.1/' in response.text
+        assert is_client_acknowledged('testclient')
+
+    def test_continue_404_when_hotspot_down(self, test_client):
+        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value=None):
+            assert test_client.get(PORTAL_CONTINUE_PATH).status_code == 404
+        assert not is_client_acknowledged('testclient')
+
+    def test_continue_404_in_docker(self, test_client_docker_mode):
+        assert test_client_docker_mode.get(PORTAL_CONTINUE_PATH).status_code == 404
+
+    @pytest.mark.parametrize("path", PROBE_PATHS)
+    def test_probe_succeeds_after_continue(self, test_client, path):
+        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value='10.42.0.1'):
+            assert test_client.get(PORTAL_CONTINUE_PATH).status_code == 200
         response = test_client.get(path, follow_redirects=False)
         status, media_type, body = PROBE_SUCCESS_RESPONSES[path]
         assert response.status_code == status
@@ -189,12 +215,6 @@ class TestAcknowledgedClients:
         response = test_client.get('/hotspot-detect.html')
         assert response.status_code == 200
         assert '<BODY>Success</BODY>' in response.text
-
-    def test_portal_404_does_not_acknowledge(self, test_client):
-        """A hotspot-down 404 is not the client seeing the address."""
-        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value=None):
-            assert test_client.get('/portal').status_code == 404
-        assert test_client.get('/generate_204', follow_redirects=False).status_code == 302
 
     def test_other_clients_still_redirected(self, test_client):
         acknowledge_client('10.42.0.99')
@@ -220,8 +240,7 @@ class TestPortalPage:
         assert response.headers['cache-control'] == 'no-store'
         body = response.text
         assert '10.42.0.1' in body
-        assert 'https://10.42.0.1/' in body
-        assert 'https://10.42.0.1/controller/' in body
+        assert f'href="{PORTAL_CONTINUE_PATH}"' in body
         assert 'WROLPi' in body  # the SSID
 
     def test_404_when_hotspot_down(self, test_client):

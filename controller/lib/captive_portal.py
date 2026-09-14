@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # wildcard would break the hotspot's forwarding of everything else to the WROLPi's uplink.
 PROBE_HOSTS = (
     'captive.apple.com',  # iOS / macOS
+    'captive.g.aaplimg.com',  # the CDN name captive.apple.com aliases to
     'connectivitycheck.gstatic.com',  # Android
     'connectivitycheck.android.com',  # Android (older)
     'www.msftconnecttest.com',  # Windows 10+
@@ -88,8 +89,11 @@ def render_dnsmasq_config(ip: str) -> str:
         '# Captive portal: captive-portal probe hostnames resolve to this WROLPi.',
         '# Only these names are hijacked so the hotspot still forwards everything else.',
     ]
-    lines.extend(f'address=/{host}/{ip}' for host in PROBE_HOSTS)
-    lines.append(f'address=/{FRIENDLY_NAME}/{ip}')
+    for host in (*PROBE_HOSTS, FRIENDLY_NAME):
+        # `address=` only answers A/AAAA.  Phones also ask for the HTTPS record type, and a
+        # forwarded answer leads them to the real host; `local=` never forwards any type.
+        lines.append(f'local=/{host}/')
+        lines.append(f'address=/{host}/{ip}')
     return '\n'.join(lines) + '\n'
 
 

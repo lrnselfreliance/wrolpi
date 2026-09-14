@@ -41,6 +41,15 @@ class TestRenderDnsmasqConfig:
             assert f'address=/{host}/10.42.0.1' in config
         assert f'address=/{FRIENDLY_NAME}/10.42.0.1' in config
 
+    def test_probe_hosts_are_never_forwarded(self):
+        """iOS asks for the HTTPS record type too; a forwarded answer leads it to the real Apple."""
+        config = render_dnsmasq_config('10.42.0.1')
+        for host in (*PROBE_HOSTS, FRIENDLY_NAME):
+            assert f'local=/{host}/' in config
+
+    def test_apple_cdn_alias_is_a_probe_host(self):
+        assert 'captive.g.aaplimg.com' in PROBE_HOSTS
+
     def test_no_wildcard(self):
         """A wildcard would break the hotspot's Internet passthrough."""
         assert '/#/' not in render_dnsmasq_config('10.42.0.1')

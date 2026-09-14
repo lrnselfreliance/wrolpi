@@ -50,6 +50,9 @@ mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
 mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+# The Controller writes the hotspot captive-portal dnsmasq include here when the hotspot starts.
+# Never copy a file into it: the include only exists while the setting is enabled.
+mkdir -p /etc/NetworkManager/dnsmasq-shared.d
 
 # Generate certificate for HTTPS.
 /opt/wrolpi/scripts/generate_certificates.sh

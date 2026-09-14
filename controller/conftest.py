@@ -58,6 +58,16 @@ def _isolate_media_directory(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_dnsmasq_include(tmp_path_factory, monkeypatch):
+    """Point the captive-portal dnsmasq include at a temp file so tests never write /etc."""
+    import controller.lib.captive_portal as captive_portal
+    include = tmp_path_factory.mktemp("dnsmasq") / "50-wrolpi-captive-portal.conf"
+    monkeypatch.setattr(captive_portal, "INCLUDE_FILE", include)
+    # Portal acknowledgements are process state; every test starts with none.
+    captive_portal.reset_acknowledged_clients()
+
+
+@pytest.fixture(autouse=True)
 def _patch_status_worker():
     """Replace the real status worker with a no-op for every test.
 

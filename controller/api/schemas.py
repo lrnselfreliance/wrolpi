@@ -156,6 +156,9 @@ class HotspotStatusResponse(BaseModel):
     reason: Optional[str] = Field(default=None, description="Reason if unavailable")
     ssid: Optional[str] = Field(default=None, description="Hotspot SSID when enabled")
     device: Optional[str] = Field(default=None, description="WiFi device name")
+    ip: Optional[str] = Field(default=None, description="Hotspot IPv4 address when enabled")
+    captive_portal: bool = Field(default=True, description="Whether the captive portal is enabled")
+    portal_url: Optional[str] = Field(default=None, description="Landing page URL when the hotspot is up")
 
 
 class HotspotDevicesResponse(BaseModel):
@@ -178,6 +181,8 @@ class HotspotSettingsRequest(BaseModel):
     ssid: Optional[str] = Field(default=None, description="Hotspot SSID")
     password: Optional[str] = Field(default=None, description="Hotspot password (8 to 63 characters)")
     protocol: Optional[str] = Field(default=None, description="Hotspot protocol (wpa2 or wpa3)")
+    captive_portal: Optional[bool] = Field(default=None,
+                                           description="Show a landing page to devices that join the hotspot")
 
 
 class HotspotSettingsResponse(BaseModel):
@@ -187,6 +192,9 @@ class HotspotSettingsResponse(BaseModel):
     ssid: str = Field(description="Hotspot SSID")
     password: str = Field(description="Hotspot password")
     protocol: str = Field(description="Hotspot protocol (wpa2 or wpa3)")
+    captive_portal: bool = Field(default=True, description="Show a landing page to devices that join the hotspot")
+    restart_required: bool = Field(default=False,
+                                   description="A saved change only applies after the hotspot is restarted")
 
 
 class HotspotActionResponse(BaseModel):

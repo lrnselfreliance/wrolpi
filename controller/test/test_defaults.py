@@ -111,6 +111,7 @@ class TestHotspotConfig:
         ("device", "wlan0"),
         ("ssid", "WROLPi"),
         ("password", "wrolpi hotspot"),
+        ("captive_portal", True),
     ])
     def test_hotspot_defaults(self, key, expected):
         """Hotspot should have expected default values."""

@@ -13,7 +13,11 @@ from controller.lib.captive_portal import (
     FRIENDLY_NAME,
     PROBE_HOSTS,
     PROBE_PATHS,
+    PROBE_SUCCESS_RESPONSES,
+    acknowledge_client,
     apply_dnsmasq_config,
+    is_client_acknowledged,
+    reset_acknowledged_clients,
     dnsmasq_config_ip,
     get_hotspot_ip,
     is_captive_portal_enabled,
@@ -162,6 +166,49 @@ class TestProbeRedirects:
     def test_probe_404_in_docker(self, test_client_docker_mode):
         response = test_client_docker_mode.get('/hotspot-detect.html', follow_redirects=False)
         assert response.status_code == 404
+
+
+class TestAcknowledgedClients:
+    """Once a client has seen the portal page, its probes say "online" so the OS offers Done."""
+
+    @pytest.mark.parametrize("path", PROBE_PATHS)
+    def test_probe_succeeds_after_portal_seen(self, test_client, path):
+        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value='10.42.0.1'):
+            assert test_client.get('/portal').status_code == 200
+        response = test_client.get(path, follow_redirects=False)
+        status, media_type, body = PROBE_SUCCESS_RESPONSES[path]
+        assert response.status_code == status
+        assert response.text == body
+        assert response.headers['cache-control'] == 'no-store'
+        if body:
+            assert response.headers['content-type'].startswith(media_type)
+
+    def test_apple_probe_says_success(self, test_client):
+        """iOS looks for this exact body before it shows the Done button."""
+        acknowledge_client('testclient')
+        response = test_client.get('/hotspot-detect.html')
+        assert response.status_code == 200
+        assert '<BODY>Success</BODY>' in response.text
+
+    def test_portal_404_does_not_acknowledge(self, test_client):
+        """A hotspot-down 404 is not the client seeing the address."""
+        with mock.patch("controller.api.captive_portal.get_hotspot_ip", return_value=None):
+            assert test_client.get('/portal').status_code == 404
+        assert test_client.get('/generate_204', follow_redirects=False).status_code == 302
+
+    def test_other_clients_still_redirected(self, test_client):
+        acknowledge_client('10.42.0.99')
+        assert not is_client_acknowledged('testclient')
+        assert test_client.get('/generate_204', follow_redirects=False).status_code == 302
+
+    def test_reset_shows_portal_again(self, test_client):
+        acknowledge_client('testclient')
+        reset_acknowledged_clients()
+        assert test_client.get('/generate_204', follow_redirects=False).status_code == 302
+
+    def test_acknowledge_ignores_missing_ip(self):
+        acknowledge_client(None)
+        assert not is_client_acknowledged(None)
 
 
 class TestPortalPage:

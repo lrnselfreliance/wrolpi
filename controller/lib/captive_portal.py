@@ -26,17 +26,22 @@ PROBE_HOSTS = (
     'nmcheck.gnome.org',  # GNOME
 )
 
-# Paths those probes request.  The Controller redirects each of these to the portal.
+# Paths those probes request, and the reply each OS takes as "online".  The Controller redirects a
+# probe to the portal until the client has loaded the portal page, then returns the expected
+# reply so the OS shows its "Done" button and keeps using the hotspot.
 # `/` is not listed: the dashboard already answers it with HTML, which a probe treats as a portal.
-PROBE_PATHS = (
-    '/hotspot-detect.html',  # Apple
-    '/generate_204',  # Android
-    '/connecttest.txt',  # Windows 10+
-    '/ncsi.txt',  # Windows 7/8
-    '/success.txt',  # Firefox
-    '/canonical.html',  # Firefox
-    '/check_network_status.txt',  # GNOME
-)
+PROBE_SUCCESS_RESPONSES = {
+    '/hotspot-detect.html': (200, 'text/html',  # Apple
+                             '<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>'),
+    '/generate_204': (204, 'text/plain', ''),  # Android
+    '/connecttest.txt': (200, 'text/plain', 'Microsoft Connect Test'),  # Windows 10+
+    '/ncsi.txt': (200, 'text/plain', 'Microsoft NCSI'),  # Windows 7/8
+    '/success.txt': (200, 'text/plain', 'success\n'),  # Firefox
+    '/canonical.html': (200, 'text/html',  # Firefox
+                        '<meta http-equiv="refresh" content="0;url=https://support.mozilla.org/kb/captive-portal"/>'),
+    '/check_network_status.txt': (200, 'text/plain', 'NetworkManager is online\n'),  # GNOME
+}
+PROBE_PATHS = tuple(PROBE_SUCCESS_RESPONSES)
 
 # `http://wrolpi/` also reaches the WROLPi from a hotspot client.
 FRIENDLY_NAME = 'wrolpi'
@@ -128,3 +133,22 @@ def dnsmasq_config_ip() -> Optional[str]:
     except OSError:
         pass
     return None
+
+
+# Clients (by hotspot IP) which have loaded the portal page.  Their later probes get the success
+# reply.  Reset whenever the hotspot starts so a new session shows the page again.
+_acknowledged_clients: set[str] = set()
+
+
+def acknowledge_client(ip: str):
+    """The client at `ip` has seen the portal page; its probes now say "online"."""
+    if ip:
+        _acknowledged_clients.add(ip)
+
+
+def is_client_acknowledged(ip: str) -> bool:
+    return ip in _acknowledged_clients
+
+
+def reset_acknowledged_clients():
+    _acknowledged_clients.clear()

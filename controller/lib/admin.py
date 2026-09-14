@@ -470,7 +470,9 @@ def start_hotspot() -> dict:
         # must be in place first.  The address is not known until then; NetworkManager almost
         # always picks the default, and the file is corrected below if it did not.
         captive_portal_lib.apply_dnsmasq_config(captive_portal_lib.dnsmasq_config_ip()
-                                            or captive_portal_lib.DEFAULT_HOTSPOT_IP)
+                                                or captive_portal_lib.DEFAULT_HOTSPOT_IP)
+        # A new hotspot session: every client sees the portal page again.
+        captive_portal_lib.reset_acknowledged_clients()
 
         # Create hotspot using NetworkManager
         logger.info("Starting hotspot on %s with SSID %s", device, ssid)

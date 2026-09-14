@@ -63,6 +63,8 @@ def _isolate_dnsmasq_include(tmp_path_factory, monkeypatch):
     import controller.lib.captive_portal as captive_portal
     include = tmp_path_factory.mktemp("dnsmasq") / "50-wrolpi-captive-portal.conf"
     monkeypatch.setattr(captive_portal, "INCLUDE_FILE", include)
+    # Portal acknowledgements are process state; every test starts with none.
+    captive_portal.reset_acknowledged_clients()
 
 
 @pytest.fixture(autouse=True)

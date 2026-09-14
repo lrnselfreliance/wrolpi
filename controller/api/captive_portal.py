@@ -9,15 +9,18 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from controller.lib.admin import get_hotspot_device, get_hotspot_ssid
 from controller.lib.captive_portal import (
     PORTAL_PATH,
     PROBE_PATHS,
+    PROBE_SUCCESS_RESPONSES,
+    acknowledge_client,
     get_hotspot_ip,
     is_captive_portal_enabled,
+    is_client_acknowledged,
 )
 from controller.lib.config import is_docker_mode
 
@@ -40,14 +43,22 @@ async def portal(request: Request):
     if not ip:
         # Hotspot is down; a page with the wrong address is worse than none.
         raise HTTPException(status_code=404)
+    # The phone has seen the address; let its next probe succeed so it offers "Done".
+    acknowledge_client(request.client.host if request.client else None)
     context = {"ip": ip, "ssid": get_hotspot_ssid()}
     return templates.TemplateResponse(request, "portal.html", context, headers=NO_STORE)
 
 
-async def probe():
-    """A connectivity probe.  Anything but the expected reply makes the phone show the portal."""
+async def probe(request: Request):
+    """
+    A connectivity probe.  Anything but the expected reply makes the phone show the portal, so
+    redirect until this client has loaded the portal page, then give the reply it expects.
+    """
     if not is_captive_portal_enabled():
         raise HTTPException(status_code=404)
+    if is_client_acknowledged(request.client.host if request.client else None):
+        status, media_type, body = PROBE_SUCCESS_RESPONSES[request.url.path]
+        return Response(content=body, status_code=status, media_type=media_type, headers=NO_STORE)
     return RedirectResponse(url=PORTAL_PATH, status_code=302, headers=NO_STORE)
 
 

@@ -1089,6 +1089,13 @@ class TestStartHotspot:
         assert 'address=/captive.apple.com/10.42.1.1' in captive_portal.INCLUDE_FILE.read_text()
         assert run.call_args_list[-1][0][0] == ["nmcli", "connection", "up", "Hotspot"]
 
+    def test_start_forgets_acknowledged_clients(self, reset_runtime_config):
+        """A new hotspot session shows every device the portal page again."""
+        captive_portal.acknowledge_client('10.42.0.210')
+        result, _ = self._start_with_nmcli()
+        assert result["success"] is True
+        assert not captive_portal.is_client_acknowledged('10.42.0.210')
+
     def test_no_reactivation_when_ip_matches(self, reset_runtime_config):
         result, run = self._start_with_nmcli()
         ups = [c for c in run.call_args_list if c[0][0][:3] == ['nmcli', 'connection', 'up']]

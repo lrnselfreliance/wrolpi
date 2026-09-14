@@ -74,6 +74,9 @@ def attach_shared_contexts(app: Sanic):
     # held until the API restarts; that is accepted, transcoding is not critical work.
     app.shared_ctx.transcode_lock = multiprocessing.Lock()
 
+    # Speed tests in flight across all workers (wrolpi.speedtest).  Informational only, no lock.
+    app.shared_ctx.speedtest_active = multiprocessing.Value(ctypes.c_int, 0)
+
     # Switches
     app.shared_ctx.switches = manager.dict()
     app.shared_ctx.switches_lock = multiprocessing.Lock()
@@ -125,6 +128,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
     app.shared_ctx.status.clear()
+    app.shared_ctx.speedtest_active.value = 0
     app.shared_ctx.status.update(dict(
         cpu_stats=dict(),
         load_stats=dict(),

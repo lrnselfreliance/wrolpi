@@ -25,6 +25,7 @@ import {
     PathInput,
     Placeholder,
     Progress,
+    Sparkline,
     SearchBox,
     Select,
     Statistic,
@@ -564,6 +565,23 @@ export function ThemeSamplePage() {
                     Four states drawn from four roles. Failure also carries weight, because
                     brightness is the first thing lost on a dim screen and it is all night has.
                 </p>
+            </Panel>
+        </Section>
+
+        <Section label='Sparkline'>
+            <Panel>
+                {/*
+                  The speed test's rolling throughput trace.  Line and area are one token at two
+                  opacities and the baseline is --border, so it needs nothing per theme.  A null
+                  sample is a gap, not a plunge to zero: a lost ping should read as missing.
+                */}
+                <div style={{maxWidth: 460}}>
+                    <Sparkline values={[2, 48, 61, 58, 63, 60, 62, 59, 61, 60, 64, 62]} height={56}
+                               label='Download throughput'/>
+                    <Sparkline values={[12, 11, 40, 12, null, null, 13, 12, 90, 12, 11]} height={40} color='green'
+                               label='Round trip time'/>
+                    <Sparkline values={[]} height={32} label='Nothing yet'/>
+                </div>
             </Panel>
         </Section>
 

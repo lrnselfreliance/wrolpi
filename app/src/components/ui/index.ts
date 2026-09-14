@@ -15,6 +15,7 @@ export * from './scale';
 export * from './Icon';
 export * from './Button';
 export * from './Feedback';
+export * from './Sparkline';
 export * from './Surfaces';
 export * from './DataTable';
 export * from './Navigation';

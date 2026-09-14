@@ -13,6 +13,7 @@ import {WaterCalculator} from "./calculators/WaterCalculator";
 import {FoodStorageCalculator} from "./calculators/FoodStorageCalculator";
 import {OneTimePadCalculator} from "./calculators/OneTimePadCalculator";
 import {VinDecoderCalculator} from "./calculators/VinDecoderCalculator";
+import {SpeedTestCalculator} from "./calculators/SpeedTestCalculator";
 
 // Calculators are shown in these titled groups, in this order.  Each calculator carries a
 // `group` matching one of these names; any calculator whose group is missing/unknown falls
@@ -41,6 +42,7 @@ export const useCalculators = () => {
         {key: 'qrCode', icon: 'qrcode', button: 'QR Code', group: 'Tools & Reference', contents: <QRCodeCalculator/>},
         {key: 'otp', icon: 'lock', button: 'One Time Pad', title: 'One Time Pad', group: 'Radio & Communications', contents: <OneTimePadCalculator/>},
         {key: 'vin', icon: 'car', button: 'VIN Decoder', title: 'VIN Decoder', group: 'Tools & Reference', contents: <VinDecoderCalculator/>},
+        {key: 'speedtest', icon: 'tachometer alternate', button: 'Speed Test', title: 'Speed Test', group: 'Tools & Reference', contents: <SpeedTestCalculator/>},
     ];
 
     const activeCalculator = calc ? calculators.find(i => i.key === calc) : null;

@@ -977,6 +977,7 @@
             <button id="desktop-btn" class="btn" onclick="toggleSubsystem('desktop')" disabled>Loading...</button>
             <button id="vnc-btn" class="btn" onclick="toggleSubsystem('vnc')" disabled>Loading...</button>
         </div>
+        <p id="hotspot-address" style="margin: -0.5rem 0 1rem; color: #aaa; font-size: 0.9rem;" hidden></p>
         <details style="margin-bottom: 1rem;">
             <summary style="cursor: pointer;">Hotspot Settings</summary>
             <div class="modal-form" style="max-width: 24rem; margin-top: 0.5rem;">
@@ -995,6 +996,10 @@
                     <select id="hotspot-protocol"
                             style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
                     </select>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                    <input type="checkbox" id="hotspot-captive-portal">
+                    Captive portal: show a welcome page (with this WROLPi's address) to devices that join
                 </label>
                 <button class="btn btn-primary" onclick="saveHotspotSettings()">Save Hotspot Settings</button>
             </div>
@@ -1392,6 +1397,7 @@
             id: 'hotspot-btn', label: 'Hotspot',
             statusUrl: 'api/hotspot/status', startUrl: 'api/hotspot/start', stopUrl: 'api/hotspot/stop',
             isOn: data => data.enabled,
+            onStatus: showHotspotAddress,
         },
         bluetooth: {
             id: 'bluetooth-btn', label: 'Bluetooth',
@@ -1429,6 +1435,7 @@
         try {
             const data = await apiCall(config.statusUrl);
             toggleStates[name] = config.isOn(data);
+            if (config.onStatus) config.onStatus(data);
             btn.title = '';
             if (!data.available) {
                 btn.textContent = `${config.label} Unavailable`;
@@ -1481,6 +1488,19 @@
         }
     }
 
+    // Hotspot clients need the address to reach this WROLPi; the portal page tells them.
+    function showHotspotAddress(data) {
+        const el = document.getElementById('hotspot-address');
+        if (!el) return;
+        if (data.enabled && data.ip) {
+            el.textContent = `Hotspot address: ${data.ip}`
+                + (data.portal_url ? ` · Welcome page: ${data.portal_url}` : ' · Captive portal off');
+            el.hidden = false;
+        } else {
+            el.hidden = true;
+        }
+    }
+
     async function loadHotspotSettings() {
         const ssidInput = document.getElementById('hotspot-ssid');
         if (!ssidInput) return;
@@ -1491,6 +1511,7 @@
             ]);
             ssidInput.value = settings.ssid;
             document.getElementById('hotspot-password').value = settings.password;
+            document.getElementById('hotspot-captive-portal').checked = settings.captive_portal !== false;
             const select = document.getElementById('hotspot-device');
             select.innerHTML = '';
             // Keep the saved device selectable even if it is not currently present.
@@ -1543,13 +1564,17 @@
         const btn = event.target;
         btn.disabled = true;
         try {
-            await apiCall('api/hotspot/settings', 'POST', {
+            const saved = await apiCall('api/hotspot/settings', 'POST', {
                 ssid: document.getElementById('hotspot-ssid').value,
                 password: document.getElementById('hotspot-password').value,
                 device: document.getElementById('hotspot-device').value,
                 protocol: document.getElementById('hotspot-protocol').value || null,
+                captive_portal: document.getElementById('hotspot-captive-portal').checked,
             });
             await updateToggleButton('hotspot');
+            if (saved.restart_required) {
+                alert('Saved. Restart the hotspot to apply the new settings.');
+            }
         } catch (e) {
             alert(`Failed to save hotspot settings: ${e.message}`);
         }

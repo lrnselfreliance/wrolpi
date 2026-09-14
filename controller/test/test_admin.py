@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from controller.lib.config import reload_config_from_drive
+from controller.lib import captive_portal
 from controller.lib.admin import (
     apply_timezone_from_config,
     block_bluetooth,
@@ -558,6 +559,23 @@ class TestGetHotspotStatusDict:
             assert result["available"] is True
             assert result["enabled"] is True
 
+    def test_ip_and_portal_url_when_connected(self, reset_runtime_config):
+        with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.connected), \
+                mock.patch("controller.lib.captive_portal.get_hotspot_ip", return_value='10.42.0.1'), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False):
+            result = get_hotspot_status_dict()
+        assert result["ip"] == '10.42.0.1'
+        assert result["captive_portal"] is True
+        assert result["portal_url"] == 'http://10.42.0.1/portal'
+
+    def test_no_ip_when_off(self, reset_runtime_config):
+        with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.off), \
+                mock.patch("controller.lib.captive_portal.get_hotspot_ip") as get_ip:
+            result = get_hotspot_status_dict()
+        assert result["ip"] is None
+        assert result["portal_url"] is None
+        get_ip.assert_not_called()
+
 
 class TestHotspotSettingsMigration:
     """Legacy hotspot settings in wrolpi.yaml are copied into controller.yaml on startup."""
@@ -653,6 +671,28 @@ class TestUpdateHotspotSettings:
         assert get_hotspot_protocol() == 'wpa3'
         saved = yaml.safe_load(mock_config_path.read_text())
         assert saved['hotspot']['protocol'] == 'wpa3'
+
+    def test_updates_captive_portal(self, mock_config_path, reset_runtime_config):
+        """The captive portal toggle is saved to controller.yaml and returned."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(captive_portal=False)
+
+        assert result["success"] is True
+        assert result["captive_portal"] is False
+        saved = yaml.safe_load(mock_config_path.read_text())
+        assert saved['hotspot']['captive_portal'] is False
+
+    def test_restart_required_only_while_hotspot_up(self, mock_config_path, reset_runtime_config):
+        """A change applies on the next hotspot start, so say so when the hotspot is running."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.connected):
+            assert update_hotspot_settings(captive_portal=False)["restart_required"] is True
+            # Nothing changed: nothing to apply.
+            assert update_hotspot_settings()["restart_required"] is False
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.off):
+            assert update_hotspot_settings(captive_portal=True)["restart_required"] is False
 
     def test_rejects_invalid_protocol(self, mock_config_path, reset_runtime_config):
         """Only wpa2 and wpa3 are valid protocols."""
@@ -897,6 +937,9 @@ class TestDockerModeErrors:
             assert "Docker" in error
 
 
+HOTSPOT_IP_JSON = '[{"ifname": "wlan0", "addr_info": [{"family": "inet", "local": "10.42.0.1"}]}]'
+
+
 class TestStartHotspot:
     """Tests for start_hotspot function."""
 
@@ -924,8 +967,10 @@ class TestStartHotspot:
                 device_ready = mock.Mock(returncode=0, stdout="wlan1:disconnected\n", stderr="")
                 ok = mock.Mock(returncode=0, stdout="", stderr="")
 
+                # The final call reads the hotspot's address for the captive portal.
+                ip_addr = mock.Mock(returncode=0, stdout=HOTSPOT_IP_JSON, stderr="")
                 with mock.patch("subprocess.run",
-                                side_effect=[radio_on, device_ready, ok, ok, ok]) as mock_subprocess:
+                                side_effect=[radio_on, device_ready, ok, ok, ok, ip_addr]) as mock_subprocess:
                     with mock.patch("time.sleep"):
                         start_hotspot()
 
@@ -939,14 +984,67 @@ class TestStartHotspot:
                     assert "testpassword123" in cmd_args
 
     @staticmethod
+    def _start_with_nmcli(ip_json=HOTSPOT_IP_JSON):
+        """Run start_hotspot with nmcli mocked; returns the subprocess mock and the include path."""
+        radio_on = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        ip_addr = mock.Mock(returncode=0, stdout=ip_json, stderr="")
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.captive_portal.is_docker_mode", return_value=False), \
+                mock.patch("subprocess.run", side_effect=[radio_on, device_ready, ok, ok, ok, ip_addr, ok]) as run, \
+                mock.patch("time.sleep"):
+            result = start_hotspot()
+        return result, run
+
+    def test_writes_captive_portal_config_before_creating_hotspot(self, reset_runtime_config):
+        """dnsmasq reads the include at activation, so it must exist before `nmcli ... hotspot`."""
+        include = captive_portal.INCLUDE_FILE
+        result, run = self._start_with_nmcli()
+        assert result["success"] is True
+        assert include.exists()
+        assert 'address=/captive.apple.com/10.42.0.1' in include.read_text()
+        # The address is only read after the hotspot exists; the include was written before that.
+        hotspot_call_index = next(i for i, c in enumerate(run.call_args_list) if 'hotspot' in c[0][0])
+        ip_call_index = next(i for i, c in enumerate(run.call_args_list) if c[0][0][0] == 'ip')
+        assert hotspot_call_index < ip_call_index
+
+    def test_disabled_removes_captive_portal_config(self, reset_runtime_config):
+        include = captive_portal.INCLUDE_FILE
+        include.write_text('address=/captive.apple.com/10.42.0.1\n')
+        with mock.patch("controller.lib.captive_portal.get_config_value", return_value=False):
+            result, run = self._start_with_nmcli()
+        assert result["success"] is True
+        assert not include.exists()
+        # No `ip` read and no extra re-activation when the portal is off.
+        assert not [c for c in run.call_args_list if c[0][0][0] == 'ip']
+
+    def test_rewrites_config_when_networkmanager_picked_another_subnet(self, reset_runtime_config):
+        """10.42.1.1 is used when another shared connection holds 10.42.0.1."""
+        other = '[{"ifname": "wlan0", "addr_info": [{"family": "inet", "local": "10.42.1.1"}]}]'
+        result, run = self._start_with_nmcli(ip_json=other)
+        assert result["success"] is True
+        assert 'address=/captive.apple.com/10.42.1.1' in captive_portal.INCLUDE_FILE.read_text()
+        # Re-activated once more so dnsmasq re-reads the corrected include.
+        ups = [c for c in run.call_args_list if c[0][0][:3] == ['nmcli', 'connection', 'up']]
+        assert len(ups) == 2
+
+    def test_no_reactivation_when_ip_matches(self, reset_runtime_config):
+        result, run = self._start_with_nmcli()
+        ups = [c for c in run.call_args_list if c[0][0][:3] == ['nmcli', 'connection', 'up']]
+        assert len(ups) == 1
+
+    @staticmethod
     def _run_enable(protocol: str, results: list) -> tuple:
         """Run start_hotspot() with the given hotspot.protocol and subprocess results."""
         def mock_get_config(key, default=None):
             return {'hotspot.protocol': protocol}.get(key, default)
 
+        # After a successful start the hotspot's address is read once for the captive portal.
+        ip_addr = mock.Mock(returncode=0, stdout=HOTSPOT_IP_JSON, stderr="")
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
-                with mock.patch("subprocess.run", side_effect=results) as mock_subprocess:
+                with mock.patch("subprocess.run", side_effect=results + [ip_addr]) as mock_subprocess:
                     with mock.patch("time.sleep"):
                         result = start_hotspot()
         return result, mock_subprocess.call_args_list
@@ -1028,6 +1126,7 @@ class TestStartHotspot:
                 hotspot_result,      # nmcli device wifi hotspot
                 hotspot_result,      # nmcli connection modify Hotspot
                 hotspot_result,      # nmcli connection up Hotspot
+                mock.Mock(returncode=0, stdout=HOTSPOT_IP_JSON, stderr=""),  # ip -4 -j addr show
             ]):
                 with mock.patch("time.sleep"):  # Don't actually sleep in tests
                     result = start_hotspot()

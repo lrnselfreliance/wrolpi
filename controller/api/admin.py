@@ -30,6 +30,7 @@ from controller.api.schemas import (
     VncActionResponse,
     VncStatusResponse,
 )
+from controller.lib.captive_portal import is_captive_portal_enabled
 from controller.lib.admin import (
     block_bluetooth,
     disable_throttle,
@@ -112,6 +113,7 @@ async def hotspot_settings() -> HotspotSettingsResponse:
         ssid=get_hotspot_ssid(),
         password=get_hotspot_password(),
         protocol=get_hotspot_protocol(),
+        captive_portal=is_captive_portal_enabled(),
     )
 
 
@@ -122,11 +124,12 @@ async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSet
     if is_docker_mode():
         raise HTTPException(status_code=500, detail="Not available in Docker mode")
     result = update_hotspot_settings(device=request.device, ssid=request.ssid, password=request.password,
-                                     protocol=request.protocol)
+                                     protocol=request.protocol, captive_portal=request.captive_portal)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
     return HotspotSettingsResponse(device=result["device"], ssid=result["ssid"], password=result["password"],
-                                   protocol=result["protocol"])
+                                   protocol=result["protocol"], captive_portal=result["captive_portal"],
+                                   restart_required=result.get("restart_required", False))
 
 
 @router.post("/api/hotspot/start", response_model=HotspotActionResponse)

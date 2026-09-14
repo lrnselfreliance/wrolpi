@@ -69,6 +69,7 @@ jest.mock('../../api/controller', () => ({
     restartServices: jest.fn().mockResolvedValue({success: true}),
     getSambaStatus: jest.fn().mockResolvedValue({enabled: false, available: true, shares: []}),
     getHotspotSettings: jest.fn(),
+    getHotspotStatus: jest.fn(),
     getHotspotDevices: jest.fn(),
     getHotspotProtocols: jest.fn(),
     updateHotspotSettings: jest.fn(),
@@ -117,6 +118,12 @@ jest.mock('../Common', () => {
     };
 });
 
+// Toasts render through Mantine notifications, which the test providers do not include.
+jest.mock('../ui', () => ({
+    ...jest.requireActual('../ui'),
+    toast: jest.fn(),
+}));
+
 // Mock Settings.js components
 jest.mock('./Settings', () => ({
     RestartButton: () => <button data-testid="restart-button">Restart</button>,
@@ -157,11 +164,15 @@ describe('ControllerPage', () => {
         // resetMocks clears module-factory implementations, so configure hotspot mocks here.
         const controllerApi = require('../../api/controller');
         controllerApi.getHotspotSettings.mockResolvedValue(
-            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2'});
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2', captive_portal: true});
+        controllerApi.getHotspotStatus.mockResolvedValue(
+            {enabled: true, available: true, ssid: 'WROLPi', device: 'wlan0', ip: '10.42.0.1',
+                captive_portal: true, portal_url: 'http://10.42.0.1/portal'});
         controllerApi.getHotspotDevices.mockResolvedValue({devices: ['wlan0']});
         controllerApi.getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2', 'wpa3']});
         controllerApi.updateHotspotSettings.mockResolvedValue(
-            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2'});
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2', captive_portal: true,
+                restart_required: false});
     });
 
     test('renders Services section', async () => {
@@ -233,6 +244,44 @@ describe('ControllerPage', () => {
             expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
         });
         expect(screen.queryByText('WPA3')).not.toBeInTheDocument();
+    });
+
+    test('captive portal checkbox reflects the saved setting and is sent on save', async () => {
+        const controllerApi = require('../../api/controller');
+        controllerApi.getHotspotSettings.mockResolvedValue(
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2', captive_portal: false});
+        renderControllerPage();
+        const checkbox = await screen.findByLabelText('Captive portal');
+        expect(checkbox).not.toBeChecked();
+
+        fireEvent.click(checkbox);
+        expect(checkbox).toBeChecked();
+        fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+        await waitFor(() => {
+            expect(controllerApi.updateHotspotSettings).toHaveBeenCalledWith(
+                expect.objectContaining({captive_portal: true}));
+        });
+    });
+
+    test('saving hotspot settings while the hotspot is up tells the user to restart it', async () => {
+        const controllerApi = require('../../api/controller');
+        controllerApi.updateHotspotSettings.mockResolvedValue(
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2', captive_portal: false,
+                restart_required: true});
+        const {toast} = require('../ui');
+        renderControllerPage();
+        await screen.findByLabelText('Captive portal');
+        fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+        await waitFor(() => {
+            expect(toast).toHaveBeenCalledWith(expect.objectContaining(
+                {description: 'Restart the hotspot to apply the new settings.'}));
+        });
+    });
+
+    test('shows the hotspot address and welcome page while the hotspot is up', async () => {
+        renderControllerPage();
+        expect(await screen.findByText('10.42.0.1')).toBeInTheDocument();
+        expect(screen.getByText(/Welcome page: http:\/\/10\.42\.0\.1\/portal/)).toBeInTheDocument();
     });
 
     test('hotspot protocol dropdown only offers WPA2 on a Raspberry Pi', async () => {

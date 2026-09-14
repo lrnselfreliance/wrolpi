@@ -92,7 +92,7 @@ class TestHotspotSettingsEndpoint:
         response = test_client.get("/api/hotspot/settings")
         assert response.status_code == 200
         assert response.json() == {"device": "wlan0", "ssid": "WROLPi", "password": "wrolpi hotspot",
-                                   "protocol": "wpa2"}
+                                   "protocol": "wpa2", "captive_portal": True, "restart_required": False}
 
     def test_post_settings(self, test_client, mock_config_path):
         """Should update settings and persist them to controller.yaml."""
@@ -102,9 +102,17 @@ class TestHotspotSettingsEndpoint:
         )
         assert response.status_code == 200
         assert response.json() == {"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123",
-                                   "protocol": "wpa3"}
+                                   "protocol": "wpa3", "captive_portal": True, "restart_required": False}
         assert "wlp2s0" in mock_config_path.read_text()
         assert "wpa3" in mock_config_path.read_text()
+
+    def test_post_captive_portal(self, test_client, mock_config_path):
+        """The captive portal toggle round-trips and is persisted."""
+        response = test_client.post("/api/hotspot/settings", json={"captive_portal": False})
+        assert response.status_code == 200
+        assert response.json()["captive_portal"] is False
+        assert "captive_portal: false" in mock_config_path.read_text()
+        assert test_client.get("/api/hotspot/settings").json()["captive_portal"] is False
 
     def test_post_rejects_short_password(self, test_client, mock_config_path):
         """Should reject a password shorter than 8 characters."""

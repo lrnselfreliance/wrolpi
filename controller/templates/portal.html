@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to WROLPi</title>
+    <style>
+        /* Self-contained: shown inside phone sign-in sheets which load nothing external. */
+        body {
+            margin: 0;
+            padding: 2rem 1.25rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #f0f0f0;
+            text-align: center;
+        }
+        h1 { font-size: 1.6rem; margin: 0 0 0.5rem; }
+        p { margin: 0.5rem 0; line-height: 1.4; }
+        .muted { color: #b0b0c0; font-size: 0.95rem; }
+        .address {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 2.4rem;
+            font-weight: 700;
+            margin: 1.25rem 0;
+            word-break: break-all;
+            user-select: all;
+            -webkit-user-select: all;
+        }
+        .btn {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 22rem;
+            margin: 0.75rem auto;
+            padding: 0.9rem 1rem;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            color: #fff;
+            background: #6c4fbb;
+        }
+        .btn.secondary { background: #2f2f4a; }
+        .note {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>This is your WROLPi</h1>
+    <p class="muted">You are connected to the <strong>{{ ssid }}</strong> hotspot.</p>
+
+    <p>The address of this WROLPi is</p>
+    <div class="address">{{ ip }}</div>
+
+    <a class="btn" href="https://{{ ip }}/">Open WROLPi</a>
+    <a class="btn secondary" href="https://{{ ip }}/controller/">Open the Controller</a>
+
+    <div class="note muted">
+        <p>If these buttons do nothing, close this window and open your browser to
+            <strong>https://{{ ip }}</strong>.</p>
+        <p>Your browser will warn about the certificate the first time. That is expected for an
+            offline WROLPi; continue to the site.</p>
+        <p>This hotspot does not provide Internet access.</p>
+    </div>
+</body>
+</html>

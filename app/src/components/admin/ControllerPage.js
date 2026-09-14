@@ -31,6 +31,7 @@ import {
     getHotspotDevices,
     getHotspotProtocols,
     getHotspotSettings,
+    getHotspotStatus,
     getSambaStatus,
     getServiceLogs,
     getServices,
@@ -1457,10 +1458,13 @@ function HotspotSettingsForm() {
     const dockerized = useDockerized();
     const [devices, setDevices] = React.useState([]);
     const [protocols, setProtocols] = React.useState([]);
-    const [form, setForm] = React.useState({device: '', ssid: '', password: '', protocol: ''});
+    const [form, setForm] = React.useState(
+        {device: '', ssid: '', password: '', protocol: '', captive_portal: true});
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [qrOpen, setQrOpen] = React.useState(false);
+    // Hotspot clients need this address to reach the WROLPi; the captive portal page tells them.
+    const [hotspotStatus, setHotspotStatus] = React.useState(null);
 
     React.useEffect(() => {
         const fetchSettings = async () => {
@@ -1471,6 +1475,7 @@ function HotspotSettingsForm() {
                     ssid: settings.ssid,
                     password: settings.password,
                     protocol: settings.protocol,
+                    captive_portal: settings.captive_portal !== false,
                 });
                 setDevices(devicesResponse.devices || []);
             } catch (e) {
@@ -1481,6 +1486,28 @@ function HotspotSettingsForm() {
         };
         fetchSettings();
     }, []);
+
+    // The address is only meaningful while the hotspot is up; it is optional information.
+    React.useEffect(() => {
+        if (dockerized) {
+            return;
+        }
+        let cancelled = false;
+        const fetchStatus = async () => {
+            try {
+                const status = await getHotspotStatus();
+                if (!cancelled) {
+                    setHotspotStatus(status || null);
+                }
+            } catch (e) {
+                console.error('Failed to fetch hotspot status', e);
+            }
+        };
+        fetchStatus();
+        return () => {
+            cancelled = true;
+        };
+    }, [dockerized]);
 
     // The supported protocols depend on the selected device's hardware.
     React.useEffect(() => {
@@ -1519,8 +1546,20 @@ function HotspotSettingsForm() {
         setSaving(true);
         try {
             const settings = await updateHotspotSettings(form);
-            setForm(settings);
-            toast({type: 'success', title: 'Hotspot settings saved', time: 3000});
+            setForm({
+                device: settings.device,
+                ssid: settings.ssid,
+                password: settings.password,
+                protocol: settings.protocol,
+                captive_portal: settings.captive_portal !== false,
+            });
+            // Settings apply when the hotspot starts (dnsmasq only reads its config then).
+            toast({
+                type: 'success',
+                title: 'Hotspot settings saved',
+                description: settings.restart_required ? 'Restart the hotspot to apply the new settings.' : undefined,
+                time: settings.restart_required ? 6000 : 3000,
+            });
         } catch (e) {
             toast({type: 'error', title: 'Failed to save hotspot settings', description: e.message, time: 5000});
         } finally {
@@ -1549,8 +1588,14 @@ function HotspotSettingsForm() {
     const escapeWifi = (s) => s.replace(/([\\;,"])/g, '\\$1');
     const qrCodeValue = `WIFI:S:${escapeWifi(form.ssid)};T:WPA;P:${escapeWifi(form.password)};;`;
 
+    const address = hotspotStatus && hotspotStatus.enabled && hotspotStatus.ip;
+
     return <Panel>
         <Header as='h4' icon='wifi'>Hotspot Settings</Header>
+        {address && <p style={{margin: '0 0 0.5em', opacity: 0.8}}>
+            Hotspot address: <b>{address}</b>
+            {hotspotStatus.portal_url ? <> · Welcome page: {hotspotStatus.portal_url}</> : ' · Captive portal off'}
+        </p>}
         <Group grow align='flex-start'>
             <TextInput
                 label='Hotspot SSID'
@@ -1581,6 +1626,14 @@ function HotspotSettingsForm() {
                 onChange={(value) => setForm({...form, protocol: value})}
             />
         </Group>
+        <Checkbox
+            mt='sm'
+            label='Captive portal'
+            description="Show a welcome page with this WROLPi's address to devices that join the hotspot"
+            checked={form.captive_portal}
+            disabled={dockerized || saving}
+            onChange={(e) => setForm({...form, captive_portal: e.currentTarget.checked})}
+        />
         <div className='wrolpi-button-row' style={{marginTop: '0.8em'}}>
             <Button
                 color='violet'

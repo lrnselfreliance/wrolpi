@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from controller.lib import config as config_lib
+from controller.lib import captive_portal as captive_portal_lib
 from controller.lib.config import is_docker_mode, get_config_value, get_media_directory
 
 logger = logging.getLogger(__name__)
@@ -162,9 +163,12 @@ def get_device_hotspot_protocols(device: str) -> list[str]:
 
 
 def update_hotspot_settings(device: str = None, ssid: str = None, password: str = None,
-                            protocol: str = None) -> dict:
+                            protocol: str = None, captive_portal: bool = None) -> dict:
     """
     Update hotspot settings in controller.yaml.  Only provided values are changed.
+
+    Settings are applied when the hotspot starts, so a change saved while the hotspot is up
+    reports `restart_required`.
 
     Returns:
         dict with success status and the current settings
@@ -195,6 +199,9 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
     if protocol:
         config_lib.update_config('hotspot.protocol', protocol)
         changed = True
+    if captive_portal is not None:
+        config_lib.update_config('hotspot.captive_portal', bool(captive_portal))
+        changed = True
 
     if changed:
         try:
@@ -202,14 +209,18 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
         except RuntimeError as e:
             return {"success": False, "error": str(e)}
 
-    logger.info("Hotspot settings updated (device=%s, ssid=%s, protocol=%s)",
-                get_hotspot_device(), get_hotspot_ssid(), get_hotspot_protocol())
+    logger.info("Hotspot settings updated (device=%s, ssid=%s, protocol=%s, captive_portal=%s)",
+                get_hotspot_device(), get_hotspot_ssid(), get_hotspot_protocol(),
+                captive_portal_lib.is_captive_portal_enabled())
     return {
         "success": True,
         "device": get_hotspot_device(),
         "ssid": get_hotspot_ssid(),
         "password": get_hotspot_password(),
         "protocol": get_hotspot_protocol(),
+        "captive_portal": captive_portal_lib.is_captive_portal_enabled(),
+        # dnsmasq only reads its include when the Hotspot connection activates.
+        "restart_required": changed and get_hotspot_status() == HotspotStatus.connected,
     }
 
 
@@ -372,6 +383,9 @@ def get_hotspot_status_dict() -> dict:
         reason: Optional[str] - Reason if unavailable
         ssid: Optional[str] - Hotspot SSID when enabled
         device: Optional[str] - WiFi device name
+        ip: Optional[str] - Hotspot IPv4 address when enabled
+        captive_portal: bool - Whether the captive portal is enabled
+        portal_url: Optional[str] - Landing page URL when enabled
     """
     device = get_hotspot_device()
     status = get_hotspot_status()
@@ -388,12 +402,17 @@ def get_hotspot_status_dict() -> dict:
     elif status == HotspotStatus.in_use:
         reason = "WiFi device is connected to a network"
 
+    ip = captive_portal_lib.get_hotspot_ip(device) if enabled else None
+    portal_enabled = captive_portal_lib.is_captive_portal_enabled()
     return {
         "enabled": enabled,
         "available": available,
         "reason": reason,
         "ssid": get_hotspot_ssid() if enabled else None,
         "device": device,
+        "ip": ip,
+        "captive_portal": portal_enabled,
+        "portal_url": f"http://{ip}{captive_portal_lib.PORTAL_PATH}" if ip and portal_enabled else None,
     }
 
 
@@ -446,6 +465,12 @@ def start_hotspot() -> dict:
         if not device_ready:
             logger.warning("WiFi device %s did not become ready after turning radio on", device)
             return {"success": False, "error": f"WiFi device {device} not ready after turning radio on"}
+
+        # dnsmasq reads the captive portal include only when the connection activates, so it
+        # must be in place first.  The address is not known until then; NetworkManager almost
+        # always picks the default, and the file is corrected below if it did not.
+        captive_portal_lib.apply_dnsmasq_config(captive_portal_lib.dnsmasq_config_ip()
+                                            or captive_portal_lib.DEFAULT_HOTSPOT_IP)
 
         # Create hotspot using NetworkManager
         logger.info("Starting hotspot on %s with SSID %s", device, ssid)
@@ -515,6 +540,8 @@ def start_hotspot() -> dict:
             # WPA2 is what nmcli created the hotspot with anyway; not fatal.
             logger.warning("Failed to explicitly set WPA2 on hotspot: %s", error)
 
+        _fix_captive_portal_ip(device)
+
         logger.info("Hotspot started successfully on %s (%s)", device, protocol)
         return {"success": True, "ssid": ssid, "device": device}
 
@@ -527,6 +554,27 @@ def start_hotspot() -> dict:
     except subprocess.SubprocessError as e:
         logger.warning("Failed to start hotspot: %s", e)
         return {"success": False, "error": str(e)}
+
+
+def _fix_captive_portal_ip(device: str):
+    """
+    Re-point the captive portal include at the address NetworkManager actually assigned.
+
+    Rare: NetworkManager uses 10.42.1.1 (and so on) only when another shared connection
+    already holds 10.42.0.1.  Re-activating the connection makes dnsmasq re-read the file.
+    """
+    if not captive_portal_lib.is_captive_portal_enabled():
+        return
+    ip = captive_portal_lib.get_hotspot_ip(device)
+    if not ip or ip == captive_portal_lib.dnsmasq_config_ip():
+        return
+    logger.info("Hotspot address is %s, rewriting captive portal config and re-activating", ip)
+    if not captive_portal_lib.apply_dnsmasq_config(ip):
+        return
+    try:
+        subprocess.run(["nmcli", "connection", "up", "Hotspot"], capture_output=True, text=True, timeout=30)
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        logger.warning("Could not re-activate hotspot for captive portal: %s", e)
 
 
 def stop_hotspot() -> dict:

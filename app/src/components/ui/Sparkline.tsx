@@ -16,11 +16,7 @@ export interface SparklineProps {
     className?: string;
 }
 
-/**
- * A tiny inline-SVG line chart: no axes, no chart library.  Used for a rolling throughput trace
- * where the number beside it carries the scale.  Colors come from theme tokens so it reads in
- * all four themes; the area fill uses the same token at low opacity so it never needs its own.
- */
+/** A tiny inline-SVG line chart with no axes; the figure beside it carries the scale. */
 export function Sparkline({values, max, color = 'blue', height = 48, area = true, label, className}: SparklineProps) {
     const width = 100;  // viewBox units; the SVG stretches to its container.
     const finite = values.map(v => (typeof v === 'number' && Number.isFinite(v) ? v : null));

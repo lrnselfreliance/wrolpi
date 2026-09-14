@@ -17,8 +17,9 @@ export const RAMP_MS = 1000;
 export const PING_SAMPLES = 20;
 export const PING_GAP_MS = 100;
 export const PING_TIMEOUT_MS = 5000;
-// One body reused for every upload POST.  Under the server's 8 MiB cap.
-export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+// One body reused for every upload POST.  1 MiB so a slow hotspot (a few Mbps) still completes
+// several requests inside the phase; the server's per-request cap is 8 MiB.
+export const UPLOAD_CHUNK_BYTES = 1024 * 1024;
 
 // Typical bitrates for a well-encoded video at each resolution.  Deliberately round; the table
 // says "about".
@@ -275,23 +276,46 @@ export function randomBlob(size = UPLOAD_CHUNK_BYTES) {
 /**
  * POST the same random body over and over for `seconds`, tallying the bytes each request
  * delivered.  Sequential requests rather than a streamed body because Safari cannot stream a
- * request body.  Resolves to `{mbps, peak, bytes, samples}`.
+ * request body.  A request still in flight when the phase deadline passes is aborted, so the
+ * phase ends on time on a slow link rather than after the current body finishes; only completed
+ * requests count.  Resolves to `{mbps, peak, bytes, samples}`.
  */
 export async function runUpload({signal, onProgress, seconds = PHASE_SECONDS, body, deps} = {}) {
     const {fetch, now} = {...defaultDeps(), ...deps};
     const blob = body || randomBlob();
     const buckets = new Buckets(BUCKET_MS, now);
     const deadline = buckets.start + seconds * 1000;
-    while (now() < deadline && !signal?.aborted) {
-        const response = await fetch(`${SPEEDTEST_API}/upload`, {method: 'POST', body: blob, cache: 'no-store', signal});
-        if (!response.ok) {
-            throw new Error(`Upload test failed: HTTP ${response.status}`);
+    // Aborts the in-flight request at the deadline or when the caller cancels.
+    const phase = new AbortController();
+    const onAbort = () => phase.abort();
+    signal?.addEventListener('abort', onAbort);
+    const timer = setTimeout(() => phase.abort(), seconds * 1000);
+    try {
+        while (now() < deadline && !phase.signal.aborted) {
+            let response;
+            try {
+                response = await fetch(`${SPEEDTEST_API}/upload`, {
+                    method: 'POST', body: blob, cache: 'no-store', signal: phase.signal,
+                });
+            } catch (e) {
+                if (phase.signal.aborted && !signal?.aborted) {
+                    // The deadline cut this request short; the phase is simply over.
+                    break;
+                }
+                throw e;
+            }
+            if (!response.ok) {
+                throw new Error(`Upload test failed: HTTP ${response.status}`);
+            }
+            const json = await response.json();
+            buckets.add(json.bytes);
+            if (onProgress) {
+                onProgress(buckets);
+            }
         }
-        const json = await response.json();
-        buckets.add(json.bytes);
-        if (onProgress) {
-            onProgress(buckets);
-        }
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
     }
     buckets.flush(true);
     return {mbps: steadyStateMbps(buckets.samples), peak: peakMbps(buckets.samples), bytes: buckets.total, samples: buckets.samples};

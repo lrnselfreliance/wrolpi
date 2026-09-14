@@ -20,6 +20,7 @@ import {
 
 const PHASES = {
     idle: {label: 'Ready', order: 0},
+    starting: {label: 'Connecting…', order: 1},
     ping: {label: 'Measuring latency…', order: 1},
     download: {label: 'Downloading…', order: 2},
     upload: {label: 'Uploading…', order: 3},
@@ -72,9 +73,15 @@ export function SpeedTestCalculator() {
     };
 
     const start = async () => {
+        if (controllerRef.current) {
+            // A run is already in progress (its first await has not resolved yet).
+            return;
+        }
         const controller = new AbortController();
         controllerRef.current = controller;
         const {signal} = controller;
+        // Leave `idle` synchronously so the button reads Cancel before the first await.
+        setPhase('starting');
         setResults(emptyResults());
         setError(null);
         setActiveDuring(0);
@@ -139,7 +146,7 @@ export function SpeedTestCalculator() {
 
     const cancel = () => controllerRef.current?.abort();
 
-    const running = ['ping', 'download', 'upload'].includes(phase);
+    const running = ['starting', 'ping', 'download', 'upload'].includes(phase);
     const finished = ['done', 'cancelled', 'error'].includes(phase);
     const others = otherActiveTests(info?.active_tests, activeDuring);
 
@@ -162,11 +169,12 @@ export function SpeedTestCalculator() {
                 </Grid.Col>
                 <Grid.Col span={{base: 12, sm: 8}}>
                     <Text size='sm' c='dimmed' data-testid='speedtest-phase'>{PHASES[phase].label}</Text>
-                    {running && <Progress percent={live.progress} showPercent={false} color='blue'/>}
+                    {running && <Progress percent={live.progress} showPercent={false} color='blue'
+                                          indeterminate={phase === 'starting'}/>}
                 </Grid.Col>
             </Grid>
 
-            {running && <div style={{marginTop: '1em'}} data-testid='speedtest-live'>
+            {running && phase !== 'starting' && <div style={{marginTop: '1em'}} data-testid='speedtest-live'>
                 <div style={{display: 'flex', alignItems: 'baseline', gap: '0.5em'}}>
                     <span style={{fontSize: '2.5rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums'}}>
                         {liveValue}

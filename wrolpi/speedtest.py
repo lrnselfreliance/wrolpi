@@ -1,13 +1,6 @@
-"""Speed test endpoints: the browser measures its network path to this WROLPi.
+"""Speed test endpoints: ping, a bounded download stream, a bounded upload sink, and context.
 
-Ping is an HTTP round trip to a tiny JSON response.  Download streams generated random bytes for
-a bounded number of seconds.  Upload reads and discards whatever the browser sends and reports how
-many bytes arrived.  Nothing is stored.
-
-These measure the network between the client and Sanic (through Caddy), not disk read speed; the
-UI says so.  There is deliberately no "one test at a time" lock: several people testing at once is
-how a user learns how the link shares between streamers.  The server only counts how many tests
-are in flight so the UI can show that context.
+Nothing is stored.  Several clients may test at once; the server only counts tests in flight.
 """
 import os
 import time
@@ -33,8 +26,10 @@ MAX_DOWNLOAD_SECONDS = 15.0
 # Bytes sent per `await response.send()`.  Large enough that Python overhead does not cap a fast
 # LAN, small enough that the loop yields often.
 CHUNK_SIZE = 256 * 1024
-# The browser uploads in sequential POSTs of a few MiB; refuse anything that could hold a worker.
+# The browser uploads in sequential POSTs of a few MiB.  Both caps exist so a request cannot hold a
+# worker: size alone does not, a slow or paused body could trickle in for minutes.
 MAX_UPLOAD_CHUNK = 8 * 1024 * 1024
+MAX_UPLOAD_SECONDS = 15.0
 
 # One random buffer built at import; chunks are slices of it so no bytes are generated per
 # request.  Random so no proxy or compression can flatter the result.  A whole multiple of
@@ -54,6 +49,12 @@ class UploadTooLarge(APIError):
     status_code = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
 
 
+class UploadTooSlow(APIError):
+    code = 'UPLOAD_TOO_SLOW'
+    summary = f'Speed test upload requests must finish within {MAX_UPLOAD_SECONDS} seconds'
+    status_code = HTTPStatus.REQUEST_TIMEOUT
+
+
 def clamp_seconds(value: Optional[str]) -> float:
     """Parse the requested download duration and keep it within the server's bounds."""
     if value is None or value == '':
@@ -62,7 +63,9 @@ def clamp_seconds(value: Optional[str]) -> float:
         seconds = float(value)
     except (TypeError, ValueError):
         raise ValidationError(f'seconds must be a number, got {value!r}')
-    if seconds < 0 or seconds != seconds:  # negative or NaN
+    if seconds != seconds:  # NaN
+        raise ValidationError('seconds must be a number, got NaN')
+    if seconds < 0:
         raise ValidationError('seconds must not be negative')
     return max(MIN_DOWNLOAD_SECONDS, min(seconds, MAX_DOWNLOAD_SECONDS))
 
@@ -109,6 +112,7 @@ async def info(request: Request):
         active_tests=_counter().value,
         max_download_seconds=MAX_DOWNLOAD_SECONDS,
         max_upload_chunk=MAX_UPLOAD_CHUNK,
+        max_upload_seconds=MAX_UPLOAD_SECONDS,
     ), headers=NO_STORE_HEADERS)
 
 
@@ -134,6 +138,21 @@ async def download(request: Request):
         _adjust_active(-1)
 
 
+async def drain_upload(request: Request) -> int:
+    """Read and discard the request body, enforcing both the size and the time cap."""
+    deadline = time.monotonic() + MAX_UPLOAD_SECONDS
+    total = 0
+    while True:
+        body = await request.stream.read()
+        if body is None:
+            return total
+        total += len(body)
+        if total > MAX_UPLOAD_CHUNK:
+            raise UploadTooLarge()
+        if time.monotonic() > deadline:
+            raise UploadTooSlow()
+
+
 @speedtest_bp.post('/upload', stream=True)
 @openapi.definition(
     summary='Read and discard the request body, reporting how many bytes arrived and how long it took.',
@@ -146,14 +165,7 @@ async def upload(request: Request):
     _adjust_active(1)
     try:
         start = time.monotonic()
-        total = 0
-        while True:
-            body = await request.stream.read()
-            if body is None:
-                break
-            total += len(body)
-            if total > MAX_UPLOAD_CHUNK:
-                raise UploadTooLarge()
+        total = await drain_upload(request)
         seconds = time.monotonic() - start
     finally:
         _adjust_active(-1)

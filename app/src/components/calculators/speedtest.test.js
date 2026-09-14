@@ -247,6 +247,39 @@ describe('runUpload', () => {
         expect(result.mbps).toBeCloseTo(10, 3);
     });
 
+    test('a request still in flight at the deadline is aborted and the phase ends on time', async () => {
+        jest.useFakeTimers();
+        try {
+            const now = makeClock();
+            let calls = 0;
+            const fetch = jest.fn((url, init) => new Promise((resolve, reject) => {
+                calls++;
+                if (calls === 1) {
+                    // Fast first request.
+                    now.advance(200);
+                    resolve({ok: true, status: 200, json: async () => ({bytes: 1000, seconds: 0.2})});
+                    return;
+                }
+                // Second request never completes on its own: it must be aborted at the deadline.
+                init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }));
+            const promise = runUpload({seconds: 1, body: {size: 1000}, deps: {fetch, now}});
+            // Let the first request settle and the second start.
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            now.advance(2000);
+            jest.advanceTimersByTime(1000);
+            const result = await promise;
+            expect(fetch).toHaveBeenCalledTimes(2);
+            expect(fetch.mock.calls[1][1].signal.aborted).toBe(true);
+            // Only the completed request counts.
+            expect(result.bytes).toBe(1000);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     test('an aborted signal ends the loop', async () => {
         const now = makeClock();
         const controller = new AbortController();

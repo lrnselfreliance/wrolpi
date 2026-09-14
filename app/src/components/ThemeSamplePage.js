@@ -570,11 +570,7 @@ export function ThemeSamplePage() {
 
         <Section label='Sparkline'>
             <Panel>
-                {/*
-                  The speed test's rolling throughput trace.  Line and area are one token at two
-                  opacities and the baseline is --border, so it needs nothing per theme.  A null
-                  sample is a gap, not a plunge to zero: a lost ping should read as missing.
-                */}
+                {/* A null sample must show as a gap, not a drop to zero (a lost ping). */}
                 <div style={{maxWidth: 460}}>
                     <Sparkline values={[2, 48, 61, 58, 63, 60, 62, 59, 61, 60, 64, 62]} height={56}
                                label='Download throughput'/>

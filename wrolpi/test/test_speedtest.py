@@ -20,8 +20,10 @@ def test_clamp_seconds():
     assert speedtest.clamp_seconds('0') == speedtest.MIN_DOWNLOAD_SECONDS
     with pytest.raises(speedtest.ValidationError):
         speedtest.clamp_seconds('abc')
-    with pytest.raises(speedtest.ValidationError):
+    with pytest.raises(speedtest.ValidationError, match='negative'):
         speedtest.clamp_seconds('-1')
+    with pytest.raises(speedtest.ValidationError, match='NaN'):
+        speedtest.clamp_seconds('nan')
 
 
 def test_chunks_never_empty():
@@ -119,6 +121,47 @@ async def test_upload_too_large(async_client):
 
 
 @pytest.mark.asyncio
+async def test_upload_too_large_mid_stream_releases_counter(async_client):
+    """A body that only reveals its size while streaming is refused, and the counter is released."""
+
+    async def body():
+        yield b'x' * 1024
+        yield b'x' * 1024
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(speedtest, 'MAX_UPLOAD_CHUNK', 1024)
+        request, response = await async_client.post('/api/speedtest/upload', content=body())
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert _active() == 0
+
+
+@pytest.mark.asyncio
+async def test_upload_too_slow(async_client):
+    """A body that trickles in past the time cap is refused, and the counter is released."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(speedtest, 'MAX_UPLOAD_SECONDS', 0)
+        request, response = await async_client.post('/api/speedtest/upload', content=b'x' * 2048)
+    assert response.status_code == HTTPStatus.REQUEST_TIMEOUT
+    assert _active() == 0
+
+
+@pytest.mark.asyncio
+async def test_upload_broken_stream_releases_counter(async_client):
+    """The counter is released when reading the body blows up part way through."""
+
+    async def broken(_request):
+        raise ConnectionResetError('client went away')
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(speedtest, 'drain_upload', broken)
+        try:
+            await async_client.post('/api/speedtest/upload', content=b'x' * 1024)
+        except Exception:
+            pass
+    assert _active() == 0
+
+
+@pytest.mark.asyncio
 async def test_info(async_client):
     request, response = await async_client.get('/api/speedtest/info')
     assert response.status_code == HTTPStatus.OK
@@ -126,6 +169,7 @@ async def test_info(async_client):
     assert response.json['active_tests'] == 0
     assert response.json['max_download_seconds'] == speedtest.MAX_DOWNLOAD_SECONDS
     assert response.json['max_upload_chunk'] == speedtest.MAX_UPLOAD_CHUNK
+    assert response.json['max_upload_seconds'] == speedtest.MAX_UPLOAD_SECONDS
 
     # Caddy forwards the real client address; Sanic is configured to trust one proxy hop.
     request, response = await async_client.get('/api/speedtest/info',

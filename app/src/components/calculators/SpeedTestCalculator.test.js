@@ -69,6 +69,23 @@ describe('SpeedTestCalculator', () => {
         expect(screen.getByRole('button', {name: /run again/i})).toBeInTheDocument();
     });
 
+    test('Start becomes Cancel before the first await resolves, so a second run cannot be started', async () => {
+        // Hold the first await so Start is clicked again before the ping phase begins.
+        const pending = deferred();
+        speedtest.fetchInfo.mockImplementation(() => pending.promise);
+        renderWithProviders(<SpeedTestCalculator/>);
+        fireEvent.click(screen.getByRole('button', {name: /start test/i}));
+        // The button has already become Cancel, and a stray click on it is the abort path,
+        // so hunt for any Start/Run again button and click it if one exists.
+        expect(screen.queryByRole('button', {name: /start test|run again/i})).toBeNull();
+        expect(screen.getByTestId('speedtest-phase')).toHaveTextContent('Connecting');
+
+        pending.resolve({client_ip: '10.0.0.50', active_tests: 0});
+        await waitFor(() => expect(screen.getByTestId('speedtest-phase')).toHaveTextContent('Complete'));
+        expect(speedtest.fetchInfo).toHaveBeenCalledTimes(1);
+        expect(speedtest.runPing).toHaveBeenCalledTimes(1);
+    });
+
     test('Cancel aborts the run and shows no results for unfinished phases', async () => {
         const pending = deferred();
         speedtest.runDownload.mockImplementation(({signal}) => new Promise((resolve, reject) => {

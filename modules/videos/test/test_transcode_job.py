@@ -1,5 +1,6 @@
 """Tests for the transcode Job and its API (see `wrolpi.jobs`)."""
 import json
+import pathlib
 import shutil
 from unittest import mock
 
@@ -11,6 +12,23 @@ from wrolpi import jobs
 from wrolpi.cmd import CommandResult
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
+
+MP4 = 'mov,mp4,m4a,3gp,3g2,mj2'
+
+
+@pytest.fixture(autouse=True)
+def mock_probe():
+    """The output probe agrees with what the Job asked for (targets or copied source codecs)."""
+
+    async def probe(path: pathlib.Path):
+        # The test video is h264/aac; a copied stream keeps that, a target replaces it.
+        fmt = MP4 if path.suffix == '.mp4' else 'matroska,webm'
+        return {'streams': [{'codec_type': 'video', 'codec_name': 'h264'},
+                            {'codec_type': 'audio', 'codec_name': 'aac'}],
+                'format': {'format_name': fmt, 'duration': '5.3'}}
+
+    with mock.patch('modules.videos.transcode.probe_for_verify', side_effect=probe):
+        yield
 
 
 def test_make_ffmpeg_progress_parser():
@@ -46,6 +64,9 @@ async def test_transcode_video_job(test_session, test_directory, async_client, v
         # ffmpeg reports progress on stdout, then writes the temporary output file.  The output
         # must be a real video: the refresh would otherwise drop the Video model (mimetype changed).
         stdout_callback('out_time_us=5000000')
+        if cmd[-1] == '-':
+            # The tail-decode check: nothing to write.
+            return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
         shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
         return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'ffmpeg version fake', elapsed=1)
 
@@ -88,6 +109,9 @@ async def test_transcode_video_job_remux(test_session, test_directory, async_cli
     test_session.commit()
 
     async def fake_run_command(cmd, stdout_callback=None, **kwargs):
+        if cmd[-1] == '-':
+            # The tail-decode check: nothing to write.
+            return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
         shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
         return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
 
@@ -96,7 +120,7 @@ async def test_transcode_video_job_remux(test_session, test_directory, async_cli
         record = await jobs.wait_for_job(job_id)
 
     assert record['status'] == jobs.COMPLETE, record
-    cmd = mock_run.call_args[0][0]
+    cmd = mock_run.call_args_list[0][0][0]
     assert cmd[cmd.index('-c:v') + 1] == 'copy' and cmd[cmd.index('-c:a') + 1] == 'copy'
     assert '+faststart' in cmd
     assert not video_path.exists()

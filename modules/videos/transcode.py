@@ -4,6 +4,7 @@ import pathlib
 import shutil
 from typing import List, Optional, Tuple, Callable
 
+from modules.videos.common import ffprobe_json, ffmpeg_video_complete_async
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import run_command
 from wrolpi.common import logger, get_relative_to_media_directory, wrol_mode_enabled
@@ -46,6 +47,12 @@ TRANSCODE_AUDIO_TARGETS = {
 TRANSCODE_CONTAINERS = ('mp4', 'mkv')
 
 TRANSCODE_TIMEOUT = 4 * 60 * 60  # A long video on a Raspberry Pi can take hours.
+
+# Output verification (see `verify_transcode_output`): the output's duration may differ from the
+# source by this much before it is considered truncated.  Muxers trim a frame or two; a truncated
+# file is off by minutes.
+DURATION_TOLERANCE_SECONDS = 1.0
+DURATION_TOLERANCE_RATIO = 0.01
 
 # Transcoding writes a whole new copy of the video next to the original.
 MINIMUM_FREE_SPACE_RATIO = 1.5
@@ -146,6 +153,75 @@ async def transcode_video_file(video_path: pathlib.Path,
         lock.release()
 
 
+async def probe_for_verify(path: pathlib.Path) -> dict:
+    """ffprobe a file for `verify_transcode_output`.  Separate so tests can replace it."""
+    return await ffprobe_json(path)
+
+
+def _format_names(probe: dict) -> List[str]:
+    return str((probe.get('format') or {}).get('format_name') or '').split(',')
+
+
+def _duration(probe: dict) -> Optional[float]:
+    try:
+        return float((probe.get('format') or {}).get('duration'))
+    except (TypeError, ValueError):
+        return None
+
+
+def verify_transcode_output(source: dict, output: dict, target_vcodec: Optional[str],
+                            target_acodec: Optional[str], container: str):
+    """Compare ffprobe results of the source and the transcoded output; the output must be a
+    complete rendition of the source before the source is replaced by it.
+
+    Checks: the output parses (its index was written), it is in the requested container, it has a
+    video stream (and an audio stream when the source has one), each stream's codec is the target
+    or, when copied, the source's, and the duration matches within a tolerance.
+
+    @raise RuntimeError: describing the first failed check.
+    """
+    if not output or not output.get('streams'):
+        raise RuntimeError('Transcode output could not be probed (no streams); its index may be missing')
+
+    if container not in _format_names(output):
+        raise RuntimeError(f'Transcode output container is {_format_names(output)}, expected {container}')
+
+    source_video = get_stream_codec_names(source, 'video')
+    source_audio = get_stream_codec_names(source, 'audio')
+    output_video = get_stream_codec_names(output, 'video')
+    output_audio = get_stream_codec_names(output, 'audio')
+
+    if not output_video:
+        raise RuntimeError('Transcode output has no video stream')
+    if source_audio and not output_audio:
+        raise RuntimeError('Transcode output has no audio stream, but the source has one')
+
+    expected_video = target_vcodec or (source_video[0] if source_video else None)
+    if expected_video and output_video[0] != expected_video:
+        raise RuntimeError(f'Transcode output video codec is {output_video[0]}, expected {expected_video}')
+    expected_audio = target_acodec or (source_audio[0] if source_audio else None)
+    if output_audio and expected_audio and output_audio[0] != expected_audio:
+        raise RuntimeError(f'Transcode output audio codec is {output_audio[0]}, expected {expected_audio}')
+
+    source_duration, output_duration = _duration(source), _duration(output)
+    if source_duration is not None:
+        if output_duration is None:
+            raise RuntimeError('Transcode output has no duration')
+        tolerance = max(DURATION_TOLERANCE_SECONDS, DURATION_TOLERANCE_RATIO * source_duration)
+        if abs(source_duration - output_duration) > tolerance:
+            raise RuntimeError(
+                f'Transcode output duration is {output_duration:.1f}s, source is {source_duration:.1f}s')
+
+
+async def _verify_tail_decodes(path: pathlib.Path, runner: Callable):
+    """The same completeness check a download gets (`ffmpeg_video_complete`), as a hard failure.
+
+    @raise RuntimeError: when the tail of `path` does not decode cleanly."""
+    ok, errors = await ffmpeg_video_complete_async(path, runner=runner)
+    if not ok:
+        raise RuntimeError(f'Transcode output failed to decode: {errors[-2000:] or "ffmpeg exited non-zero"}')
+
+
 def make_ffmpeg_progress_parser(duration: Optional[float], set_progress: Callable[[float], None]) \
         -> Callable[[str], None]:
     """Return a callback for `ffmpeg -progress pipe:1` stdout lines which reports percent complete.
@@ -207,8 +283,11 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
            '-nostats', '-progress', 'pipe:1',
            str(tmp_path))
     logger.warning(f'Transcoding {video_path} to {final_path} (video={target_vcodec}, audio={target_acodec})')
+    # Probed before ffmpeg so verification compares against the file as it was.
+    source_probe = await probe_for_verify(video_path)
     try:
         job = get_current_job()
+        runner = job.run_command if job else run_command
         if job:
             # Inside a Job: ffmpeg's output lands in the Job log and progress is reported.
             result = await job.run_command(cmd, cwd=video_path.parent, timeout=TRANSCODE_TIMEOUT,
@@ -219,6 +298,13 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
             raise RuntimeError(
                 f'ffmpeg exited with {result.return_code} while transcoding {video_path}:'
                 f'\n{result.stderr.decode()[-2000:]}')
+
+        # The original is only replaced by a complete output: compare probes, then prove the tail
+        # decodes.  A failure here leaves the original untouched.
+        logger.info(f'Verifying transcode output {tmp_path}')
+        output_probe = await probe_for_verify(tmp_path)
+        verify_transcode_output(source_probe, output_probe, target_vcodec, target_acodec, container)
+        await _verify_tail_decodes(tmp_path, runner)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise

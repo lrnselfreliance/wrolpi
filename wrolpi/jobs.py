@@ -200,10 +200,7 @@ def cancel_job(job_id: str) -> dict:
 
 def _claim_job(job_id: str) -> Optional[dict]:
     """Move a Job from PENDING to RUNNING in one step under the lock; returns the running record,
-    or None when the Job is no longer pending (cancelled while queued, or already claimed).
-
-    Reading the status and writing RUNNING separately let a cancel land in between and be
-    overwritten, running a Job the user had cancelled."""
+    or None when the Job is no longer pending (cancelled while queued, or already claimed)."""
     with _lock():
         record = _jobs().get(job_id)
         if not record or record['status'] != PENDING:

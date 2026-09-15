@@ -1804,3 +1804,65 @@ async def test_refresh_sync_skips_post_processing_when_unchanged(async_client, t
         file_worker._apply_post_processing = original
 
     assert called is False, '_apply_post_processing should be skipped when no files changed'
+
+
+@pytest.mark.asyncio
+async def test_direct_file_refresh_skips_ignored_directory(
+        async_client, test_session, test_directory, make_files_structure, test_wrolpi_config, await_background_tasks
+):
+    """Refreshing a file directly must not index it when it lives in an ignored directory.
+
+    The playlists directory holds hard links of indexed videos.  Indexing a link would create a second Video for the
+    same file.
+    """
+    from wrolpi.common import get_wrolpi_config
+
+    get_wrolpi_config().ignored_directories = ['config', 'tags', 'playlists']
+    await await_background_tasks()
+
+    video, link = make_files_structure([
+        'videos/channel/video.mp4',
+        'playlists/Testing/0001_video.mp4',
+    ])
+
+    task = FileTask(FileTaskType.refresh, [video, link])
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+
+    test_session.expire_all()
+    primary_paths = {str(i.primary_path) for i in test_session.query(FileGroup)}
+    assert primary_paths == {str(video)}
+
+
+@pytest.mark.asyncio
+async def test_directory_refresh_deletes_stale_ignored_file_groups(
+        async_client, test_session, test_directory, make_files_structure, test_wrolpi_config, await_background_tasks
+):
+    """A FileGroup that was indexed before its directory was ignored is removed by the next refresh."""
+    from wrolpi.common import get_wrolpi_config
+
+    get_wrolpi_config().ignored_directories = ['config', 'tags']
+    await await_background_tasks()
+
+    video, link = make_files_structure([
+        'videos/channel/video.mp4',
+        'playlists/Testing/0001_video.mp4',
+    ])
+
+    task = FileTask(FileTaskType.refresh, [test_directory], count=2)
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+    test_session.expire_all()
+    assert test_session.query(FileGroup).count() == 2
+
+    # The user (or WROLPi) ignores the playlists directory, the stale record must go away.
+    get_wrolpi_config().ignored_directories = ['config', 'tags', 'playlists']
+    await await_background_tasks()
+
+    task = FileTask(FileTaskType.refresh, [test_directory], count=1)
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+
+    test_session.expire_all()
+    primary_paths = {str(i.primary_path) for i in test_session.query(FileGroup)}
+    assert primary_paths == {str(video)}

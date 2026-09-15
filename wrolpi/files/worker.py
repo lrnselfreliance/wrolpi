@@ -36,7 +36,7 @@ from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
-    _bulk_update_file_groups_reorganize, get_normalized_ignored_directories,
+    _bulk_update_file_groups_reorganize, get_normalized_ignored_directories, remove_files_in_ignored_directories,
 )
 
 logger = logger.getChild(__name__)
@@ -1848,6 +1848,12 @@ class FileWorker:
                         all_fs_files.add(file_path)
                 else:
                     all_fs_files.add(file_path)
+
+        # Never index files in ignored directories (playlists/tags hold hard links of already-indexed files, which
+        # would otherwise become duplicate FileGroups).  Deleted paths are kept so stale records are still removed.
+        existing_files = [i for i in all_fs_files if i.exists()]
+        allowed_files = set(remove_files_in_ignored_directories(existing_files))
+        all_fs_files = {i for i in all_fs_files if not i.exists() or i in allowed_files}
 
         if not all_fs_files:
             return FileComparisonResult(unchanged=[], new=[], deleted=[], modified=[])

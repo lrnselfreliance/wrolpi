@@ -382,7 +382,9 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
         output_probe = await probe_for_verify(tmp_path)
         verify_transcode_output(source_probe, output_probe, target_vcodec, target_acodec, container)
         await _verify_tail_decodes(tmp_path, runner)
-    except Exception:
+    except BaseException:
+        # BaseException: a cancelled Job's run_command raises CancelledError, which must not leave
+        # the partial output behind for a refresh to index.
         tmp_path.unlink(missing_ok=True)
         raise
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pathlib
 from unittest import mock
@@ -401,3 +402,22 @@ async def test_transcode_video_file_rejects_undecodable_tail(test_directory, asy
     assert '-sseof' in cmd and cmd[cmd.index('-sseof') + 1].startswith('-')
     assert str(cmd[cmd.index('-i') + 1]).endswith('video.transcode.mp4')
     assert cmd[cmd.index('-f') + 1] == 'null'
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_file_cancel_removes_tmp(test_directory, async_client):
+    """A cancelled encode (a Job's run_command raises CancelledError, a BaseException) must still
+    remove the temporary output and leave the original."""
+    video_path = test_directory / 'video.webm'
+    video_path.write_bytes(b'fake video data')
+
+    async def fake_run_command(cmd, **kwargs):
+        pathlib.Path(cmd[-1]).write_bytes(b'partial data')
+        raise asyncio.CancelledError('killed')
+
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command):
+        with pytest.raises(asyncio.CancelledError):
+            await transcode_video_file(video_path, target_vcodec='h264')
+
+    assert video_path.read_bytes() == b'fake video data'
+    assert not (test_directory / 'video.transcode.mp4').exists(), 'The partial output must be removed'

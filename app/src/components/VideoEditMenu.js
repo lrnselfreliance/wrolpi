@@ -15,6 +15,8 @@ import {
 } from './Vars';
 
 const JOB_POLL_MS = 2000;
+// Consecutive failed polls before a Job is given up as lost (the API restarted and forgot it).
+const JOB_POLL_MAX_FAILURES = 5;
 export const FINISHED_STATUSES = ['complete', 'failed', 'cancelled'];
 // ffprobe calls an embedded thumbnail a video stream.
 const THUMBNAIL_CODECS = ['mjpeg', 'png', 'bmp', 'gif'];
@@ -73,16 +75,16 @@ const statusKind = (status) => {
 }
 
 /**
- * Poll a Job until it finishes.  Lives in whichever component must outlive the UI showing the Job:
- * the page must learn the Job finished even when the user closed the modal that started it.
- *
- * A failed request is retried on the next tick; only unmount, a new `jobId`, or a finished status
- * stops the polling.  `onFinished` is called once per Job.
+ * Poll a Job until it finishes; `onFinished(job)` is called once.  A failed request is retried;
+ * a 404 (the API restarted and forgot its Jobs) or `JOB_POLL_MAX_FAILURES` failures in a row stop
+ * the polling and call `onLost(error)` instead.
  */
-export function useJob(jobId, onFinished) {
+export function useJob(jobId, onFinished, onLost) {
     const [job, setJob] = useState(null);
     const onFinishedRef = useRef(onFinished);
+    const onLostRef = useRef(onLost);
     onFinishedRef.current = onFinished;
+    onLostRef.current = onLost;
 
     useEffect(() => {
         setJob(null);
@@ -91,13 +93,20 @@ export function useJob(jobId, onFinished) {
         }
         let stopped = false;
         let timer = null;
+        let failures = 0;
 
         const poll = async () => {
             let latest = null;
             try {
                 latest = await getJob(jobId);
+                failures = 0;
             } catch (e) {
                 console.error(e);
+                failures += 1;
+                if (!stopped && (e?.status === 404 || failures >= JOB_POLL_MAX_FAILURES)) {
+                    if (onLostRef.current) onLostRef.current(e);
+                    return;
+                }
             }
             if (stopped) return;
             if (latest) {
@@ -187,11 +196,8 @@ export function JobProgress({job, onCancel}) {
 }
 
 /**
- * Choose target codecs for one Video and queue the transcode Job, or show the Job already
- * queued for it.  The Job itself is owned by the parent (`useJob`), so closing this modal does not
- * stop the page from learning when it finishes.
- *
- * The selects start at the user's preferred codecs from the Videos settings.
+ * Choose target codecs for one Video and queue the transcode Job (`onQueued(jobId)`), or show the
+ * given `job`.  The selects start at the user's preferred codecs from the Videos settings.
  */
 export function TranscodeModal({
                                    open, onClose, fileGroupId, video, audioOnly = false, job, jobId, onQueued,
@@ -274,7 +280,6 @@ export function TranscodeModal({
     };
 
     const describe = (codecs) => codecs.length ? codecs.join(', ') : 'unknown';
-    // A queued or finished Job replaces the form until the parent forgets it.
     const showJob = !!jobId;
 
     let hint = null;
@@ -282,9 +287,11 @@ export function TranscodeModal({
         hint = `The video stream is removed; the result is an audio file (.${container}).  `
             + (audioCodec === TRANSCODE_COPY ? 'The audio is copied without re-encoding.' : `The audio is converted to ${audioCodec}.`);
     } else if (defaultsLoaded && remuxOnly) {
+        const kept = audioOnly ? 'The audio is kept' : 'Both streams are kept';
         hint = sameContainer
-            ? 'Both streams are kept: the file is rewritten as-is with fast start (moves the index to the front for quicker playback start).'
-            : `Both streams are kept: only the container changes to ${container} (a quick remux, no quality loss).`;
+            ? `${kept}: the file is rewritten as-is` + (container === 'mp4' || container === 'm4a'
+                ? ' with fast start (moves the index to the front for quicker playback start).' : '.')
+            : `${kept}: only the container changes to ${container} (a quick remux, no quality loss).`;
     }
     const buttonLabel = removeVideo ? 'Extract Audio' : remuxOnly ? 'Remux' : 'Transcode';
 
@@ -431,10 +438,8 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, descripti
 }
 
 /**
- * The "Edit" dropdown on the Video page: Edit, Refresh, Transcode, Delete.
- *
- * Owns the active transcode Job for this video, so the page hears about its completion whether or
- * not the modal is open, and a second transcode cannot be queued while one is running.
+ * The "Edit" dropdown on the Video page: Edit, Refresh, Transcode, Delete.  Holds this video's
+ * active transcode Job; `onTranscodeComplete` fires whether or not the modal is open.
  */
 export function VideoEditMenu({
                                   videoFile, video, description, onRefresh, onTranscodeComplete, onDelete, onSaved,
@@ -453,13 +458,28 @@ export function VideoEditMenu({
         if (finished.status === 'complete') {
             toast({type: 'success', title: 'Transcode complete', description: finished.description, time: 5000});
             if (onTranscodeComplete) onTranscodeComplete(finished);
+        } else if (finished.status === 'failed') {
+            toast({
+                type: 'error', title: 'Transcode failed', time: 10000,
+                description: `${finished.description}: ${finished.error || 'unknown error'}.  The original file was kept.`,
+            });
+        } else if (finished.status === 'cancelled') {
+            toast({type: 'info', title: 'Transcode cancelled', description: finished.description, time: 5000});
         }
         if (!transcodeOpen) {
             // Nobody is looking at the result; make room for the next transcode.
             setJobId(null);
         }
     };
-    const {job, cancel} = useJob(jobId, handleJobFinished);
+    const handleJobLost = (error) => {
+        toast({
+            type: 'warning', title: 'Lost track of the transcode', time: 10000,
+            description: 'The job is no longer known (the API may have restarted).  Check the file before trying again.',
+        });
+        setJobId(null);
+        setTranscodeOpen(false);
+    };
+    const {job, cancel} = useJob(jobId, handleJobFinished, handleJobLost);
 
     // Another video: its transcodes are its own.
     const firstVideoId = useRef(videoFile?.id);

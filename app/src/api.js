@@ -274,7 +274,9 @@ export async function getJobs() {
 export async function getJob(jobId) {
     const response = await apiGet(`${API_URI}/jobs/${jobId}`);
     if (!response.ok) {
-        throw new Error(await getErrorMessage(response, 'Unable to get the job'));
+        const error = new Error(await getErrorMessage(response, 'Unable to get the job'));
+        error.status = response.status;
+        throw error;
     }
     const data = await response.json();
     return data['job'];

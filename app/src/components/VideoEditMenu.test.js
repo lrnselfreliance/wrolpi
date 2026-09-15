@@ -20,6 +20,10 @@ jest.mock('../api', () => ({
 
 import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo, updateVideo} from '../api';
 
+// The ui index re-exports `toast` from here; a spy lets tests see what the page tells the user.
+jest.mock('./ui/toast', () => ({...jest.requireActual('./ui/toast'), toast: jest.fn()}));
+import {toast} from './ui/toast';
+
 const video = {
     codec_names: ['vp9', 'mjpeg', 'opus'],
     codec_types: ['video', 'video', 'audio'],
@@ -42,6 +46,8 @@ const pendingJob = {
 };
 const runningJob = {...pendingJob, status: 'running', progress: 40, log: ['out_time_us=1']};
 const completeJob = {...pendingJob, status: 'complete', progress: 100, log: ['done']};
+const failedJob = {...pendingJob, status: 'failed', progress: 12, error: 'ffmpeg exited with 1', log: ['boom']};
+const notFound = Object.assign(new Error('Job does not exist'), {status: 404});
 
 describe('helpers', () => {
     test('currentCodecs ignores embedded thumbnail streams', () => {
@@ -149,7 +155,9 @@ describe('TranscodeModal', () => {
         renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={mkv}/>);
 
         await waitFor(() => expect(selectInput('Container')).toHaveValue('mkv'));
-        expect(await screen.findByText(/rewritten as-is with fast start/)).toBeInTheDocument();
+        // mkv has no fast start; the hint must not promise one.
+        expect(await screen.findByText(/Both streams are kept: the file is rewritten as-is\./)).toBeInTheDocument();
+        expect(screen.queryByText(/fast start/)).not.toBeInTheDocument();
         expect(screen.getByRole('button', {name: 'Remux'})).toBeEnabled();
     });
 
@@ -165,7 +173,9 @@ describe('TranscodeModal', () => {
         // The aac source, copied, belongs in m4a; the file already is one.
         await waitFor(() => expect(selectInput('Container')).toHaveValue('m4a (aac)'));
         expect(screen.queryAllByLabelText('Video codec')).toHaveLength(0);
-        expect(await screen.findByText(/rewritten as-is with fast start/)).toBeInTheDocument();
+        expect(await screen.findByText(/The audio is kept: the file is rewritten as-is with fast start/))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/Both streams/)).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', {name: 'Remux'}));
         // No video codec is sent for an audio file, whatever the video preferences say.
@@ -262,8 +272,8 @@ describe('EditVideoModal', () => {
 });
 
 // A tiny harness so the hook can be driven like the menu drives it.
-function JobHarness({jobId, onFinished}) {
-    const {job, cancel} = useJob(jobId, onFinished);
+function JobHarness({jobId, onFinished, onLost}) {
+    const {job, cancel} = useJob(jobId, onFinished, onLost);
     return <JobProgress job={job} onCancel={cancel}/>;
 }
 
@@ -333,6 +343,31 @@ describe('useJob + JobProgress', () => {
         await nextPoll();
         await waitFor(() => expect(screen.getByText('complete')).toBeInTheDocument());
         expect(onFinished).toHaveBeenCalledTimes(1);
+    });
+
+    test('a 404 means the API forgot the Job: give up at once', async () => {
+        getJob.mockRejectedValue(notFound);
+        const onLost = jest.fn();
+        const onFinished = jest.fn();
+        renderWithProviders(<JobHarness jobId='transcode_video-abc' onFinished={onFinished} onLost={onLost}/>);
+
+        await waitFor(() => expect(onLost).toHaveBeenCalledTimes(1));
+        expect(onLost.mock.calls[0][0].status).toBe(404);
+        await nextPoll();
+        expect(getJob).toHaveBeenCalledTimes(1);
+        expect(onFinished).not.toHaveBeenCalled();
+    });
+
+    test('repeated failures give up after a few polls', async () => {
+        getJob.mockRejectedValue(new Error('network'));
+        const onLost = jest.fn();
+        renderWithProviders(<JobHarness jobId='transcode_video-abc' onLost={onLost}/>);
+
+        for (let i = 0; i < 6; i++) {
+            await nextPoll();
+        }
+        await waitFor(() => expect(onLost).toHaveBeenCalledTimes(1));
+        expect(getJob).toHaveBeenCalledTimes(5);
     });
 
     test('Cancel asks the API to cancel the Job', async () => {
@@ -503,6 +538,37 @@ describe('VideoEditMenu', () => {
         expect(await screen.findByText('running')).toBeInTheDocument();
         expect(screen.queryAllByLabelText('Video codec')).toHaveLength(0);
         expect(transcodeVideo).not.toHaveBeenCalled();
+    });
+
+    test('a Job that fails after the modal was closed still tells the user', async () => {
+        getJob.mockResolvedValue(failedJob);
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}
+                           onTranscodeComplete={jest.fn()} initialJobId='transcode_video-abc'/>,
+        );
+        await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+        expect(toast.mock.calls[0][0]).toMatchObject({type: 'error', title: 'Transcode failed'});
+        expect(toast.mock.calls[0][0].description).toMatch(/ffmpeg exited with 1/);
+        expect(toast.mock.calls[0][0].description).toMatch(/original file was kept/);
+
+        // Forgotten: the menu is unlocked again.
+        await openMenu();
+        expect(screen.getByRole('menuitem', {name: 'Transcode...'})).toBeEnabled();
+        expect(screen.getByRole('menuitem', {name: /Delete/})).toBeEnabled();
+    });
+
+    test('a Job the API no longer knows unlocks the menu with a warning', async () => {
+        getJob.mockRejectedValue(notFound);
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}
+                           initialJobId='transcode_video-abc'/>,
+        );
+        await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+        expect(toast.mock.calls[0][0]).toMatchObject({type: 'warning', title: 'Lost track of the transcode'});
+
+        await openMenu();
+        expect(screen.getByRole('menuitem', {name: 'Transcode...'})).toBeEnabled();
+        expect(screen.getByRole('menuitem', {name: /Delete/})).toBeEnabled();
     });
 
     test('a Job that finished unwatched is forgotten, so the next open offers the form', async () => {

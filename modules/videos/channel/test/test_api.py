@@ -1,19 +1,24 @@
 import json
 import pathlib
 import shutil
+import sqlite3
 import tempfile
+import threading
 from datetime import timedelta
 from http import HTTPStatus
 
 import mock
 import pytest
 
+from modules.videos.channel import lib
 from modules.videos.common import get_videos_directory
 from modules.videos.conftest import simple_channel
 from modules.videos.downloader import ChannelDownloader
 from modules.videos.lib import save_channels_config, get_channels_config
 from modules.videos.models import Channel, Video
+from wrolpi.collections.models import Collection
 from wrolpi.common import get_relative_to_media_directory, walk
+from wrolpi.conftest import production_like_sessions
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, DownloadResult
@@ -256,6 +261,55 @@ async def test_channel_post_directory(test_session, async_client, test_directory
     assert (test_directory / 'foo') == directory
     assert directory.is_dir()
     assert directory.is_absolute()
+
+
+@pytest.mark.asyncio
+async def test_channel_post_survives_concurrent_writer(test_session, async_client, test_directory):
+    """Creating a Channel must not fail because something else wrote in the meantime.
+
+    Regression test for `database is locked` on `INSERT INTO collection` from POST /api/videos/channels
+    while background workers (config saves, refreshes) were writing.  The request session begins
+    *deferred*, `create_channel` reads (the conflict check) before it INSERTs, and SQLite refuses that
+    mid-transaction lock upgrade instantly -- busy_timeout is skipped for upgrades.  The handler must
+    begin as a writer so the concurrent writer waits on it (busy_timeout) instead.
+    """
+    db_file = test_session.get_bind().url.database
+    data = json.dumps(dict(name='Contended Channel', directory='contended'))
+    # Release anything the fixtures left open on the shared session's connection.
+    test_session.commit()
+
+    def commit_from_another_connection():
+        # The "background worker": a committed write from a fresh connection.
+        other = sqlite3.connect(db_file, timeout=30, check_same_thread=False)
+        other.isolation_level = None
+        other.execute('PRAGMA busy_timeout=30000')
+        other.execute('BEGIN IMMEDIATE')
+        version, = other.execute('PRAGMA user_version').fetchone()
+        other.execute(f'PRAGMA user_version={version + 1}')
+        other.execute('COMMIT')
+        other.close()
+
+    writer = threading.Thread(target=commit_from_another_connection, daemon=True)
+    real_check = lib.check_for_channel_conflicts
+
+    def check_then_let_another_worker_write(*args, **kwargs):
+        # The handler has now read; something else writes before the handler's INSERT.  A deferred
+        # handler lets the writer through at once and then fails its own INSERT; a handler that
+        # began IMMEDIATE holds the lock, so the writer blocks here and waits its turn.
+        result = real_check(*args, **kwargs)
+        writer.start()
+        writer.join(timeout=0.5)
+        return result
+
+    with production_like_sessions(test_session) as maker:
+        with mock.patch('modules.videos.channel.lib.check_for_channel_conflicts', check_then_let_another_worker_write):
+            request, response = await async_client.post('/api/videos/channels', content=data)
+        writer.join(timeout=30)
+
+        assert response.status_code == HTTPStatus.CREATED, response.body
+        assert not writer.is_alive(), 'the concurrent writer never got its turn'
+        # Committed before the handler returned, so another worker sees it.
+        assert maker().query(Collection).filter_by(name='Contended Channel').one()
 
 
 @pytest.mark.asyncio

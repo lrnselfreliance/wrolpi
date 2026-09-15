@@ -9,6 +9,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger, wrol_mode_check, get_media_directory, get_relative_to_media_directory
+from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST
@@ -51,18 +52,24 @@ def channel_get(request: Request, channel_id: int = None):
 @validate(schema.ChannelPostRequest)
 @wrol_mode_check
 def channel_post(request: Request, body: schema.ChannelPostRequest):
-    session = request.ctx.session
     body.directory = get_media_directory() / body.directory
 
-    channel = lib.create_channel(session, data=body, return_dict=False)
+    # Not `request.ctx.session`: creating a Channel reads (the URL/name/directory conflict check)
+    # before it INSERTs, and a deferred transaction fails that lock upgrade *instantly* with
+    # "database is locked" if anything else wrote in between -- which is what a user creating a
+    # Channel while background workers saved configs hit.  This session also commits before the
+    # refresh below is fired, so the refresh does not wait on a lock this request still holds.
+    with get_db_session(commit=True) as session:
+        channel = lib.create_channel(session, data=body, return_dict=False)
+        channel_id, channel_name = channel.id, channel.name
 
     # Refresh the videos asynchronously
-    channel.refresh_files(channel.id)
+    Channel.refresh_files(channel_id)
 
-    Events.send_created(f'Created Channel: {channel.name}')
+    Events.send_created(f'Created Channel: {channel_name}')
 
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
-                         {'Location': f'/api/videos/channels/{channel.id}'})
+                         {'Location': f'/api/videos/channels/{channel_id}'})
 
 
 @channel_bp.put('/<channel_id:int>')

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from unittest import mock
 from http import HTTPStatus
 
 import pytest
@@ -210,3 +211,56 @@ async def test_jobs_api(async_client):
 
     request, response = await async_client.get('/api/jobs/nope')
     assert response.status == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_jobs_claim_is_atomic(async_client):
+    """The worker claims a Job (PENDING -> RUNNING) in one step under the lock, so a cancel that
+    lands first wins and the Job never runs; a cancel that lands after only requests a stop."""
+    from wrolpi.jobs import _claim_job
+
+    cancelled_first = enqueue_job('test_sync', value='a')
+    cancel_job(cancelled_first)
+    assert _claim_job(cancelled_first) is None, 'A cancelled Job cannot be claimed'
+    assert get_job(cancelled_first)['status'] == jobs.CANCELLED, 'The claim must not promote it to RUNNING'
+
+    claimed = enqueue_job('test_sync', value='b')
+    record = _claim_job(claimed)
+    assert record['status'] == jobs.RUNNING and record['pid'] and record['started_at']
+    assert get_job(claimed)['status'] == jobs.RUNNING
+    assert _claim_job(claimed) is None, 'A Job is claimed once'
+    # Cancelling a claimed Job only asks it to stop.
+    assert cancel_job(claimed)['status'] == jobs.RUNNING
+    assert get_job(claimed)['cancel_requested'] is True
+
+
+@pytest.mark.asyncio
+async def test_jobs_pending_limit(async_client):
+    """The queue refuses new Jobs past a pending cap, so a runaway client cannot grow shared memory."""
+    with mock.patch.object(jobs, 'JOB_PENDING_LIMIT', 2):
+        first = enqueue_job('test_slow', seconds=30)
+        second = enqueue_job('test_slow', seconds=30)
+        with pytest.raises(InvalidJob, match='pending'):
+            enqueue_job('test_slow', seconds=30)
+        # A cancelled Job no longer counts.
+        cancel_job(first)
+        third = enqueue_job('test_slow', seconds=30)
+    for job_id in (second, third):
+        cancel_job(job_id)
+    assert await process_job_queue() == 3, 'Cancelled ids are drained as no-ops'
+    assert [i['status'] for i in get_jobs()] == [jobs.CANCELLED] * 3
+
+
+@pytest.mark.asyncio
+async def test_jobs_run_command_cancel_semantics(async_client):
+    """A Job's subprocess runs in its own session (the whole group dies with it), and a killed
+    command raises rather than returning a result a handler could mistake for a normal exit."""
+    from wrolpi.cmd import CommandResult
+    from wrolpi.jobs import JobContext
+
+    context = JobContext('test-1', 'test')
+    killed = CommandResult(return_code=-9, cancelled=True, stdout=b'', stderr=b'', elapsed=1)
+    with mock.patch('wrolpi.cmd.run_command', return_value=killed) as mock_run:
+        with pytest.raises(asyncio.CancelledError):
+            await context.run_command(('sleep', '30'))
+    assert mock_run.call_args.kwargs['start_new_session'] is True

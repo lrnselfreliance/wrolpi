@@ -211,3 +211,67 @@ async def test_transcode_video_job_wrol_mode(test_session, test_directory, async
     assert 'WROL Mode' in record['error']
     mock_run.assert_not_called()
     assert video_path.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_job_retargets_before_deleting(test_session, test_directory, async_client,
+                                                              video_factory):
+    """When the suffix changes, the FileGroup is pointed at the new file (and committed) while the
+    old file still exists; the old file is deleted only afterwards.  A crash in between then leaves
+    both files with the database pointing at a real one."""
+    from modules.videos import transcode as transcode_module
+
+    video_path = test_directory / 'videos/NO CHANNEL/movie.webm'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video = video_factory(with_video_file=video_path)
+    test_session.commit()
+    seen = {}
+
+    real_retarget = transcode_module.retarget_file_group
+
+    def spy_retarget(file_group_id, old_path, new_path):
+        seen['old_exists'] = old_path.exists()
+        seen['new_exists'] = new_path.exists()
+        real_retarget(file_group_id, old_path, new_path)
+        test_session.expire_all()
+        seen['db_primary'] = Video.find_by_file_group_id(test_session, file_group_id).file_group.primary_path
+
+    async def fake_run_command(cmd, stdout_callback=None, **kwargs):
+        if cmd[-1] == '-':
+            return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('wrolpi.cmd.run_command', side_effect=fake_run_command), \
+            mock.patch.object(transcode_module, 'retarget_file_group', side_effect=spy_retarget):
+        job_id = transcode_video_job.enqueue(file_group_id=video.file_group_id, video_codec='h264',
+                                             audio_codec='aac', container='mp4')
+        record = await jobs.wait_for_job(job_id)
+
+    assert record['status'] == jobs.COMPLETE, record
+    new_path = test_directory / 'videos/NO CHANNEL/movie.mp4'
+    assert seen == {'old_exists': True, 'new_exists': True, 'db_primary': new_path}, seen
+    assert not video_path.exists(), 'The old file is deleted once the database points at the new one'
+    assert new_path.is_file()
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_file_keep_original(test_directory, async_client):
+    """`transcode_video_file(keep_original=True)` renames the output into place but leaves the
+    original for the caller to delete once its records point at the new file."""
+    from modules.videos.transcode import transcode_video_file
+    video_path = test_directory / 'video.webm'
+    video_path.write_bytes(b'fake video data')
+
+    async def fake_run_command(cmd, **kwargs):
+        if cmd[-1] == '-':
+            return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command):
+        result = await transcode_video_file(video_path, target_vcodec='h264', target_acodec='aac',
+                                            container='mp4', keep_original=True)
+
+    assert result == test_directory / 'video.mp4' and result.is_file()
+    assert video_path.read_bytes() == b'fake video data', 'The original is kept'

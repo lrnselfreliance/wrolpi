@@ -124,14 +124,17 @@ async def transcode_video_file(video_path: pathlib.Path,
                                target_vcodec: Optional[str] = None,
                                target_acodec: Optional[str] = None,
                                container: str = 'mp4',
-                               duration: Optional[float] = None) -> pathlib.Path:
+                               duration: Optional[float] = None,
+                               keep_original: bool = False) -> pathlib.Path:
     """Transcode a video file in place (same stem, possibly a new container extension).
 
     Only one transcode runs at a time machine-wide (across all Sanic workers); this call waits
     for its turn.  Only the stream(s) with a target are re-encoded; the other stream is copied.
     The output is written to a temporary file in the same directory, then atomically renamed over
-    the final path.  The original file is deleted if the extension changed.  Returns the final
-    path.
+    the final path.  The original file is deleted if the extension changed, unless
+    `keep_original`: a caller with database records pointing at the original must retarget them
+    first, then delete it (see `transcode_video_job`), so a crash never leaves the records pointing
+    at a deleted file.  Returns the final path.
 
     When run inside a Job (see `wrolpi.jobs`), ffmpeg's output is captured into the Job log and, if
     `duration` (seconds) is known, progress is reported to the Job.
@@ -148,7 +151,8 @@ async def transcode_video_file(video_path: pathlib.Path,
 
     lock = await _acquire_transcode_lock()
     try:
-        return await _transcode_video_file(video_path, target_vcodec, target_acodec, container, duration)
+        return await _transcode_video_file(video_path, target_vcodec, target_acodec, container, duration,
+                                           keep_original)
     finally:
         lock.release()
 
@@ -249,7 +253,7 @@ def make_ffmpeg_progress_parser(duration: Optional[float], set_progress: Callabl
 
 async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
                                 target_acodec: Optional[str], container: str,
-                                duration: Optional[float] = None) -> pathlib.Path:
+                                duration: Optional[float] = None, keep_original: bool = False) -> pathlib.Path:
     """The ffmpeg work of `transcode_video_file`; the caller holds the transcode lock."""
     # Notify here, after the lock: the wait for another transcode can last hours, and the user
     # should hear "Transcoding" only when this file's work actually begins.
@@ -320,7 +324,7 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
     # The old ffprobe sidecar describes the old streams.
     video_path.with_suffix('.ffprobe.json').unlink(missing_ok=True)
     tmp_path.rename(final_path)
-    if final_path != video_path:
+    if final_path != video_path and not keep_original:
         video_path.unlink()
     final_path.chmod(DEFAULT_FILE_PERMISSIONS)
 
@@ -345,6 +349,27 @@ def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional
         raise ValueError(f'Unsupported container {container!r}; supported: {TRANSCODE_CONTAINERS}')
 
 
+def retarget_file_group(file_group_id: int, old_path: pathlib.Path, new_path: pathlib.Path):
+    """Point a Video's FileGroup at the transcoded file and mark it for re-modeling.  Committed."""
+    from modules.videos.models import Video
+    from wrolpi.files.lib import get_mimetype
+
+    with get_db_session(commit=True) as session:
+        video = Video.find_by_file_group_id(session, file_group_id)
+        file_group = video.file_group
+        if new_path != old_path:
+            mimetype = get_mimetype(new_path)
+            file_group.files = [
+                {**i, 'path': new_path.name, 'mimetype': mimetype} if i['path'] == old_path.name else i
+                for i in file_group.files
+            ]
+            file_group.primary_path = new_path
+            file_group.mimetype = mimetype
+        # The streams changed: the modeler must ffprobe the file again.
+        video.ffprobe_json = None
+        file_group.indexed = False
+
+
 @register_job('transcode_video')
 async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = None,
                               audio_codec: Optional[str] = None, container: str = 'mp4') -> dict:
@@ -352,7 +377,6 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
 
     Run as a Job (`transcode_video_job.enqueue(...)`) so the user can watch and cancel it."""
     from modules.videos.models import Video
-    from wrolpi.files.lib import get_mimetype
     from wrolpi.files.worker import file_worker
 
     # The API refuses to queue in WROL Mode; this catches a Job queued before it was enabled.
@@ -368,24 +392,17 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
         if not video_path or not video_path.is_file():
             raise RuntimeError(f'Video file does not exist: {video_path}')
 
-    final_path = await transcode_video_file(video_path, video_codec, audio_codec, container, duration=duration)
+    # The original is kept until the database points at the new file (below).
+    final_path = await transcode_video_file(video_path, video_codec, audio_codec, container, duration=duration,
+                                            keep_original=True)
 
-    # Point the existing FileGroup at the new file *before* refreshing.  A refresh which finds a
-    # new filename on disk would delete this FileGroup and create another, losing tags and history.
-    with get_db_session(commit=True) as session:
-        video = Video.find_by_file_group_id(session, file_group_id)
-        file_group = video.file_group
-        if final_path != video_path:
-            file_group.files = [
-                {**i, 'path': final_path.name, 'mimetype': get_mimetype(final_path)}
-                if i['path'] == video_path.name else i
-                for i in file_group.files
-            ]
-            file_group.primary_path = final_path
-            file_group.mimetype = get_mimetype(final_path)
-        # The streams changed: the modeler must ffprobe the file again.
-        video.ffprobe_json = None
-        file_group.indexed = False
+    # Point the existing FileGroup at the new file *before* deleting the original and *before*
+    # refreshing.  A crash after the delete would leave the database pointing at a missing file;
+    # a refresh which finds a new filename on disk would delete this FileGroup and create another,
+    # losing tags and history.
+    retarget_file_group(file_group_id, video_path, final_path)
+    if final_path != video_path:
+        video_path.unlink(missing_ok=True)
 
     job_id = file_worker.queue_refresh([final_path], send_events=False)
     await file_worker.wait_for_job(job_id)

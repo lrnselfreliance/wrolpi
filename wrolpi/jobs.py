@@ -62,6 +62,9 @@ FINISHED_STATUSES = (COMPLETE, FAILED, CANCELLED)
 JOB_LOG_LINES = 200
 # Finished Jobs kept for the UI/API before the oldest are forgotten.
 JOB_HISTORY_LIMIT = 100
+# Pending Jobs allowed at once; `enqueue_job` refuses past this so a runaway client cannot grow
+# shared memory without bound.
+JOB_PENDING_LIMIT = 100
 # How often the running Job checks whether it has been cancelled from another process.
 JOB_CANCEL_POLL_SECONDS = 0.05 if PYTEST else 1
 # The Job log lives in this process; it is copied to the shared dict at most this often.
@@ -131,6 +134,9 @@ def enqueue_job(name: str, description: str = None, **kwargs) -> str:
         cancel_requested=False,
     )
     with _lock():
+        pending = sum(1 for i in _jobs().values() if i['status'] == PENDING)
+        if pending >= JOB_PENDING_LIMIT:
+            raise InvalidJob(f'Too many pending jobs ({pending}); try again once some have finished')
         _jobs()[job_id] = record
         _prune_finished_jobs()
     _queue().put_nowait(job_id)
@@ -192,6 +198,22 @@ def cancel_job(job_id: str) -> dict:
     return record
 
 
+def _claim_job(job_id: str) -> Optional[dict]:
+    """Move a Job from PENDING to RUNNING in one step under the lock; returns the running record,
+    or None when the Job is no longer pending (cancelled while queued, or already claimed).
+
+    Reading the status and writing RUNNING separately let a cancel land in between and be
+    overwritten, running a Job the user had cancelled."""
+    with _lock():
+        record = _jobs().get(job_id)
+        if not record or record['status'] != PENDING:
+            return None
+        record = dict(record)
+        record.update(status=RUNNING, started_at=now().isoformat(), pid=os.getpid())
+        _jobs()[job_id] = record
+        return record
+
+
 def _cancel_requested(job_id: str) -> bool:
     record = _jobs().get(job_id)
     return bool(record and record.get('cancel_requested'))
@@ -240,12 +262,18 @@ class JobContext:
             if stdout_callback:
                 stdout_callback(line)
 
+        # Its own session: killing the command kills anything it spawned, as elsewhere in WROLPi.
+        kwargs.setdefault('start_new_session', True)
         result = await run_command(cmd, stdout_callback=_callback, **kwargs)
         if result.stderr:
             for line in result.stderr.decode(errors='replace').splitlines()[-JOB_LOG_LINES:]:
                 if line.strip():
                     self.log(line)
         self.flush()
+        if result.cancelled:
+            # `run_command` swallows the cancellation and returns; a handler checking return codes
+            # must not mistake a killed command for a normal exit.
+            raise asyncio.CancelledError(f'Command was cancelled: {cmd[0]}')
         return result
 
 
@@ -289,8 +317,8 @@ def _json_safe(value):
 
 async def _run_job(job_id: str):
     """Run one Job to completion (or failure/cancellation) in this process."""
-    record = _jobs().get(job_id)
-    if not record or record['status'] != PENDING:
+    record = _claim_job(job_id)
+    if not record:
         # Cancelled while it was waiting in the queue.
         return
 
@@ -302,7 +330,6 @@ async def _run_job(job_id: str):
                     finished_at=now().isoformat())
         return
 
-    _update_job(job_id, status=RUNNING, started_at=now().isoformat(), pid=os.getpid())
     token = _current_job.set(context)
     try:
         async def call():

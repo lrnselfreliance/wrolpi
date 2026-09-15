@@ -503,7 +503,7 @@ export function VideoEditMenu({
     return <>
         <Menu position='bottom-start' withinPortal>
             <Menu.Target>
-                <Button role='primary' icon='edit' iconAfter='dropdown' loading={refreshing}>Edit</Button>
+                <Button color='yellow' icon='edit' iconAfter='dropdown' loading={refreshing}>Edit</Button>
             </Menu.Target>
             <Menu.Dropdown>
                 <Menu.Item

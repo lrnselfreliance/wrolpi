@@ -182,13 +182,44 @@ describe('VideoEditMenu', () => {
         expect(screen.getByRole('menuitem', {name: /Transcode/})).toBeDisabled();
     });
 
-    test('WROL Mode disables both items', async () => {
+    test('WROL Mode disables every item', async () => {
         renderWithProviders(
-            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()}/>,
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}/>,
             wrolMode,
         );
         fireEvent.click(screen.getByRole('button', {name: /Edit/}));
         expect(await screen.findByRole('menuitem', {name: /Refresh/})).toBeDisabled();
         expect(screen.getByRole('menuitem', {name: /Transcode/})).toBeDisabled();
+        expect(screen.getByRole('menuitem', {name: /Delete/})).toBeDisabled();
+    });
+
+    test('Delete asks for confirmation before calling onDelete', async () => {
+        const onDelete = jest.fn().mockResolvedValue(undefined);
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={onDelete}/>,
+        );
+
+        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
+        fireEvent.click(await screen.findByRole('menuitem', {name: /Delete/}));
+        expect(await screen.findByText('Delete video?')).toBeInTheDocument();
+        expect(onDelete).not.toHaveBeenCalled();
+
+        fireEvent.click(await screen.findByRole('button', {name: 'Delete'}));
+        await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+    });
+
+    test('backing out of the Delete confirmation deletes nothing', async () => {
+        const onDelete = jest.fn();
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={onDelete}/>,
+        );
+
+        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
+        fireEvent.click(await screen.findByRole('menuitem', {name: /Delete/}));
+        expect(await screen.findByText('Delete video?')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        await waitFor(() => expect(screen.queryByText('Delete video?')).not.toBeInTheDocument());
+        expect(onDelete).not.toHaveBeenCalled();
     });
 });

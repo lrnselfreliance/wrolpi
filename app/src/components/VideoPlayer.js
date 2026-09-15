@@ -489,18 +489,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                     <Button component='a' href={downloadUrl} icon='download'>
                         Download
                     </Button>
-                    <APIButton
-                        role='danger'
-                        confirmContent='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
-                        confirmButton='Delete'
-                        onClick={async () => await handleDeleteVideo(videoFile.id)}
-                        obeyWROLMode={true}
-                    >Delete</APIButton>
                     <VideoEditMenu
                         videoFile={videoFile}
                         video={video}
                         onRefresh={handleRefresh}
                         onTranscodeComplete={fetchVideo}
+                        onDelete={async () => await handleDeleteVideo(videoFile.id)}
                     />
                     <AddToPlaylistButton fileGroupId={videoFile.id}/>
                 </div>

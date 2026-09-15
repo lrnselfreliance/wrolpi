@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo} from '../api';
 import {useWROLMode} from '../hooks/customHooks';
-import {Button, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, toast} from './ui';
+import {Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, toast} from './ui';
 import {
     TRANSCODE_COPY,
     transcodeAudioCodecOptions,
@@ -269,15 +269,28 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
 }
 
 /**
- * The "Edit" dropdown on the Video page: Refresh (re-download metadata) and Transcode.
+ * The "Edit" dropdown on the Video page: Refresh (re-download metadata), Transcode, and Delete.
  *
  * `onRefresh` is awaited; `onTranscodeComplete` is called after the file was replaced so the
- * page can fetch the Video again (its path and codecs changed).
+ * page can fetch the Video again (its path and codecs changed).  `onDelete` is awaited after the
+ * user confirms; the page decides what happens next (navigate away, or the tagged-files prompt).
  */
-export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete}) {
+export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete, onDelete}) {
     const wrolModeEnabled = useWROLMode();
     const [transcodeOpen, setTranscodeOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            await onDelete();
+            setDeleteOpen(false);
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -310,8 +323,29 @@ export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete}
                 >
                     Transcode...
                 </Menu.Item>
+                <Menu.Divider/>
+                <Menu.Item
+                    color='var(--danger)'
+                    leftSection={<Icon name='trash'/>}
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={!onDelete || !!wrolModeEnabled}
+                >
+                    Delete...
+                </Menu.Item>
             </Menu.Dropdown>
         </Menu>
+        <Confirm
+            open={deleteOpen}
+            title='Delete video?'
+            confirmLabel='Delete'
+            destructive
+            loading={deleting}
+            onConfirm={handleDelete}
+            onCancel={() => setDeleteOpen(false)}
+        >
+            Are you sure you want to delete this video?  All files related to this video will be deleted.
+            It will not be downloaded again!
+        </Confirm>
         <TranscodeModal
             open={transcodeOpen}
             onClose={() => setTranscodeOpen(false)}

@@ -187,6 +187,18 @@ class VideoSearchRequest:
 
 
 @dataclass
+class VideoTranscodeRequest:
+    video_codec: Optional[str] = None  # A key of TRANSCODE_VIDEO_TARGETS, or None to copy the stream.
+    audio_codec: Optional[str] = None  # A key of TRANSCODE_AUDIO_TARGETS, or None to copy the stream.
+    container: str = 'mp4'
+
+
+@dataclass
+class VideoTranscodeResponse:
+    job_id: str
+
+
+@dataclass
 class VideoSearchResponse:
     videos: List[VideoWithChannel]
     tsquery: str

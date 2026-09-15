@@ -16,6 +16,7 @@ import {
     IconStack,
     MediaFilterToggle,
     MediaGate,
+    Menu,
     Message,
     MultiSelect,
     NumberInput,
@@ -380,6 +381,25 @@ export function ThemeSamplePage() {
                             <Button size={size}>{size}</Button>
                             <IconButton size={size} icon='external' label={`Open (${size})`}/>
                         </div>)}
+                    </Row>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <Header as='h5'>A dropdown of actions</Header>
+                    {/* The video page's Edit button: one labelled button opens a menu of the
+                        rarer actions, so the row stays short.  The trailing chevron is what
+                        says "menu" rather than "does the thing"; a disabled item stays listed
+                        so the user learns it exists. */}
+                    <Row>
+                        <Menu position='bottom-start' withinPortal>
+                            <Menu.Target>
+                                <Button role='primary' icon='edit' iconAfter='dropdown'>Edit</Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                                <Menu.Item leftSection={<Icon name='refresh'/>}>Refresh</Menu.Item>
+                                <Menu.Item leftSection={<Icon name='film'/>}>Transcode...</Menu.Item>
+                                <Menu.Item leftSection={<Icon name='trash'/>} disabled>Unavailable</Menu.Item>
+                            </Menu.Dropdown>
+                        </Menu>
                     </Row>
                 </div>
                 <div style={{marginTop: 12}}>

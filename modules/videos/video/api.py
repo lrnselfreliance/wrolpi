@@ -7,11 +7,12 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
-from wrolpi.common import logger
-from wrolpi.errors import InvalidOrderBy
+from wrolpi.common import logger, wrol_mode_check
+from wrolpi.errors import InvalidOrderBy, InvalidJob
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
+from ..transcode import transcode_video_job, validate_transcode_request
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -53,6 +54,31 @@ def video_get_description(_: Request, file_group_id: int):
 def video_get_captions(_: Request, file_group_id: int):
     video = lib.get_video(file_group_id)
     return json_response({'captions': video.get_caption_chunks()})
+
+
+@video_bp.post('/<file_group_id:int>/transcode')
+@openapi.description('Queue a Job which transcodes the Video to the requested codecs/container.')
+@openapi.body({'application/json': schema.VideoTranscodeRequest})
+@openapi.response(HTTPStatus.OK, schema.VideoTranscodeResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(schema.VideoTranscodeRequest)
+@wrol_mode_check
+async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTranscodeRequest):
+    try:
+        validate_transcode_request(body.video_codec, body.audio_codec, body.container)
+    except ValueError as e:
+        raise InvalidJob(str(e))
+    # Raises UnknownVideo (404) before anything is queued.
+    video = lib.get_video(file_group_id)
+    job_id = transcode_video_job.enqueue(
+        description=f'Transcode {video.video_path.name}',
+        file_group_id=file_group_id,
+        video_codec=body.video_codec,
+        audio_codec=body.audio_codec,
+        container=body.container,
+    )
+    return json_response({'job_id': job_id})
 
 
 @video_bp.post('/search')

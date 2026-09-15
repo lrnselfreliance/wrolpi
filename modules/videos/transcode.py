@@ -2,11 +2,13 @@ import asyncio
 import os
 import pathlib
 import shutil
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import run_command
-from wrolpi.common import logger
+from wrolpi.common import logger, get_relative_to_media_directory
+from wrolpi.db import get_db_session
+from wrolpi.jobs import register_job, get_current_job
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS, PYTEST
 
 logger = logger.getChild(__name__)
@@ -114,7 +116,8 @@ async def _acquire_transcode_lock():
 async def transcode_video_file(video_path: pathlib.Path,
                                target_vcodec: Optional[str] = None,
                                target_acodec: Optional[str] = None,
-                               container: str = 'mp4') -> pathlib.Path:
+                               container: str = 'mp4',
+                               duration: Optional[float] = None) -> pathlib.Path:
     """Transcode a video file in place (same stem, possibly a new container extension).
 
     Only one transcode runs at a time machine-wide (across all Sanic workers); this call waits
@@ -122,6 +125,9 @@ async def transcode_video_file(video_path: pathlib.Path,
     The output is written to a temporary file in the same directory, then atomically renamed over
     the final path.  The original file is deleted if the extension changed.  Returns the final
     path.
+
+    When run inside a Job (see `wrolpi.jobs`), ffmpeg's output is captured into the Job log and, if
+    `duration` (seconds) is known, progress is reported to the Job.
 
     @raise RuntimeError: when ffmpeg fails, or there is not enough free disk space.
     """
@@ -135,13 +141,39 @@ async def transcode_video_file(video_path: pathlib.Path,
 
     lock = await _acquire_transcode_lock()
     try:
-        return await _transcode_video_file(video_path, target_vcodec, target_acodec, container)
+        return await _transcode_video_file(video_path, target_vcodec, target_acodec, container, duration)
     finally:
         lock.release()
 
 
+def make_ffmpeg_progress_parser(duration: Optional[float], set_progress: Callable[[float], None]) \
+        -> Callable[[str], None]:
+    """Return a callback for `ffmpeg -progress pipe:1` stdout lines which reports percent complete.
+
+    ffmpeg emits `out_time_us=<microseconds>` (older builds: `out_time_ms`, also microseconds)."""
+    last = [-1]
+
+    def parse(line: str):
+        if not duration or duration <= 0:
+            return
+        key, sep, value = line.partition('=')
+        if not sep or key not in ('out_time_us', 'out_time_ms'):
+            return
+        try:
+            seconds = int(value) / 1_000_000
+        except ValueError:
+            return
+        percent = int(min(100.0, max(0.0, 100.0 * seconds / duration)))
+        if percent != last[0]:
+            last[0] = percent
+            set_progress(percent)
+
+    return parse
+
+
 async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
-                                target_acodec: Optional[str], container: str) -> pathlib.Path:
+                                target_acodec: Optional[str], container: str,
+                                duration: Optional[float] = None) -> pathlib.Path:
     """The ffmpeg work of `transcode_video_file`; the caller holds the transcode lock."""
     # Notify here, after the lock: the wait for another transcode can last hours, and the user
     # should hear "Transcoding" only when this file's work actually begins.
@@ -171,10 +203,18 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
            *video_args,
            *audio_args,
            '-movflags', '+faststart',
+           # Machine-readable progress on stdout (the human progress line is suppressed).
+           '-nostats', '-progress', 'pipe:1',
            str(tmp_path))
     logger.warning(f'Transcoding {video_path} to {final_path} (video={target_vcodec}, audio={target_acodec})')
     try:
-        result = await run_command(cmd, cwd=video_path.parent, timeout=TRANSCODE_TIMEOUT)
+        job = get_current_job()
+        if job:
+            # Inside a Job: ffmpeg's output lands in the Job log and progress is reported.
+            result = await job.run_command(cmd, cwd=video_path.parent, timeout=TRANSCODE_TIMEOUT,
+                                           stdout_callback=make_ffmpeg_progress_parser(duration, job.set_progress))
+        else:
+            result = await run_command(cmd, cwd=video_path.parent, timeout=TRANSCODE_TIMEOUT)
         if result.return_code != 0:
             raise RuntimeError(
                 f'ffmpeg exited with {result.return_code} while transcoding {video_path}:'
@@ -207,3 +247,59 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
     finally:
         os.close(fd)
     return final_path
+
+
+def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional[str], container: str):
+    """@raise ValueError: when the request cannot be transcoded."""
+    if not video_codec and not audio_codec:
+        raise ValueError('At least one of video_codec or audio_codec is required')
+    if video_codec and video_codec not in TRANSCODE_VIDEO_TARGETS:
+        raise ValueError(f'Cannot transcode video to {video_codec!r}; supported: {sorted(TRANSCODE_VIDEO_TARGETS)}')
+    if audio_codec and audio_codec not in TRANSCODE_AUDIO_TARGETS:
+        raise ValueError(f'Cannot transcode audio to {audio_codec!r}; supported: {sorted(TRANSCODE_AUDIO_TARGETS)}')
+    if container not in TRANSCODE_CONTAINERS:
+        raise ValueError(f'Unsupported container {container!r}; supported: {TRANSCODE_CONTAINERS}')
+
+
+@register_job('transcode_video')
+async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = None,
+                              audio_codec: Optional[str] = None, container: str = 'mp4') -> dict:
+    """Transcode a Video's file, then re-index it so the FileGroup reflects the new file.
+
+    Run as a Job (`transcode_video_job.enqueue(...)`) so the user can watch and cancel it."""
+    from modules.videos.models import Video
+    from wrolpi.files.lib import get_mimetype
+    from wrolpi.files.worker import file_worker
+
+    validate_transcode_request(video_codec, audio_codec, container)
+
+    with get_db_session() as session:
+        video = Video.find_by_file_group_id(session, file_group_id)
+        video_path = video.video_path
+        duration = video.file_group.length
+        if not video_path or not video_path.is_file():
+            raise RuntimeError(f'Video file does not exist: {video_path}')
+
+    final_path = await transcode_video_file(video_path, video_codec, audio_codec, container, duration=duration)
+
+    # Point the existing FileGroup at the new file *before* refreshing.  A refresh which finds a
+    # new filename on disk would delete this FileGroup and create another, losing tags and history.
+    with get_db_session(commit=True) as session:
+        video = Video.find_by_file_group_id(session, file_group_id)
+        file_group = video.file_group
+        if final_path != video_path:
+            file_group.files = [
+                {**i, 'path': final_path.name, 'mimetype': get_mimetype(final_path)}
+                if i['path'] == video_path.name else i
+                for i in file_group.files
+            ]
+            file_group.primary_path = final_path
+            file_group.mimetype = get_mimetype(final_path)
+        # The streams changed: the modeler must ffprobe the file again.
+        video.ffprobe_json = None
+        file_group.indexed = False
+
+    job_id = file_worker.queue_refresh([final_path], send_events=False)
+    await file_worker.wait_for_job(job_id)
+
+    return {'path': str(get_relative_to_media_directory(final_path))}

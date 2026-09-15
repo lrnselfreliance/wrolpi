@@ -24,6 +24,7 @@ import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
+import {VideoEditMenu} from "./VideoEditMenu";
 import {IconPlayerPause, IconPlayerPlay} from "@tabler/icons-react";
 
 const MEDIA_PATH = '/media';
@@ -495,12 +496,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         onClick={async () => await handleDeleteVideo(videoFile.id)}
                         obeyWROLMode={true}
                     >Delete</APIButton>
-                    <APIButton
-                        role='primary'
-                        onClick={handleRefresh}
-                        obeyWROLMode={true}
-                        disabled={!videoFile.url}
-                    >Refresh</APIButton>
+                    <VideoEditMenu
+                        videoFile={videoFile}
+                        video={video}
+                        onRefresh={handleRefresh}
+                        onTranscodeComplete={fetchVideo}
+                    />
                     <AddToPlaylistButton fileGroupId={videoFile.id}/>
                 </div>
             </Panel>

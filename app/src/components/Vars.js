@@ -158,6 +158,24 @@ export const downloadAudioCodecOptions = [
     {key: 'vorbis', text: 'vorbis', value: 'vorbis'},
 ];
 
+// Codecs WROLPi's ffmpeg step can produce.  Mirrors TRANSCODE_VIDEO_TARGETS / TRANSCODE_AUDIO_TARGETS /
+// TRANSCODE_CONTAINERS in modules/videos/transcode.py; the API rejects anything else.
+export const TRANSCODE_COPY = 'copy';
+export const transcodeVideoCodecOptions = [
+    {value: TRANSCODE_COPY, label: 'Keep (copy)'},
+    {value: 'h264', label: 'h264 (avc1)'},
+];
+export const transcodeAudioCodecOptions = [
+    {value: TRANSCODE_COPY, label: 'Keep (copy)'},
+    {value: 'aac', label: 'aac'},
+    {value: 'opus', label: 'opus'},
+    {value: 'mp3', label: 'mp3'},
+];
+export const transcodeContainerOptions = [
+    {value: 'mp4', label: 'mp4'},
+    {value: 'mkv', label: 'mkv'},
+];
+
 export const Downloaders = {
     Archive: 'archive',
     File: 'file',

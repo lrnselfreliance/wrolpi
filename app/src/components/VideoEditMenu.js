@@ -5,8 +5,11 @@ import {
     Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, Textarea, TextInput, toast,
 } from './ui';
 import {
+    audioContainerForCodec,
     TRANSCODE_COPY,
+    TRANSCODE_REMOVE_VIDEO,
     transcodeAudioCodecOptions,
+    transcodeAudioContainerOptions,
     transcodeContainerOptions,
     transcodeVideoCodecOptions,
 } from './Vars';
@@ -41,10 +44,25 @@ export function preferredTarget(preferences, options) {
     return TRANSCODE_COPY;
 }
 
-/** The container of a video file, when it is one ffmpeg can write for us. */
+/** The container of a video (or audio) file, when it is one ffmpeg can write for us. */
 export function currentContainer(video) {
     const suffix = String(video?.video_path || '').split('.').pop().toLowerCase();
-    return transcodeContainerOptions.some(i => i.value === suffix) ? suffix : null;
+    const known = [...transcodeContainerOptions, ...transcodeAudioContainerOptions];
+    return known.some(i => i.value === suffix) ? suffix : null;
+}
+
+/**
+ * The container to offer for the chosen codecs: audio-only output gets the natural container of
+ * the audio codec that will be in it (the target, or the source's when copied); output with video
+ * keeps the file's own container when possible.
+ */
+export function containerFor({audioOutput, audioCodec, video}) {
+    if (audioOutput) {
+        const codec = audioCodec !== TRANSCODE_COPY ? audioCodec : currentCodecs(video).audio[0];
+        return audioContainerForCodec(codec);
+    }
+    const current = currentContainer(video);
+    return transcodeContainerOptions.some(i => i.value === current) ? current : 'mp4';
 }
 
 const statusKind = (status) => {
@@ -175,7 +193,10 @@ export function JobProgress({job, onCancel}) {
  *
  * The selects start at the user's preferred codecs from the Videos settings.
  */
-export function TranscodeModal({open, onClose, fileGroupId, video, job, jobId, onQueued, onCancelJob}) {
+export function TranscodeModal({
+                                   open, onClose, fileGroupId, video, audioOnly = false, job, jobId, onQueued,
+                                   onCancelJob,
+                               }) {
     const wrolModeEnabled = useWROLMode();
     const [videoCodec, setVideoCodec] = useState(TRANSCODE_COPY);
     const [audioCodec, setAudioCodec] = useState(TRANSCODE_COPY);
@@ -184,24 +205,34 @@ export function TranscodeModal({open, onClose, fileGroupId, video, job, jobId, o
     const [submitting, setSubmitting] = useState(false);
 
     const current = currentCodecs(video);
+    const removeVideo = videoCodec === TRANSCODE_REMOVE_VIDEO;
+    // An audio file has no video stream to keep or remove; removing the video makes an audio file.
+    const audioOutput = audioOnly || removeVideo;
 
     useEffect(() => {
         if (!open) {
             return;
         }
         setDefaultsLoaded(false);
-        setContainer(currentContainer(video) || 'mp4');
         let stale = false;
         const load = async () => {
+            let nextVideo = TRANSCODE_COPY;
+            let nextAudio = TRANSCODE_COPY;
             try {
                 const defaults = await fetchVideoDownloadDefaults();
                 if (stale) return;
-                setVideoCodec(preferredTarget(defaults?.video_codecs, transcodeVideoCodecOptions));
-                setAudioCodec(preferredTarget(defaults?.audio_codecs, transcodeAudioCodecOptions));
+                nextVideo = audioOnly ? TRANSCODE_COPY
+                    : preferredTarget(defaults?.video_codecs, transcodeVideoCodecOptions);
+                nextAudio = preferredTarget(defaults?.audio_codecs, transcodeAudioCodecOptions);
             } catch (e) {
                 console.error(e);
             } finally {
-                if (!stale) setDefaultsLoaded(true);
+                if (!stale) {
+                    setVideoCodec(nextVideo);
+                    setAudioCodec(nextAudio);
+                    setContainer(containerFor({audioOutput: audioOnly, audioCodec: nextAudio, video}));
+                    setDefaultsLoaded(true);
+                }
             }
         };
         load();
@@ -210,8 +241,20 @@ export function TranscodeModal({open, onClose, fileGroupId, video, job, jobId, o
         };
     }, [open]);
 
-    const remuxOnly = videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
+    const changeVideoCodec = (value) => {
+        const next = value || TRANSCODE_COPY;
+        setVideoCodec(next);
+        setContainer(containerFor({audioOutput: audioOnly || next === TRANSCODE_REMOVE_VIDEO, audioCodec, video}));
+    };
+    const changeAudioCodec = (value) => {
+        const next = value || TRANSCODE_COPY;
+        setAudioCodec(next);
+        setContainer(containerFor({audioOutput, audioCodec: next, video}));
+    };
+
+    const remuxOnly = !removeVideo && videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
     const sameContainer = container === currentContainer(video);
+    const containerOptions = audioOutput ? transcodeAudioContainerOptions : transcodeContainerOptions;
 
     const handleStart = async () => {
         setSubmitting(true);
@@ -234,44 +277,54 @@ export function TranscodeModal({open, onClose, fileGroupId, video, job, jobId, o
     // A queued or finished Job replaces the form until the parent forgets it.
     const showJob = !!jobId;
 
+    let hint = null;
+    if (defaultsLoaded && removeVideo) {
+        hint = `The video stream is removed; the result is an audio file (.${container}).  `
+            + (audioCodec === TRANSCODE_COPY ? 'The audio is copied without re-encoding.' : `The audio is converted to ${audioCodec}.`);
+    } else if (defaultsLoaded && remuxOnly) {
+        hint = sameContainer
+            ? 'Both streams are kept: the file is rewritten as-is with fast start (moves the index to the front for quicker playback start).'
+            : `Both streams are kept: only the container changes to ${container} (a quick remux, no quality loss).`;
+    }
+    const buttonLabel = removeVideo ? 'Extract Audio' : remuxOnly ? 'Remux' : 'Transcode';
+
     return <Modal open={open} onClose={onClose} size='small'>
-        <Modal.Header>Transcode Video</Modal.Header>
+        <Modal.Header>{audioOnly ? 'Transcode Audio' : 'Transcode Video'}</Modal.Header>
         <Modal.Content>
             <Stack gap='md'>
                 <Text size='sm' c='var(--muted)'>
-                    Current codecs: video {describe(current.video)}, audio {describe(current.audio)}.
+                    {audioOnly
+                        ? `Current codec: audio ${describe(current.audio)}.  `
+                        : `Current codecs: video ${describe(current.video)}, audio ${describe(current.audio)}.  `}
                     Streams set to Keep are copied without re-encoding.  Transcoding is slow and slightly
                     reduces quality; the original file is replaced when it finishes.
                 </Text>
                 {!showJob && <>
-                    <Select
+                    {!audioOnly && <Select
                         label='Video codec'
                         data={transcodeVideoCodecOptions}
                         value={videoCodec}
-                        onChange={value => setVideoCodec(value || TRANSCODE_COPY)}
+                        onChange={changeVideoCodec}
                         disabled={!defaultsLoaded}
                         allowDeselect={false}
-                    />
+                    />}
                     <Select
                         label='Audio codec'
                         data={transcodeAudioCodecOptions}
                         value={audioCodec}
-                        onChange={value => setAudioCodec(value || TRANSCODE_COPY)}
+                        onChange={changeAudioCodec}
                         disabled={!defaultsLoaded}
                         allowDeselect={false}
                     />
                     <Select
                         label='Container'
-                        data={transcodeContainerOptions}
+                        data={containerOptions}
                         value={container}
-                        onChange={value => setContainer(value || 'mp4')}
+                        onChange={value => setContainer(value || containerOptions[0].value)}
+                        disabled={!defaultsLoaded}
                         allowDeselect={false}
                     />
-                    {remuxOnly && defaultsLoaded && <Text size='sm' c='var(--muted)'>
-                        {sameContainer
-                            ? 'Both streams are kept: the file is rewritten as-is with fast start (moves the index to the front for quicker playback start).'
-                            : `Both streams are kept: only the container changes to ${container} (a quick remux, no quality loss).`}
-                    </Text>}
+                    {hint && <Text size='sm' c='var(--muted)'>{hint}</Text>}
                 </>}
                 {showJob && <JobProgress job={job} onCancel={onCancelJob}/>}
             </Stack>
@@ -285,7 +338,7 @@ export function TranscodeModal({open, onClose, fileGroupId, video, job, jobId, o
                 loading={submitting}
                 disabled={submitting || !defaultsLoaded || !!wrolModeEnabled}
             >
-                {remuxOnly ? 'Remux' : 'Transcode'}
+                {buttonLabel}
             </Button>}
         </Modal.Actions>
     </Modal>
@@ -444,6 +497,7 @@ export function VideoEditMenu({
     };
 
     const isVideo = !!videoFile?.mimetype?.startsWith('video/');
+    const isAudio = !!videoFile?.mimetype?.startsWith('audio/');
     const transcoding = !!jobId && !isJobFinished(job);
 
     return <>
@@ -469,7 +523,7 @@ export function VideoEditMenu({
                 <Menu.Item
                     leftSection={<Icon name='film'/>}
                     onClick={() => setTranscodeOpen(true)}
-                    disabled={!isVideo || (!!wrolModeEnabled && !transcoding)}
+                    disabled={!(isVideo || isAudio) || (!!wrolModeEnabled && !transcoding)}
                 >
                     {transcoding ? 'Transcoding...' : 'Transcode...'}
                 </Menu.Item>
@@ -489,6 +543,7 @@ export function VideoEditMenu({
             onClose={handleTranscodeClose}
             fileGroupId={videoFile?.id}
             video={video}
+            audioOnly={isAudio}
             job={job}
             jobId={jobId}
             onQueued={setJobId}

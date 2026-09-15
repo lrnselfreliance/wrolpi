@@ -44,7 +44,31 @@ TRANSCODE_AUDIO_TARGETS = {
 }
 
 # Containers that can hold an h264/aac transcode result.  webm cannot.
-TRANSCODE_CONTAINERS = ('mp4', 'mkv')
+TRANSCODE_CONTAINERS = ('mp4', 'mkv')  # For output with a video stream.
+# For audio-only output: the video stream removed (`REMOVE_VIDEO`), or an audio-only source.
+TRANSCODE_AUDIO_CONTAINERS = ('m4a', 'ogg', 'mp3')
+# ffprobe codec names each audio container can hold without re-encoding.
+# Ordered: `default_audio_container` picks the first container that holds a codec, so the most
+# specific container comes first (mp3 fits in m4a too, but an .mp3 is what a user expects).
+AUDIO_CONTAINER_CODECS = {
+    'mp3': {'mp3'},
+    'ogg': {'opus', 'vorbis', 'flac'},
+    'm4a': {'aac', 'mp3', 'alac'},
+}
+# `target_vcodec` value meaning "drop the video stream"; the output is an audio file.
+REMOVE_VIDEO = 'none'
+# ffprobe's `format_name` token for each container (mkv reports "matroska,webm").
+CONTAINER_FORMAT_NAMES = {'mp4': 'mp4', 'mkv': 'matroska', 'm4a': 'm4a', 'ogg': 'ogg', 'mp3': 'mp3'}
+# `-movflags +faststart` is an mp4-muxer option; other muxers warn about it.
+FASTSTART_CONTAINERS = ('mp4', 'm4a')
+
+
+def default_audio_container(codec: Optional[str]) -> str:
+    """The natural audio container for a codec: what a player expects from the suffix."""
+    for container, codecs in AUDIO_CONTAINER_CODECS.items():
+        if codec in codecs:
+            return container
+    return 'm4a'
 
 TRANSCODE_TIMEOUT = 4 * 60 * 60  # A long video on a Raspberry Pi can take hours.
 
@@ -143,11 +167,9 @@ async def transcode_video_file(video_path: pathlib.Path,
     """
     if not FFMPEG_BIN:
         raise RuntimeError('ffmpeg was not found')
-    # No target for either stream is a remux: both streams are copied into the (new) container
-    # with faststart.  Cheap, and what a user wants when only the container is wrong.
-    if container not in TRANSCODE_CONTAINERS:
-        logger.info(f'Forcing mp4 container for transcode of {video_path} ({container} is not supported)')
-        container = 'mp4'
+    # No target for either stream is a remux: both streams are copied into the (new) container.
+    # `target_vcodec=REMOVE_VIDEO` (or an audio-only source) makes the output an audio file; see
+    # `resolve_output`, which also settles an unsuitable container.
 
     lock = await _acquire_transcode_lock()
     try:
@@ -184,10 +206,11 @@ def verify_transcode_output(source: dict, output: dict, target_vcodec: Optional[
 
     @raise RuntimeError: describing the first failed check.
     """
-    if not output or not output.get('streams'):
+    if not output or output.get('streams') is None:
         raise RuntimeError('Transcode output could not be probed (no streams); its index may be missing')
 
-    if container not in _format_names(output):
+    expected_format = CONTAINER_FORMAT_NAMES.get(container, container)
+    if expected_format not in _format_names(output):
         raise RuntimeError(f'Transcode output container is {_format_names(output)}, expected {container}')
 
     source_video = get_stream_codec_names(source, 'video')
@@ -195,14 +218,20 @@ def verify_transcode_output(source: dict, output: dict, target_vcodec: Optional[
     output_video = get_stream_codec_names(output, 'video')
     output_audio = get_stream_codec_names(output, 'audio')
 
-    if not output_video:
-        raise RuntimeError('Transcode output has no video stream')
-    if source_audio and not output_audio:
-        raise RuntimeError('Transcode output has no audio stream, but the source has one')
-
-    expected_video = target_vcodec or (source_video[0] if source_video else None)
-    if expected_video and output_video[0] != expected_video:
-        raise RuntimeError(f'Transcode output video codec is {output_video[0]}, expected {expected_video}')
+    audio_only = target_vcodec == REMOVE_VIDEO or not source_video
+    if audio_only:
+        if output_video:
+            raise RuntimeError(f'Transcode output still has a video stream ({output_video[0]})')
+        if not output_audio:
+            raise RuntimeError('Transcode output has no audio stream')
+    else:
+        if not output_video:
+            raise RuntimeError('Transcode output has no video stream')
+        if source_audio and not output_audio:
+            raise RuntimeError('Transcode output has no audio stream, but the source has one')
+        expected_video = target_vcodec or (source_video[0] if source_video else None)
+        if expected_video and output_video[0] != expected_video:
+            raise RuntimeError(f'Transcode output video codec is {output_video[0]}, expected {expected_video}')
     expected_audio = target_acodec or (source_audio[0] if source_audio else None)
     if output_audio and expected_audio and output_audio[0] != expected_audio:
         raise RuntimeError(f'Transcode output audio codec is {output_audio[0]}, expected {expected_audio}')
@@ -251,6 +280,40 @@ def make_ffmpeg_progress_parser(duration: Optional[float], set_progress: Callabl
     return parse
 
 
+def resolve_output(source_probe: dict, target_vcodec: Optional[str], target_acodec: Optional[str],
+                   container: str) -> Tuple[bool, str]:
+    """Decide whether the output is audio-only and which container it gets.
+
+    Audio-only when the video is to be removed, or the source has no video stream.  An audio
+    container that cannot hold the (copied or target) audio codec is refused; a video container
+    asked for an audio-only output is replaced by the codec's natural one.
+
+    @raise RuntimeError: when the request cannot be satisfied by this source."""
+    source_video = get_stream_codec_names(source_probe, 'video')
+    source_audio = get_stream_codec_names(source_probe, 'audio')
+
+    if target_vcodec and target_vcodec != REMOVE_VIDEO and not source_video:
+        raise RuntimeError(f'Cannot transcode video to {target_vcodec}: the file has no video stream')
+
+    audio_only = target_vcodec == REMOVE_VIDEO or not source_video
+    if not audio_only:
+        if container not in TRANSCODE_CONTAINERS:
+            logger.info(f'Forcing mp4 container ({container} cannot hold a video stream)')
+            container = 'mp4'
+        return False, container
+
+    if not source_audio:
+        raise RuntimeError('Cannot produce an audio file: the source has no audio stream')
+    effective_acodec = target_acodec or source_audio[0]
+    if container not in TRANSCODE_AUDIO_CONTAINERS:
+        container = default_audio_container(effective_acodec)
+        logger.info(f'Using {container} container for audio-only output ({effective_acodec})')
+    elif effective_acodec not in AUDIO_CONTAINER_CODECS[container]:
+        raise RuntimeError(
+            f'{effective_acodec} audio cannot be stored in {container}; choose another container or codec')
+    return True, container
+
+
 async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
                                 target_acodec: Optional[str], container: str,
                                 duration: Optional[float] = None, keep_original: bool = False) -> pathlib.Path:
@@ -270,25 +333,35 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
         raise RuntimeError(
             f'Not enough free space to transcode {video_path} ({free} bytes free, source is {source_size} bytes)')
 
-    video_args = TRANSCODE_VIDEO_TARGETS[target_vcodec] if target_vcodec else ('-c:v', 'copy')
+    # Probed before ffmpeg: the command depends on the source's streams, and verification compares
+    # against the file as it was.
+    source_probe = await probe_for_verify(video_path)
+    audio_only, container = resolve_output(source_probe, target_vcodec, target_acodec, container)
+
     audio_args = TRANSCODE_AUDIO_TARGETS[target_acodec] if target_acodec else ('-c:a', 'copy')
+    if audio_only:
+        # `-vn` also drops embedded cover art; the audio stream is required.
+        map_args = ('-map', '0:a:0', '-vn')
+        video_args = ()
+    else:
+        # 0:V:0 excludes attached-picture streams (embedded thumbnails); 0:a:0? tolerates a video
+        # with no audio stream.
+        map_args = ('-map', '0:V:0', '-map', '0:a:0?')
+        video_args = TRANSCODE_VIDEO_TARGETS[target_vcodec] if target_vcodec else ('-c:v', 'copy')
+    faststart_args = ('-movflags', '+faststart') if container in FASTSTART_CONTAINERS else ()
 
     final_path = video_path.with_suffix(f'.{container}')
     tmp_path = video_path.with_suffix(f'.transcode.{container}')
-    # 0:V:0 excludes attached-picture streams (embedded thumbnails); 0:a:0? tolerates a video
-    # with no audio stream.
     cmd = (FFMPEG_BIN, '-y',
            '-i', video_path,
-           '-map', '0:V:0', '-map', '0:a:0?',
+           *map_args,
            *video_args,
            *audio_args,
-           '-movflags', '+faststart',
+           *faststart_args,
            # Machine-readable progress on stdout (the human progress line is suppressed).
            '-nostats', '-progress', 'pipe:1',
            str(tmp_path))
     logger.warning(f'Transcoding {video_path} to {final_path} (video={target_vcodec}, audio={target_acodec})')
-    # Probed before ffmpeg so verification compares against the file as it was.
-    source_probe = await probe_for_verify(video_path)
     try:
         job = get_current_job()
         runner = job.run_command if job else run_command
@@ -340,13 +413,23 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
 
 
 def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional[str], container: str):
-    """@raise ValueError: when the request cannot be transcoded.  No codec at all is a remux."""
-    if video_codec and video_codec not in TRANSCODE_VIDEO_TARGETS:
+    """@raise ValueError: when the request cannot be transcoded.  No codec at all is a remux;
+    `video_codec=REMOVE_VIDEO` drops the video stream and needs an audio container."""
+    if video_codec and video_codec != REMOVE_VIDEO and video_codec not in TRANSCODE_VIDEO_TARGETS:
         raise ValueError(f'Cannot transcode video to {video_codec!r}; supported: {sorted(TRANSCODE_VIDEO_TARGETS)}')
     if audio_codec and audio_codec not in TRANSCODE_AUDIO_TARGETS:
         raise ValueError(f'Cannot transcode audio to {audio_codec!r}; supported: {sorted(TRANSCODE_AUDIO_TARGETS)}')
-    if container not in TRANSCODE_CONTAINERS:
-        raise ValueError(f'Unsupported container {container!r}; supported: {TRANSCODE_CONTAINERS}')
+    containers = TRANSCODE_CONTAINERS + TRANSCODE_AUDIO_CONTAINERS
+    if container not in containers:
+        raise ValueError(f'Unsupported container {container!r}; supported: {containers}')
+    if video_codec == REMOVE_VIDEO and container not in TRANSCODE_AUDIO_CONTAINERS:
+        raise ValueError(f'Removing the video needs an audio container ({TRANSCODE_AUDIO_CONTAINERS}), not {container}')
+    if container in TRANSCODE_AUDIO_CONTAINERS:
+        if video_codec and video_codec != REMOVE_VIDEO:
+            raise ValueError(f'A video stream cannot be stored in {container}; remove the video or choose a video container')
+        if audio_codec and audio_codec not in AUDIO_CONTAINER_CODECS[container]:
+            raise ValueError(f'{audio_codec} audio cannot be stored in {container}; '
+                             f'it holds {sorted(AUDIO_CONTAINER_CODECS[container])}')
 
 
 def retarget_file_group(file_group_id: int, old_path: pathlib.Path, new_path: pathlib.Path):

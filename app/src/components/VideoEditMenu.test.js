@@ -2,10 +2,13 @@ import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
 import {
-    currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, useJob,
-    VideoEditMenu,
+    containerFor, currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal,
+    useJob, VideoEditMenu,
 } from './VideoEditMenu';
-import {TRANSCODE_COPY, transcodeAudioCodecOptions, transcodeVideoCodecOptions} from './Vars';
+import {
+    audioContainerForCodec, TRANSCODE_COPY, TRANSCODE_REMOVE_VIDEO, transcodeAudioCodecOptions,
+    transcodeVideoCodecOptions,
+} from './Vars';
 
 jest.mock('../api', () => ({
     cancelJob: jest.fn(),
@@ -23,6 +26,8 @@ const video = {
     video_path: 'videos/movie.webm',
 };
 const videoFile = {id: 7, url: 'https://example.com/watch?v=1', mimetype: 'video/webm', title: 'Old Title', video};
+const audio = {codec_names: ['aac'], codec_types: ['audio'], video_path: 'videos/song.m4a'};
+const audioFile = {id: 8, url: null, mimetype: 'audio/mp4', title: 'Song', video: audio};
 
 // Mantine's Select renders a hidden input next to the visible one, both tied to the label.
 const selectInput = (label) => screen.getAllByLabelText(label).find(i => i.type !== 'hidden');
@@ -47,8 +52,29 @@ describe('helpers', () => {
     test('currentContainer reads the file suffix, only for containers we can write', () => {
         expect(currentContainer({video_path: 'videos/a/movie.MP4'})).toBe('mp4');
         expect(currentContainer({video_path: 'videos/a/movie.mkv'})).toBe('mkv');
+        expect(currentContainer({video_path: 'videos/a/song.m4a'})).toBe('m4a');
         expect(currentContainer({video_path: 'videos/a/movie.webm'})).toBeNull();
         expect(currentContainer(null)).toBeNull();
+    });
+
+    test('audioContainerForCodec mirrors the backend default', () => {
+        expect(audioContainerForCodec('aac')).toBe('m4a');
+        expect(audioContainerForCodec('mp3')).toBe('mp3');
+        expect(audioContainerForCodec('opus')).toBe('ogg');
+        expect(audioContainerForCodec('vorbis')).toBe('ogg');
+        expect(audioContainerForCodec(undefined)).toBe('m4a');
+    });
+
+    test('containerFor follows the audio codec for audio output, the file for video output', () => {
+        // Removing the video from a vp9/opus webm, copying the audio: opus lives in ogg.
+        expect(containerFor({audioOutput: true, audioCodec: TRANSCODE_COPY, video})).toBe('ogg');
+        expect(containerFor({audioOutput: true, audioCodec: 'aac', video})).toBe('m4a');
+        expect(containerFor({audioOutput: true, audioCodec: 'mp3', video})).toBe('mp3');
+        // Video output keeps a container we can write, else mp4.
+        expect(containerFor({audioOutput: false, audioCodec: 'aac', video})).toBe('mp4');
+        expect(containerFor({audioOutput: false, audioCodec: 'aac', video: {video_path: 'a.mkv'}})).toBe('mkv');
+        // An audio file's own suffix is not a video container.
+        expect(containerFor({audioOutput: false, audioCodec: TRANSCODE_COPY, video: audio})).toBe('mp4');
     });
 
     test('preferredTarget picks the first preference ffmpeg can produce', () => {
@@ -125,6 +151,36 @@ describe('TranscodeModal', () => {
         await waitFor(() => expect(selectInput('Container')).toHaveValue('mkv'));
         expect(await screen.findByText(/rewritten as-is with fast start/)).toBeInTheDocument();
         expect(screen.getByRole('button', {name: 'Remux'})).toBeEnabled();
+    });
+
+    test('an audio file offers audio codecs and containers only', async () => {
+        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: ['h264'], audio_codecs: []});
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={8} video={audio} audioOnly={true}
+                            onQueued={jest.fn()}/>,
+        );
+
+        expect(screen.getByText('Transcode Audio')).toBeInTheDocument();
+        expect(screen.getByText(/Current codec: audio aac/)).toBeInTheDocument();
+        // The aac source, copied, belongs in m4a; the file already is one.
+        await waitFor(() => expect(selectInput('Container')).toHaveValue('m4a (aac)'));
+        expect(screen.queryAllByLabelText('Video codec')).toHaveLength(0);
+        expect(await screen.findByText(/rewritten as-is with fast start/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Remux'}));
+        // No video codec is sent for an audio file, whatever the video preferences say.
+        await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(8, {
+            video_codec: null, audio_codec: null, container: 'm4a',
+        }));
+    });
+
+    test('the Remove video option is offered for videos', async () => {
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video} onQueued={jest.fn()}/>,
+        );
+        await waitFor(() => expect(selectInput('Video codec')).toHaveValue('h264 (avc1)'));
+        expect(transcodeVideoCodecOptions.some(i => i.value === TRANSCODE_REMOVE_VIDEO)).toBe(true);
+        // Selecting it is exercised through containerFor (Mantine's dropdown is not driveable in jsdom).
     });
 
     test('WROL Mode disables starting a transcode', async () => {
@@ -345,14 +401,22 @@ describe('VideoEditMenu', () => {
         expect(screen.getByLabelText('Title')).toHaveValue('Old Title');
     });
 
-    test('Refresh is unavailable without a URL, Transcode for non-video files', async () => {
-        const audioFile = {...videoFile, url: null, mimetype: 'audio/mpeg'};
-        renderWithProviders(<VideoEditMenu videoFile={audioFile} video={video} onRefresh={jest.fn()}/>);
+    test('Refresh is unavailable without a URL; audio files can be transcoded', async () => {
+        renderWithProviders(<VideoEditMenu videoFile={audioFile} video={audio} onRefresh={jest.fn()}/>);
 
         fireEvent.click(screen.getByRole('button', {name: /Edit/}));
         const refresh = await screen.findByRole('menuitem', {name: /Refresh/});
         expect(refresh).toBeDisabled();
-        expect(screen.getByRole('menuitem', {name: /Transcode/})).toBeDisabled();
+        expect(screen.getByRole('menuitem', {name: /Transcode/})).toBeEnabled();
+        fireEvent.click(screen.getByRole('menuitem', {name: /Transcode/}));
+        expect(await screen.findByText('Transcode Audio')).toBeInTheDocument();
+    });
+
+    test('Transcode is unavailable for files that are neither video nor audio', async () => {
+        const other = {...videoFile, mimetype: 'application/pdf'};
+        renderWithProviders(<VideoEditMenu videoFile={other} video={video} onRefresh={jest.fn()}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
+        expect(await screen.findByRole('menuitem', {name: /Transcode/})).toBeDisabled();
     });
 
     test('WROL Mode disables every item', async () => {

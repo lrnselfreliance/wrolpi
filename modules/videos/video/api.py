@@ -12,7 +12,7 @@ from wrolpi.errors import InvalidOrderBy, InvalidJob
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
-from ..transcode import transcode_video_job, validate_transcode_request
+from ..transcode import transcode_video_job, validate_transcode_request, REMOVE_VIDEO
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -85,8 +85,12 @@ async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTran
         raise InvalidJob(str(e))
     # Raises UnknownVideo (404) before anything is queued.
     video = lib.get_video(file_group_id)
+    is_audio = (video.file_group.mimetype or '').startswith('audio/')
+    if is_audio and body.video_codec and body.video_codec != REMOVE_VIDEO:
+        raise InvalidJob(f'This is an audio file; it has no video stream to transcode to {body.video_codec}')
+    action = 'Extract audio from' if body.video_codec == REMOVE_VIDEO and not is_audio else 'Transcode'
     job_id = transcode_video_job.enqueue(
-        description=f'Transcode {video.video_path.name}',
+        description=f'{action} {video.video_path.name}',
         file_group_id=file_group_id,
         video_codec=body.video_codec,
         audio_codec=body.audio_codec,

@@ -264,6 +264,9 @@ export async function transcodeVideo(fileGroupId, {video_codec = null, audio_cod
 
 export async function getJobs() {
     const response = await apiGet(`${API_URI}/jobs`);
+    if (!response.ok) {
+        throw new Error(await getErrorMessage(response, 'Unable to get the jobs'));
+    }
     const data = await response.json();
     return data['jobs'];
 }

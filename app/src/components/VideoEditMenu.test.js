@@ -2,7 +2,8 @@ import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
 import {
-    currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, VideoEditMenu,
+    currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, useJob,
+    VideoEditMenu,
 } from './VideoEditMenu';
 import {TRANSCODE_COPY, transcodeAudioCodecOptions, transcodeVideoCodecOptions} from './Vars';
 
@@ -34,6 +35,8 @@ const pendingJob = {
     id: 'transcode_video-abc', status: 'pending', progress: null, log: [], error: null, cancel_requested: false,
     description: 'Transcode movie.webm',
 };
+const runningJob = {...pendingJob, status: 'running', progress: 40, log: ['out_time_us=1']};
+const completeJob = {...pendingJob, status: 'complete', progress: 100, log: ['done']};
 
 describe('helpers', () => {
     test('currentCodecs ignores embedded thumbnail streams', () => {
@@ -62,11 +65,13 @@ describe('TranscodeModal', () => {
         jest.clearAllMocks();
         fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: ['h264'], audio_codecs: ['vorbis', 'aac']});
         transcodeVideo.mockResolvedValue('transcode_video-abc');
-        getJob.mockResolvedValue(pendingJob);
     });
 
     test('pre-populates from the preferred codecs and queues the Job', async () => {
-        renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video}/>);
+        const onQueued = jest.fn();
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video} onQueued={onQueued}/>,
+        );
 
         expect(screen.getByText(/Current codecs: video vp9, audio opus/)).toBeInTheDocument();
 
@@ -80,16 +85,26 @@ describe('TranscodeModal', () => {
         await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(7, {
             video_codec: 'h264', audio_codec: 'aac', container: 'mp4',
         }));
-        // The form is replaced by the Job's progress.
-        await waitFor(() => expect(getJob).toHaveBeenCalledWith('transcode_video-abc'));
+        await waitFor(() => expect(onQueued).toHaveBeenCalledWith('transcode_video-abc'));
+    });
+
+    test('shows the Job instead of the form once one is queued', () => {
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video}
+                            jobId='transcode_video-abc' job={runningJob} onCancelJob={jest.fn()}/>,
+        );
         expect(screen.queryAllByLabelText('Video codec')).toHaveLength(0);
-        expect(await screen.findByText('pending')).toBeInTheDocument();
+        expect(screen.getByText('running')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Close'})).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /Transcode/})).not.toBeInTheDocument();
     });
 
     test('keeping every stream is a remux into the chosen container', async () => {
         fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
         // A webm cannot be kept (not a container we write), so the select starts at mp4: a change.
-        renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video}/>);
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video} onQueued={jest.fn()}/>,
+        );
 
         await waitFor(() => expect(selectInput('Container')).toHaveValue('mp4'));
         expect(await screen.findByText(/only the container changes to mp4/)).toBeInTheDocument();
@@ -190,7 +205,23 @@ describe('EditVideoModal', () => {
     });
 });
 
-describe('JobProgress', () => {
+// A tiny harness so the hook can be driven like the menu drives it.
+function JobHarness({jobId, onFinished}) {
+    const {job, cancel} = useJob(jobId, onFinished);
+    return <JobProgress job={job} onCancel={cancel}/>;
+}
+
+// Let pending promise callbacks run (a settled request schedules its next poll), then advance
+// the fake clock past the poll interval.
+const nextPoll = async () => {
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        jest.advanceTimersByTime(2000);
+    });
+};
+
+describe('useJob + JobProgress', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.useFakeTimers();
@@ -202,11 +233,9 @@ describe('JobProgress', () => {
 
     test('polls until the Job finishes, then reports once', async () => {
         const onFinished = jest.fn();
-        getJob
-            .mockResolvedValueOnce({...pendingJob, status: 'running', progress: 40, log: ['out_time_us=1']})
-            .mockResolvedValueOnce({...pendingJob, status: 'complete', progress: 100, log: ['done']});
+        getJob.mockResolvedValueOnce(runningJob).mockResolvedValueOnce(completeJob);
 
-        renderWithProviders(<JobProgress jobId='transcode_video-abc' onFinished={onFinished}/>);
+        renderWithProviders(<JobHarness jobId='transcode_video-abc' onFinished={onFinished}/>);
 
         await waitFor(() => expect(screen.getByText('running')).toBeInTheDocument());
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
@@ -225,11 +254,36 @@ describe('JobProgress', () => {
         expect(screen.queryByRole('button', {name: 'Cancel'})).not.toBeInTheDocument();
     });
 
+    test('a failed request is retried instead of ending the polling', async () => {
+        getJob
+            .mockRejectedValueOnce(new Error('network'))
+            .mockResolvedValueOnce(runningJob)
+            .mockRejectedValueOnce(new Error('network'))
+            .mockResolvedValueOnce(completeJob);
+        const onFinished = jest.fn();
+
+        renderWithProviders(<JobHarness jobId='transcode_video-abc' onFinished={onFinished}/>);
+
+        // First poll failed: still "Starting...", but another poll is scheduled.
+        await waitFor(() => expect(getJob).toHaveBeenCalledTimes(1));
+        expect(screen.getByText('Starting...')).toBeInTheDocument();
+        await nextPoll();
+        await waitFor(() => expect(screen.getByText('running')).toBeInTheDocument());
+
+        // A failure mid-way keeps the last good state and keeps polling.
+        await nextPoll();
+        await waitFor(() => expect(getJob).toHaveBeenCalledTimes(3));
+        expect(screen.getByText('running')).toBeInTheDocument();
+        await nextPoll();
+        await waitFor(() => expect(screen.getByText('complete')).toBeInTheDocument());
+        expect(onFinished).toHaveBeenCalledTimes(1);
+    });
+
     test('Cancel asks the API to cancel the Job', async () => {
         getJob.mockResolvedValue({...pendingJob, status: 'running', progress: 10});
         cancelJob.mockResolvedValue({...pendingJob, status: 'running', progress: 10, cancel_requested: true});
 
-        renderWithProviders(<JobProgress jobId='transcode_video-abc'/>);
+        renderWithProviders(<JobHarness jobId='transcode_video-abc'/>);
 
         await waitFor(() => expect(screen.getByRole('button', {name: 'Cancel'})).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
@@ -241,7 +295,7 @@ describe('JobProgress', () => {
     test('shows the error of a failed Job', async () => {
         getJob.mockResolvedValue({...pendingJob, status: 'failed', error: 'ffmpeg exited with 1', log: ['boom']});
 
-        renderWithProviders(<JobProgress jobId='transcode_video-abc'/>);
+        renderWithProviders(<JobHarness jobId='transcode_video-abc'/>);
 
         await waitFor(() => expect(screen.getByText('failed')).toBeInTheDocument());
         expect(screen.getByText('ffmpeg exited with 1')).toBeInTheDocument();
@@ -251,20 +305,44 @@ describe('JobProgress', () => {
 describe('VideoEditMenu', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
+        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: ['h264'], audio_codecs: ['aac']});
+        transcodeVideo.mockResolvedValue('transcode_video-abc');
     });
+
+    // Mantine's Menu in jsdom: after a modal has closed, the first click on the target can land
+    // while the dropdown still counts as open (and so toggles it shut).  Click until items show.
+    const openMenu = async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+            fireEvent.click(screen.getByRole('button', {name: /Edit/}));
+            try {
+                return await screen.findByRole('menuitem', {name: /Refresh/}, {timeout: 300});
+            } catch (e) {
+                // Toggled shut; try again.
+            }
+        }
+        throw new Error('The Edit menu did not open');
+    };
+    const openMenuItem = async (name) => {
+        await openMenu();
+        fireEvent.click(screen.getByRole('menuitem', {name}));
+    };
 
     test('Refresh calls onRefresh; Transcode opens the modal', async () => {
         const onRefresh = jest.fn().mockResolvedValue(undefined);
         renderWithProviders(<VideoEditMenu videoFile={videoFile} video={video} onRefresh={onRefresh}/>);
 
-        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: /Refresh/}));
+        await openMenuItem(/Refresh/);
         await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
 
-        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: /Transcode/}));
+        await openMenuItem(/Transcode/);
         await waitFor(() => expect(screen.getByText('Transcode Video')).toBeInTheDocument());
+    });
+
+    test('Edit opens the details modal', async () => {
+        renderWithProviders(<VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()}/>);
+        await openMenuItem(/^Edit/);
+        expect(await screen.findByText('Edit Video')).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveValue('Old Title');
     });
 
     test('Refresh is unavailable without a URL, Transcode for non-video files', async () => {
@@ -289,22 +367,13 @@ describe('VideoEditMenu', () => {
         expect(screen.getByRole('menuitem', {name: /^Edit/})).toBeDisabled();
     });
 
-    test('Edit opens the details modal', async () => {
-        renderWithProviders(<VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()}/>);
-        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: /^Edit/}));
-        expect(await screen.findByText('Edit Video')).toBeInTheDocument();
-        expect(screen.getByLabelText('Title')).toHaveValue('Old Title');
-    });
-
     test('Delete asks for confirmation before calling onDelete', async () => {
         const onDelete = jest.fn().mockResolvedValue(undefined);
         renderWithProviders(
             <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={onDelete}/>,
         );
 
-        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: /Delete/}));
+        await openMenuItem(/Delete/);
         expect(await screen.findByText('Delete video?')).toBeInTheDocument();
         expect(onDelete).not.toHaveBeenCalled();
 
@@ -318,12 +387,72 @@ describe('VideoEditMenu', () => {
             <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={onDelete}/>,
         );
 
-        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: /Delete/}));
+        await openMenuItem(/Delete/);
         expect(await screen.findByText('Delete video?')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
         await waitFor(() => expect(screen.queryByText('Delete video?')).not.toBeInTheDocument());
         expect(onDelete).not.toHaveBeenCalled();
+    });
+
+    test('closing the modal keeps watching the Job and reports completion to the page', async () => {
+        jest.useFakeTimers();
+        try {
+            getJob.mockResolvedValueOnce(runningJob).mockResolvedValueOnce(completeJob);
+            const onTranscodeComplete = jest.fn();
+            renderWithProviders(
+                <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}
+                               onTranscodeComplete={onTranscodeComplete}/>,
+            );
+
+            await openMenuItem(/Transcode/);
+            await waitFor(() => expect(selectInput('Video codec')).toHaveValue('h264 (avc1)'));
+            fireEvent.click(screen.getByRole('button', {name: 'Transcode'}));
+            await waitFor(() => expect(screen.getByText('running')).toBeInTheDocument());
+
+            // Close while it runs.  The modal is gone but the Job is still watched.
+            fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+            await waitFor(() => expect(screen.queryByText('Transcode Video')).not.toBeInTheDocument());
+
+            await nextPoll();
+            await waitFor(() => expect(onTranscodeComplete).toHaveBeenCalledTimes(1));
+            expect(onTranscodeComplete.mock.calls[0][0].status).toBe('complete');
+            expect(getJob).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('while a Job runs, Transcode shows its progress and Delete waits', async () => {
+        getJob.mockResolvedValue(runningJob);
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}
+                           initialJobId='transcode_video-abc'/>,
+        );
+        await waitFor(() => expect(getJob).toHaveBeenCalled());
+
+        await openMenu();
+        expect(screen.getByRole('menuitem', {name: 'Transcoding...'})).toBeEnabled();
+        expect(screen.getByRole('menuitem', {name: /Delete/})).toBeDisabled();
+
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Transcoding...'}));
+        expect(await screen.findByText('running')).toBeInTheDocument();
+        expect(screen.queryAllByLabelText('Video codec')).toHaveLength(0);
+        expect(transcodeVideo).not.toHaveBeenCalled();
+    });
+
+    test('a Job that finished unwatched is forgotten, so the next open offers the form', async () => {
+        getJob.mockResolvedValue(completeJob);
+        renderWithProviders(
+            <VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()} onDelete={jest.fn()}
+                           initialJobId='transcode_video-abc'/>,
+        );
+        await waitFor(() => expect(getJob).toHaveBeenCalled());
+
+        await openMenu();
+        expect(await screen.findByRole('menuitem', {name: 'Transcode...'})).toBeEnabled();
+        expect(screen.getByRole('menuitem', {name: /Delete/})).toBeEnabled();
+        fireEvent.click(screen.getByRole('menuitem', {name: 'Transcode...'}));
+        await waitFor(() => expect(selectInput('Video codec')).toBeInTheDocument());
     });
 });

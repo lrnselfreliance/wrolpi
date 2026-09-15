@@ -385,10 +385,7 @@ export function ThemeSamplePage() {
                 </div>
                 <div style={{marginTop: 12}}>
                     <Header as='h5'>A dropdown of actions</Header>
-                    {/* The video page's Edit button: one labelled button opens a menu of the
-                        rarer actions, so the row stays short.  The trailing chevron is what
-                        says "menu" rather than "does the thing"; a disabled item stays listed
-                        so the user learns it exists. */}
+                    {/* Mirrors the video page's Edit control. */}
                     <Row>
                         <Menu position='bottom-start' withinPortal>
                             <Menu.Target>

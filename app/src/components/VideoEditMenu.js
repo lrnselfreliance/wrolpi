@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo} from '../api';
+import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo, updateVideo} from '../api';
 import {useWROLMode} from '../hooks/customHooks';
-import {Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, toast} from './ui';
+import {Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, TextInput, toast} from './ui';
 import {
     TRANSCODE_COPY,
     transcodeAudioCodecOptions,
@@ -269,14 +269,82 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
 }
 
 /**
+ * Edit a Video's details.  The change is written to the Video's info json, so it survives a
+ * refresh; a re-download of the Video's metadata will overwrite it.
+ */
+export function EditVideoModal({open, onClose, fileGroupId, videoFile, onSaved}) {
+    const [title, setTitle] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            // Start from the current details on every open, discarding an abandoned edit.
+            setTitle(videoFile?.title || '');
+        }
+    }, [open, videoFile?.title]);
+
+    const trimmed = title.trim();
+    const unchanged = trimmed === (videoFile?.title || '');
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const updated = await updateVideo(fileGroupId, {title: trimmed});
+            toast({type: 'success', title: 'Saved', description: 'The video was updated.', time: 3000});
+            if (onSaved) await onSaved(updated);
+            onClose();
+        } catch (e) {
+            // updateVideo already toasted.
+            console.error(e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return <Modal open={open} onClose={onClose} size='small'>
+        <Modal.Header>Edit Video</Modal.Header>
+        <Modal.Content>
+            <form onSubmit={e => {
+                e.preventDefault();
+                if (trimmed && !unchanged && !saving) handleSave();
+            }}>
+                <TextInput
+                    label='Title'
+                    value={title}
+                    onChange={e => setTitle(e.currentTarget.value)}
+                    error={!trimmed ? 'A title is required' : null}
+                    data-autofocus
+                />
+                <Text size='sm' c='var(--muted)' mt='sm'>
+                    Saved to the video's info json.  Refreshing the video from its source will replace it.
+                </Text>
+            </form>
+        </Modal.Content>
+        <Modal.Actions>
+            <Button role='cancel' onClick={onClose}>Cancel</Button>
+            <Button
+                role='save'
+                icon='save'
+                onClick={handleSave}
+                loading={saving}
+                disabled={saving || !trimmed || unchanged}
+            >
+                Save
+            </Button>
+        </Modal.Actions>
+    </Modal>
+}
+
+/**
  * The "Edit" dropdown on the Video page: Refresh (re-download metadata), Transcode, and Delete.
  *
  * `onRefresh` is awaited; `onTranscodeComplete` is called after the file was replaced so the
  * page can fetch the Video again (its path and codecs changed).  `onDelete` is awaited after the
  * user confirms; the page decides what happens next (navigate away, or the tagged-files prompt).
  */
-export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete, onDelete}) {
+export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete, onDelete, onSaved}) {
     const wrolModeEnabled = useWROLMode();
+    const [editOpen, setEditOpen] = useState(false);
     const [transcodeOpen, setTranscodeOpen] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -310,6 +378,13 @@ export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete,
             </Menu.Target>
             <Menu.Dropdown>
                 <Menu.Item
+                    leftSection={<Icon name='edit'/>}
+                    onClick={() => setEditOpen(true)}
+                    disabled={!!wrolModeEnabled}
+                >
+                    Edit...
+                </Menu.Item>
+                <Menu.Item
                     leftSection={<Icon name='refresh'/>}
                     onClick={handleRefresh}
                     disabled={!videoFile?.url || !!wrolModeEnabled || refreshing}
@@ -334,6 +409,13 @@ export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete,
                 </Menu.Item>
             </Menu.Dropdown>
         </Menu>
+        <EditVideoModal
+            open={editOpen}
+            onClose={() => setEditOpen(false)}
+            fileGroupId={videoFile?.id}
+            videoFile={videoFile}
+            onSaved={onSaved}
+        />
         <Confirm
             open={deleteOpen}
             title='Delete video?'

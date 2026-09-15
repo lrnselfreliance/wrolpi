@@ -187,6 +187,11 @@ class VideoSearchRequest:
 
 
 @dataclass
+class VideoUpdateRequest:
+    title: str
+
+
+@dataclass
 class VideoTranscodeRequest:
     video_codec: Optional[str] = None  # A key of TRANSCODE_VIDEO_TARGETS, or None to copy the stream.
     audio_codec: Optional[str] = None  # A key of TRANSCODE_AUDIO_TARGETS, or None to copy the stream.

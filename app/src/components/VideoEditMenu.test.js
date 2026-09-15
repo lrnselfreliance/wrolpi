@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
-import {currentCodecs, JobProgress, preferredTarget, TranscodeModal, VideoEditMenu} from './VideoEditMenu';
+import {currentCodecs, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, VideoEditMenu} from './VideoEditMenu';
 import {TRANSCODE_COPY, transcodeAudioCodecOptions, transcodeVideoCodecOptions} from './Vars';
 
 jest.mock('../api', () => ({
@@ -9,16 +9,17 @@ jest.mock('../api', () => ({
     fetchVideoDownloadDefaults: jest.fn(),
     getJob: jest.fn(),
     transcodeVideo: jest.fn(),
+    updateVideo: jest.fn(),
 }));
 
-import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo} from '../api';
+import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo, updateVideo} from '../api';
 
 const video = {
     codec_names: ['vp9', 'mjpeg', 'opus'],
     codec_types: ['video', 'video', 'audio'],
     video_path: 'videos/movie.webm',
 };
-const videoFile = {id: 7, url: 'https://example.com/watch?v=1', mimetype: 'video/webm', video};
+const videoFile = {id: 7, url: 'https://example.com/watch?v=1', mimetype: 'video/webm', title: 'Old Title', video};
 
 // Mantine's Select renders a hidden input next to the visible one, both tied to the label.
 const selectInput = (label) => screen.getAllByLabelText(label).find(i => i.type !== 'hidden');
@@ -92,6 +93,52 @@ describe('TranscodeModal', () => {
         );
         await waitFor(() => expect(selectInput('Video codec')).toHaveValue('h264 (avc1)'));
         expect(screen.getByRole('button', {name: /Transcode/})).toBeDisabled();
+    });
+});
+
+describe('EditVideoModal', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        updateVideo.mockResolvedValue({...videoFile, title: 'New Title'});
+    });
+
+    test('starts from the current title and saves a changed one', async () => {
+        const onSaved = jest.fn().mockResolvedValue(undefined);
+        const onClose = jest.fn();
+        renderWithProviders(
+            <EditVideoModal open={true} onClose={onClose} fileGroupId={7} videoFile={videoFile} onSaved={onSaved}/>,
+        );
+
+        const input = screen.getByLabelText('Title');
+        expect(input).toHaveValue('Old Title');
+        // Nothing changed yet: Save is disabled.
+        expect(screen.getByRole('button', {name: /Save/})).toBeDisabled();
+
+        fireEvent.change(input, {target: {value: '  New Title '}});
+        fireEvent.click(screen.getByRole('button', {name: /Save/}));
+
+        await waitFor(() => expect(updateVideo).toHaveBeenCalledWith(7, {title: 'New Title'}));
+        await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('an empty title cannot be saved', () => {
+        renderWithProviders(<EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile}/>);
+        fireEvent.change(screen.getByLabelText('Title'), {target: {value: '   '}});
+        expect(screen.getByText('A title is required')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: /Save/})).toBeDisabled();
+        expect(updateVideo).not.toHaveBeenCalled();
+    });
+
+    test('a failed save keeps the modal open', async () => {
+        updateVideo.mockRejectedValue(new Error('boom'));
+        const onClose = jest.fn();
+        renderWithProviders(<EditVideoModal open={true} onClose={onClose} fileGroupId={7} videoFile={videoFile}/>);
+        fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Other'}});
+        fireEvent.click(screen.getByRole('button', {name: /Save/}));
+        await waitFor(() => expect(updateVideo).toHaveBeenCalled());
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('Title')).toHaveValue('Other');
     });
 });
 
@@ -191,6 +238,15 @@ describe('VideoEditMenu', () => {
         expect(await screen.findByRole('menuitem', {name: /Refresh/})).toBeDisabled();
         expect(screen.getByRole('menuitem', {name: /Transcode/})).toBeDisabled();
         expect(screen.getByRole('menuitem', {name: /Delete/})).toBeDisabled();
+        expect(screen.getByRole('menuitem', {name: /^Edit/})).toBeDisabled();
+    });
+
+    test('Edit opens the details modal', async () => {
+        renderWithProviders(<VideoEditMenu videoFile={videoFile} video={video} onRefresh={jest.fn()}/>);
+        fireEvent.click(screen.getByRole('button', {name: /Edit/}));
+        fireEvent.click(await screen.findByRole('menuitem', {name: /^Edit/}));
+        expect(await screen.findByText('Edit Video')).toBeInTheDocument();
+        expect(screen.getByLabelText('Title')).toHaveValue('Old Title');
     });
 
     test('Delete asks for confirmation before calling onDelete', async () => {

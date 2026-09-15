@@ -495,6 +495,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         onRefresh={handleRefresh}
                         onTranscodeComplete={fetchVideo}
                         onDelete={async () => await handleDeleteVideo(videoFile.id)}
+                        onSaved={fetchVideo}
                     />
                     <AddToPlaylistButton fileGroupId={videoFile.id}/>
                 </div>

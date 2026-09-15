@@ -236,6 +236,18 @@ export async function getVideo(fileGroupId) {
     return [data['file_group'], data['prev'], data['next']];
 }
 
+export async function updateVideo(fileGroupId, {title}) {
+    // Edits the Video's details (written to its info json).  Returns the updated video file group.
+    const response = await apiPut(`${VIDEOS_API}/${fileGroupId}`, {title});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Unable to save the video.  See server logs.');
+        toast({type: 'error', title: 'Failed to save', description: message, time: 5000});
+        throw new Error(message);
+    }
+    const data = await response.json();
+    return data['file_group'];
+}
+
 export async function transcodeVideo(fileGroupId, {video_codec = null, audio_codec = null, container = 'mp4'}) {
     // Queues a transcode Job; returns the job id.  Watch it with `getJob`.
     const body = {video_codec, audio_codec, container};

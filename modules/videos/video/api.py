@@ -29,6 +29,20 @@ def video_get(request: Request, file_group_id: int):
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 
+@video_bp.put('/<file_group_id:int>')
+@openapi.description('Edit a Video\'s details.  Written to its info json; the Video is validated again.')
+@openapi.body({'application/json': schema.VideoUpdateRequest})
+@openapi.response(HTTPStatus.OK, schema.VideoResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(schema.VideoUpdateRequest)
+@wrol_mode_check
+async def video_update(_: Request, file_group_id: int, body: schema.VideoUpdateRequest):
+    lib.update_video(file_group_id, body.title)
+    video, previous_video, next_video = lib.get_video_for_app(file_group_id)
+    return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
+
+
 @video_bp.get('/<file_group_id:int>/comments')
 @openapi.description('Get Video comments')
 @openapi.response(HTTPStatus.OK, schema.VideoCommentsResponse)

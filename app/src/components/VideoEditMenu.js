@@ -285,6 +285,7 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
  * refresh; a re-download of the Video's metadata will overwrite it.
  */
 export function EditVideoModal({open, onClose, fileGroupId, videoFile, description: currentDescription, onSaved}) {
+    const wrolModeEnabled = useWROLMode();
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [saving, setSaving] = useState(false);
@@ -345,6 +346,9 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, descripti
                 <Text size='sm' c='var(--muted)' mt='sm'>
                     Saved to the video's info json.  Refreshing the video from its source will replace it.
                 </Text>
+                {wrolModeEnabled && <Text size='sm' c='var(--danger)' mt='sm'>
+                    Videos cannot be edited while WROL Mode is enabled.
+                </Text>}
             </form>
         </Modal.Content>
         <Modal.Actions>
@@ -354,7 +358,7 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, descripti
                 icon='save'
                 onClick={handleSave}
                 loading={saving}
-                disabled={saving || !trimmed || unchanged}
+                disabled={saving || !trimmed || unchanged || !!wrolModeEnabled}
             >
                 Save
             </Button>

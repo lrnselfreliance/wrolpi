@@ -164,3 +164,26 @@ async def test_video_transcode_api(async_client, test_session, video_factory, wr
                                                 content=json.dumps({'video_codec': 'h264'}))
     assert response.status == 403
     await wrol_mode_fixture(False)
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_job_wrol_mode(test_session, test_directory, async_client, video_factory,
+                                             wrol_mode_fixture):
+    """A transcode queued before WROL Mode was enabled must not run: the Job fails, ffmpeg is never
+    started, and the file is untouched."""
+    video = video_factory()
+    video_path = video.video_path
+    before = video_path.read_bytes()
+
+    job_id = transcode_video_job.enqueue(file_group_id=video.file_group_id, video_codec='h264')
+    await wrol_mode_fixture(True)
+    try:
+        with mock.patch('wrolpi.cmd.run_command') as mock_run:
+            record = await jobs.wait_for_job(job_id)
+    finally:
+        await wrol_mode_fixture(False)
+
+    assert record['status'] == jobs.FAILED, record
+    assert 'WROL Mode' in record['error']
+    mock_run.assert_not_called()
+    assert video_path.read_bytes() == before

@@ -115,3 +115,21 @@ async def test_video_update_api(async_client, test_session, video_factory, wrol_
                                                content=json.dumps({'title': 'Nope'}))
     assert response.status == 403
     await wrol_mode_fixture(False)
+
+
+@pytest.mark.asyncio
+async def test_update_video_wrol_mode(test_session, video_factory, wrol_mode_fixture):
+    """The library function refuses in WROL Mode, not only the API route, so no caller can edit."""
+    from wrolpi.errors import WROLModeEnabled
+    video = video_factory(with_info_json={'title': 'Old'})
+    test_session.commit()
+
+    await wrol_mode_fixture(True)
+    try:
+        with pytest.raises(WROLModeEnabled):
+            update_video(video.file_group_id, title='Nope')
+    finally:
+        await wrol_mode_fixture(False)
+
+    test_session.expire_all()
+    assert Video.find_by_file_group_id(test_session, video.file_group_id).file_group.title == 'Old'

@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple, Callable
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import run_command
-from wrolpi.common import logger, get_relative_to_media_directory
+from wrolpi.common import logger, get_relative_to_media_directory, wrol_mode_enabled
 from wrolpi.db import get_db_session
 from wrolpi.jobs import register_job, get_current_job
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS, PYTEST
@@ -268,6 +268,10 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
     from modules.videos.models import Video
     from wrolpi.files.lib import get_mimetype
     from wrolpi.files.worker import file_worker
+
+    # The API refuses to queue in WROL Mode; this catches a Job queued before it was enabled.
+    if wrol_mode_enabled():
+        raise RuntimeError('Cannot transcode while WROL Mode is enabled')
 
     validate_transcode_request(video_codec, audio_codec, container)
 

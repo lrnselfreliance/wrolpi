@@ -50,6 +50,7 @@ def get_video(file_group_id: int) -> Video:
         return video
 
 
+@wrol_mode_check
 def update_video(file_group_id: int, title: str = None, description: str = None) -> Video:
     """Edit a Video's details.  The files are the source of truth, so the change is written to the
     Video's .info.json (created if missing) and the Video is validated again from it.  Only the

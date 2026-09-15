@@ -160,6 +160,16 @@ describe('EditVideoModal', () => {
         await waitFor(() => expect(updateVideo).toHaveBeenCalledWith(7, {description: ''}));
     });
 
+    test('WROL Mode disables saving', async () => {
+        renderWithProviders(
+            <EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile}/>,
+            wrolMode,
+        );
+        fireEvent.change(screen.getByLabelText('Title'), {target: {value: 'Changed'}});
+        expect(screen.getByRole('button', {name: /Save/})).toBeDisabled();
+        expect(screen.getByText(/WROL Mode/)).toBeInTheDocument();
+    });
+
     test('an empty title cannot be saved', () => {
         renderWithProviders(<EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile}/>);
         fireEvent.change(screen.getByLabelText('Title'), {target: {value: '   '}});

@@ -188,7 +188,9 @@ class VideoSearchRequest:
 
 @dataclass
 class VideoUpdateRequest:
-    title: str
+    # Only the fields given are changed.
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
 @dataclass

@@ -38,7 +38,7 @@ def video_get(request: Request, file_group_id: int):
 @validate(schema.VideoUpdateRequest)
 @wrol_mode_check
 async def video_update(_: Request, file_group_id: int, body: schema.VideoUpdateRequest):
-    lib.update_video(file_group_id, body.title)
+    lib.update_video(file_group_id, title=body.title, description=body.description)
     video, previous_video, next_video = lib.get_video_for_app(file_group_id)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 

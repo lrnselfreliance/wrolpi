@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo, updateVideo} from '../api';
 import {useWROLMode} from '../hooks/customHooks';
-import {Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, TextInput, toast} from './ui';
+import {Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, Textarea, TextInput, toast} from './ui';
 import {
     TRANSCODE_COPY,
     transcodeAudioCodecOptions,
@@ -272,24 +272,32 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
  * Edit a Video's details.  The change is written to the Video's info json, so it survives a
  * refresh; a re-download of the Video's metadata will overwrite it.
  */
-export function EditVideoModal({open, onClose, fileGroupId, videoFile, onSaved}) {
+export function EditVideoModal({open, onClose, fileGroupId, videoFile, description: currentDescription, onSaved}) {
     const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (open) {
             // Start from the current details on every open, discarding an abandoned edit.
             setTitle(videoFile?.title || '');
+            setDescription(currentDescription || '');
         }
-    }, [open, videoFile?.title]);
+    }, [open, videoFile?.title, currentDescription]);
 
     const trimmed = title.trim();
-    const unchanged = trimmed === (videoFile?.title || '');
+    const titleChanged = trimmed !== (videoFile?.title || '');
+    const descriptionChanged = description !== (currentDescription || '');
+    const unchanged = !titleChanged && !descriptionChanged;
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            const updated = await updateVideo(fileGroupId, {title: trimmed});
+            // Send only what changed, so an untouched field is never rewritten.
+            const changes = {};
+            if (titleChanged) changes.title = trimmed;
+            if (descriptionChanged) changes.description = description;
+            const updated = await updateVideo(fileGroupId, changes);
             toast({type: 'success', title: 'Saved', description: 'The video was updated.', time: 3000});
             if (onSaved) await onSaved(updated);
             onClose();
@@ -304,16 +312,23 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, onSaved})
     return <Modal open={open} onClose={onClose} size='small'>
         <Modal.Header>Edit Video</Modal.Header>
         <Modal.Content>
-            <form onSubmit={e => {
-                e.preventDefault();
-                if (trimmed && !unchanged && !saving) handleSave();
-            }}>
+            {/* No submit-on-Enter: Enter belongs to the description's new lines. */}
+            <form onSubmit={e => e.preventDefault()}>
                 <TextInput
                     label='Title'
                     value={title}
                     onChange={e => setTitle(e.currentTarget.value)}
                     error={!trimmed ? 'A title is required' : null}
                     data-autofocus
+                />
+                <Textarea
+                    label='Description'
+                    value={description}
+                    onChange={e => setDescription(e.currentTarget.value)}
+                    autosize
+                    minRows={4}
+                    maxRows={14}
+                    mt='sm'
                 />
                 <Text size='sm' c='var(--muted)' mt='sm'>
                     Saved to the video's info json.  Refreshing the video from its source will replace it.
@@ -342,7 +357,7 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, onSaved})
  * page can fetch the Video again (its path and codecs changed).  `onDelete` is awaited after the
  * user confirms; the page decides what happens next (navigate away, or the tagged-files prompt).
  */
-export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete, onDelete, onSaved}) {
+export function VideoEditMenu({videoFile, video, description, onRefresh, onTranscodeComplete, onDelete, onSaved}) {
     const wrolModeEnabled = useWROLMode();
     const [editOpen, setEditOpen] = useState(false);
     const [transcodeOpen, setTranscodeOpen] = useState(false);
@@ -414,6 +429,7 @@ export function VideoEditMenu({videoFile, video, onRefresh, onTranscodeComplete,
             onClose={() => setEditOpen(false)}
             fileGroupId={videoFile?.id}
             videoFile={videoFile}
+            description={description}
             onSaved={onSaved}
         />
         <Confirm

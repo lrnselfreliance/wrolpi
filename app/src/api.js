@@ -236,9 +236,10 @@ export async function getVideo(fileGroupId) {
     return [data['file_group'], data['prev'], data['next']];
 }
 
-export async function updateVideo(fileGroupId, {title}) {
-    // Edits the Video's details (written to its info json).  Returns the updated video file group.
-    const response = await apiPut(`${VIDEOS_API}/${fileGroupId}`, {title});
+export async function updateVideo(fileGroupId, {title, description}) {
+    // Edits the Video's details (written to its info json).  Only the fields given are changed.
+    // Returns the updated video file group.
+    const response = await apiPut(`${VIDEOS_API}/${fileGroupId}`, {title, description});
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Unable to save the video.  See server logs.');
         toast({type: 'error', title: 'Failed to save', description: message, time: 5000});

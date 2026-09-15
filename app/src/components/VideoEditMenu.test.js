@@ -106,20 +106,32 @@ describe('EditVideoModal', () => {
         const onSaved = jest.fn().mockResolvedValue(undefined);
         const onClose = jest.fn();
         renderWithProviders(
-            <EditVideoModal open={true} onClose={onClose} fileGroupId={7} videoFile={videoFile} onSaved={onSaved}/>,
+            <EditVideoModal open={true} onClose={onClose} fileGroupId={7} videoFile={videoFile}
+                            description='Old words' onSaved={onSaved}/>,
         );
 
         const input = screen.getByLabelText('Title');
         expect(input).toHaveValue('Old Title');
+        expect(screen.getByLabelText('Description')).toHaveValue('Old words');
         // Nothing changed yet: Save is disabled.
         expect(screen.getByRole('button', {name: /Save/})).toBeDisabled();
 
         fireEvent.change(input, {target: {value: '  New Title '}});
         fireEvent.click(screen.getByRole('button', {name: /Save/}));
 
+        // Only the changed field is sent.
         await waitFor(() => expect(updateVideo).toHaveBeenCalledWith(7, {title: 'New Title'}));
         await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test('saves a changed description on its own, including clearing it', async () => {
+        renderWithProviders(
+            <EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile} description='Old words'/>,
+        );
+        fireEvent.change(screen.getByLabelText('Description'), {target: {value: ''}});
+        fireEvent.click(screen.getByRole('button', {name: /Save/}));
+        await waitFor(() => expect(updateVideo).toHaveBeenCalledWith(7, {description: ''}));
     });
 
     test('an empty title cannot be saved', () => {

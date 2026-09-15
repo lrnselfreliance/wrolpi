@@ -44,6 +44,36 @@ def test_update_video_title_creates_info_json(test_session, test_directory, vide
     assert video.info_json_path.name in [i['path'] for i in video.file_group.files], 'The new file is tracked'
 
 
+def test_update_video_description(test_session, test_directory, video_factory):
+    """The description is written to the info json and indexed; the title is untouched when not
+    given.  An empty description clears it."""
+    video = video_factory(with_info_json={'title': 'Kept', 'description': 'old words'})
+    test_session.commit()
+    assert video.file_group.c_text == 'old words'
+
+    update_video(video.file_group_id, description='new words\nsecond line')
+
+    test_session.expire_all()
+    video = Video.find_by_file_group_id(test_session, video.file_group_id)
+    assert video.file_group.title == 'Kept'
+    assert video.file_group.c_text == 'new words\nsecond line'
+    assert video.get_description() == 'new words\nsecond line'
+    assert json.loads(video.info_json_path.read_text())['description'] == 'new words\nsecond line'
+
+    update_video(video.file_group_id, description='')
+    test_session.expire_all()
+    video = Video.find_by_file_group_id(test_session, video.file_group_id)
+    assert video.get_description() is None
+    assert video.file_group.title == 'Kept'
+
+
+def test_update_video_nothing(test_session, video_factory):
+    video = video_factory(with_info_json={'title': 'Old'})
+    test_session.commit()
+    with pytest.raises(ValidationError):
+        update_video(video.file_group_id)
+
+
 def test_update_video_title_empty(test_session, video_factory):
     video = video_factory(with_info_json={'title': 'Old'})
     test_session.commit()
@@ -66,6 +96,16 @@ async def test_video_update_api(async_client, test_session, video_factory, wrol_
 
     request, response = await async_client.put(f'/api/videos/{video.file_group_id}', content=json.dumps({'title': ''}))
     assert response.status == 400
+
+    request, response = await async_client.put(f'/api/videos/{video.file_group_id}', content=json.dumps({}))
+    assert response.status == 400
+
+    request, response = await async_client.put(f'/api/videos/{video.file_group_id}',
+                                               content=json.dumps({'description': 'about it'}))
+    assert response.status == 200, response.json
+    assert response.json['file_group']['title'] == 'Edited', 'Title untouched'
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/description')
+    assert response.json['description'] == 'about it'
 
     request, response = await async_client.put('/api/videos/999999', content=json.dumps({'title': 'x'}))
     assert response.status == 404

@@ -211,6 +211,20 @@ async def test_transcode_lock_serializes(test_directory, async_client):
 
 
 @pytest.mark.asyncio
-async def test_transcode_video_file_requires_target():
-    with pytest.raises(RuntimeError, match='target codec'):
-        await transcode_video_file(pathlib.Path('/tmp/video.mp4'))
+async def test_transcode_video_file_remux(test_directory, async_client):
+    """No target codec is a remux: both streams are copied into the requested container."""
+    video_path = test_directory / 'video.mkv'
+    video_path.write_bytes(b'fake video data')
+
+    async def fake_run_command(cmd, **kwargs):
+        pathlib.Path(cmd[-1]).write_bytes(b'remuxed data')
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command) as mock_run:
+        result = await transcode_video_file(video_path, container='mp4')
+
+    assert result == test_directory / 'video.mp4' and result.is_file()
+    assert not video_path.exists()
+    cmd = mock_run.call_args[0][0]
+    assert cmd[cmd.index('-c:v') + 1] == 'copy' and cmd[cmd.index('-c:a') + 1] == 'copy'
+    assert '+faststart' in cmd

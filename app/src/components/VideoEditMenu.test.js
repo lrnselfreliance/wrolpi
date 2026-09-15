@@ -1,7 +1,9 @@
 import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
-import {currentCodecs, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, VideoEditMenu} from './VideoEditMenu';
+import {
+    currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal, VideoEditMenu,
+} from './VideoEditMenu';
 import {TRANSCODE_COPY, transcodeAudioCodecOptions, transcodeVideoCodecOptions} from './Vars';
 
 jest.mock('../api', () => ({
@@ -37,6 +39,13 @@ describe('helpers', () => {
     test('currentCodecs ignores embedded thumbnail streams', () => {
         expect(currentCodecs(video)).toEqual({video: ['vp9'], audio: ['opus']});
         expect(currentCodecs(null)).toEqual({video: [], audio: []});
+    });
+
+    test('currentContainer reads the file suffix, only for containers we can write', () => {
+        expect(currentContainer({video_path: 'videos/a/movie.MP4'})).toBe('mp4');
+        expect(currentContainer({video_path: 'videos/a/movie.mkv'})).toBe('mkv');
+        expect(currentContainer({video_path: 'videos/a/movie.webm'})).toBeNull();
+        expect(currentContainer(null)).toBeNull();
     });
 
     test('preferredTarget picks the first preference ffmpeg can produce', () => {
@@ -77,13 +86,30 @@ describe('TranscodeModal', () => {
         expect(await screen.findByText('pending')).toBeInTheDocument();
     });
 
-    test('refuses to start when every stream is kept', async () => {
+    test('keeping every stream is a remux into the chosen container', async () => {
         fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
+        // A webm cannot be kept (not a container we write), so the select starts at mp4: a change.
         renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={video}/>);
 
-        await waitFor(() => expect(screen.getByText('Choose at least one codec to convert.')).toBeInTheDocument());
-        expect(screen.getByRole('button', {name: /Transcode/})).toBeDisabled();
-        expect(transcodeVideo).not.toHaveBeenCalled();
+        await waitFor(() => expect(selectInput('Container')).toHaveValue('mp4'));
+        expect(await screen.findByText(/only the container changes to mp4/)).toBeInTheDocument();
+
+        const button = screen.getByRole('button', {name: 'Remux'});
+        expect(button).toBeEnabled();
+        fireEvent.click(button);
+        await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(7, {
+            video_codec: null, audio_codec: null, container: 'mp4',
+        }));
+    });
+
+    test('a remux into the same container is described as a fast-start rewrite', async () => {
+        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
+        const mkv = {...video, video_path: 'videos/movie.mkv'};
+        renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={mkv}/>);
+
+        await waitFor(() => expect(selectInput('Container')).toHaveValue('mkv'));
+        expect(await screen.findByText(/rewritten as-is with fast start/)).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Remux'})).toBeEnabled();
     });
 
     test('WROL Mode disables starting a transcode', async () => {

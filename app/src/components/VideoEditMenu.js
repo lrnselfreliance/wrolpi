@@ -148,6 +148,12 @@ export function JobProgress({jobId, onFinished}) {
  * The selects start at the user's preferred codecs from the Videos settings (the same preference
  * lists the downloader honors), so the common case is a glance and a click.
  */
+/** The container of a video file, when it is one ffmpeg can write for us. */
+export function currentContainer(video) {
+    const suffix = String(video?.video_path || '').split('.').pop().toLowerCase();
+    return transcodeContainerOptions.some(i => i.value === suffix) ? suffix : null;
+}
+
 export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) {
     const wrolModeEnabled = useWROLMode();
     const [videoCodec, setVideoCodec] = useState(TRANSCODE_COPY);
@@ -166,6 +172,8 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
         // Each opening starts over: a finished Job's progress must not linger on the next open.
         setJobId(null);
         setDefaultsLoaded(false);
+        // Start from the file's own container so a codec-only change keeps it.
+        setContainer(currentContainer(video) || 'mp4');
         let stale = false;
         const load = async () => {
             try {
@@ -185,7 +193,9 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
         };
     }, [open]);
 
-    const nothingToDo = videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
+    // Both streams kept: a remux.  Cheap, and it fixes the container (or adds fast start).
+    const remuxOnly = videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
+    const sameContainer = container === currentContainer(video);
 
     const handleStart = async () => {
         setSubmitting(true);
@@ -246,8 +256,10 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
                         onChange={value => setContainer(value || 'mp4')}
                         allowDeselect={false}
                     />
-                    {nothingToDo && defaultsLoaded && <Text size='sm' c='var(--muted)'>
-                        Choose at least one codec to convert.
+                    {remuxOnly && defaultsLoaded && <Text size='sm' c='var(--muted)'>
+                        {sameContainer
+                            ? 'Both streams are kept: the file is rewritten as-is with fast start (moves the index to the front for quicker playback start).'
+                            : `Both streams are kept: only the container changes to ${container} (a quick remux, no quality loss).`}
                     </Text>}
                 </>}
                 {jobId && <JobProgress jobId={jobId} onFinished={handleFinished}/>}
@@ -260,9 +272,9 @@ export function TranscodeModal({open, onClose, fileGroupId, video, onComplete}) 
                 icon='film'
                 onClick={handleStart}
                 loading={submitting}
-                disabled={submitting || nothingToDo || !defaultsLoaded || !!wrolModeEnabled}
+                disabled={submitting || !defaultsLoaded || !!wrolModeEnabled}
             >
-                Transcode
+                {remuxOnly ? 'Remux' : 'Transcode'}
             </Button>}
         </Modal.Actions>
     </Modal>

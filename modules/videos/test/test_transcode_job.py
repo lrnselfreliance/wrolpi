@@ -80,6 +80,30 @@ async def test_transcode_video_job(test_session, test_directory, async_client, v
 
 
 @pytest.mark.asyncio
+async def test_transcode_video_job_remux(test_session, test_directory, async_client, video_factory):
+    """No target codec is a remux: both streams are copied into the requested container."""
+    video_path = test_directory / 'videos/NO CHANNEL/movie.mkv'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video = video_factory(with_video_file=video_path)
+    test_session.commit()
+
+    async def fake_run_command(cmd, stdout_callback=None, **kwargs):
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('wrolpi.cmd.run_command', side_effect=fake_run_command) as mock_run:
+        job_id = transcode_video_job.enqueue(file_group_id=video.file_group_id, container='mp4')
+        record = await jobs.wait_for_job(job_id)
+
+    assert record['status'] == jobs.COMPLETE, record
+    cmd = mock_run.call_args[0][0]
+    assert cmd[cmd.index('-c:v') + 1] == 'copy' and cmd[cmd.index('-c:a') + 1] == 'copy'
+    assert '+faststart' in cmd
+    assert not video_path.exists()
+    assert (test_directory / 'videos/NO CHANNEL/movie.mp4').is_file()
+
+
+@pytest.mark.asyncio
 async def test_transcode_video_job_failure(test_session, test_directory, async_client, video_factory):
     """A failed ffmpeg fails the Job and leaves the original file in place."""
     video = video_factory()
@@ -103,10 +127,6 @@ async def test_video_transcode_api(async_client, test_session, video_factory, wr
     video = video_factory()
     test_session.commit()
 
-    # Nothing to transcode.
-    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
-                                                content=json.dumps({}))
-    assert response.status == 400, response.json
     # Unsupported target.
     request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
                                                 content=json.dumps({'video_codec': 'av1'}))
@@ -129,6 +149,14 @@ async def test_video_transcode_api(async_client, test_session, video_factory, wr
                                 'audio_codec': 'aac', 'container': 'mp4'}
     # Do not run it (ffmpeg); cancel instead.
     jobs.cancel_job(job_id)
+
+    # No codec at all is allowed: a container-only remux.
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'container': 'mkv'}))
+    assert response.status == 200, response.json
+    assert jobs.get_job(response.json['job_id'])['kwargs'] == {
+        'file_group_id': video.file_group_id, 'video_codec': None, 'audio_codec': None, 'container': 'mkv'}
+    jobs.cancel_job(response.json['job_id'])
 
     # WROL mode forbids modifying files.
     await wrol_mode_fixture(True)

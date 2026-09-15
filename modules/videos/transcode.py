@@ -133,8 +133,8 @@ async def transcode_video_file(video_path: pathlib.Path,
     """
     if not FFMPEG_BIN:
         raise RuntimeError('ffmpeg was not found')
-    if not target_vcodec and not target_acodec:
-        raise RuntimeError('Refusing to transcode without a target codec')
+    # No target for either stream is a remux: both streams are copied into the (new) container
+    # with faststart.  Cheap, and what a user wants when only the container is wrong.
     if container not in TRANSCODE_CONTAINERS:
         logger.info(f'Forcing mp4 container for transcode of {video_path} ({container} is not supported)')
         container = 'mp4'
@@ -250,9 +250,7 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
 
 
 def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional[str], container: str):
-    """@raise ValueError: when the request cannot be transcoded."""
-    if not video_codec and not audio_codec:
-        raise ValueError('At least one of video_codec or audio_codec is required')
+    """@raise ValueError: when the request cannot be transcoded.  No codec at all is a remux."""
     if video_codec and video_codec not in TRANSCODE_VIDEO_TARGETS:
         raise ValueError(f'Cannot transcode video to {video_codec!r}; supported: {sorted(TRANSCODE_VIDEO_TARGETS)}')
     if audio_codec and audio_codec not in TRANSCODE_AUDIO_TARGETS:

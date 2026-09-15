@@ -158,6 +158,41 @@ export const downloadAudioCodecOptions = [
     {key: 'vorbis', text: 'vorbis', value: 'vorbis'},
 ];
 
+// Codecs WROLPi's ffmpeg step can produce.  Mirrors TRANSCODE_VIDEO_TARGETS / TRANSCODE_AUDIO_TARGETS /
+// TRANSCODE_CONTAINERS in modules/videos/transcode.py; the API rejects anything else.
+export const TRANSCODE_COPY = 'copy';
+// REMOVE_VIDEO in modules/videos/transcode.py: drop the video stream, the result is an audio file.
+export const TRANSCODE_REMOVE_VIDEO = 'none';
+export const transcodeVideoCodecOptions = [
+    {value: TRANSCODE_COPY, label: 'Keep (copy)'},
+    {value: 'h264', label: 'h264 (avc1)'},
+    {value: TRANSCODE_REMOVE_VIDEO, label: 'Remove video (audio only)'},
+];
+export const transcodeAudioCodecOptions = [
+    {value: TRANSCODE_COPY, label: 'Keep (copy)'},
+    {value: 'aac', label: 'aac'},
+    {value: 'opus', label: 'opus'},
+    {value: 'mp3', label: 'mp3'},
+];
+// Containers for output with a video stream ...
+export const transcodeContainerOptions = [
+    {value: 'mp4', label: 'mp4'},
+    {value: 'mkv', label: 'mkv'},
+];
+// ... and for audio-only output.  AUDIO_CONTAINER_CODECS in transcode.py says what each holds.
+export const transcodeAudioContainerOptions = [
+    {value: 'm4a', label: 'm4a (aac)'},
+    {value: 'ogg', label: 'ogg (opus)'},
+    {value: 'mp3', label: 'mp3'},
+];
+
+/** The audio container a player expects for a codec (default_audio_container in transcode.py). */
+export function audioContainerForCodec(codec) {
+    if (codec === 'mp3') return 'mp3';
+    if (['opus', 'vorbis', 'flac'].includes(codec)) return 'ogg';
+    return 'm4a';
+}
+
 export const Downloaders = {
     Archive: 'archive',
     File: 'file',

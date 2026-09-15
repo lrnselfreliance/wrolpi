@@ -211,3 +211,15 @@ class InvalidArchiveMember(APIError):
     code = 'INVALID_ARCHIVE_MEMBER'
     summary = 'The requested member does not exist in the archive.'
     status_code = HTTPStatus.BAD_REQUEST
+
+
+class UnknownJob(APIError):
+    code = 'UNKNOWN_JOB'
+    summary = 'The Job cannot be found.'
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class InvalidJob(APIError):
+    code = 'INVALID_JOB'
+    summary = 'The Job request is invalid.'
+    status_code = HTTPStatus.BAD_REQUEST

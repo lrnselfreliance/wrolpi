@@ -50,6 +50,43 @@ def get_video(file_group_id: int) -> Video:
         return video
 
 
+@wrol_mode_check
+def update_video(file_group_id: int, title: str = None, description: str = None) -> Video:
+    """Edit a Video's details.  The files are the source of truth, so the change is written to the
+    Video's .info.json (created if missing) and the Video is validated again from it.  Only the
+    fields given (not None) are changed; an empty description clears it.
+
+    A later re-download of the Video's metadata will overwrite the info json, and this edit with
+    it.
+
+    @raise UnknownVideo: if the Video can not be found
+    @raise ValidationError: when nothing is given, or the title is empty
+    """
+    from wrolpi.errors import ValidationError
+    if title is None and description is None:
+        raise ValidationError('Nothing to change')
+    if title is not None:
+        title = title.strip()
+        if not title:
+            raise ValidationError('Video title cannot be empty')
+
+    with get_db_session(commit=True) as session:
+        video = Video.find_by_file_group_id(session, file_group_id)
+        info_json = video.get_info_json() or dict()
+        if title is not None:
+            # `extract_video_info_json` prefers fulltitle over title; keep the two in agreement.
+            info_json['title'] = title
+            info_json['fulltitle'] = title
+        if description is not None:
+            info_json['description'] = description
+        # Keep the file as it was, other than the edited fields.
+        video.replace_info_json(info_json, clean=False)
+        # Re-derive the title (and search text) from the file just written.
+        video.validate(session)
+        video.flush()
+        return video
+
+
 VIDEO_ORDERS = {
     # fg.id (the rowid) is the pagination tiebreaker: it is present in every index, so these
     # orders stay index-only.  LOWER(fg.primary_path) forced SQLite to read every (large) row.

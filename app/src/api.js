@@ -236,6 +236,63 @@ export async function getVideo(fileGroupId) {
     return [data['file_group'], data['prev'], data['next']];
 }
 
+export async function updateVideo(fileGroupId, {title, description}) {
+    // Edits the Video's details (written to its info json).  Only the fields given are changed.
+    // Returns the updated video file group.
+    const response = await apiPut(`${VIDEOS_API}/${fileGroupId}`, {title, description});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Unable to save the video.  See server logs.');
+        toast({type: 'error', title: 'Failed to save', description: message, time: 5000});
+        throw new Error(message);
+    }
+    const data = await response.json();
+    return data['file_group'];
+}
+
+export async function transcodeVideo(fileGroupId, {video_codec = null, audio_codec = null, container = 'mp4'}) {
+    // Queues a transcode Job; returns the job id.  Watch it with `getJob`.
+    const body = {video_codec, audio_codec, container};
+    const response = await apiPost(`${VIDEOS_API}/${fileGroupId}/transcode`, body);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Unable to queue the transcode.  See server logs.');
+        toast({type: 'error', title: 'Failed to transcode', description: message, time: 5000});
+        throw new Error(message);
+    }
+    const data = await response.json();
+    return data['job_id'];
+}
+
+export async function getJobs() {
+    const response = await apiGet(`${API_URI}/jobs`);
+    if (!response.ok) {
+        throw new Error(await getErrorMessage(response, 'Unable to get the jobs'));
+    }
+    const data = await response.json();
+    return data['jobs'];
+}
+
+export async function getJob(jobId) {
+    const response = await apiGet(`${API_URI}/jobs/${jobId}`);
+    if (!response.ok) {
+        const error = new Error(await getErrorMessage(response, 'Unable to get the job'));
+        error.status = response.status;
+        throw error;
+    }
+    const data = await response.json();
+    return data['job'];
+}
+
+export async function cancelJob(jobId) {
+    const response = await apiDelete(`${API_URI}/jobs/${jobId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Unable to cancel the job');
+        toast({type: 'error', title: 'Failed to cancel', description: message, time: 5000});
+        throw new Error(message);
+    }
+    const data = await response.json();
+    return data['job'];
+}
+
 export async function getVideoComments(fileGroupId) {
     const response = await apiGet(`${VIDEOS_API}/${fileGroupId}/comments`);
     let data = await response.json();

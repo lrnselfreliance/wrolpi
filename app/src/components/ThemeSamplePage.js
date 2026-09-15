@@ -16,6 +16,7 @@ import {
     IconStack,
     MediaFilterToggle,
     MediaGate,
+    Menu,
     Message,
     MultiSelect,
     NumberInput,
@@ -380,6 +381,22 @@ export function ThemeSamplePage() {
                             <Button size={size}>{size}</Button>
                             <IconButton size={size} icon='external' label={`Open (${size})`}/>
                         </div>)}
+                    </Row>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <Header as='h5'>A dropdown of actions</Header>
+                    {/* Mirrors the video page's Edit control. */}
+                    <Row>
+                        <Menu position='bottom-start' withinPortal>
+                            <Menu.Target>
+                                <Button color='yellow' icon='edit' iconAfter='dropdown'>Edit</Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                                <Menu.Item leftSection={<Icon name='refresh'/>}>Refresh</Menu.Item>
+                                <Menu.Item leftSection={<Icon name='film'/>}>Transcode...</Menu.Item>
+                                <Menu.Item leftSection={<Icon name='trash'/>} disabled>Unavailable</Menu.Item>
+                            </Menu.Dropdown>
+                        </Menu>
                     </Row>
                 </div>
                 <div style={{marginTop: 12}}>

@@ -249,9 +249,11 @@ export async function updateVideo(fileGroupId, {title, description}) {
     return data['file_group'];
 }
 
-export async function transcodeVideo(fileGroupId, {video_codec = null, audio_codec = null, container = 'mp4'}) {
+export async function transcodeVideo(fileGroupId, {
+    video_codec = null, audio_codec = null, container = 'mp4', fragmented = false,
+}) {
     // Queues a transcode Job; returns the job id.  Watch it with `getJob`.
-    const body = {video_codec, audio_codec, container};
+    const body = {video_codec, audio_codec, container, fragmented};
     const response = await apiPost(`${VIDEOS_API}/${fileGroupId}/transcode`, body);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Unable to queue the transcode.  See server logs.');

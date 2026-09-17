@@ -7,7 +7,7 @@ import pytest
 
 from modules.videos.transcode import codecs_match, get_stream_codec_names, get_transcode_target, \
     transcode_can_satisfy_codecs, transcode_video_file, TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS, \
-    verify_transcode_output
+    verify_transcode_output, validate_transcode_request, REMOVE_VIDEO, FRAGMENT_DURATION_US
 from wrolpi.cmd import CommandResult
 
 
@@ -421,3 +421,56 @@ async def test_transcode_video_file_cancel_removes_tmp(test_directory, async_cli
 
     assert video_path.read_bytes() == b'fake video data'
     assert not (test_directory / 'video.transcode.mp4').exists(), 'The partial output must be removed'
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_file_fragmented(test_directory, async_client, mock_probe):
+    """`fragmented=True` writes a fragmented mp4: a tiny moov, a global seek index, and fragments
+    at keyframes instead of fast start.  Very long videos then start and seek quickly on phones."""
+    video_path = test_directory / 'video.mp4'
+    video_path.write_bytes(b'fake video data')
+    mock_probe.output = make_probe('vp9', 'opus', 10.0, MP4)  # A remux: both streams copied.
+
+    async def fake_run_command(cmd, **kwargs):
+        if cmd[-1] != '-':
+            pathlib.Path(cmd[-1]).write_bytes(b'fragmented data')
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command) as mock_run:
+        result = await transcode_video_file(video_path, container='mp4', fragmented=True)
+
+    assert result == video_path
+    cmd = mock_run.call_args_list[0][0][0]
+    flags = cmd[cmd.index('-movflags') + 1]
+    for flag in ('frag_keyframe', 'empty_moov', 'default_base_moof', 'global_sidx'):
+        assert flag in flags, flags
+    assert 'faststart' not in flags
+    assert cmd[cmd.index('-frag_duration') + 1] == str(FRAGMENT_DURATION_US)
+
+
+@pytest.mark.asyncio
+async def test_transcode_video_file_fragmented_only_mp4(test_directory, async_client, mock_probe):
+    """Fragments are an mp4 concept; for another container the flag is ignored."""
+    video_path = test_directory / 'video.mp4'
+    video_path.write_bytes(b'fake video data')
+    mock_probe.output = make_probe('vp9', 'opus', 10.0, 'matroska,webm')
+
+    async def fake_run_command(cmd, **kwargs):
+        if cmd[-1] != '-':
+            pathlib.Path(cmd[-1]).write_bytes(b'data')
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('modules.videos.transcode.run_command', side_effect=fake_run_command) as mock_run:
+        await transcode_video_file(video_path, container='mkv', fragmented=True)
+
+    cmd = mock_run.call_args_list[0][0][0]
+    assert '-movflags' not in cmd and '-frag_duration' not in cmd
+
+
+def test_validate_fragmented_needs_mp4():
+    validate_transcode_request(None, None, 'mp4', fragmented=True)
+    validate_transcode_request(REMOVE_VIDEO, None, 'm4a', fragmented=True)  # m4a is an mp4.
+    with pytest.raises(ValueError, match='mp4'):
+        validate_transcode_request(None, None, 'mkv', fragmented=True)
+    with pytest.raises(ValueError, match='mp4'):
+        validate_transcode_request(REMOVE_VIDEO, 'mp3', 'mp3', fragmented=True)

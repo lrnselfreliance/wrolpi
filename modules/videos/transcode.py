@@ -61,6 +61,11 @@ REMOVE_VIDEO = 'none'
 CONTAINER_FORMAT_NAMES = {'mp4': 'mp4', 'mkv': 'matroska', 'm4a': 'm4a', 'ogg': 'ogg', 'mp3': 'mp3'}
 # `-movflags +faststart` is an mp4-muxer option; other muxers warn about it.
 FASTSTART_CONTAINERS = ('mp4', 'm4a')
+# Fragmented mp4 (`fragmented=True`): a tiny moov plus a global seek index, samples described per
+# fragment.  A very long video's whole-file index can reach tens of MB, which a phone must fetch
+# and parse before the first frame; fragments make it start and seek quickly.  mp4/m4a only.
+FRAGMENTED_MOVFLAGS = '+frag_keyframe+empty_moov+default_base_moof+global_sidx'
+FRAGMENT_DURATION_US = 10_000_000
 
 
 def default_audio_container(codec: Optional[str]) -> str:
@@ -149,7 +154,8 @@ async def transcode_video_file(video_path: pathlib.Path,
                                target_acodec: Optional[str] = None,
                                container: str = 'mp4',
                                duration: Optional[float] = None,
-                               keep_original: bool = False) -> pathlib.Path:
+                               keep_original: bool = False,
+                               fragmented: bool = False) -> pathlib.Path:
     """Transcode a video file in place (same stem, possibly a new container extension).
 
     Only one transcode runs at a time machine-wide (across all Sanic workers); this call waits
@@ -174,7 +180,7 @@ async def transcode_video_file(video_path: pathlib.Path,
     lock = await _acquire_transcode_lock()
     try:
         return await _transcode_video_file(video_path, target_vcodec, target_acodec, container, duration,
-                                           keep_original)
+                                           keep_original, fragmented)
     finally:
         lock.release()
 
@@ -316,7 +322,8 @@ def resolve_output(source_probe: dict, target_vcodec: Optional[str], target_acod
 
 async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optional[str],
                                 target_acodec: Optional[str], container: str,
-                                duration: Optional[float] = None, keep_original: bool = False) -> pathlib.Path:
+                                duration: Optional[float] = None, keep_original: bool = False,
+                                fragmented: bool = False) -> pathlib.Path:
     """The ffmpeg work of `transcode_video_file`; the caller holds the transcode lock."""
     # Notify here, after the lock: the wait for another transcode can last hours, and the user
     # should hear "Transcoding" only when this file's work actually begins.
@@ -348,7 +355,12 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
         # with no audio stream.
         map_args = ('-map', '0:V:0', '-map', '0:a:0?')
         video_args = TRANSCODE_VIDEO_TARGETS[target_vcodec] if target_vcodec else ('-c:v', 'copy')
-    faststart_args = ('-movflags', '+faststart') if container in FASTSTART_CONTAINERS else ()
+    if container in FASTSTART_CONTAINERS and fragmented:
+        mux_args = ('-movflags', FRAGMENTED_MOVFLAGS, '-frag_duration', str(FRAGMENT_DURATION_US))
+    elif container in FASTSTART_CONTAINERS:
+        mux_args = ('-movflags', '+faststart')
+    else:
+        mux_args = ()
 
     final_path = video_path.with_suffix(f'.{container}')
     tmp_path = video_path.with_suffix(f'.transcode.{container}')
@@ -357,7 +369,7 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
            *map_args,
            *video_args,
            *audio_args,
-           *faststart_args,
+           *mux_args,
            # Machine-readable progress on stdout (the human progress line is suppressed).
            '-nostats', '-progress', 'pipe:1',
            str(tmp_path))
@@ -414,9 +426,11 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
     return final_path
 
 
-def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional[str], container: str):
+def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional[str], container: str,
+                               fragmented: bool = False):
     """@raise ValueError: when the request cannot be transcoded.  No codec at all is a remux;
-    `video_codec=REMOVE_VIDEO` drops the video stream and needs an audio container."""
+    `video_codec=REMOVE_VIDEO` drops the video stream and needs an audio container; `fragmented`
+    needs an mp4 container."""
     if video_codec and video_codec != REMOVE_VIDEO and video_codec not in TRANSCODE_VIDEO_TARGETS:
         raise ValueError(f'Cannot transcode video to {video_codec!r}; supported: {sorted(TRANSCODE_VIDEO_TARGETS)}')
     if audio_codec and audio_codec not in TRANSCODE_AUDIO_TARGETS:
@@ -424,6 +438,8 @@ def validate_transcode_request(video_codec: Optional[str], audio_codec: Optional
     containers = TRANSCODE_CONTAINERS + TRANSCODE_AUDIO_CONTAINERS
     if container not in containers:
         raise ValueError(f'Unsupported container {container!r}; supported: {containers}')
+    if fragmented and container not in FASTSTART_CONTAINERS:
+        raise ValueError(f'A fragmented file must be mp4 (or m4a), not {container}')
     if video_codec == REMOVE_VIDEO and container not in TRANSCODE_AUDIO_CONTAINERS:
         raise ValueError(f'Removing the video needs an audio container ({TRANSCODE_AUDIO_CONTAINERS}), not {container}')
     if container in TRANSCODE_AUDIO_CONTAINERS:
@@ -457,7 +473,8 @@ def retarget_file_group(file_group_id: int, old_path: pathlib.Path, new_path: pa
 
 @register_job('transcode_video')
 async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = None,
-                              audio_codec: Optional[str] = None, container: str = 'mp4') -> dict:
+                              audio_codec: Optional[str] = None, container: str = 'mp4',
+                              fragmented: bool = False) -> dict:
     """Transcode a Video's file, then re-index it so the FileGroup reflects the new file.
 
     Run as a Job (`transcode_video_job.enqueue(...)`) so the user can watch and cancel it."""
@@ -468,7 +485,7 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
     if wrol_mode_enabled():
         raise RuntimeError('Cannot transcode while WROL Mode is enabled')
 
-    validate_transcode_request(video_codec, audio_codec, container)
+    validate_transcode_request(video_codec, audio_codec, container, fragmented)
 
     with get_db_session() as session:
         video = Video.find_by_file_group_id(session, file_group_id)
@@ -479,7 +496,7 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
 
     # The original is kept until the database points at the new file (below).
     final_path = await transcode_video_file(video_path, video_codec, audio_codec, container, duration=duration,
-                                            keep_original=True)
+                                            keep_original=True, fragmented=fragmented)
 
     # Point the existing FileGroup at the new file *before* deleting the original and *before*
     # refreshing.  A crash after the delete would leave the database pointing at a missing file;

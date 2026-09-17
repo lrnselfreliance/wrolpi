@@ -80,7 +80,7 @@ def video_get_captions(_: Request, file_group_id: int):
 @wrol_mode_check
 async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTranscodeRequest):
     try:
-        validate_transcode_request(body.video_codec, body.audio_codec, body.container)
+        validate_transcode_request(body.video_codec, body.audio_codec, body.container, body.fragmented)
     except ValueError as e:
         raise InvalidJob(str(e))
     # Raises UnknownVideo (404) before anything is queued.
@@ -88,13 +88,19 @@ async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTran
     is_audio = (video.file_group.mimetype or '').startswith('audio/')
     if is_audio and body.video_codec and body.video_codec != REMOVE_VIDEO:
         raise InvalidJob(f'This is an audio file; it has no video stream to transcode to {body.video_codec}')
-    action = 'Extract audio from' if body.video_codec == REMOVE_VIDEO and not is_audio else 'Transcode'
+    if body.video_codec == REMOVE_VIDEO and not is_audio:
+        action = 'Extract audio from'
+    elif not body.video_codec and not body.audio_codec:
+        action = 'Remux'
+    else:
+        action = 'Transcode'
     job_id = transcode_video_job.enqueue(
         description=f'{action} {video.video_path.name}',
         file_group_id=file_group_id,
         video_codec=body.video_codec,
         audio_codec=body.audio_codec,
         container=body.container,
+        fragmented=body.fragmented,
     )
     return json_response({'job_id': job_id})
 

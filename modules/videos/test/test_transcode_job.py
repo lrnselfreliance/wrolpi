@@ -170,7 +170,7 @@ async def test_video_transcode_api(async_client, test_session, video_factory, wr
     assert record['name'] == 'transcode_video'
     assert record['description'] == f'Transcode {video.video_path.name}'
     assert record['kwargs'] == {'file_group_id': video.file_group_id, 'video_codec': 'h264',
-                                'audio_codec': 'aac', 'container': 'mp4'}
+                                'audio_codec': 'aac', 'container': 'mp4', 'fragmented': False}
     # Do not run it (ffmpeg); cancel instead.
     jobs.cancel_job(job_id)
 
@@ -179,7 +179,7 @@ async def test_video_transcode_api(async_client, test_session, video_factory, wr
                                                 content=json.dumps({'container': 'mkv'}))
     assert response.status == 200, response.json
     assert jobs.get_job(response.json['job_id'])['kwargs'] == {
-        'file_group_id': video.file_group_id, 'video_codec': None, 'audio_codec': None, 'container': 'mkv'}
+        'file_group_id': video.file_group_id, 'video_codec': None, 'audio_codec': None, 'container': 'mkv', 'fragmented': False}
     jobs.cancel_job(response.json['job_id'])
 
     # WROL mode forbids modifying files.
@@ -275,3 +275,21 @@ async def test_transcode_video_file_keep_original(test_directory, async_client):
 
     assert result == test_directory / 'video.mp4' and result.is_file()
     assert video_path.read_bytes() == b'fake video data', 'The original is kept'
+
+
+@pytest.mark.asyncio
+async def test_video_transcode_api_fragmented(async_client, test_session, video_factory):
+    """`fragmented` reaches the Job; it needs an mp4 container."""
+    video = video_factory()
+    test_session.commit()
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'container': 'mp4', 'fragmented': True}))
+    assert response.status == 200, response.json
+    record = jobs.get_job(response.json['job_id'])
+    assert record['kwargs']['fragmented'] is True
+    assert record['description'].startswith('Remux')
+    jobs.cancel_job(response.json['job_id'])
+
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'container': 'mkv', 'fragmented': True}))
+    assert response.status == 400

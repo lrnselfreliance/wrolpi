@@ -198,6 +198,7 @@ class VideoTranscodeRequest:
     video_codec: Optional[str] = None  # A key of TRANSCODE_VIDEO_TARGETS, or None to copy the stream.
     audio_codec: Optional[str] = None  # A key of TRANSCODE_AUDIO_TARGETS, or None to copy the stream.
     container: str = 'mp4'
+    fragmented: bool = False  # Fragmented mp4: quick start/seek for very long videos (mp4/m4a only).
 
 
 @dataclass

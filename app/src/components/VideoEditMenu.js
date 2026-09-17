@@ -2,7 +2,8 @@ import React, {useEffect, useRef, useState} from 'react';
 import {cancelJob, fetchVideoDownloadDefaults, getJob, transcodeVideo, updateVideo} from '../api';
 import {useWROLMode} from '../hooks/customHooks';
 import {
-    Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, Textarea, TextInput, toast,
+    Button, Confirm, Group, Icon, Menu, Modal, Progress, Select, Stack, Status, Text, Textarea, TextInput, Toggle,
+    toast,
 } from './ui';
 import {
     audioContainerForCodec,
@@ -207,6 +208,7 @@ export function TranscodeModal({
     const [videoCodec, setVideoCodec] = useState(TRANSCODE_COPY);
     const [audioCodec, setAudioCodec] = useState(TRANSCODE_COPY);
     const [container, setContainer] = useState('mp4');
+    const [fragmented, setFragmented] = useState(false);
     const [defaultsLoaded, setDefaultsLoaded] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
@@ -220,6 +222,7 @@ export function TranscodeModal({
             return;
         }
         setDefaultsLoaded(false);
+        setFragmented(false);
         let stale = false;
         const load = async () => {
             let nextVideo = TRANSCODE_COPY;
@@ -261,6 +264,8 @@ export function TranscodeModal({
     const remuxOnly = !removeVideo && videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
     const sameContainer = container === currentContainer(video);
     const containerOptions = audioOutput ? transcodeAudioContainerOptions : transcodeContainerOptions;
+    // Fragments are an mp4 concept (m4a is an mp4).
+    const canFragment = container === 'mp4' || container === 'm4a';
 
     const handleStart = async () => {
         setSubmitting(true);
@@ -269,6 +274,7 @@ export function TranscodeModal({
                 video_codec: videoCodec === TRANSCODE_COPY ? null : videoCodec,
                 audio_codec: audioCodec === TRANSCODE_COPY ? null : audioCodec,
                 container,
+                fragmented: canFragment && fragmented,
             });
             onQueued(id);
         } catch (e) {
@@ -288,10 +294,14 @@ export function TranscodeModal({
             + (audioCodec === TRANSCODE_COPY ? 'The audio is copied without re-encoding.' : `The audio is converted to ${audioCodec}.`);
     } else if (defaultsLoaded && remuxOnly) {
         const kept = audioOnly ? 'The audio is kept' : 'Both streams are kept';
-        hint = sameContainer
-            ? `${kept}: the file is rewritten as-is` + (container === 'mp4' || container === 'm4a'
-                ? ' with fast start (moves the index to the front for quicker playback start).' : '.')
-            : `${kept}: only the container changes to ${container} (a quick remux, no quality loss).`;
+        if (sameContainer && canFragment && fragmented) {
+            hint = `${kept}: the file is rewritten as-is in fragments (a quick remux, no quality loss).`;
+        } else if (sameContainer) {
+            hint = `${kept}: the file is rewritten as-is` + (canFragment
+                ? ' with fast start (moves the index to the front for quicker playback start).' : '.');
+        } else {
+            hint = `${kept}: only the container changes to ${container} (a quick remux, no quality loss).`;
+        }
     }
     const buttonLabel = removeVideo ? 'Extract Audio' : remuxOnly ? 'Remux' : 'Transcode';
 
@@ -331,6 +341,15 @@ export function TranscodeModal({
                         disabled={!defaultsLoaded}
                         allowDeselect={false}
                     />
+                    {canFragment && <Toggle
+                        label='Fragmented (for very long videos)'
+                        checked={fragmented}
+                        onChange={e => setFragmented(e.currentTarget.checked)}
+                        disabled={!defaultsLoaded}
+                        info='Splits the index into fragments instead of one block at the front.  A video many
+                         hours long then starts and seeks quickly on phones, which otherwise must download the
+                         whole index first.'
+                    />}
                     {hint && <Text size='sm' c='var(--muted)'>{hint}</Text>}
                 </>}
                 {showJob && <JobProgress job={job} onCancel={onCancelJob}/>}

@@ -115,7 +115,7 @@ describe('TranscodeModal', () => {
         fireEvent.click(screen.getByRole('button', {name: /Transcode/}));
 
         await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(7, {
-            video_codec: 'h264', audio_codec: 'aac', container: 'mp4',
+            video_codec: 'h264', audio_codec: 'aac', container: 'mp4', fragmented: false,
         }));
         await waitFor(() => expect(onQueued).toHaveBeenCalledWith('transcode_video-abc'));
     });
@@ -145,8 +145,36 @@ describe('TranscodeModal', () => {
         expect(button).toBeEnabled();
         fireEvent.click(button);
         await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(7, {
-            video_codec: null, audio_codec: null, container: 'mp4',
+            video_codec: null, audio_codec: null, container: 'mp4', fragmented: false,
         }));
+    });
+
+    test('Fragmented is offered for mp4 and sent with the request', async () => {
+        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
+        const mp4 = {...video, video_path: 'videos/movie.mp4'};
+        renderWithProviders(
+            <TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={mp4} onQueued={jest.fn()}/>,
+        );
+        await waitFor(() => expect(selectInput('Container')).toHaveValue('mp4'));
+        const toggle = screen.getByRole('switch', {name: /Fragmented/});
+        expect(toggle).not.toBeChecked();
+
+        fireEvent.click(toggle);
+        expect(await screen.findByText(/rewritten as-is in fragments/)).toBeInTheDocument();
+        expect(screen.queryByText(/fast start/)).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Remux'}));
+        await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(7, {
+            video_codec: null, audio_codec: null, container: 'mp4', fragmented: true,
+        }));
+    });
+
+    test('Fragmented is not offered for mkv', async () => {
+        fetchVideoDownloadDefaults.mockResolvedValue({video_codecs: [], audio_codecs: []});
+        const mkv = {...video, video_path: 'videos/movie.mkv'};
+        renderWithProviders(<TranscodeModal open={true} onClose={jest.fn()} fileGroupId={7} video={mkv}/>);
+        await waitFor(() => expect(selectInput('Container')).toHaveValue('mkv'));
+        expect(screen.queryByRole('switch', {name: /Fragmented/})).not.toBeInTheDocument();
     });
 
     test('a remux into the same container is described as a fast-start rewrite', async () => {
@@ -180,7 +208,7 @@ describe('TranscodeModal', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Remux'}));
         // No video codec is sent for an audio file, whatever the video preferences say.
         await waitFor(() => expect(transcodeVideo).toHaveBeenCalledWith(8, {
-            video_codec: null, audio_codec: null, container: 'm4a',
+            video_codec: null, audio_codec: null, container: 'm4a', fragmented: false,
         }));
     });
 

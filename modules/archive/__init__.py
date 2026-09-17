@@ -369,7 +369,10 @@ async def archive_modeler(progress_callback: Callable[[int], None] = None):
         with get_db_session(commit=True) as session:
             results = session.query(FileGroup, Archive) \
                 .filter(
-                # Get all groups that contain an HTML file that have not been indexed.
+                # Archive shares text/html with generic HTML.  Unlike video/doc/zim, do NOT
+                # select Archive.id IS NULL: that would re-probe every leftover HTML file
+                # every refresh.  Non-SingleFile HTML stays indexed=0 so apply_indexers
+                # can claim it.
                 FileGroup.indexed != True,
                 FileGroup.mimetype == 'text/html',
             ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \

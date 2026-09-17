@@ -40,18 +40,18 @@ indexer_map = defaultdict(lambda: DefaultIndexer)
 
 
 def find_indexer(mimetype: str) -> Type[Indexer]:
-    """Find the Indexer for a given File model."""
+    """Find the Indexer for a given File model.  Longest registered prefix wins."""
     if not mimetype:
         return DefaultIndexer
 
-    # Get the indexer that matches the mimetype of this file.
-    indexer = next((v for k, v in indexer_map.items() if mimetype.startswith(k)), None)
+    matches = [(key, indexer) for key, indexer in indexer_map.items() if mimetype.startswith(key)]
+    if matches:
+        # text/html must beat a later-inserted 'text' DefaultIndexer fallback.
+        _key, indexer = max(matches, key=lambda item: len(item[0]))
+        return indexer
 
-    if not indexer:
-        # Use the broad indexer.
-        indexer = indexer_map[mimetype.split('/')[0]]
-
-    return indexer
+    # dict.get does not insert into the defaultdict, so a miss does not pollute the map.
+    return indexer_map.get(mimetype.split('/')[0], DefaultIndexer)
 
 
 def register_indexer(*mimetypes: str):

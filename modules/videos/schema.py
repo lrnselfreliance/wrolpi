@@ -122,7 +122,6 @@ class Video:
     video_path: str
     name: str
     caption_path: str
-    idempotency: str
     info_json_path: str
     channel_id: int
 
@@ -138,7 +137,6 @@ class VideoWithChannel:
     video_path: str
     name: str
     caption_path: str
-    idempotency: str
     info_json_path: str
     channel_id: int
 

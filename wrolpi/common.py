@@ -2270,6 +2270,7 @@ modelers = []
 
 
 def register_modeler(modeler: callable):
+    """Register a FileGroup modeler.  `modeler` must accept `progress_callback=None`."""
     modelers.append(modeler)
     return modeler
 
@@ -2297,10 +2298,9 @@ async def apply_modelers(progress_callback: callable = None):
     for modeler in modelers:
         logger_.info(f'Applying modeler {modeler.__name__}')
         try:
-            # Check if this modeler accepts a progress_callback parameter
-            sig = inspect.signature(modeler)
-            if 'progress_callback' in sig.parameters and progress_callback and initial_unindexed > 0:
-                # Create a callback that updates the cumulative progress
+            # Modelers must accept progress_callback= (see register_modeler).  The leftover
+            # indexer (apply_indexers) runs after all of these.
+            if progress_callback and initial_unindexed > 0:
                 def make_modeler_callback(current_cumulative):
                     def modeler_progress_callback(batch_processed: int):
                         nonlocal cumulative_processed

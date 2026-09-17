@@ -15,7 +15,6 @@ import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer, get_wrolpi_config
 from wrolpi.conftest import await_switches
-from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup, Directory
@@ -340,19 +339,18 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     srt_file3 = srt_file3.rename(test_directory / 'video.en.srt')
 
     # All files are found because they are in this refresh request, or in the `dir1` directory.
-    idempotency = now()
-    lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
+    lib._upsert_files([video_file, srt_file3, bar, baz])
     # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': video_file, 'indexed': False, 'stem': 'video',
          'files': [
              {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'indexed': False, 'stem': 'bar',
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}]
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'indexed': False, 'stem': 'baz',
          'files': [{'path': baz.name, 'size': 8, 'suffix': '.txt', 'mimetype': 'text/plain'}]
          },
     ])
@@ -364,67 +362,67 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     test_session.query(FileGroup).filter_by(primary_path=video_file).one().indexed = True
     test_session.commit()
     assert_file_groups(
-        [{'primary_path': str(video_file), 'idempotency': idempotency,
-          'indexed': True}],
+        [{'primary_path': str(video_file), 'indexed': True}],
         assert_count=False)
 
     # Only modified files need to be re-indexed.
-    lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
+    lib._upsert_files([video_file, srt_file3, bar, baz])
     # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True,
+        {'primary_path': video_file, 'indexed': True, 'stem': 'video',
          'files': [
              {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'indexed': False,
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'indexed': False,
          'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
 
     # Deleting SRT removes it from the video.
     srt_file3.unlink()
-    lib._upsert_files([video_file, bar, baz], idempotency)
+    lib._upsert_files([video_file, bar, baz])
     video_file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=str(video_file)).one()
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
     # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
         # Video is no longer indexed because SRT was removed.
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': video_file, 'indexed': False,
          'files': [{'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'indexed': False,
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'indexed': False,
          'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
 
 
 @pytest.mark.asyncio
-async def test_refresh_discover_paths(test_session, make_files_structure, test_directory, assert_files,
-                                      assert_file_groups):
+async def test_refresh_paths(test_session, make_files_structure, test_directory, assert_files,
+                             refresh_files):
+    """Refreshing a file, a directory, or missing files updates FileGroups via FileWorker."""
     foo, bar, baz = make_files_structure(['dir1/foo.txt', 'dir1/bar.txt', 'baz.txt'])
     dir1 = foo.parent
 
-    # `refresh_paths` only refreshes the file requested.
-    await lib.refresh_discover_paths([foo, ])
+    # Refreshing one file only discovers that file.
+    await refresh_files([foo])
     assert_files([
         {'path': 'dir1/foo.txt'},
     ])
 
-    # `refresh_paths` refreshes recursively.
-    await lib.refresh_discover_paths([foo.parent, ])
+    # Refreshing a directory discovers recursively.
+    await refresh_files([foo.parent])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
     ])
 
-    # `refresh_paths` finally discovers the file at the top of the media directory.
-    await lib.refresh_discover_paths([test_directory, ])
+    # Refreshing the media directory discovers the file at the top.
+    await refresh_files([test_directory])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
@@ -433,7 +431,7 @@ async def test_refresh_discover_paths(test_session, make_files_structure, test_d
 
     # Records for deleted files are deleted.  Request a refresh of `dir1` so we indirectly refresh `foo`.
     foo.unlink()
-    await lib.refresh_discover_paths([dir1, ])
+    await refresh_files([dir1])
     assert_files([
         {'path': 'dir1/bar.txt'},
         {'path': 'baz.txt'},
@@ -442,36 +440,68 @@ async def test_refresh_discover_paths(test_session, make_files_structure, test_d
     # Records for all children of a directory are deleted.
     bar.unlink()
     dir1.rmdir()
-    await lib.refresh_discover_paths([dir1, ])
+    await refresh_files([dir1])
     assert_files([
         {'path': 'baz.txt'},
     ])
 
 
 @pytest.mark.asyncio
-async def test_refresh_discover_paths_groups(test_session, make_files_structure, test_directory, video_bytes):
+async def test_refresh_groups(test_session, make_files_structure, test_directory, video_bytes, refresh_files):
     make_files_structure({'dir1/foo.mp4': video_bytes, 'dir1/foo.info.json': 'hello', 'baz.txt': 'hello'})
-    await lib.refresh_discover_paths([test_directory, ], now())
+    await refresh_files([test_directory])
 
     # Two "foo" files, one "baz" file.
     assert test_session.query(FileGroup).count() == 2
 
     baz, foo = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
-    # "foo" files are related to the "foo" group.
-    assert sorted([str(i['path'].relative_to(test_directory)) for i in foo.my_files()]) == [
-        'dir1/foo.info.json', 'dir1/foo.mp4',
-    ]
-    # "bar" file is the only file related to the "bar" group.
+    # "foo" files are related to the "foo" group.  Modeling may add sidecars (.ffprobe.json).
+    foo_names = {i['path'].name for i in foo.my_files()}
+    assert {'foo.info.json', 'foo.mp4'} <= foo_names
+    assert foo.stem == 'foo'
+    # "baz" file is the only file related to the "baz" group.
     assert len(baz.my_files()) == 1
     assert str(baz.my_files()[0]['path'].relative_to(test_directory)) == 'baz.txt'
-    assert baz.indexed is False
+    assert baz.indexed is True  # leftover indexer claims plain text
+    assert baz.stem == 'baz'
+
+
+def test_find_indexer_longest_prefix():
+    """Longest registered mimetype prefix wins, even if a shorter key was inserted later."""
+    # Simulate the old fallback, which did indexer_map[mimetype.split('/')[0]] and inserted
+    # DefaultIndexer for 'text' into the defaultdict.
+    indexers.indexer_map['text']
+    try:
+        assert indexers.find_indexer('text/html') is indexers.HTMLIndexer
+        assert indexers.find_indexer('text/plain') is indexers.TextIndexer
+        assert indexers.find_indexer('text/csv') is indexers.DefaultIndexer
+        assert indexers.find_indexer('application/zip') is indexers.ZipIndexer
+    finally:
+        indexers.indexer_map.pop('text', None)
+
+
+def test_ensure_file_group_stems_recomputes_on_version_change(test_session, test_directory, make_files_structure):
+    """A stored stem is a cache of the grouping algorithm; a version bump must backfill."""
+    foo, = make_files_structure(['foo.en.srt'])
+    fg = FileGroup.from_paths(test_session, foo)
+    test_session.commit()
+    assert fg.stem == 'foo'
+    fg.stem = 'stale-stem'
+    test_session.commit()
+
+    lib.set_stem_algorithm_version(0)
+    lib.ensure_file_group_stems()
+    test_session.expire(fg)
+    assert fg.stem == 'foo'
+    assert lib.get_stem_algorithm_version() == lib.STEM_ALGORITHM_VERSION
 
 
 @pytest.mark.asyncio
-async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches):
+async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches,
+                              refresh_files):
     """A FileGroup can be tagged."""
     make_files_structure(['foo.mp4'])
-    await lib.refresh_discover_paths([test_directory, ], now())
+    await refresh_files()
     one = await tag_factory()
 
     foo: FileGroup = test_session.query(FileGroup).one()
@@ -787,24 +817,6 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
     foo, bar = make_files_structure({'foo': 'text', 'bar': None})
     with pytest.raises(NoPrimaryFile):
         assert lib.get_primary_file([foo, bar])
-
-
-@pytest.mark.asyncio
-async def test_get_refresh_progress(async_client, test_session):
-    request, response = await async_client.get('/api/files/refresh_progress')
-    assert response.status_code == HTTPStatus.OK
-    assert 'progress' in response.json
-    progress = response.json['progress']
-    assert 'cleanup' in progress
-    assert 'discovery' in progress
-    assert 'indexed' in progress
-    assert 'indexing' in progress
-    assert 'modeled' in progress
-    assert 'modeling' in progress
-    assert 'refreshing' in progress
-    assert 'counted_files' in progress
-    assert 'total_file_groups' in progress
-    assert 'unindexed' in progress
 
 
 @pytest.mark.asyncio

@@ -83,6 +83,8 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_size_ix', 'size'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
+        # Speeds compare joins.  Not UNIQUE: duplicates are collapsed at refresh time.
+        Index('file_group_directory_stem_idx', 'directory', 'stem'),
     )
     # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
     id: int = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
@@ -96,8 +98,14 @@ class FileGroup(ModelHelper, Base):
     data = Column(FancyJSON)  # populated by the modeler
     download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
     files = Column(FancyJSON)  # populated during discovery
-    idempotency = Column(TZDateTime)  # used to track which files need to be deleted during refresh
-    indexed = Column(Boolean, default=lambda: False)  # wrolpi.files.lib.apply_indexers
+    # Leftover from the idempotency-stamp refresh.  FileWorker no longer writes this.
+    # directory.idempotency is still used.  Do not drop: file_group is the FTS content table.
+    idempotency = Column(TZDateTime)
+    indexed = Column(Boolean, default=lambda: False)  # see indexing state machine on apply_indexers
+    # Cached output of split_path_stem_and_suffix(primary_path).  Identity of a group is
+    # (directory, stem); primary_path is the preferred file inside the group.  Recomputed on
+    # upsert and when STEM_ALGORITHM_VERSION changes (see ensure_file_group_stems).
+    stem = Column(String)
     length = Column(BigInteger)  # video duration, article words, etc.
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "doc", etc.
@@ -546,7 +554,9 @@ class FileGroup(ModelHelper, Base):
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
         # Store the lowercased suffix so searches can filter by file type using the indexed column.
-        file_group.suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
+        stem, suffix = split_path_stem_and_suffix(primary_path)
+        file_group.suffix = (suffix or '').lower() or None
+        file_group.stem = stem
         logger.trace(f'FileGroup.from_paths: {file_group}')
 
         return file_group
@@ -712,11 +722,14 @@ class FileGroup(ModelHelper, Base):
         self.directory = new_directory
         self.primary_path = new_primary_path
 
-        # Update title and a_text only if filename changed
+        # Update title, a_text, and stem only if filename changed
         if filename_changed:
             if self.title == old_name:
                 self.title = new_primary_path.name
             self.a_text = split_file_name_words(new_primary_path.name)
+            stem, suffix = split_path_stem_and_suffix(new_primary_path)
+            self.stem = stem
+            self.suffix = (suffix or '').lower() or None
 
         # Note: `data` now contains relative paths that don't need updating!
         # The filenames stay the same, only the directory changes.
@@ -824,3 +837,11 @@ class Directory(ModelHelper, Base):
 
     def __repr__(self):
         return f'<Directory path={repr(str(self.path))}>'
+
+
+class WrolpiKV(Base):
+    """Internal key/value store.  Not user config.  Holds schema-adjacent stamps such as
+    STEM_ALGORITHM_VERSION so compare can refuse to run on a stale stem cache."""
+    __tablename__ = 'wrolpi_kv'
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)

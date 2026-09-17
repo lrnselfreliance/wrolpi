@@ -8,6 +8,7 @@ from typing import Callable, List, Tuple, Dict
 
 import cachetools.func
 from libzim import Entry
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
@@ -75,15 +76,20 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
 @register_modeler
 async def zim_modeler(progress_callback: Callable[[int], None] = None):
     total_processed = 0
+    failed_ids: set = set()
     while True:
         with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup, Zim) \
-                .filter(FileGroup.indexed != True,  # noqa
-                        FileGroup.primary_path.ilike('%.zim'),
-                        ) \
+            query = session.query(FileGroup, Zim) \
                 .outerjoin(Zim, Zim.file_group_id == FileGroup.id) \
-                .limit(10)
-            file_groups: List[Tuple[FileGroup, Zim]] = list(file_groups)
+                .filter(FileGroup.primary_path.ilike('%.zim')) \
+                .filter(
+                # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
+                # already set indexed=True, and re-model when files changed.
+                or_(Zim.id.is_(None), FileGroup.indexed != True),
+            )
+            if failed_ids:
+                query = query.filter(FileGroup.id.notin_(failed_ids))
+            file_groups: List[Tuple[FileGroup, Zim]] = list(query.limit(10))
 
             processed = 0
             for file_group, zim in file_groups:
@@ -101,6 +107,7 @@ async def zim_modeler(progress_callback: Callable[[int], None] = None):
                         file_group.indexed = True
                         file_group.model = 'zim'
                 except Exception as e:
+                    failed_ids.add(file_group.id)
                     if PYTEST:
                         raise
                     logger.error(f'Unable to model Zim {zim_id=} {file_group.primary_path=}', exc_info=e)

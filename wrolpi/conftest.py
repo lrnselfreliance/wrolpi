@@ -1048,14 +1048,17 @@ def insert_file_group(test_session, test_directory):
         # Store relative filenames in files (new schema)
         files = [dict(path=i.name, mimetype='fake') for i in paths]
         primary_path = paths[0]
+        from wrolpi.files.lib import split_path_stem_and_suffix
+        stem, _ = split_path_stem_and_suffix(primary_path)
         params = dict(
             directory=str(primary_path.parent),
             primary_path=str(primary_path),
             files=json.dumps(files),
+            stem=stem,
         )
         test_session.execute('INSERT INTO file_group '
-                             '(indexed, directory, primary_path, files) VALUES '
-                             '(true, :directory, :primary_path, :files)', params)
+                             '(indexed, directory, primary_path, files, stem) VALUES '
+                             '(true, :directory, :primary_path, :files, :stem)', params)
 
     return _
 

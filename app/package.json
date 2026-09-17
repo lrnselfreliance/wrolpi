@@ -20,7 +20,7 @@
     "pmtiles": "^4.5.0",
     "protomaps-themes-base": "^4.5.0",
     "query-string": "^9.5.1",
-    "react": "^18.2.0",
+    "react": "^19.2.8",
     "react-colorful": "^5.8.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -62,7 +62,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@types/lodash": "^4.17.25",
     "@types/node": "^26.4.0",
-    "@types/react": "^18.3.17",
+    "@types/react": "^19.2.18",
     "@types/react-dom": "^18.3.5",
     "typescript": "^5.9.3",
     "webpack-dev-server": "^5.2.6"

@@ -141,10 +141,16 @@ class Video(ModelHelper, Base):
 
     def get_video_description(self) -> Optional[str]:
         """
-        Get the Video description from the file system.
+        Get the Video description from the file system.  A description the user set (Edit > Edit)
+        lives in the info json's `wrolpi` section and wins; an empty one means "none".
         """
-        if (info_json := self.get_info_json()) and (description := info_json.get('description')):
-            return description
+        info_json = self.get_info_json()
+        if not info_json:
+            return None
+        wrolpi_section = info_json.get('wrolpi') or dict()
+        if 'custom_description' in wrolpi_section:
+            return wrolpi_section['custom_description'] or None
+        return info_json.get('description') or None
 
     def get_description(self) -> Optional[str]:
         """The indexed description (`FileGroup.c_text`), falling back to the info json on disk.

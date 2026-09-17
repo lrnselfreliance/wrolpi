@@ -56,8 +56,9 @@ def update_video(file_group_id: int, title: str = None, description: str = None)
     Video's .info.json (created if missing) and the Video is validated again from it.  Only the
     fields given (not None) are changed; an empty description clears it.
 
-    A later re-download of the Video's metadata will overwrite the info json, and this edit with
-    it.
+    Edits go into the info json's `wrolpi` section (`custom_title`, `custom_description`), never
+    over yt-dlp's own keys: the original title and description stay in the file, and a metadata
+    re-download carries the section over.
 
     @raise UnknownVideo: if the Video can not be found
     @raise ValidationError: when nothing is given, or the title is empty
@@ -70,17 +71,19 @@ def update_video(file_group_id: int, title: str = None, description: str = None)
         if not title:
             raise ValidationError('Video title cannot be empty')
 
+    changes = dict()
+    if title is not None:
+        changes['custom_title'] = title
+    if description is not None:
+        changes['custom_description'] = description
+
     with get_db_session(commit=True) as session:
         video = Video.find_by_file_group_id(session, file_group_id)
-        info_json = video.get_info_json() or dict()
-        if title is not None:
-            # `extract_video_info_json` prefers fulltitle over title; keep the two in agreement.
-            info_json['title'] = title
-            info_json['fulltitle'] = title
-        if description is not None:
-            info_json['description'] = description
-        # Keep the file as it was, other than the edited fields.
-        video.replace_info_json(info_json, clean=False)
+        if video.info_json_path is None or not video.info_json_path.is_file():
+            # No info json yet: create one holding only the wrolpi section.
+            video.replace_info_json({'wrolpi': changes}, clean=False)
+        else:
+            video.file_group.update_wrolpi_json(changes)
         # Re-derive the title (and search text) from the file just written.
         video.validate(session)
         video.flush()

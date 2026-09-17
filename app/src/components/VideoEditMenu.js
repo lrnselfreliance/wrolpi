@@ -342,7 +342,7 @@ export function TranscodeModal({
                         allowDeselect={false}
                     />
                     {canFragment && <Toggle
-                        label='Fragmented (for very long videos)'
+                        label={`Fragmented (for very long ${audioOutput ? 'audio' : 'videos'})`}
                         checked={fragmented}
                         onChange={e => setFragmented(e.currentTarget.checked)}
                         disabled={!defaultsLoaded}

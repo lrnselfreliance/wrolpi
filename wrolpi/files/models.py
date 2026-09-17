@@ -432,6 +432,19 @@ class FileGroup(ModelHelper, Base):
         if json_path.name not in tracked_paths:
             self.append_files(json_path)
 
+    def get_wrolpi_json(self) -> dict:
+        """The `wrolpi` section of this FileGroup's metadata JSON: WROLPi-owned keys (a user's
+        custom title, the parent download) that yt-dlp/readability never write.  Empty if none."""
+        json_path = self.metadata_json_path
+        if not json_path or not json_path.is_file():
+            return dict()
+        try:
+            contents = json.loads(json_path.read_text())
+        except (OSError, ValueError):
+            return dict()
+        section = contents.get('wrolpi') if isinstance(contents, dict) else None
+        return dict(section) if isinstance(section, dict) else dict()
+
     def update_wrolpi_json(self, data: dict):
         """Read this FileGroup's metadata JSON, merge `data` into its `wrolpi` section, and write back.
 

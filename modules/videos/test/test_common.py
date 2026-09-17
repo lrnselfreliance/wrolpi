@@ -644,3 +644,38 @@ async def test_video_modeler_does_not_hold_write_lock_during_ffprobe(async_clien
     assert lock_held_during_ffprobe, 'ffprobe never ran, so the test proves nothing'
     assert not any(lock_held_during_ffprobe), \
         'the write lock was held while ffprobe ran; every other writer waits out busy_timeout'
+
+
+def test_ffmpeg_video_complete_real_files(test_directory, video_file):
+    """A whole video passes; a truncated copy fails.  Uses the real ffmpeg on the example video."""
+    from modules.videos.common import ffmpeg_video_complete, tail_decode_command
+    assert ffmpeg_video_complete(video_file) is True
+
+    truncated = test_directory / 'truncated.mp4'
+    data = video_file.read_bytes()
+    truncated.write_bytes(data[:int(len(data) * 0.6)])
+    assert ffmpeg_video_complete(truncated) is False
+
+    empty = test_directory / 'empty.mp4'
+    empty.write_bytes(b'')
+    with pytest.raises(RuntimeError, match='empty'):
+        ffmpeg_video_complete(empty)
+    with pytest.raises(FileNotFoundError):
+        ffmpeg_video_complete(test_directory / 'missing.mp4')
+
+    cmd = tail_decode_command(video_file)
+    assert cmd[cmd.index('-sseof') + 1] == '-30' and cmd[cmd.index('-f') + 1] == 'null' and cmd[-1] == '-'
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_video_complete_async_real_files(test_directory, video_file):
+    """The async variant reaches the same verdicts and returns ffmpeg's error text."""
+    from modules.videos.common import ffmpeg_video_complete_async
+    ok, errors = await ffmpeg_video_complete_async(video_file)
+    assert ok is True and errors == ''
+
+    truncated = test_directory / 'truncated.mp4'
+    data = video_file.read_bytes()
+    truncated.write_bytes(data[:int(len(data) * 0.6)])
+    ok, errors = await ffmpeg_video_complete_async(truncated)
+    assert ok is False and errors

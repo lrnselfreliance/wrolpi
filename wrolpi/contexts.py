@@ -106,6 +106,12 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.file_worker_status = manager.dict()
     app.shared_ctx.file_worker_jobs = manager.dict()
 
+    # Jobs (wrolpi/jobs.py): FIFO queue of registered functions run one at a time by the
+    # perpetual-tasks owner.  Never persisted; an API restart loses them.
+    app.shared_ctx.jobs = manager.dict()
+    app.shared_ctx.jobs_queue = manager.Queue()
+    app.shared_ctx.jobs_lock = multiprocessing.Lock()
+
     reset_shared_contexts(app)
 
 
@@ -205,6 +211,14 @@ def reset_shared_contexts(app: Sanic):
             break
     app.shared_ctx.file_worker_status.clear()
     app.shared_ctx.file_worker_jobs.clear()
+
+    # Jobs
+    while True:
+        try:
+            app.shared_ctx.jobs_queue.get_nowait()
+        except queue.Empty:
+            break
+    app.shared_ctx.jobs.clear()
     app.shared_ctx.file_worker_status.update(dict(
         status='idle',
         task_type=None,

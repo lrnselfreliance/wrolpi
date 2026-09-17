@@ -187,6 +187,26 @@ class VideoSearchRequest:
 
 
 @dataclass
+class VideoUpdateRequest:
+    # Only the fields given are changed.
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
+@dataclass
+class VideoTranscodeRequest:
+    video_codec: Optional[str] = None  # A key of TRANSCODE_VIDEO_TARGETS, or None to copy the stream.
+    audio_codec: Optional[str] = None  # A key of TRANSCODE_AUDIO_TARGETS, or None to copy the stream.
+    container: str = 'mp4'
+    fragmented: bool = False  # Fragmented mp4: quick start/seek for very long videos (mp4/m4a only).
+
+
+@dataclass
+class VideoTranscodeResponse:
+    job_id: str
+
+
+@dataclass
 class VideoSearchResponse:
     videos: List[VideoWithChannel]
     tsquery: str

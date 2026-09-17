@@ -887,6 +887,7 @@ class PreparedVideo:
     destination: Optional[pathlib.Path] = None
     info_json: Optional[dict] = None
     location: Optional[str] = None             # existing video, for error reports
+    wrolpi: dict = field(default_factory=dict)  # existing video's wrolpi section, to carry over
 
 
 @dataclass
@@ -907,6 +908,7 @@ class ExecutedVideo:
     tag_names: List[str]
     settings: dict
     location: Optional[str]                    # for error reporting
+    wrolpi: dict = field(default_factory=dict)  # existing video's wrolpi section, to carry over
 
 
 class VideoDownloader(Downloader, ABC):
@@ -954,6 +956,8 @@ class VideoDownloader(Downloader, ABC):
         # can still tell the user where the previous attempt landed.
         existing = Video.get_by_url(session, url)
         location = existing.location if existing else None
+        # yt-dlp rewrites the whole info json; the user's edits (its wrolpi section) must survive.
+        wrolpi = existing.file_group.get_wrolpi_json() if existing else dict()
 
         return PreparedVideo(
             url=url,
@@ -962,6 +966,7 @@ class VideoDownloader(Downloader, ABC):
             destination=download.destination,
             info_json=download.info_json,
             location=location,
+            wrolpi=wrolpi,
         )
 
     async def execute_download(self, prepared: PreparedVideo, ctx: DownloadContext,
@@ -1201,6 +1206,7 @@ class VideoDownloader(Downloader, ABC):
                 tag_names=prepared.tag_names,
                 settings=settings,
                 location=location,
+                wrolpi=prepared.wrolpi,
             )
 
         except BotBlockedDownloadError:
@@ -1238,6 +1244,11 @@ class VideoDownloader(Downloader, ABC):
         video.channel_id = executed.channel_id
         if video.info_json_path and (new_info_json := video.clean_info_json()):
             video.replace_info_json(new_info_json, clean=False)
+        if executed.wrolpi and video.info_json_path:
+            # The re-downloaded info json lost the user's edits; put them back, then derive the
+            # title/description again so the custom ones win (from_paths validated without them).
+            video.file_group.update_wrolpi_json(executed.wrolpi)
+            video.validate(session)
 
         if parent_download_url := executed.settings.get('parent_download_url'):
             try:
@@ -1368,9 +1379,12 @@ class VideoDownloader(Downloader, ABC):
         settings = download.settings or dict()
 
         with get_db_session(commit=True) as session:
-            # Find the existing video, replace its info json.
+            # Find the existing video, replace its info json; keep the user's edits (wrolpi section).
             video = Video.get_by_url(session, url)
+            wrolpi = video.file_group.get_wrolpi_json()
             video.replace_info_json(info_json)
+            if wrolpi:
+                video.file_group.update_wrolpi_json(wrolpi)
 
             if parent_download_url := settings.get('parent_download_url'):
                 try:

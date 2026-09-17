@@ -771,7 +771,7 @@ export const useVideoExtras = (fileGroupId) => {
         }
     }, [fileGroupId]);
 
-    return {comments, description}
+    return {comments, description, fetchDescription}
 }
 
 export const useVideoCaptions = (fileGroupId) => {

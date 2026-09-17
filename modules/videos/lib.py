@@ -58,7 +58,9 @@ def extract_video_info_json(video: Video) -> VideoInfoJSON:
     """
     video_info_json = VideoInfoJSON()
     if info_json := video.get_info_json():
-        title = info_json.get('fulltitle') or info_json.get('title')
+        # A title the user set (Edit > Edit) is kept apart from yt-dlp's keys, and wins.
+        wrolpi_section = info_json.get('wrolpi') or dict()
+        title = wrolpi_section.get('custom_title') or info_json.get('fulltitle') or info_json.get('title')
         video_info_json.title = html.unescape(title) if title else None
 
         upload_date = dates.strpdate(i) if (i := info_json.get('upload_date')) else None

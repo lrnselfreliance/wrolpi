@@ -1789,3 +1789,76 @@ async def test_enforce_codecs():
         with pytest.raises(UnrecoverableDownloadError):
             await enforce_codecs(video_path, video_paths, effective)
         mock_transcode.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_metadata_refresh_keeps_wrolpi_section(test_session, test_directory, video_factory):
+    """Refreshing a Video's metadata replaces yt-dlp's info json; the wrolpi section (the user's
+    custom title and description) is carried over and still wins."""
+    source_id = 'video-source-id'
+    url = 'https://example.com/the-video'
+    video = video_factory(with_info_json={'id': source_id, 'title': 'Orig',
+                                          'wrolpi': {'custom_title': 'Mine', 'custom_description': 'my words'}},
+                          source_id=source_id)
+    video.file_group.url = url
+    test_session.commit()
+    assert video.file_group.title == 'Mine'
+
+    download = Download(url=url, info_json={'id': source_id}, settings={})
+    with mock.patch('modules.videos.downloader.download_video_info_json') as mock_download:
+        mock_download.return_value = {'id': source_id, 'title': 'Orig v2', 'description': 'theirs', 'duration': 9}
+        result = await VideoDownloader.download_info_json(download, video.video_path)
+    assert result.success is True, result
+
+    test_session.expire_all()
+    video = Video.find_by_file_group_id(test_session, video.file_group_id)
+    info_json = video.get_info_json()
+    assert info_json['title'] == 'Orig v2', 'yt-dlp data was refreshed'
+    assert info_json['wrolpi'] == {'custom_title': 'Mine', 'custom_description': 'my words'}
+    assert video.file_group.title == 'Mine'
+    assert video.get_description() == 'my words'
+
+
+@pytest.mark.asyncio
+async def test_redownload_keeps_wrolpi_section(test_session, test_directory, mock_video_extract_info, simple_channel,
+                                               await_switches, video_download_manager, mock_video_process_runner,
+                                               image_file):
+    """A full re-download has yt-dlp overwrite the info json; the wrolpi section is carried over."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    info_json_path = video_path.with_suffix('.info.json')
+    info_json_path.write_text(json.dumps({'title': 'Orig', 'webpage_url': url, 'wrolpi': {'custom_title': 'Mine'}}))
+    from modules.videos.normalize_video_url import normalize_video_url
+    existing = Video.from_paths(test_session, video_path, info_json_path)
+    existing.validate(test_session)
+    test_session.commit()
+    assert existing.file_group.title == 'Mine'
+    assert Video.get_by_url(test_session, normalize_video_url(url)) is not None, 'lookup by normalized url'
+    assert existing.file_group.get_wrolpi_json() == {'custom_title': 'Mine'}
+
+    from wrolpi.cmd import CommandResult
+
+    async def yt_dlp_overwrites_info_json(*args, **kwargs):
+        # yt-dlp rewrites the whole info json; the wrolpi section is gone from disk.
+        info_json_path.write_text(json.dumps({'title': 'Orig v2', 'webpage_url': url, 'duration': 5}))
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
+
+    mock_video_process_runner.side_effect = yt_dlp_overwrites_info_json
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+        video_download_manager.create_download(test_session, url, video_downloader.name)
+        await video_download_manager.wait_for_all_downloads()
+        mock_video_process_runner.assert_called_once()
+
+    test_session.expire_all()
+    video: Video = test_session.query(Video).one()
+    info_json = video.get_info_json()
+    assert info_json['title'] == 'Orig v2'
+    assert info_json['wrolpi'] == {'custom_title': 'Mine'}
+    assert video.file_group.title == 'Mine'

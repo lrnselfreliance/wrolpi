@@ -35,6 +35,7 @@ from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
+from wrolpi.jobs import jobs_bp
 from wrolpi.log_levels import int_to_name
 from wrolpi.speedtest import speedtest_bp
 from wrolpi.tags import Tag
@@ -60,6 +61,7 @@ api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(flasher_bp)
 api_app.blueprint(inventory_bp)
+api_app.blueprint(jobs_bp)
 api_app.blueprint(map_bp)
 api_app.blueprint(speedtest_bp)
 api_app.blueprint(videos_bp)

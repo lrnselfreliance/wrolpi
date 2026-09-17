@@ -149,31 +149,70 @@ def ffmpeg_poster(video_path: Path, poster_path: Path, seconds: int):
     return stderr
 
 
-def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
-    """Checks if video file is complete by taking screenshot from the end of the video.
+# How much of a video's tail is decoded to prove the file is complete.  Corruption from an
+# interrupted download or write lands at the end of the file; decoding all of it would take as
+# long as playing it.
+TAIL_DECODE_SECONDS = 30
+TAIL_DECODE_TIMEOUT = 10 * 60
 
-    @raise FileNotFoundError: raised if the video file does not exist.
-    """
+
+def tail_decode_command(video_path: Path, seconds: int = None) -> Tuple[str | Path, ...]:
+    """ffmpeg command which decodes the last `seconds` of `video_path` to nothing, printing only
+    errors.  `-sseof` seeks from the end; a file shorter than `seconds` is decoded whole."""
+    seconds = seconds or TAIL_DECODE_SECONDS
+    return FFMPEG_BIN, '-v', 'error', '-sseof', f'-{int(seconds)}', '-i', video_path, '-f', 'null', '-'
+
+
+def _tail_decode_verdict(return_code: int, stderr: bytes | str) -> Tuple[bool, str]:
+    errors = (stderr.decode(errors='replace') if isinstance(stderr, bytes) else (stderr or '')).strip()
+    ok = return_code == 0 and not errors
+    return ok, errors
+
+
+def _check_video_file(video_path: Path):
     if not video_path.is_file():
         raise FileNotFoundError(f'Video file not found: {video_path}')
     if not video_path.stat().st_size:
         raise RuntimeError(f'Video file is empty: {video_path}')
+    if not FFMPEG_BIN:
+        raise RuntimeError('ffmpeg was not found')
 
-    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
-        path = Path(fh.name)
-        path.unlink()
-        try:
-            seconds = seconds or extract_video_duration(video_path) - 5
-            ffmpeg_poster(video_path, path, seconds)
-            return True
-        except subprocess.CalledProcessError:
-            return False
-        except TypeError:
-            # "N/A" duration.
-            return False
-        finally:
-            if path.is_file():
-                path.unlink()
+
+def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
+    """True if the last `seconds` of the video decode without error.
+
+    Used after a download, and after a transcode before the original is replaced.  A truncated or
+    corrupt file fails here because its damage is at the end; the index (moov) must also be
+    readable for ffmpeg to seek from the end at all.
+
+    @raise FileNotFoundError: raised if the video file does not exist.
+    @raise RuntimeError: raised if the video file is empty, or ffmpeg is missing.
+    """
+    _check_video_file(video_path)
+    cmd = tuple(str(i) for i in tail_decode_command(video_path, seconds))
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=TAIL_DECODE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        logger.error(f'Timed out checking video is complete: {video_path}')
+        return False
+    ok, errors = _tail_decode_verdict(proc.returncode, proc.stderr)
+    if not ok:
+        logger.warning(f'Video is incomplete or corrupt: {video_path} (exit {proc.returncode}) {errors[-500:]}')
+    return ok
+
+
+async def ffmpeg_video_complete_async(video_path: Path, seconds: int = None, runner=None) -> Tuple[bool, str]:
+    """`ffmpeg_video_complete` for async callers; returns (complete, ffmpeg's error output).
+
+    `runner` defaults to `run_command`; a Job passes its own so ffmpeg's output lands in the Job log.
+    """
+    _check_video_file(video_path)
+    runner = runner or run_command
+    result = await runner(tail_decode_command(video_path, seconds), cwd=video_path.parent, timeout=TAIL_DECODE_TIMEOUT)
+    ok, errors = _tail_decode_verdict(result.return_code, result.stderr)
+    if not ok:
+        logger.warning(f'Video is incomplete or corrupt: {video_path} (exit {result.return_code}) {errors[-500:]}')
+    return ok, errors
 
 
 def generate_video_poster(video_path: Path, seconds: int = 5) -> Tuple[Path, Optional[int]]:

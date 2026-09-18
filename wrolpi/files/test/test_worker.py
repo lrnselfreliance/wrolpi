@@ -1,5 +1,6 @@
 """Tests for the file comparison worker."""
 import asyncio
+import os
 from unittest import mock
 
 import pytest
@@ -7,6 +8,7 @@ from sqlalchemy import text
 
 from wrolpi.conftest import await_switches
 from wrolpi.dates import from_timestamp
+from wrolpi.vars import IS_MACOS
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import (
     compare_file_groups,
@@ -20,6 +22,8 @@ from wrolpi.files.worker import (
     _split_nul_field_triples,
     _entry_from_printf_fields,
     _normalize_roots,
+    GNU_FIND_PRINTF,
+    _stream_gnu_find_entries,
 )
 
 
@@ -1801,6 +1805,23 @@ async def test_refresh_two_directories_does_not_delete_third(
 
     assert test_session.query(FileGroup).filter_by(id=c_id).one_or_none() is not None, \
         'refreshing A and B deleted a stale FileGroup in C'
+
+
+def test_gnu_find_printf_is_safe_subprocess_arg():
+    """find -printf format must not contain a real NUL; that raises ValueError on exec."""
+    assert '\x00' not in GNU_FIND_PRINTF
+    os.fsencode(GNU_FIND_PRINTF)
+
+
+@pytest.mark.skipif(IS_MACOS, reason='GNU find -printf')
+@pytest.mark.asyncio
+async def test_gnu_find_printf_emits_nul_records(test_directory, make_files_structure):
+    """Linux/CI: GNU find -printf with \\0 escapes must actually stream files."""
+    make_files_structure(['docs/hello.txt'])
+    find_args = [str(test_directory), '-type', 'f', '-not', '-path', '*/.*']
+    entries = [e async for e in _stream_gnu_find_entries(find_args)]
+    names = {filename for _directory, filename, _stem, _mtime in entries}
+    assert 'hello.txt' in names
 
 
 def test_split_nul_field_triples_allows_tab_and_newline_in_filename():

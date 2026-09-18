@@ -17,6 +17,9 @@ from wrolpi.files.worker import (
     FileTaskType,
     FileWorkerJobFailed,
     QUEUE_STALL_SECONDS,
+    _split_nul_field_triples,
+    _entry_from_printf_fields,
+    _normalize_roots,
 )
 
 
@@ -326,17 +329,17 @@ async def test_compare_file_groups_survives_concurrent_commit(
     make_files_structure(['docs/file1.txt', 'docs/file2.txt'])
 
     from wrolpi.files import worker as worker_mod
-    original = worker_mod._stream_filesystem_paths
+    original = worker_mod._stream_filesystem_entries
 
-    async def commit_after_first(root):
+    async def commit_after_first(roots):
         first = True
-        async for p in original(root):
-            yield p
+        async for entry in original(roots):
+            yield entry
             if first:
                 first = False
                 test_session.commit()
 
-    with mock.patch.object(worker_mod, '_stream_filesystem_paths', commit_after_first):
+    with mock.patch.object(worker_mod, '_stream_filesystem_entries', commit_after_first):
         result = await compare_file_groups(test_directory)
 
     assert len(result.new) == 2
@@ -351,11 +354,11 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
     make_files_structure(['docs/file1.txt'])
 
     from wrolpi.files import worker as worker_mod
-    original = worker_mod._stream_filesystem_paths
+    original = worker_mod._stream_filesystem_entries
 
-    async def commit_then_abort_then_raise(root):
-        async for p in original(root):
-            yield p
+    async def commit_then_abort_then_raise(roots):
+        async for entry in original(roots):
+            yield entry
             test_session.commit()
             # A failed statement mid-transaction must not prevent the work-table cleanup.
             try:
@@ -364,7 +367,7 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
                 pass
             raise RuntimeError('simulated crash mid-scan')
 
-    with mock.patch.object(worker_mod, '_stream_filesystem_paths', commit_then_abort_then_raise):
+    with mock.patch.object(worker_mod, '_stream_filesystem_entries', commit_then_abort_then_raise):
         with pytest.raises(RuntimeError):
             await compare_file_groups(test_directory)
 
@@ -1626,7 +1629,6 @@ async def test_file_worker_discovery_flag_is_set(async_client, test_session, tes
 async def test_upsert_files_progress_callback(test_session, test_directory, make_files_structure):
     """_upsert_files calls progress callback during processing."""
     from wrolpi.files.lib import _upsert_files
-    from wrolpi.dates import now
 
     # Create files
     files = make_files_structure([f'docs/file{i}.txt' for i in range(10)])
@@ -1636,8 +1638,7 @@ async def test_upsert_files_progress_callback(test_session, test_directory, make
     def on_progress(processed, total):
         progress_calls.append((processed, total))
 
-    idempotency = now()
-    _upsert_files(files, idempotency, on_progress)
+    _upsert_files(files, on_progress)
 
     # Progress callback should have been called
     assert len(progress_calls) > 0
@@ -1748,6 +1749,99 @@ async def test_compare_file_groups_duplicate_keeps_one(test_session, test_direct
     # At least one must be in deleted (the duplicate)
     assert len(deleted_ids) >= 1
     assert deleted_ids & {fg1_id, fg2_id}
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_multiple_roots_does_not_touch_outside(
+        test_session, test_directory, make_files_structure):
+    """Refreshing directories A and B must not delete a stale FileGroup in C."""
+    a_file, b_file, c_file = make_files_structure([
+        'dirA/a.txt',
+        'dirB/b.txt',
+        'dirC/c.txt',
+    ])
+    FileGroup.from_paths(test_session, a_file)
+    FileGroup.from_paths(test_session, b_file)
+    c_fg = FileGroup.from_paths(test_session, c_file)
+    test_session.commit()
+    c_id = c_fg.id
+
+    c_file.unlink()
+
+    result = await compare_file_groups([test_directory / 'dirA', test_directory / 'dirB'])
+
+    assert all(d.file_group_id != c_id for d in result.deleted), \
+        'stale FileGroup outside the requested roots was reported deleted'
+    assert test_session.query(FileGroup).filter_by(id=c_id).one()
+
+    full = await compare_file_groups(test_directory)
+    assert c_id in {d.file_group_id for d in full.deleted}
+
+
+@pytest.mark.asyncio
+async def test_refresh_two_directories_does_not_delete_third(
+        async_client, test_session, test_directory, make_files_structure):
+    """FileWorker refresh of A+B must not delete a stale row in C (the old root=None bug)."""
+    from wrolpi.conftest import await_file_worker
+
+    a_file, b_file, c_file = make_files_structure([
+        'dirA/a.txt',
+        'dirB/b.txt',
+        'dirC/c.txt',
+    ])
+    FileGroup.from_paths(test_session, a_file)
+    FileGroup.from_paths(test_session, b_file)
+    c_fg = FileGroup.from_paths(test_session, c_file)
+    test_session.commit()
+    c_id = c_fg.id
+    c_file.unlink()
+
+    file_worker.queue_refresh([test_directory / 'dirA', test_directory / 'dirB'])
+    await await_file_worker()
+
+    assert test_session.query(FileGroup).filter_by(id=c_id).one_or_none() is not None, \
+        'refreshing A and B deleted a stale FileGroup in C'
+
+
+def test_split_nul_field_triples_allows_tab_and_newline_in_filename():
+    """GNU find -printf uses NUL delimiters so a tab/newline in the name is not a field break."""
+    data = (
+        b'/media/wrolpi\0file\twith\ttabs.txt\0'
+        b'17123.45\0'
+        b'/media/wrolpi\0new\nline.mp4\0'
+        b'99.5\0leftover'
+    )
+    triples, leftover = _split_nul_field_triples(data)
+    assert len(triples) == 2
+    directory, filename, mtime = triples[0]
+    assert directory == b'/media/wrolpi'
+    assert filename == b'file\twith\ttabs.txt'
+    assert mtime == b'17123.45'
+    assert triples[1][1] == b'new\nline.mp4'
+    assert leftover == b'leftover'
+
+    entry = _entry_from_printf_fields(*triples[0])
+    assert entry[1] == 'file\twith\ttabs.txt'
+    assert entry[3] == 17123.45
+
+    assert _entry_from_printf_fields(b'/tmp', b'bad.txt', b'not-a-float') is None
+
+
+def test_normalize_roots_empty_list_is_media_directory(test_directory):
+    """An empty roots list must not produce `()` SQL; treat it like a global refresh."""
+    assert _normalize_roots([]) == [test_directory]
+    assert _normalize_roots(None) == [test_directory]
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_empty_roots_is_global(test_session, test_directory, make_files_structure):
+    """compare_file_groups([]) scans the media directory, same as omitting roots."""
+    make_files_structure(['only.txt'])
+    via_none = await compare_file_groups(None)
+    via_empty = await compare_file_groups([])
+    assert len(via_none.new) == 1
+    assert len(via_empty.new) == 1
+    assert via_empty.new[0].stem == 'only'
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,6 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.map_pins_config = manager.dict()
     app.shared_ctx.flasher_config = manager.dict()
     # Shared dicts.
-    app.shared_ctx.refresh = manager.dict()
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.cache = manager.dict()
@@ -131,7 +130,6 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.archive_downloader_config.clear()
     app.shared_ctx.download_cache_config.clear()
     # Shared dicts.
-    app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
     app.shared_ctx.status.clear()
     app.shared_ctx.speedtest_active.value = 0

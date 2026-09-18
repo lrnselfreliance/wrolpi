@@ -23,11 +23,9 @@ from sqlalchemy import asc, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
-    partition, \
-    get_files_and_directories, chunks, chunks_by_stem, walk, \
+    chunks, chunks_by_stem, walk, \
     get_wrolpi_config, \
     unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory, strip_surrogates
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
@@ -58,7 +56,8 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
            'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
            'get_normalized_ignored_directories', 'sanitize_ignored_directories',
-           'cached_search_total', 'search_filter_cache_key', 'count_file_groups']
+           'cached_search_total', 'search_filter_cache_key', 'count_file_groups',
+           'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -488,6 +487,13 @@ _EXTRA_SUFFIXES_LOWER = frozenset(s.lower() for s in EXTRA_SUFFIXES)
 _HARDCODED_SUFFIXES = frozenset(
     {'.info.json', '.ffprobe.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
 
+# Bump when SUFFIXES / split_path_stem_and_suffix grouping rules change.  A stored
+# file_group.stem is a cache of this algorithm; compare joins on it, so a mismatch
+# looks like delete+insert and would drop tags.  ensure_file_group_stems() must run
+# before any compare when this version does not match the value in wrolpi_kv.
+STEM_ALGORITHM_VERSION = 1
+STEM_ALGORITHM_VERSION_KEY = 'stem_algorithm_version'
+
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
 
 
@@ -674,7 +680,7 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
-def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
+def _upsert_files(files: List[pathlib.Path],
                   progress_callback: Callable[[int, int], None] = None):
     """Insert/update all records of the provided files.
 
@@ -683,7 +689,6 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
 
     Args:
         files: List of file paths to upsert
-        idempotency: Timestamp used to track which files were processed in this refresh
         progress_callback: Optional callback(processed, total) called after each chunk is processed
 
     It is assumed all files exist."""
@@ -709,10 +714,11 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                     # files are modified.
                     modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
                     size = sum(i.stat().st_size for i in group)
-                    files = json.dumps(_paths_to_files_dict(group))
-                    suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
-                    values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
-                    non_primary_files = {i for i in group if i != primary_path}
+                    files_json = json.dumps(_paths_to_files_dict(group))
+                    stem, suffix = split_path_stem_and_suffix(primary_path)
+                    suffix = (suffix or '').lower() or None
+                    values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
+                    non_primary_files.update(i for i in group if i != primary_path)
                 except NoPrimaryFile:
                     # Cannot find primary path, create a `file_group` for each file.
                     for primary_path in group:
@@ -721,9 +727,10 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                         mimetype = get_mimetype(primary_path)
                         modification_datetime = from_timestamp(primary_path.stat().st_mtime)
                         size = primary_path.stat().st_size
-                        files = json.dumps(_paths_to_files_dict([primary_path]))
-                        suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
-                        values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
+                        files_json = json.dumps(_paths_to_files_dict([primary_path]))
+                        stem, suffix = split_path_stem_and_suffix(primary_path)
+                        suffix = (suffix or '').lower() or None
+                        values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
             except FileNotFoundError as e:
                 # A file was deleted between discovery and upsert (temp files, WAL sidecars, etc.).
                 refresh_logger.warning(f'File vanished during refresh, skipping group near {group[0]}', exc_info=e)
@@ -732,7 +739,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
         values = [(str(primary_path),
                    str(primary_path.parent),  # directory
                    False,  # `indexed` is false to force indexing by default.
-                   idempotency, *i) for primary_path, i in values.items()]
+                   *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
             # SQLite's RETURNING only exposes the post-upsert row; find the previously-indexed
             # paths first so re-indexing invalidations can be counted.
@@ -744,18 +751,18 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
             placeholders, params = values_clause(values)
             stmt = f'''
                 INSERT INTO file_group
-                    (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files,
-                     suffix)
+                    (primary_path, directory, indexed, modification_datetime, mimetype, size, files,
+                     suffix, stem)
                 VALUES {placeholders}
                 ON CONFLICT (primary_path) DO UPDATE
                 SET
                     directory=EXCLUDED.directory,
-                    idempotency=EXCLUDED.idempotency,
                     modification_datetime=EXCLUDED.modification_datetime,
                     mimetype=EXCLUDED.mimetype,
                     size=EXCLUDED.size,
-                    -- Always keep suffix current so suffix search works even for already-indexed files.
+                    -- Always keep suffix/stem current so grouping and suffix search stay correct.
                     suffix=EXCLUDED.suffix,
+                    stem=EXCLUDED.stem,
                     files=(
                         -- Do not overwrite files unless the files have changed and need to be re-indexed.
                         CASE
@@ -767,7 +774,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                         ELSE EXCLUDED.files
                         END
                     ),
-                    -- Preseve TRUE `indexed` only if the files have not changed.
+                    -- Preserve TRUE `indexed` only if the files have not changed.
                     indexed=(
                         file_group.indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
@@ -791,6 +798,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                 # use paths which are not primary.
                 curs.execute('DELETE FROM file_group WHERE primary_path IN (SELECT value FROM json_each(?))',
                              (json.dumps(list(map(str, non_primary_files))),))
+            non_primary_files.clear()
 
         # Report progress after each chunk
         processed_count += len(chunk)
@@ -810,105 +818,86 @@ def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathl
     return files
 
 
-async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
-    """Discover all files in the directories provided in paths, as well as all files in paths.
+def _ensure_kv_table(curs):
+    curs.execute('CREATE TABLE IF NOT EXISTS wrolpi_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
 
-    All records for files in `paths` that do not exist will be deleted.
 
-    Will refuse to refresh when the media directory is empty."""
-    try:
-        next(get_media_directory().iterdir())
-    except StopIteration:
-        # We don't want to delete a bunch of files which would exist if the drive was mounted.
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
-    except FileNotFoundError:
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
+def get_stem_algorithm_version() -> int:
+    """The grouping-algorithm version last applied to file_group.stem, or 0 if never stored."""
+    with get_db_curs() as curs:
+        _ensure_kv_table(curs)
+        curs.execute('SELECT value FROM wrolpi_kv WHERE key = ?', (STEM_ALGORITHM_VERSION_KEY,))
+        row = curs.fetchone()
+        return int(row['value']) if row else 0
 
-    if not paths:
-        raise ValueError('Must provide some paths to refresh.')
 
-    idempotency = idempotency or now()
-
-    exists, deleted = partition(lambda i: i.exists(), paths)
-
-    # DISCOVER all files, upsert their records.
-
-    if exists:
-        # Recursively upsert all files that exist, and files in the existing directories.
-        directories, files = partition(lambda i: i.is_dir(), exists)
-        while directories:
-            directory = directories.pop(0)
-            try:
-                new_files, new_directories = get_files_and_directories(directory)
-            except FileNotFoundError as e:
-                # Directory may have been deleted during refresh.
-                logger.warning(f'Cannot refresh directory because it is missing: {directory}', exc_info=e)
-                continue
-            except PermissionError as e:
-                # Directory may have been deleted during refresh.
-                logger.warning(f'Do not have permission to refresh directory: {directory}', exc_info=e)
-                continue
-            directories.extend(new_directories)
-            files.extend(new_files)
-
-            # Remove any files in ignored directories.
-            files = remove_files_in_ignored_directories(files)
-
-            refresh_logger.debug(f'Discovered {len(new_files)} files in {directory}')
-            if len(files) >= 100:
-                # Wait until there are enough files to perform the upsert.
-                try:
-                    _upsert_files(files, idempotency)
-                except Exception as e:
-                    refresh_logger.error(f'Failed to upsert files', exc_info=e)
-                files = list()
-            # Sleep to catch cancel.
-            await asyncio.sleep(0)
-        if files:
-            # Not enough files for the chunks above, finish what is left.
-            try:
-                _upsert_files(files, idempotency)
-            except Exception as e:
-                refresh_logger.error(f'Failed to upsert files', exc_info=e)
-
-        refresh_logger.info('Finished discovering files.  Will now remove deleted files from DB...')
-
+def set_stem_algorithm_version(version: int):
     with get_db_curs(commit=True) as curs:
-        params = []
-        deleted_files = ''
-        if deleted:
-            # Delete any paths that do not exist.
-            deleted_files = ' OR '.join(['primary_path = ?'] * len(deleted))
-            params.extend(str(i) for i in deleted)
+        _ensure_kv_table(curs)
+        curs.execute(
+            'INSERT INTO wrolpi_kv (key, value) VALUES (?, ?) '
+            'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+            (STEM_ALGORITHM_VERSION_KEY, str(version)),
+        )
 
-        wheres = ''
-        if paths:
-            # Use indexed directory column to delete any children of directories that are deleted.
-            # Match exact directory or subdirectories
-            conditions = []
-            where_params = []
-            for p in paths:
-                p_str = str(p)
-                conditions.append('(directory = ? OR directory LIKE ?)')
-                where_params.extend([p_str, f'{p_str}/%'])
-            wheres = ' ( (idempotency != ? OR idempotency is null) AND (' + ' OR '.join(conditions) + '))'
-            params.append(idempotency)
-            params.extend(where_params)
 
-        stmt = f'''
-            DELETE FROM file_group
-            WHERE
-                -- Delete all known-deleted files.
-                {deleted_files}
-                -- Delete any files in the refreshed paths that were not updated.
-                {" OR " + wheres if deleted_files and wheres else wheres}
-        '''
-        refresh_logger.debug(stmt)
-        curs.execute(stmt, params)
+def ensure_file_group_stems():
+    """Recompute file_group.stem when STEM_ALGORITHM_VERSION has changed.
+
+    A stored stem is a cache of split_path_stem_and_suffix.  Compare joins on (directory, stem),
+    so an algorithm change without this backfill reports the same files as deleted+new and
+    drops tags, viewed timestamps, and domain rows.  Must run before any compare.
+
+    After a successful backfill the kv version matches, and later refreshes skip the table scan.
+    Upsert, from_paths, move, and reorganize must keep stem current.
+    """
+    stored = get_stem_algorithm_version()
+    if stored == STEM_ALGORITHM_VERSION:
+        return
+    with get_db_curs() as curs:
+        curs.execute('SELECT id, primary_path FROM file_group')
+        rows = list(curs.fetchall())
+    if rows:
+        updates = []
+        for row in rows:
+            stem, _ = split_path_stem_and_suffix(row['primary_path'])
+            updates.append((stem, row['id']))
+        with get_db_curs(commit=True) as curs:
+            for chunk in chunks(updates, 500):
+                curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
+    set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
 
 
 async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
-    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function.
+    """Index leftover FileGroups that no modeler claimed.
+
+    File indexing state machine
+    ---------------------------
+    A FileGroup is discovered (a row exists), then modeled and/or content-indexed.
+
+    `indexed` means "a modeler or this leftover indexer has finished with this row
+    for the current files."  It is not "a domain model exists."  `model` is the
+    domain claim (`video` / `archive` / `doc` / `zim`).
+
+    1. Discover/upsert: new or changed groups are inserted with indexed=0.
+       Unchanged groups keep indexed=1.
+    2. Modelers run first.  A modeler that exclusively owns its mimetype
+       (video, doc, zim) selects:
+           (domain_row IS NULL OR indexed != 1) AND mimetype_matches
+       so a FileGroup the leftover indexer already marked indexed=1 still
+       gets a Video/Doc/Zim row.  Failures are skipped for the rest of the
+       run (failed_ids) and retried on the next refresh.
+    3. Archive shares text/html with generic HTML.  It selects only
+       indexed != 1.  HTML that is not a SingleFile stays indexed=0 so this
+       function can claim it.  HTML that is an Archive is indexed=1 with
+       model='archive'.
+    4. This function claims every remaining indexed != 1 row.  It writes
+       a/b/c/d_text via the Indexer registry and sets indexed=1 even on
+       extractor failure so poison files do not loop forever.
+    5. Cleanup (channel claims, empty collections, tag config) runs last.
+
+    FileGroup.do_model() is the single-file equivalent of steps 2-4, used by
+    uploads.  Batch modelers are used by FileWorker refresh.
 
     Args:
         progress_callback: Optional callback(processed, total) called after each batch.
@@ -1481,85 +1470,6 @@ async def remove_file_group_tag(session: Session, file_group_id: int, file_group
     file_group.untag(session, tag.id)
 
 
-@dataclasses.dataclass
-class RefreshProgress:
-    counted_files: int = 0
-    counting: bool = False
-    discovery: bool = False
-    indexed: int = 0
-    indexing: bool = False
-    modeled: int = 0
-    modeling: bool = False
-    cleanup: bool = False
-    refreshing: bool = False
-    total_file_groups: int = 0
-    unindexed: int = 0
-
-    def __json__(self) -> dict:
-        d = dict(
-            counted_files=self.counted_files,
-            counting=self.counting,
-            discovery=self.discovery,
-            indexed=self.indexed,
-            indexing=self.indexing,
-            modeled=self.modeled,
-            modeling=self.modeling,
-            cleanup=self.cleanup,
-            refreshing=self.refreshing,
-            total_file_groups=self.total_file_groups,
-            unindexed=self.unindexed,
-        )
-        return d
-
-
-def get_refresh_progress() -> RefreshProgress:
-    from wrolpi.api_utils import api_app
-
-    idempotency = api_app.shared_ctx.refresh.get('idempotency')
-    if idempotency:
-        stmt = '''
-               SELECT
-                   -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files)) FILTER (WHERE idempotency = :idempotency)   AS "total_file_groups",
-                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = :idempotency)   AS "indexed",
-                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = :idempotency)  AS "unindexed",
-                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = :idempotency) AS "modeled"
-               FROM file_group \
-               '''
-    else:
-        # Idempotency has not yet been declared.
-        stmt = '''
-               SELECT
-                   -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files))              AS "total_file_groups",
-                   COUNT(id) FILTER (WHERE indexed IS TRUE)   AS "indexed",
-                   COUNT(id) FILTER (WHERE indexed IS FALSE)  AS "unindexed",
-                   COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
-               FROM file_group \
-               '''
-
-    with get_db_curs() as curs:
-        curs.execute(stmt, dict(idempotency=idempotency))
-        results = dict(curs.fetchone())
-        # TODO counts are wrong if we are not refreshing all files.
-
-        progress = RefreshProgress(
-            counted_files=api_app.shared_ctx.refresh.get('counted_files', 0),
-            counting=flags.file_worker_counting.is_set(),
-            discovery=flags.file_worker_discovery.is_set(),
-            indexed=int(results['indexed'] or 0),
-            indexing=flags.file_worker_indexing.is_set(),
-            modeled=int(results['modeled'] or 0),
-            modeling=flags.file_worker_modeling.is_set(),
-            cleanup=flags.file_worker_cleanup.is_set(),
-            refreshing=flags.file_worker_busy.is_set(),
-            total_file_groups=int(results['total_file_groups'] or 0),
-            unindexed=int(results['unindexed'] or 0),
-        )
-
-    return progress
-
-
 def mimetypes_to_sql_wheres(wheres: List[str], params: dict, mimetypes: List[str]) -> Tuple[List[str], dict]:
     if mimetypes:
         local_wheres = list()
@@ -1714,18 +1624,22 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
     with get_db_curs(commit=True) as curs:
         for update in updates:
             # Don't change indexed - reorganization only moves files, content unchanged
+            primary_path = update['primary_path']
+            stem, _ = split_path_stem_and_suffix(primary_path)
             curs.execute('''
                          UPDATE file_group
                          SET directory    = ?,
                              primary_path = ?,
                              files        = ?,
-                             data         = ?
+                             data         = ?,
+                             stem         = ?
                          WHERE id = ?
                          ''', (
                              update['directory'],
-                             update['primary_path'],
+                             primary_path,
                              json.dumps(update['files'], default=_json_serial),
                              json.dumps(update['data'], default=_json_serial) if update.get('data') else None,
+                             stem,
                              update['id'],
                          ))
 

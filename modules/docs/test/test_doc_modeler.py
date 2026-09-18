@@ -10,7 +10,6 @@ from sqlalchemy.exc import OperationalError
 
 from modules.docs import doc_modeler
 from modules.docs.models import Doc, DocSection
-from wrolpi.dates import now
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import file_worker
@@ -105,7 +104,7 @@ async def test_doc_modeler_replaces_sections(async_client, test_session, test_di
 @pytest.mark.asyncio
 async def test_doc_do_model_sets_model(test_session, example_pdf):
     """Doc.do_model sets file_group.model so the FileGroup is recognized as a doc."""
-    files_lib._upsert_files([example_pdf], now())
+    files_lib._upsert_files([example_pdf])
     file_group = test_session.query(FileGroup).one()
     # Reset to simulate a newly discovered file.
     file_group.model = None
@@ -394,7 +393,7 @@ async def test_doc_modeler_pdf_max_size(test_session, example_pdf):
     """The contents of a large PDF are not indexed."""
     example_pdf.write_bytes(example_pdf.read_bytes() * 5000)
 
-    files_lib._upsert_files([example_pdf], now())
+    files_lib._upsert_files([example_pdf])
 
     await doc_modeler()
     file_group = test_session.query(FileGroup).one()
@@ -407,7 +406,7 @@ async def test_doc_modeler_pdf_poster(test_session, example_pdf):
     poster_path = example_pdf.with_suffix('.jpg')
     Image.new('RGB', (25, 25), color='grey').save(poster_path)
 
-    files_lib._upsert_files([example_pdf, poster_path], now())
+    files_lib._upsert_files([example_pdf, poster_path])
 
     await doc_modeler()
     file_group = test_session.query(FileGroup).one()

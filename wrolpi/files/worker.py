@@ -26,17 +26,17 @@ from sqlalchemy import text, or_
 
 from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
-from wrolpi.common import get_media_directory, get_wrolpi_config, logger, walk, chunks, unique_by_predicate
-from wrolpi.dates import now
+from wrolpi.common import get_media_directory, logger, walk, chunks, unique_by_predicate
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, IS_MACOS
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     _bulk_update_file_groups_reorganize, get_normalized_ignored_directories, remove_files_in_ignored_directories,
+    ensure_file_group_stems,
 )
 
 logger = logger.getChild(__name__)
@@ -55,6 +55,7 @@ __all__ = [
     'FileGroupDiff',
     'FileComparisonResult',
     'FileWorkerJobFailed',
+    'classify_file_group_diffs',
     'compare_file_groups',
     'count_files',
     'file_worker',
@@ -139,6 +140,115 @@ def _deduplicate_db_groups(
                 file_group_id=fg_id,
             ))
     return deduplicated, duplicate_diffs
+
+
+def _filenames_from_files_json(raw) -> Set[str]:
+    """Filenames from a FileGroup.files JSON value (relative or absolute paths)."""
+    if not raw:
+        return set()
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    if not isinstance(raw, list):
+        return set()
+    names = set()
+    for entry in raw:
+        path = entry.get('path') if isinstance(entry, dict) else entry
+        if path:
+            names.add(Path(path).name)
+    return names
+
+
+def classify_file_group_diffs(
+        fs_groups: Dict[Tuple[str, str], Set[str]],
+        db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]],
+        fs_mtimes: Dict[Tuple[str, str], float] | None = None,
+) -> FileComparisonResult:
+    """Classify filesystem vs DB groups into new/deleted/modified/unchanged.
+
+    `db_groups` may contain duplicates per (directory, stem); extras are marked deleted.
+    If `fs_mtimes` is provided (max mtime per key), unchanged-by-name groups with a newer
+    filesystem mtime are classified modified without a second stat().  If omitted, those
+    groups are stat()'d (used by the small direct-file path).
+    """
+    deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
+
+    unchanged = []
+    new = []
+    deleted = list(duplicate_diffs)
+    modified = []
+
+    all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
+
+    for key in all_keys:
+        directory, stem = key
+        fs_files = fs_groups.get(key, set())
+        db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
+
+        diff = FileGroupDiff(
+            directory=Path(directory),
+            stem=stem,
+            db_files=db_files,
+            fs_files=fs_files,
+            file_group_id=db_id,
+        )
+
+        if diff.is_new:
+            new.append(diff)
+        elif diff.is_deleted:
+            deleted.append(diff)
+        elif diff.needs_update:
+            modified.append(diff)
+        elif diff.is_unchanged:
+            if fs_mtimes is not None:
+                fs_mtime = fs_mtimes.get(key, 0)
+                if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
+                    modified.append(diff)
+                else:
+                    unchanged.append(diff)
+            else:
+                try:
+                    dir_path = Path(directory)
+                    fs_mtime = max(
+                        (dir_path / filename).stat().st_mtime
+                        for filename in fs_files
+                    )
+                    if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
+                        modified.append(diff)
+                    else:
+                        unchanged.append(diff)
+                except (OSError, ValueError):
+                    unchanged.append(diff)
+        elif db_id is not None and not fs_files and not db_files:
+            deleted.append(diff)
+
+    return FileComparisonResult(
+        unchanged=unchanged,
+        new=new,
+        deleted=deleted,
+        modified=modified,
+    )
+
+
+def _normalize_roots(roots: Path | list[Path] | None) -> list[Path]:
+    """Always at least the media directory.  An empty list is treated like None."""
+    if roots is None:
+        return [get_media_directory()]
+    if isinstance(roots, (str, Path)):
+        return [Path(roots)]
+    root_list = [Path(r) for r in roots]
+    return root_list or [get_media_directory()]
+
+
+def _directory_in_roots_sql(roots: list[Path], column: str = 'fg.directory') -> Tuple[str, dict]:
+    """SQL fragment: `column` is any of the roots or a subdirectory of one."""
+    clauses = []
+    params = {}
+    for i, root in enumerate(roots):
+        root_str = str(root)
+        clauses.append(f'({column} = :root_{i} OR {column} LIKE :root_pat_{i})')
+        params[f'root_{i}'] = root_str
+        params[f'root_pat_{i}'] = f'{root_str}/%'
+    return '(' + ' OR '.join(clauses) + ')', params
 
 
 def _diff_to_paths(diff: FileGroupDiff) -> list[pathlib.Path]:
@@ -260,18 +370,96 @@ async def find_directories(directories: list[Path]) -> set[Path]:
             await proc.wait()
 
 
-async def _stream_filesystem_paths(root: Path) -> AsyncGenerator[str, None]:
-    """Stream file paths using find command. Memory efficient and cancellable.
-
-    Excludes hidden files and ignored directories from config.
-    """
-    # Build find arguments with ignored directory exclusions
-    find_args = [str(root), '-type', 'f', '-not', '-path', '*/.*']
+def _find_args_for_roots(roots: list[Path]) -> list[str]:
+    """Common `find` arguments: files under roots, no hidden paths, no ignored dirs, no DB file."""
+    find_args = [str(r) for r in roots]
+    find_args.extend(['-type', 'f', '-not', '-path', '*/.*'])
     for ignored in _get_normalized_ignored_directories():
         find_args.extend(['-not', '-path', f'{ignored}/*'])
-    # Never index the database (or its WAL sidecars), even if `config` is un-ignored.
     from wrolpi.db import get_db_file
     find_args.extend(['-not', '-path', f'{get_db_file()}*'])
+    return find_args
+
+
+async def _stream_filesystem_paths(root: Path | list[Path]) -> AsyncGenerator[str, None]:
+    """Stream file paths using find. Kept for tests that patch this generator."""
+    async for directory, filename, stem, mtime in _stream_filesystem_entries(root):
+        yield str(Path(directory) / filename)
+
+
+def _split_nul_field_triples(buf: bytes) -> Tuple[list, bytes]:
+    """Pull complete NUL-separated (directory, filename, mtime) triples out of `buf`.
+
+    Returns (triples, leftover_bytes).  A filename may contain tabs or newlines; only NUL
+    is the delimiter (GNU find `-printf '%h\\0%f\\0%T@\\0'`).
+    """
+    triples = []
+    while True:
+        parts = buf.split(b'\0', 3)
+        if len(parts) < 4:
+            return triples, buf
+        directory_b, filename_b, mtime_b, buf = parts
+        triples.append((directory_b, filename_b, mtime_b))
+
+
+def _entry_from_printf_fields(directory_b: bytes, filename_b: bytes, mtime_b: bytes):
+    """Decode one find -printf record.  Returns None and logs if the record is unusable."""
+    try:
+        directory = directory_b.decode()
+        filename = filename_b.decode()
+        mtime = float(mtime_b.decode())
+    except (UnicodeDecodeError, ValueError) as e:
+        logger.warning(f'Skipping unreadable find record {directory_b!r}/{filename_b!r}: {e}')
+        return None
+    if not directory or not filename:
+        return None
+    stem, _ = split_path_stem_and_suffix(Path(directory) / filename)
+    return directory, filename, stem, mtime
+
+
+async def _stream_gnu_find_entries(find_args: list[str]) -> AsyncGenerator[Tuple[str, str, str, float], None]:
+    """Stream (directory, filename, stem, mtime) using GNU find -printf with NUL delimiters."""
+    proc = await asyncio.create_subprocess_exec(
+        'find', *find_args, '-printf', '%h\0%f\0%T@\0',
+        stdout=asyncio.subprocess.PIPE,
+    )
+    buf = b''
+    try:
+        while True:
+            chunk = await proc.stdout.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            triples, buf = _split_nul_field_triples(buf)
+            for fields in triples:
+                entry = _entry_from_printf_fields(*fields)
+                if entry:
+                    yield entry
+        if buf.strip(b'\0'):
+            logger.warning(f'Incomplete find -printf record discarded: {buf[:200]!r}')
+        await proc.wait()
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+
+
+async def _stream_filesystem_entries(
+        roots: Path | list[Path],
+) -> AsyncGenerator[Tuple[str, str, str, float], None]:
+    """Yield (directory, filename, stem, mtime) for files under roots.
+
+    GNU find `-printf` records mtime in the same walk (Debian/RPi).  macOS find has no
+    `-printf`, so each path is stat()'d once while streaming.  Either way the mtime is
+    stored in the TEMP table and unchanged groups are never stat()'d again.
+    """
+    root_list = _normalize_roots(roots)
+    find_args = _find_args_for_roots(root_list)
+
+    if not IS_MACOS:
+        async for entry in _stream_gnu_find_entries(find_args):
+            yield entry
+        return
 
     proc = await asyncio.create_subprocess_exec(
         'find', *find_args,
@@ -280,11 +468,17 @@ async def _stream_filesystem_paths(root: Path) -> AsyncGenerator[str, None]:
     try:
         async for line in proc.stdout:
             path = line.decode().rstrip('\n')
-            if path:
-                yield path
+            if not path:
+                continue
+            p = Path(path)
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            stem, _ = split_path_stem_and_suffix(p)
+            yield str(p.parent), p.name, stem, mtime
         await proc.wait()
     finally:
-        # Kill subprocess if still running (handles both normal exit and cancellation)
         if proc.returncode is None:
             proc.kill()
             await proc.wait()
@@ -310,36 +504,56 @@ def _insert_fs_batch(conn, table_name: str, batch: list):
         return
     conn.execute(
         text(f"""
-             INSERT INTO {table_name} (directory, filename, stem)
-             VALUES (:directory, :filename, :stem)
+             INSERT INTO {table_name} (directory, filename, stem, mtime)
+             VALUES (:directory, :filename, :stem, :mtime)
              ON CONFLICT DO NOTHING
              """),
-        [{"directory": b[0], "filename": b[1], "stem": b[2]} for b in batch],
+        [{"directory": b[0], "filename": b[1], "stem": b[2], "mtime": b[3]} for b in batch],
+    )
+
+
+def _diff_from_sql_row(row, fs_files: Set[str], db_files: Set[str]) -> FileGroupDiff:
+    return FileGroupDiff(
+        directory=Path(row.directory),
+        stem=row.stem,
+        db_files=db_files,
+        fs_files=fs_files,
+        file_group_id=row.id if getattr(row, 'id', None) else None,
     )
 
 
 async def compare_file_groups(
-        root: Path = None,
+        roots: Path | list[Path] | None = None,
         batch_size: int = 10000,
         progress_callback: Callable[[int], None] = None,
+        root: Path | None = None,
 ) -> FileComparisonResult:
     """
     Compare FileGroups in DB to filesystem. Memory efficient for Raspberry Pi.
 
-    Uses a uniquely-named SQLite work table to handle millions of files without
-    loading everything into Python memory.
+    `roots` may be a single path or a list.  Only FileGroups under those directories
+    are considered; a two-directory refresh must not delete a stale row in a third.
 
-    Returns which FileGroups are new, deleted, modified, or unchanged.
+    Uses a uniquely-named SQLite TEMP table on a dedicated connection so the set-diff
+    runs in SQL (the join must use this connection; TEMP tables are per-connection).
+    Unchanged groups are never stat()'d a second time: mtime is recorded during the
+    find walk.
 
     This function is async and cancellable - when cancelled, it will terminate
     the subprocess scanning the filesystem.
     """
-    root = root or get_media_directory()
+    if root is not None and roots is None:
+        roots = root
+    root_list = _normalize_roots(roots)
+    await asyncio.to_thread(ensure_file_group_stems)
+
     # Per-call table name so concurrent scans don't collide.  The work table is a TEMP table on
     # its own dedicated connection: it never shares a transaction (or locks) with the session,
     # it is invisible to other connections, and it is dropped automatically when the connection
     # closes — orphaned work tables are impossible.
     table_name = f'fs_files_{uuid.uuid4().hex[:12]}'
+    groups_table = f'{table_name}_groups'
+    roots_sql, root_params = _directory_in_roots_sql(root_list)
 
     with get_db_session() as session:
         work_conn = session.get_bind().connect()
@@ -350,21 +564,17 @@ async def compare_file_groups(
                                      directory TEXT NOT NULL,
                                      filename  TEXT NOT NULL,
                                      stem      TEXT NOT NULL,
+                                     mtime     REAL NOT NULL DEFAULT 0,
                                      PRIMARY KEY (directory, filename)
                                  )
                                  """))
 
-            # Stream filesystem files into work table with stems
             batch = []
             file_count = 0
-            path_gen = _stream_filesystem_paths(root)
+            path_gen = _stream_filesystem_entries(root_list)
             try:
-                async for path in path_gen:
-                    p = Path(path)
-                    directory = str(p.parent)
-                    filename = p.name
-                    stem, _ = split_path_stem_and_suffix(p)
-                    batch.append((directory, filename, stem))
+                async for directory, filename, stem, mtime in path_gen:
+                    batch.append((directory, filename, stem, mtime))
 
                     if len(batch) >= batch_size:
                         _insert_fs_batch(work_conn, table_name, batch)
@@ -382,117 +592,111 @@ async def compare_file_groups(
 
             logger.info(f'Scanned {file_count} files from filesystem')
 
-            # Index for fast grouping
             work_conn.execute(
                 text(f"CREATE INDEX IF NOT EXISTS {table_name}_dir_stem_idx ON {table_name}(directory, stem)"))
+            work_conn.execute(text(f"""
+                CREATE TEMP TABLE {groups_table} AS
+                SELECT directory, stem,
+                       json_group_array(filename) AS files,
+                       COUNT(*) AS file_count,
+                       MAX(mtime) AS mtime
+                FROM {table_name}
+                GROUP BY directory, stem
+            """))
+            work_conn.execute(text(f"CREATE INDEX IF NOT EXISTS {groups_table}_idx ON {groups_table}(directory, stem)"))
             work_conn.execute(text(f"ANALYZE {table_name}"))
 
-            # Get filesystem files grouped by (directory, stem)
-            fs_groups: Dict[Tuple[str, str], Set[str]] = {}
-            result = work_conn.execute(text(f"""
-                                          SELECT directory, stem, json_group_array(filename) as files
-                                          FROM {table_name}
-                                          GROUP BY directory, stem
-                                          """))
-            for row in result:
-                fs_groups[(row.directory, row.stem)] = set(json.loads(row.files))
+            # Canonical DB row per (directory, stem).  Duplicates (rn > 1) are deleted.
+            # The join runs on work_conn so it can see the TEMP tables.
+            db_canonical = f'{table_name}_db'
+            work_conn.execute(text(f"""
+                CREATE TEMP TABLE {db_canonical} AS
+                SELECT id, directory, stem, files, modification_datetime, file_count, rn
+                FROM (
+                    SELECT fg.id,
+                           fg.directory,
+                           COALESCE(fg.stem, '') AS stem,
+                           fg.files,
+                           fg.modification_datetime,
+                           CASE
+                               WHEN fg.files IS NULL OR json_type(fg.files) != 'array'
+                                   THEN 0
+                               ELSE json_array_length(fg.files)
+                           END AS file_count,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY fg.directory, COALESCE(fg.stem, '')
+                               ORDER BY (
+                                   CASE
+                                       WHEN fg.files IS NULL OR json_type(fg.files) != 'array'
+                                           THEN 0
+                                       ELSE json_array_length(fg.files)
+                                   END > 0
+                               ) DESC, fg.id DESC
+                           ) AS rn
+                    FROM file_group fg
+                    WHERE fg.directory IS NOT NULL
+                      AND {roots_sql}
+                )
+            """), root_params)
 
-            logger.info(f'Found {len(fs_groups)} file groups on filesystem')
-
-            # Get all DB FileGroups within root directory (both with files and empty)
-            # Collect ALL FileGroups per (directory, stem) key — duplicates are deduped after.
-            db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]] = defaultdict(list)
-            root_str = str(root)
-            empty_count = 0
-
-            result = session.execute(text("""
-                                          SELECT fg.id,
-                                                 fg.directory,
-                                                 fg.primary_path,
-                                                 (fg.files IS NULL
-                                                     OR (json_type(fg.files) = 'array'
-                                                         AND json_array_length(fg.files) = 0)) as is_empty,
-                                                 fg.modification_datetime                      as modification_datetime,
-                                                 fg.files                                      as files
-                                          FROM file_group fg
-                                          WHERE fg.directory IS NOT NULL
-                                            AND (fg.directory = :root OR fg.directory LIKE :root_pattern)
-                                          """), {"root": root_str, "root_pattern": f"{root_str}/%"})
-
-            for row in result:
-                # Raw TEXT datetime (UTC, microsecond precision); unixepoch() would truncate to
-                # whole seconds which breaks the sub-second MTIME_TOLERANCE_SECONDS comparison.
-                mtime_epoch = _datetime_text_to_epoch(row.modification_datetime)
-                if row.is_empty:
-                    empty_count += 1
-                    stem, _ = split_path_stem_and_suffix(Path(row.primary_path))
-                    key = (row.directory, stem)
-                    db_groups[key].append((row.id, set(), mtime_epoch))
-                else:
-                    raw_files = row.files
-                    if isinstance(raw_files, str):
-                        raw_files = json.loads(raw_files)
-                    if not isinstance(raw_files, list) or not raw_files:
-                        # Matches the old Postgres behavior: non-array `files` was skipped.
-                        continue
-                    files = [f['path'] for f in raw_files]
-                    first_file = files[0]
-                    stem, _ = split_path_stem_and_suffix(Path(row.directory) / first_file)
-                    key = (row.directory, stem)
-                    db_groups[key].append((row.id, set(files), mtime_epoch))
-
-            logger.info(f'Found {len(db_groups)} file groups in database')
-            if empty_count:
-                logger.debug(f'Found {empty_count} FileGroups with empty files arrays')
-
-            # Deduplicate: keep one FileGroup per key, mark the rest for deletion
-            deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
-
-            unchanged = []
             new = []
-            deleted = list(duplicate_diffs)
+            deleted = []
             modified = []
+            unchanged = []
 
-            all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
+            # Duplicates: extra FileGroups for the same (directory, stem).
+            for row in work_conn.execute(text(f"""
+                SELECT id, directory, stem, files FROM {db_canonical} WHERE rn > 1
+            """)):
+                deleted.append(_diff_from_sql_row(row, set(), _filenames_from_files_json(row.files)))
 
-            for key in all_keys:
-                directory, stem = key
-                fs_files = fs_groups.get(key, set())
-                db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
+            # Deleted: canonical DB group with no filesystem group.
+            for row in work_conn.execute(text(f"""
+                SELECT c.id, c.directory, c.stem, c.files
+                FROM {db_canonical} c
+                LEFT JOIN {groups_table} fs ON fs.directory = c.directory AND fs.stem = c.stem
+                WHERE c.rn = 1 AND fs.stem IS NULL
+            """)):
+                deleted.append(_diff_from_sql_row(row, set(), _filenames_from_files_json(row.files)))
 
+            # New: filesystem group with no DB group.
+            for row in work_conn.execute(text(f"""
+                SELECT fs.directory, fs.stem, fs.files, NULL AS id
+                FROM {groups_table} fs
+                LEFT JOIN {db_canonical} c ON c.directory = fs.directory AND c.stem = fs.stem AND c.rn = 1
+                WHERE c.id IS NULL
+            """)):
+                fs_files = set(json.loads(row.files) if isinstance(row.files, str) else (row.files or []))
+                new.append(_diff_from_sql_row(row, fs_files, set()))
+
+            # Both sides present: compare names and mtime.  Only pull file lists for these rows;
+            # unchanged file contents stay in SQL.
+            for row in work_conn.execute(text(f"""
+                SELECT c.id, c.directory, c.stem, c.files AS db_files, c.modification_datetime,
+                       fs.files AS fs_files, fs.mtime AS fs_mtime, fs.file_count AS fs_count,
+                       c.file_count AS db_count
+                FROM {db_canonical} c
+                JOIN {groups_table} fs ON fs.directory = c.directory AND fs.stem = c.stem
+                WHERE c.rn = 1
+            """)):
+                fs_files = set(json.loads(row.fs_files) if isinstance(row.fs_files, str) else (row.fs_files or []))
+                db_files = _filenames_from_files_json(row.db_files)
                 diff = FileGroupDiff(
-                    directory=Path(directory),
-                    stem=stem,
+                    directory=Path(row.directory),
+                    stem=row.stem,
                     db_files=db_files,
                     fs_files=fs_files,
-                    file_group_id=db_id,
+                    file_group_id=row.id,
                 )
-
-                if diff.is_new:
-                    new.append(diff)
-                elif diff.is_deleted:
-                    deleted.append(diff)
-                elif diff.needs_update:
+                db_mtime = _datetime_text_to_epoch(row.modification_datetime)
+                if diff.needs_update:
                     modified.append(diff)
                 elif diff.is_unchanged:
-                    # Files match by name - check if content changed via mtime
-                    # Get max mtime from filesystem files
-                    try:
-                        dir_path = Path(directory)
-                        fs_mtime = max(
-                            (dir_path / filename).stat().st_mtime
-                            for filename in fs_files
-                        )
-                        # If filesystem mtime is newer than DB mtime, content changed
-                        if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
-                            modified.append(diff)
-                        else:
-                            unchanged.append(diff)
-                    except (OSError, ValueError):
-                        # If we can't stat files, treat as unchanged
+                    if float(row.fs_mtime or 0) > db_mtime + MTIME_TOLERANCE_SECONDS:
+                        modified.append(diff)
+                    else:
                         unchanged.append(diff)
-                elif db_id is not None and not fs_files and not db_files:
-                    # Empty FileGroup with no files on disk — orphan, delete it
+                elif not fs_files and not db_files:
                     deleted.append(diff)
 
             logger.info(
@@ -1302,8 +1506,7 @@ class FileWorker:
                     percent = int((count / task.count) * 100) if task.count > 0 else 0
                     self.update_status(operation_processed=count, operation_percent=percent)
 
-                root = dir_paths[0] if len(dir_paths) == 1 else None
-                dir_result = await compare_file_groups(root=root, progress_callback=on_compare_progress)
+                dir_result = await compare_file_groups(roots=dir_paths, progress_callback=on_compare_progress)
                 if is_global_refresh:
                     Events.send_global_refresh_discovery_completed()
 
@@ -1462,8 +1665,7 @@ class FileWorker:
             self.update_status(operation_processed=processed, operation_percent=percent)
 
         # Use existing _upsert_files function which handles grouping and primary file detection
-        idempotency = now()
-        await asyncio.to_thread(_upsert_files, all_paths, idempotency, on_upsert_progress)
+        await asyncio.to_thread(_upsert_files, all_paths, on_upsert_progress)
         logger.info(f'Upserted {len(diffs)} FileGroups ({len(all_paths)} files)')
 
     async def _delete_file_groups(self, diffs: list[FileGroupDiff]):
@@ -1881,20 +2083,12 @@ class FileWorker:
             file_groups = query.all()
 
             for fg in file_groups:
-                if not fg.files:
-                    stem, _ = split_path_stem_and_suffix(fg.primary_path)
-                    key = (fg.directory, stem)
-                    if key in fs_groups:
-                        mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key].append((fg.id, set(), mtime))
-                else:
-                    first_file = fg.files[0]['path']
-                    stem, _ = split_path_stem_and_suffix(pathlib.Path(fg.directory) / first_file)
-                    key = (fg.directory, stem)
-                    if key in fs_groups:
-                        fg_filenames = {pathlib.Path(f['path']).name for f in fg.files}
-                        mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key].append((fg.id, fg_filenames, mtime))
+                stem = fg.stem or split_path_stem_and_suffix(fg.primary_path)[0]
+                key = (str(fg.directory), stem)
+                if key not in fs_groups:
+                    continue
+                mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
+                db_groups[key].append((fg.id, _filenames_from_files_json(fg.files), mtime))
 
             # Track FG IDs already loaded by the directory query to avoid double-appending
             seen_fg_ids: set[int] = set()
@@ -1912,11 +2106,10 @@ class FileWorker:
                 ).all()
                 for fg in deleted_fgs:
                     seen_fg_ids.add(fg.id)
-                    stem, _ = split_path_stem_and_suffix(fg.primary_path)
-                    key = (fg.directory, stem)
-                    fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
+                    stem = fg.stem or split_path_stem_and_suffix(fg.primary_path)[0]
+                    key = (str(fg.directory), stem)
                     mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                    db_groups[key].append((fg.id, fg_filenames, mtime))
+                    db_groups[key].append((fg.id, _filenames_from_files_json(fg.files), mtime))
                     if key not in fs_groups:
                         fs_groups[key] = set()
 
@@ -1932,72 +2125,19 @@ class FileWorker:
                     ).all()
                     for fg in dir_deleted_fgs:
                         seen_fg_ids.add(fg.id)
-                        stem, _ = split_path_stem_and_suffix(fg.primary_path)
-                        key = (fg.directory, stem)
-                        fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
+                        stem = fg.stem or split_path_stem_and_suffix(fg.primary_path)[0]
+                        key = (str(fg.directory), stem)
                         mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key].append((fg.id, fg_filenames, mtime))
+                        db_groups[key].append((fg.id, _filenames_from_files_json(fg.files), mtime))
                         if key not in fs_groups:
                             fs_groups[key] = set()
 
-        # Deduplicate: keep one FileGroup per key, mark the rest for deletion
-        deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
-
-        unchanged = []
-        new = []
-        deleted = list(duplicate_diffs)
-        modified = []
-
-        all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
-
-        for key in all_keys:
-            directory, stem = key
-            fs_files = fs_groups.get(key, set())
-            db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
-
-            diff = FileGroupDiff(
-                directory=Path(directory),
-                stem=stem,
-                db_files=db_files,
-                fs_files=fs_files,
-                file_group_id=db_id,
-            )
-
-            if diff.is_new:
-                new.append(diff)
-            elif diff.is_deleted:
-                deleted.append(diff)
-            elif diff.needs_update:
-                modified.append(diff)
-            elif diff.is_unchanged:
-                # Check mtime for content changes
-                try:
-                    dir_path = Path(directory)
-                    fs_mtime = max(
-                        (dir_path / filename).stat().st_mtime
-                        for filename in fs_files
-                    )
-                    if fs_mtime > db_mtime + MTIME_TOLERANCE_SECONDS:
-                        modified.append(diff)
-                    else:
-                        unchanged.append(diff)
-                except (OSError, ValueError):
-                    unchanged.append(diff)
-            elif db_id is not None and not fs_files and not db_files:
-                # Empty FileGroup with no files on disk — orphan, delete it
-                deleted.append(diff)
-
+        result = classify_file_group_diffs(fs_groups, db_groups)
         logger.info(
-            f'Direct file refresh: {len(unchanged)} unchanged, {len(new)} new, '
-            f'{len(deleted)} deleted, {len(modified)} modified'
+            f'Direct file refresh: {len(result.unchanged)} unchanged, {len(result.new)} new, '
+            f'{len(result.deleted)} deleted, {len(result.modified)} modified'
         )
-
-        return FileComparisonResult(
-            unchanged=unchanged,
-            new=new,
-            deleted=deleted,
-            modified=modified,
-        )
+        return result
 
     async def _apply_post_processing(self, is_global_refresh: bool = False) -> None:
         """Run modelers, indexers, and cleanup after file operations.

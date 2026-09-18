@@ -95,7 +95,6 @@ CATALOG = [
     dict(name='config/backups', method='GET', path='/api/config/backups'),
 
     # --- files ---
-    dict(name='files/refresh_progress', method='GET', path='/api/files/refresh_progress', page='files'),
     dict(name='files/worker_status', method='GET', path='/api/files/worker_status'),
     dict(name='files/bulk_tag/progress', method='GET', path='/api/files/bulk_tag/progress'),
     dict(name='files (root listing)', method='POST', path='/api/files/', body={'directories': []}, page='files'),

@@ -60,7 +60,7 @@ async def doc_modeler(progress_callback: Callable[[int], None] = None):
                 # permanently unmodeled and invisible in /api/docs.
                 or_(
                     Doc.id.is_(None),
-                    FileGroup.indexed == False,
+                    FileGroup.indexed != True,
                 ),
             )
             if failed_ids:

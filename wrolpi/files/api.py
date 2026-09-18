@@ -134,17 +134,6 @@ async def refresh(request: Request):
     return response.empty()
 
 
-@files_bp.get('/refresh_progress')
-@openapi.definition(
-    summary='Get the progress of the file refresh'
-)
-async def refresh_progress(request: Request):
-    progress = lib.get_refresh_progress()
-    return json_response(dict(
-        progress=progress,
-    ))
-
-
 @files_bp.get('/worker_status')
 @openapi.definition(
     summary='Get the FileWorker status with detailed progress'

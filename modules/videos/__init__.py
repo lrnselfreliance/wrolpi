@@ -57,7 +57,8 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
                 .filter(
                 or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
                 FileGroup.mimetype.notin_(AUDIO_PLAYLIST_MIMETYPES),
-                # Also model indexed FileGroups that never got a Video row.
+                # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
+                # already set indexed=True, and re-model when files changed (indexed != True).
                 or_(Video.id.is_(None), FileGroup.indexed != True),
             )
             if failed_ids:

@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON, or_
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
@@ -83,8 +83,9 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_size_ix', 'size'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
-        # Speeds compare joins.  Not UNIQUE: duplicates are collapsed at refresh time.
-        Index('file_group_directory_stem_idx', 'directory', 'stem'),
+        # Identity of a FileGroup.  Duplicates are collapsed by
+        # dedupe_file_groups_by_directory_stem before this unique index is created.
+        Index('file_group_directory_stem_idx', 'directory', 'stem', unique=True),
     )
     # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
     id: int = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
@@ -523,7 +524,16 @@ class FileGroup(ModelHelper, Base):
         # Sanitize any paths with invalid UTF-8 characters (renames files on disk if needed)
         paths = tuple(sanitize_filename_surrogates(p) for p in paths)
 
-        existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
+        primary_path = get_primary_file(paths) if paths else None
+        stem = split_path_stem_and_suffix(primary_path)[0] if primary_path else None
+        directory = str(primary_path.parent) if primary_path else None
+        filters = [FileGroup.primary_path.in_(list(map(str, paths)))]
+        if stem:
+            filters.append((FileGroup.directory == directory) & (FileGroup.stem == stem))
+        existing_groups = unique_by_predicate(
+            session.query(FileGroup).filter(or_(*filters)).all(),
+            lambda fg: fg.id,
+        )
         logger.trace(f'FileGroup.from_paths: {len(existing_groups)=}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.

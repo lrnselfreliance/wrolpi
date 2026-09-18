@@ -1492,10 +1492,11 @@ class FileWorker:
                 logger.info(f'Refreshing {len(file_paths)} files directly')
                 file_result = await self._refresh_files_directly(file_paths, expand_stems=task.expand_stems)
 
-                # Process file results
+                # Delete first so a new primary_path cannot collide on (directory, stem)
+                # with a duplicate FileGroup that compare already marked deleted.
                 self._cleanup_modified_models(file_result.modified)
-                await self._upsert_file_groups(file_result.new + file_result.modified)
                 await self._delete_file_groups(file_result.deleted)
+                await self._upsert_file_groups(file_result.new + file_result.modified)
 
             # Process directories with full scan (existing path)
             if dir_paths:
@@ -1520,10 +1521,11 @@ class FileWorker:
                     f'{len(dir_result.deleted)} deleted, {len(dir_result.unchanged)} unchanged'
                 )
 
-                # Process directory results
+                # Delete first so a new primary_path cannot collide on (directory, stem)
+                # with a duplicate FileGroup that compare already marked deleted.
                 self._cleanup_modified_models(dir_result.modified)
-                await self._upsert_file_groups(dir_result.new + dir_result.modified)
                 await self._delete_file_groups(dir_result.deleted)
+                await self._upsert_file_groups(dir_result.new + dir_result.modified)
 
         # Run indexers, modelers, and cleanup once for all changes
         await self._apply_post_processing(is_global_refresh=is_global_refresh)

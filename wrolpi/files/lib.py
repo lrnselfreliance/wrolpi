@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import threading
 import time
 import urllib.parse
 import zipfile
@@ -493,6 +494,9 @@ _HARDCODED_SUFFIXES = frozenset(
 # before any compare when this version does not match the value in wrolpi_kv.
 STEM_ALGORITHM_VERSION = 1
 STEM_ALGORITHM_VERSION_KEY = 'stem_algorithm_version'
+# Cancelled compare_file_groups leaves ensure_file_group_stems running in a thread.
+# Tests (and overlapping refreshes) share one SQLite writer; serialize the backfill.
+_stem_backfill_lock = threading.Lock()
 
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
 
@@ -850,22 +854,26 @@ def ensure_file_group_stems():
 
     After a successful backfill the kv version matches, and later refreshes skip the table scan.
     Upsert, from_paths, move, and reorganize must keep stem current.
+
+    A lock serializes callers: cancelling compare_file_groups does not stop the executor
+    thread, and a second compare would otherwise write wrolpi_kv concurrently (SQLITE_BUSY).
     """
-    stored = get_stem_algorithm_version()
-    if stored == STEM_ALGORITHM_VERSION:
-        return
-    with get_db_curs() as curs:
-        curs.execute('SELECT id, primary_path FROM file_group')
-        rows = list(curs.fetchall())
-    if rows:
-        updates = []
-        for row in rows:
-            stem, _ = split_path_stem_and_suffix(row['primary_path'])
-            updates.append((stem, row['id']))
-        with get_db_curs(commit=True) as curs:
-            for chunk in chunks(updates, 500):
-                curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
-    set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
+    with _stem_backfill_lock:
+        stored = get_stem_algorithm_version()
+        if stored == STEM_ALGORITHM_VERSION:
+            return
+        with get_db_curs() as curs:
+            curs.execute('SELECT id, primary_path FROM file_group')
+            rows = list(curs.fetchall())
+        if rows:
+            updates = []
+            for row in rows:
+                stem, _ = split_path_stem_and_suffix(row['primary_path'])
+                updates.append((stem, row['id']))
+            with get_db_curs(commit=True) as curs:
+                for chunk in chunks(updates, 500):
+                    curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
+        set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
 
 
 async def apply_indexers(progress_callback: Callable[[int, int], None] = None):

@@ -51,6 +51,10 @@ QUEUE_STALL_SECONDS = 30
 # 0.5s accommodates SD card / FAT32 / exFAT timestamp granularity on Pi 4.
 MTIME_TOLERANCE_SECONDS = 0.5
 
+# GNU find -printf format.  `\0` here is the two-character find escape, NOT a Python
+# NUL: subprocess arguments cannot contain embedded null bytes.
+GNU_FIND_PRINTF = r'%h\0%f\0%T@\0'
+
 __all__ = [
     'FileGroupDiff',
     'FileComparisonResult',
@@ -59,6 +63,7 @@ __all__ = [
     'compare_file_groups',
     'count_files',
     'file_worker',
+    'GNU_FIND_PRINTF',
 ]
 
 
@@ -420,7 +425,7 @@ def _entry_from_printf_fields(directory_b: bytes, filename_b: bytes, mtime_b: by
 async def _stream_gnu_find_entries(find_args: list[str]) -> AsyncGenerator[Tuple[str, str, str, float], None]:
     """Stream (directory, filename, stem, mtime) using GNU find -printf with NUL delimiters."""
     proc = await asyncio.create_subprocess_exec(
-        'find', *find_args, '-printf', '%h\0%f\0%T@\0',
+        'find', *find_args, '-printf', GNU_FIND_PRINTF,
         stdout=asyncio.subprocess.PIPE,
     )
     buf = b''

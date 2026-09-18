@@ -1712,3 +1712,30 @@ def test_bulk_update_file_groups_reorganize_handles_datetime(test_session, test_
     assert fg.files[0]['path'] == 'test_video.mp4'
     # modification_datetime should be serialized as ISO string
     assert 'modification_datetime' in fg.files[0]
+
+
+def test_bulk_update_file_groups_reorganize_updates_stem(test_session, test_directory):
+    """Reorganize must write the new stem so a later refresh does not delete+reinsert the row."""
+    from wrolpi.files.lib import _bulk_update_file_groups_reorganize
+
+    old_file = test_directory / 'old title.mp4'
+    old_file.touch()
+    fg = FileGroup.from_paths(test_session, old_file)
+    test_session.commit()
+    assert fg.stem == 'old title'
+    fg_id = fg.id
+
+    new_path = test_directory / '2024-01-01 New Title.mp4'
+    updates = [{
+        'id': fg_id,
+        'directory': str(test_directory),
+        'primary_path': str(new_path),
+        'files': [{'path': new_path.name, 'mimetype': 'video/mp4'}],
+        'data': None,
+    }]
+    _bulk_update_file_groups_reorganize(updates)
+
+    test_session.expire_all()
+    fg = test_session.query(FileGroup).filter_by(id=fg_id).one()
+    assert fg.stem == '2024-01-01 New Title'
+    assert fg.primary_path == new_path

@@ -842,31 +842,29 @@ def set_stem_algorithm_version(version: int):
 
 
 def ensure_file_group_stems():
-    """Recompute file_group.stem when NULL or when STEM_ALGORITHM_VERSION has changed.
+    """Recompute file_group.stem when STEM_ALGORITHM_VERSION has changed.
 
     A stored stem is a cache of split_path_stem_and_suffix.  Compare joins on (directory, stem),
     so an algorithm change without this backfill reports the same files as deleted+new and
     drops tags, viewed timestamps, and domain rows.  Must run before any compare.
+
+    After a successful backfill the kv version matches, and later refreshes skip the table scan.
+    Upsert, from_paths, move, and reorganize must keep stem current.
     """
     stored = get_stem_algorithm_version()
-    force = stored != STEM_ALGORITHM_VERSION
-    with get_db_curs() as curs:
-        if force:
-            curs.execute('SELECT id, primary_path FROM file_group')
-        else:
-            curs.execute("SELECT id, primary_path FROM file_group WHERE stem IS NULL OR stem = ''")
-        rows = list(curs.fetchall())
-    if not rows:
-        if stored != STEM_ALGORITHM_VERSION:
-            set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
+    if stored == STEM_ALGORITHM_VERSION:
         return
-    updates = []
-    for row in rows:
-        stem, _ = split_path_stem_and_suffix(row['primary_path'])
-        updates.append((stem, row['id']))
-    with get_db_curs(commit=True) as curs:
-        for chunk in chunks(updates, 500):
-            curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
+    with get_db_curs() as curs:
+        curs.execute('SELECT id, primary_path FROM file_group')
+        rows = list(curs.fetchall())
+    if rows:
+        updates = []
+        for row in rows:
+            stem, _ = split_path_stem_and_suffix(row['primary_path'])
+            updates.append((stem, row['id']))
+        with get_db_curs(commit=True) as curs:
+            for chunk in chunks(updates, 500):
+                curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
     set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
 
 
@@ -1626,18 +1624,22 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
     with get_db_curs(commit=True) as curs:
         for update in updates:
             # Don't change indexed - reorganization only moves files, content unchanged
+            primary_path = update['primary_path']
+            stem, _ = split_path_stem_and_suffix(primary_path)
             curs.execute('''
                          UPDATE file_group
                          SET directory    = ?,
                              primary_path = ?,
                              files        = ?,
-                             data         = ?
+                             data         = ?,
+                             stem         = ?
                          WHERE id = ?
                          ''', (
                              update['directory'],
-                             update['primary_path'],
+                             primary_path,
                              json.dumps(update['files'], default=_json_serial),
                              json.dumps(update['data'], default=_json_serial) if update.get('data') else None,
+                             stem,
                              update['id'],
                          ))
 

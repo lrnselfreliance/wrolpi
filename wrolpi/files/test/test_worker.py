@@ -17,6 +17,9 @@ from wrolpi.files.worker import (
     FileTaskType,
     FileWorkerJobFailed,
     QUEUE_STALL_SECONDS,
+    _split_nul_field_triples,
+    _entry_from_printf_fields,
+    _normalize_roots,
 )
 
 
@@ -1798,6 +1801,47 @@ async def test_refresh_two_directories_does_not_delete_third(
 
     assert test_session.query(FileGroup).filter_by(id=c_id).one_or_none() is not None, \
         'refreshing A and B deleted a stale FileGroup in C'
+
+
+def test_split_nul_field_triples_allows_tab_and_newline_in_filename():
+    """GNU find -printf uses NUL delimiters so a tab/newline in the name is not a field break."""
+    data = (
+        b'/media/wrolpi\0file\twith\ttabs.txt\0'
+        b'17123.45\0'
+        b'/media/wrolpi\0new\nline.mp4\0'
+        b'99.5\0leftover'
+    )
+    triples, leftover = _split_nul_field_triples(data)
+    assert len(triples) == 2
+    directory, filename, mtime = triples[0]
+    assert directory == b'/media/wrolpi'
+    assert filename == b'file\twith\ttabs.txt'
+    assert mtime == b'17123.45'
+    assert triples[1][1] == b'new\nline.mp4'
+    assert leftover == b'leftover'
+
+    entry = _entry_from_printf_fields(*triples[0])
+    assert entry[1] == 'file\twith\ttabs.txt'
+    assert entry[3] == 17123.45
+
+    assert _entry_from_printf_fields(b'/tmp', b'bad.txt', b'not-a-float') is None
+
+
+def test_normalize_roots_empty_list_is_media_directory(test_directory):
+    """An empty roots list must not produce `()` SQL; treat it like a global refresh."""
+    assert _normalize_roots([]) == [test_directory]
+    assert _normalize_roots(None) == [test_directory]
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_empty_roots_is_global(test_session, test_directory, make_files_structure):
+    """compare_file_groups([]) scans the media directory, same as omitting roots."""
+    make_files_structure(['only.txt'])
+    via_none = await compare_file_groups(None)
+    via_empty = await compare_file_groups([])
+    assert len(via_none.new) == 1
+    assert len(via_empty.new) == 1
+    assert via_empty.new[0].stem == 'only'
 
 
 @pytest.mark.asyncio

@@ -785,6 +785,64 @@ async def test_reorganize_preserves_tag_association(async_client, test_directory
 
 
 @pytest.mark.asyncio
+async def test_reorganize_then_refresh_preserves_filegroup_id_and_tags(
+        async_client, test_directory, video_factory, tag_factory, test_tags_config, refresh_files):
+    """A refresh after reorganize must keep the FileGroup id (and therefore tags).
+
+    Regression: _bulk_update_file_groups_reorganize left `stem` stale.  Compare then
+    classified the old stem as deleted and the new filename as new, dropping tags.
+    """
+    from wrolpi.files.worker import file_worker, FileTask, FileTaskType
+    import asyncio
+
+    channel_dir = test_directory / 'videos' / 'refresh_after_reorg'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_db_session(commit=True) as session:
+        collection = Collection(
+            name='Refresh After Reorg',
+            kind='channel',
+            directory=channel_dir,
+            file_format='%(title)s.%(ext)s'
+        )
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='Refresh After Reorg', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+
+    tag = await tag_factory('keepme')
+    video = video_factory(channel_id=channel_id, title='old title', with_video_file=True)
+
+    with get_db_session(commit=True) as session:
+        video_obj = session.query(Video).get(video.id)
+        video_obj.file_group.add_tag(session, tag.id)
+        fg_id = video_obj.file_group.id
+        old_primary_path = video_obj.file_group.primary_path
+        session.commit()
+
+    new_primary_path = channel_dir / '2024-01-01 New Title.mp4'
+    await file_worker.handle_reorganize(FileTask(
+        task_type=FileTaskType.reorganize,
+        paths=[],
+        move_mappings=[(old_primary_path, new_primary_path)],
+        job_id='test-reorganize-then-refresh',
+    ))
+    await asyncio.sleep(0.1)
+
+    await refresh_files([channel_dir])
+
+    with get_db_session() as session:
+        fg = session.query(FileGroup).get(fg_id)
+        assert fg is not None, 'FileGroup was dropped by refresh after reorganize'
+        assert fg.primary_path == new_primary_path
+        assert fg.stem == '2024-01-01 New Title'
+        assert fg.tag_names == ['keepme']
+        assert session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
 async def test_reorganize_preserves_multiple_tags(async_client, test_directory, video_factory, tag_factory,
                                                   test_tags_config):
     """FileGroup with multiple tags should retain all tags after reorganization."""

@@ -230,11 +230,13 @@ def classify_file_group_diffs(
 
 
 def _normalize_roots(roots: Path | list[Path] | None) -> list[Path]:
+    """Always at least the media directory.  An empty list is treated like None."""
     if roots is None:
         return [get_media_directory()]
     if isinstance(roots, (str, Path)):
         return [Path(roots)]
-    return [Path(r) for r in roots]
+    root_list = [Path(r) for r in roots]
+    return root_list or [get_media_directory()]
 
 
 def _directory_in_roots_sql(roots: list[Path], column: str = 'fg.directory') -> Tuple[str, dict]:
@@ -385,6 +387,63 @@ async def _stream_filesystem_paths(root: Path | list[Path]) -> AsyncGenerator[st
         yield str(Path(directory) / filename)
 
 
+def _split_nul_field_triples(buf: bytes) -> Tuple[list, bytes]:
+    """Pull complete NUL-separated (directory, filename, mtime) triples out of `buf`.
+
+    Returns (triples, leftover_bytes).  A filename may contain tabs or newlines; only NUL
+    is the delimiter (GNU find `-printf '%h\\0%f\\0%T@\\0'`).
+    """
+    triples = []
+    while True:
+        parts = buf.split(b'\0', 3)
+        if len(parts) < 4:
+            return triples, buf
+        directory_b, filename_b, mtime_b, buf = parts
+        triples.append((directory_b, filename_b, mtime_b))
+
+
+def _entry_from_printf_fields(directory_b: bytes, filename_b: bytes, mtime_b: bytes):
+    """Decode one find -printf record.  Returns None and logs if the record is unusable."""
+    try:
+        directory = directory_b.decode()
+        filename = filename_b.decode()
+        mtime = float(mtime_b.decode())
+    except (UnicodeDecodeError, ValueError) as e:
+        logger.warning(f'Skipping unreadable find record {directory_b!r}/{filename_b!r}: {e}')
+        return None
+    if not directory or not filename:
+        return None
+    stem, _ = split_path_stem_and_suffix(Path(directory) / filename)
+    return directory, filename, stem, mtime
+
+
+async def _stream_gnu_find_entries(find_args: list[str]) -> AsyncGenerator[Tuple[str, str, str, float], None]:
+    """Stream (directory, filename, stem, mtime) using GNU find -printf with NUL delimiters."""
+    proc = await asyncio.create_subprocess_exec(
+        'find', *find_args, '-printf', '%h\0%f\0%T@\0',
+        stdout=asyncio.subprocess.PIPE,
+    )
+    buf = b''
+    try:
+        while True:
+            chunk = await proc.stdout.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            triples, buf = _split_nul_field_triples(buf)
+            for fields in triples:
+                entry = _entry_from_printf_fields(*fields)
+                if entry:
+                    yield entry
+        if buf.strip(b'\0'):
+            logger.warning(f'Incomplete find -printf record discarded: {buf[:200]!r}')
+        await proc.wait()
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+
+
 async def _stream_filesystem_entries(
         roots: Path | list[Path],
 ) -> AsyncGenerator[Tuple[str, str, str, float], None]:
@@ -394,29 +453,12 @@ async def _stream_filesystem_entries(
     `-printf`, so each path is stat()'d once while streaming.  Either way the mtime is
     stored in the TEMP table and unchanged groups are never stat()'d again.
     """
-    root_list = _normalize_roots(roots) if not isinstance(roots, list) else list(roots)
-    if not root_list:
-        return
+    root_list = _normalize_roots(roots)
     find_args = _find_args_for_roots(root_list)
 
     if not IS_MACOS:
-        proc = await asyncio.create_subprocess_exec(
-            'find', *find_args, '-printf', '%h\t%f\t%T@\n',
-            stdout=asyncio.subprocess.PIPE,
-        )
-        try:
-            async for line in proc.stdout:
-                decoded = line.decode().rstrip('\n')
-                if not decoded:
-                    continue
-                directory, filename, mtime_s = decoded.split('\t', 2)
-                stem, _ = split_path_stem_and_suffix(Path(directory) / filename)
-                yield directory, filename, stem, float(mtime_s)
-            await proc.wait()
-        finally:
-            if proc.returncode is None:
-                proc.kill()
-                await proc.wait()
+        async for entry in _stream_gnu_find_entries(find_args):
+            yield entry
         return
 
     proc = await asyncio.create_subprocess_exec(
@@ -503,7 +545,7 @@ async def compare_file_groups(
     if root is not None and roots is None:
         roots = root
     root_list = _normalize_roots(roots)
-    ensure_file_group_stems()
+    await asyncio.to_thread(ensure_file_group_stems)
 
     # Per-call table name so concurrent scans don't collide.  The work table is a TEMP table on
     # its own dedicated connection: it never shares a transaction (or locks) with the session,

@@ -52,7 +52,7 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'search_files',
-           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
+           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'choose_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
            'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
@@ -685,6 +685,22 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
+def choose_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) -> pathlib.Path:
+    """Primary file for a stem group.  Falls back to a sorted path so every caller agrees.
+
+    `_upsert_files` and `_upsert_file_groups` must pick the same path.  A set's iteration
+    order is not stable; using it as the fallback would DELETE the existing tagged row
+    and INSERT a new untagged one.
+    """
+    paths = [pathlib.Path(p) for p in files]
+    if not paths:
+        raise ValueError('Cannot find primary file without any files')
+    try:
+        return get_primary_file(paths)
+    except NoPrimaryFile:
+        return sorted(paths)[0]
+
+
 def _upsert_files(files: List[pathlib.Path],
                   progress_callback: Callable[[int, int], None] = None):
     """Insert/update all records of the provided files.
@@ -709,33 +725,18 @@ def _upsert_files(files: List[pathlib.Path],
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
             try:
-                try:
-                    primary_path = get_primary_file(group)
-                    # Multiple files in this group.
-                    primary_path: pathlib.Path = primary_path
-                    # The primary mimetype allows modelers to find its file_groups.
-                    mimetype = get_mimetype(primary_path)
-                    # The group uses a common modification_datetime so the group will be re-indexed when any of it's
-                    # files are modified.
-                    modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
-                    size = sum(i.stat().st_size for i in group)
-                    files_json = json.dumps(_paths_to_files_dict(group))
-                    stem, suffix = split_path_stem_and_suffix(primary_path)
-                    suffix = (suffix or '').lower() or None
-                    values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
-                    non_primary_files.update(i for i in group if i != primary_path)
-                except NoPrimaryFile:
-                    # Same stem still means one FileGroup.  Pick a stable primary so
-                    # (directory, stem) stays unique even when nothing is modelable.
-                    primary_path = sorted(group)[0]
-                    mimetype = get_mimetype(primary_path)
-                    modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
-                    size = sum(i.stat().st_size for i in group)
-                    files_json = json.dumps(_paths_to_files_dict(group))
-                    stem, suffix = split_path_stem_and_suffix(primary_path)
-                    suffix = (suffix or '').lower() or None
-                    values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
-                    non_primary_files.update(i for i in group if i != primary_path)
+                primary_path = choose_primary_file(group)
+                # The primary mimetype allows modelers to find its file_groups.
+                mimetype = get_mimetype(primary_path)
+                # The group uses a common modification_datetime so the group will be re-indexed when any of it's
+                # files are modified.
+                modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
+                size = sum(i.stat().st_size for i in group)
+                files_json = json.dumps(_paths_to_files_dict(group))
+                stem, suffix = split_path_stem_and_suffix(primary_path)
+                suffix = (suffix or '').lower() or None
+                values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
+                non_primary_files.update(i for i in group if i != primary_path)
             except FileNotFoundError as e:
                 # A file was deleted between discovery and upsert (temp files, WAL sidecars, etc.).
                 refresh_logger.warning(f'File vanished during refresh, skipping group near {group[0]}', exc_info=e)

@@ -515,6 +515,58 @@ def test_file_group_directory_stem_is_unique(test_session, test_directory, make_
         test_session.commit()
 
 
+def test_choose_primary_file_is_sorted_and_set_stable(test_directory, make_files_structure):
+    """Unmodeled groups must pick the same primary regardless of set iteration order."""
+    csv, txt = make_files_structure(['n.csv', 'n.txt'])
+    assert lib.choose_primary_file([txt, csv]) == csv
+    assert lib.choose_primary_file({txt, csv}) == csv
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_tag_when_sidecar_added(async_client, test_session, test_directory,
+                                                    make_files_structure, tag_factory, refresh_files):
+    """Adding a sidecar to a tagged unmodeled FileGroup must not drop the tag on refresh."""
+    txt, = make_files_structure(['note.txt'])
+    fg = FileGroup.from_paths(test_session, txt)
+    test_session.commit()
+    tag = await tag_factory('keep')
+    fg.add_tag(test_session, tag.id)
+    test_session.commit()
+    fg_id = fg.id
+
+    (test_directory / 'note.csv').write_text('a,b\n')
+    await refresh_files()
+    test_session.expire_all()
+
+    remaining = test_session.query(FileGroup).filter_by(id=fg_id).one()
+    assert remaining.tag_names == ['keep']
+    names = {pathlib.Path(f['path']).name for f in remaining.files}
+    assert names == {'note.txt', 'note.csv'}
+
+
+@pytest.mark.asyncio
+async def test_rename_into_existing_stem_merges(async_client, test_session, test_directory, make_files_structure):
+    """Renaming onto another FileGroup's stem merges before moving files, so disk and DB agree."""
+    make_files_structure({'foo.jpg': 'x', 'bar.mp4': 'video'})
+    jpg = test_directory / 'foo.jpg'
+    mp4 = test_directory / 'bar.mp4'
+    FileGroup.from_paths(test_session, jpg)
+    FileGroup.from_paths(test_session, mp4)
+    test_session.commit()
+    assert test_session.query(FileGroup).count() == 2
+    assert {fg.primary_path.name for fg in test_session.query(FileGroup)} == {'foo.jpg', 'bar.mp4'}
+
+    await lib.rename_file(mp4, 'foo.mp4')
+    test_session.expire_all()
+
+    remaining = test_session.query(FileGroup).one()
+    names = {pathlib.Path(f['path']).name for f in remaining.files}
+    assert names == {'foo.jpg', 'foo.mp4'}
+    assert (test_directory / 'foo.mp4').is_file()
+    assert (test_directory / 'foo.jpg').is_file()
+    assert not (test_directory / 'bar.mp4').exists()
+
+
 @pytest.mark.asyncio
 async def test_dedupe_file_groups_merges_tags_onto_winner(async_client, test_session, test_directory,
                                                           make_files_structure, tag_factory):

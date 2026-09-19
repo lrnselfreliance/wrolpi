@@ -33,7 +33,7 @@ from wrolpi.events import Events
 from wrolpi.vars import PYTEST, IS_MACOS
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
-    group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
+    group_files_by_stem, get_primary_file, choose_primary_file, delete_directory, apply_indexers,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     _bulk_update_file_groups_reorganize, get_normalized_ignored_directories, remove_files_in_ignored_directories,
     ensure_file_group_stems,
@@ -1273,8 +1273,8 @@ class FileWorker:
         try:
             result = await self._refresh_files_directly(paths)
             self._cleanup_modified_models(result.modified)
-            await self._upsert_file_groups(result.new + result.modified)
             await self._delete_file_groups(result.deleted)
+            await self._upsert_file_groups(result.new + result.modified)
             if post_processing and (result.new or result.modified or result.deleted):
                 # Skip global modelers/indexers when the caller opts out (e.g. `lib.delete` from the
                 # upload path defers that to the post-upload `upsert_file`) or when nothing changed.
@@ -1610,17 +1610,12 @@ class FileWorker:
         # For modified diffs where file_group_id exists, we need to handle primary_path changes.
         # If the primary file changed (e.g., video deleted, leaving only poster), the ON CONFLICT
         # won't match, so we need to update the existing FileGroup's primary_path first.
-        from wrolpi.files.lib import NoPrimaryFile
         modified_ids_to_update = []
         for diff in diffs:
             if diff.file_group_id and diff.fs_files:
                 # This is a modified FileGroup - may need to update primary_path
                 new_paths = [diff.directory / f for f in diff.fs_files]
-                try:
-                    new_primary = get_primary_file(new_paths)
-                except NoPrimaryFile:
-                    # No clear primary file, just use the first one
-                    new_primary = new_paths[0] if new_paths else None
+                new_primary = choose_primary_file(new_paths)
                 if new_primary:
                     modified_ids_to_update.append((diff.file_group_id, str(new_primary)))
 

@@ -41,6 +41,20 @@ from wrolpi.files.lib import (
 
 logger = logger.getChild(__name__)
 
+
+async def _await_db(func, *args):
+    """Run a function that uses get_db_curs.
+
+    Tests share one SQLite connection via get_db_curs.  sqlite3 is not safe for concurrent
+    use of that connection, so asyncio.to_thread segfaults in CI (xdist + session commit
+    on the event loop while the worker thread is still in get_stem_algorithm_version /
+    _upsert_files).  Production opens a dedicated raw connection and can use a thread.
+    """
+    if PYTEST:
+        return func(*args)
+    return await asyncio.to_thread(func, *args)
+
+
 # Update status every N items to avoid excessive overhead
 PROGRESS_UPDATE_INTERVAL = 100
 
@@ -550,7 +564,7 @@ async def compare_file_groups(
     if root is not None and roots is None:
         roots = root
     root_list = _normalize_roots(roots)
-    await asyncio.to_thread(ensure_file_group_stems)
+    await _await_db(ensure_file_group_stems)
 
     # Per-call table name so concurrent scans don't collide.  The work table is a TEMP table on
     # its own dedicated connection: it never shares a transaction (or locks) with the session,
@@ -1672,7 +1686,7 @@ class FileWorker:
             self.update_status(operation_processed=processed, operation_percent=percent)
 
         # Use existing _upsert_files function which handles grouping and primary file detection
-        await asyncio.to_thread(_upsert_files, all_paths, on_upsert_progress)
+        await _await_db(_upsert_files, all_paths, on_upsert_progress)
         logger.info(f'Upserted {len(diffs)} FileGroups ({len(all_paths)} files)')
 
     async def _delete_file_groups(self, diffs: list[FileGroupDiff]):

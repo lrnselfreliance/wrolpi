@@ -66,6 +66,57 @@ def test_compare_db_version_uninitialized_file(test_directory):
     assert db_bootstrap.compare_db_version() == 'current'
 
 
+def test_unique_stem_migration_collapses_duplicates(test_directory):
+    """The unique-index migration merges duplicate (directory, stem) rows and keeps tags."""
+    import sqlite3
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri, get_db_file
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_09_16_1200')
+
+    db_file = get_db_file()
+    directory = str(test_directory)
+    with sqlite3.connect(db_file) as conn:
+        conn.execute('PRAGMA foreign_keys=ON')
+        conn.execute(
+            'INSERT INTO file_group (directory, primary_path, files, stem, indexed) VALUES (?,?,?,?,0)',
+            (directory, str(test_directory / 'dup.mp4'), '[]', 'dup'),
+        )
+        conn.execute(
+            'INSERT INTO file_group (directory, primary_path, files, stem, indexed) VALUES (?,?,?,?,0)',
+            (directory, str(test_directory / 'dup.info.json'), '[]', 'dup'),
+        )
+        first_id, second_id = [r[0] for r in conn.execute('SELECT id FROM file_group ORDER BY id').fetchall()]
+        conn.execute("INSERT INTO tag (name, color) VALUES ('migrated', '#111111')")
+        tag_id = conn.execute('SELECT id FROM tag').fetchone()[0]
+        # Tag the lower-id row so it wins over the later untagged duplicate.
+        conn.execute(
+            'INSERT INTO tag_file (tag_id, file_group_id) VALUES (?, ?)',
+            (tag_id, first_id),
+        )
+        conn.commit()
+        assert conn.execute('SELECT COUNT(*) FROM file_group').fetchone()[0] == 2
+        assert first_id < second_id
+
+    command.upgrade(config, 'head')
+
+    with sqlite3.connect(db_file) as conn:
+        rows = list(conn.execute('SELECT id, stem FROM file_group'))
+        assert len(rows) == 1
+        assert rows[0][0] == first_id
+        tagged = conn.execute('SELECT file_group_id FROM tag_file').fetchone()[0]
+        assert tagged == first_id
+        sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' AND name='file_group_directory_stem_idx'"
+        ).fetchone()[0]
+        assert 'UNIQUE' in sql.upper()
+
+
 def test_bootstrap_lock(test_directory):
     """Only one process can hold the bootstrap lock."""
     with db_bootstrap.bootstrap_lock() as acquired:

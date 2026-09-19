@@ -930,6 +930,13 @@ def test_group_files_by_stem(make_files_structure, test_directory):
          test_directory / 'foo.txt'],
     ]
 
+    make_files_structure(['dir_a/s3.bin', 'dir_b/s3.bin'])
+    same_stem = [test_directory / 'dir_a/s3.bin', test_directory / 'dir_b/s3.bin']
+    assert list(lib.group_files_by_stem(same_stem)) == [
+        [test_directory / 'dir_a/s3.bin'],
+        [test_directory / 'dir_b/s3.bin'],
+    ]
+
 
 def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, example_mobi, example_pdf,
                           singlefile_contents_factory, make_files_structure):

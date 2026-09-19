@@ -1500,16 +1500,16 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     files = sorted(files) if not pre_sorted else files.copy()
     file = files.pop(0)
     group = [file, ]
-    prev_stem, _ = split_path_stem_and_suffix(file)
+    prev_dir, prev_stem = file.parent, split_path_stem_and_suffix(file)[0]
     for file in files:
-        stem, suffix = split_path_stem_and_suffix(file)
-        if stem == prev_stem:
+        stem, _ = split_path_stem_and_suffix(file)
+        if stem == prev_stem and file.parent == prev_dir:
             group.append(file)
             continue
-        # Stem has changed, group is finished.
+        # Directory or stem changed, group is finished.
         yield group
         group = [file, ]
-        prev_stem = stem
+        prev_dir, prev_stem = file.parent, stem
     yield group
 
 

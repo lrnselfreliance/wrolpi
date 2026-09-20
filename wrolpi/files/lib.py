@@ -52,13 +52,14 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'search_files',
-           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
+           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'choose_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
            'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
            'get_normalized_ignored_directories', 'sanitize_ignored_directories',
            'cached_search_total', 'search_filter_cache_key', 'count_file_groups',
-           'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems']
+           'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems',
+           'backfill_null_file_group_stems', 'dedupe_file_groups_by_directory_stem']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -684,6 +685,22 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
+def choose_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) -> pathlib.Path:
+    """Primary file for a stem group.  Falls back to a sorted path so every caller agrees.
+
+    `_upsert_files` and `_upsert_file_groups` must pick the same path.  A set's iteration
+    order is not stable; using it as the fallback would DELETE the existing tagged row
+    and INSERT a new untagged one.
+    """
+    paths = [pathlib.Path(p) for p in files]
+    if not paths:
+        raise ValueError('Cannot find primary file without any files')
+    try:
+        return get_primary_file(paths)
+    except NoPrimaryFile:
+        return sorted(paths)[0]
+
+
 def _upsert_files(files: List[pathlib.Path],
                   progress_callback: Callable[[int, int], None] = None):
     """Insert/update all records of the provided files.
@@ -708,33 +725,18 @@ def _upsert_files(files: List[pathlib.Path],
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
             try:
-                try:
-                    primary_path = get_primary_file(group)
-                    # Multiple files in this group.
-                    primary_path: pathlib.Path = primary_path
-                    # The primary mimetype allows modelers to find its file_groups.
-                    mimetype = get_mimetype(primary_path)
-                    # The group uses a common modification_datetime so the group will be re-indexed when any of it's
-                    # files are modified.
-                    modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
-                    size = sum(i.stat().st_size for i in group)
-                    files_json = json.dumps(_paths_to_files_dict(group))
-                    stem, suffix = split_path_stem_and_suffix(primary_path)
-                    suffix = (suffix or '').lower() or None
-                    values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
-                    non_primary_files.update(i for i in group if i != primary_path)
-                except NoPrimaryFile:
-                    # Cannot find primary path, create a `file_group` for each file.
-                    for primary_path in group:
-                        primary_path: pathlib.Path
-                        # The primary mimetype allows modelers to find its file_groups.
-                        mimetype = get_mimetype(primary_path)
-                        modification_datetime = from_timestamp(primary_path.stat().st_mtime)
-                        size = primary_path.stat().st_size
-                        files_json = json.dumps(_paths_to_files_dict([primary_path]))
-                        stem, suffix = split_path_stem_and_suffix(primary_path)
-                        suffix = (suffix or '').lower() or None
-                        values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
+                primary_path = choose_primary_file(group)
+                # The primary mimetype allows modelers to find its file_groups.
+                mimetype = get_mimetype(primary_path)
+                # The group uses a common modification_datetime so the group will be re-indexed when any of it's
+                # files are modified.
+                modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
+                size = sum(i.stat().st_size for i in group)
+                files_json = json.dumps(_paths_to_files_dict(group))
+                stem, suffix = split_path_stem_and_suffix(primary_path)
+                suffix = (suffix or '').lower() or None
+                values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
+                non_primary_files.update(i for i in group if i != primary_path)
             except FileNotFoundError as e:
                 # A file was deleted between discovery and upsert (temp files, WAL sidecars, etc.).
                 refresh_logger.warning(f'File vanished during refresh, skipping group near {group[0]}', exc_info=e)
@@ -751,6 +753,12 @@ def _upsert_files(files: List[pathlib.Path],
             curs.execute('SELECT primary_path FROM file_group WHERE indexed = true AND primary_path IN '
                          '(SELECT value FROM json_each(?))', (json.dumps(primary_paths),))
             previously_indexed = {i['primary_path'] for i in curs.fetchall()}
+
+            if non_primary_files:
+                # Delete before INSERT so a new primary_path that shares (directory, stem)
+                # with an old sidecar FileGroup does not hit the unique index.
+                curs.execute('DELETE FROM file_group WHERE primary_path IN (SELECT value FROM json_each(?))',
+                             (json.dumps(list(map(str, non_primary_files))),))
 
             placeholders, params = values_clause(values)
             stmt = f'''
@@ -797,11 +805,6 @@ def _upsert_files(files: List[pathlib.Path],
             else:
                 refresh_logger.debug(f'Upserted {len(chunk)} files near {chunk[0]}')
 
-            if non_primary_files:
-                # New files may have been added which change what primary paths exist.  Delete any file_groups which
-                # use paths which are not primary.
-                curs.execute('DELETE FROM file_group WHERE primary_path IN (SELECT value FROM json_each(?))',
-                             (json.dumps(list(map(str, non_primary_files))),))
             non_primary_files.clear()
 
         # Report progress after each chunk
@@ -874,6 +877,84 @@ def ensure_file_group_stems():
                 for chunk in chunks(updates, 500):
                     curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
         set_stem_algorithm_version(STEM_ALGORITHM_VERSION)
+
+
+def backfill_null_file_group_stems():
+    """Fill file_group.stem for rows that never got one.  Used before creating the unique index."""
+    with get_db_curs() as curs:
+        curs.execute("SELECT id, primary_path FROM file_group WHERE stem IS NULL OR stem = ''")
+        rows = list(curs.fetchall())
+    if not rows:
+        return
+    updates = [(split_path_stem_and_suffix(row['primary_path'])[0], row['id']) for row in rows]
+    with get_db_curs(commit=True) as curs:
+        for chunk in chunks(updates, 500):
+            curs.executemany('UPDATE file_group SET stem = ? WHERE id = ?', chunk)
+
+
+def dedupe_file_groups_by_directory_stem() -> int:
+    """Collapse FileGroups that share (directory, stem).
+
+    Prefers a row with a domain model, then tags, then non-empty files, then highest id.
+    Tags and collection membership on losers are moved onto the winner.  Returns the
+    number of FileGroups deleted.
+    """
+    with get_db_curs() as curs:
+        curs.execute('''
+                     SELECT directory, stem
+                     FROM file_group
+                     WHERE directory IS NOT NULL
+                       AND stem IS NOT NULL
+                       AND stem != ''
+                     GROUP BY directory, stem
+                     HAVING COUNT(*) > 1
+                     ''')
+        keys = [(row['directory'], row['stem']) for row in curs.fetchall()]
+
+    deleted = 0
+    for directory, stem in keys:
+        with get_db_curs() as curs:
+            curs.execute('''
+                         SELECT fg.id,
+                                CASE
+                                    WHEN fg.files IS NULL OR json_type(fg.files) != 'array' THEN 0
+                                    ELSE json_array_length(fg.files)
+                                END AS file_count,
+                                CASE
+                                    WHEN fg.model IS NOT NULL AND fg.model != '' THEN 1
+                                    ELSE 0
+                                END AS has_model,
+                                (SELECT COUNT(*) FROM tag_file tf WHERE tf.file_group_id = fg.id) AS tag_count
+                         FROM file_group fg
+                         WHERE fg.directory = ?
+                           AND fg.stem = ?
+                         ''', (directory, stem))
+            members = list(curs.fetchall())
+        members.sort(key=lambda m: (m['has_model'], m['tag_count'], m['file_count'] > 0, m['id']), reverse=True)
+        winner_id = members[0]['id']
+        loser_ids = [m['id'] for m in members[1:]]
+        with get_db_curs(commit=True) as curs:
+            for loser_id in loser_ids:
+                curs.execute('''
+                             INSERT OR IGNORE INTO tag_file (tag_id, file_group_id, created_at)
+                             SELECT tag_id, ?, created_at
+                             FROM tag_file
+                             WHERE file_group_id = ?
+                             ''', (winner_id, loser_id))
+                curs.execute('''
+                             UPDATE collection_item
+                             SET file_group_id = ?
+                             WHERE file_group_id = ?
+                               AND collection_id NOT IN (SELECT collection_id
+                                                         FROM (SELECT collection_id
+                                                               FROM collection_item
+                                                               WHERE file_group_id = ?))
+                             ''', (winner_id, loser_id, winner_id))
+                curs.execute('DELETE FROM file_group WHERE id = ?', (loser_id,))
+                deleted += 1
+    if deleted:
+        refresh_logger.info(f'Collapsed {deleted} duplicate FileGroups sharing (directory, stem)')
+    return deleted
 
 
 async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
@@ -1419,16 +1500,16 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     files = sorted(files) if not pre_sorted else files.copy()
     file = files.pop(0)
     group = [file, ]
-    prev_stem, _ = split_path_stem_and_suffix(file)
+    prev_dir, prev_stem = file.parent, split_path_stem_and_suffix(file)[0]
     for file in files:
-        stem, suffix = split_path_stem_and_suffix(file)
-        if stem == prev_stem:
+        stem, _ = split_path_stem_and_suffix(file)
+        if stem == prev_stem and file.parent == prev_dir:
             group.append(file)
             continue
-        # Stem has changed, group is finished.
+        # Directory or stem changed, group is finished.
         yield group
         group = [file, ]
-        prev_stem = stem
+        prev_dir, prev_stem = file.parent, stem
     yield group
 
 

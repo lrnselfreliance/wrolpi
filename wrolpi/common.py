@@ -2382,23 +2382,24 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Genera
     from wrolpi.files.lib import split_path_stem_and_suffix
     it = sorted(it.copy())
     index = size
-    last_stem = None
+    last_key = None
     while it:
         if index >= len(it):
             # Ran out of items, yield what is left.
             yield it
             return
         path = it[index]
+        path = pathlib.Path(path)
         stem, _ = split_path_stem_and_suffix(path)
-        if last_stem and stem != last_stem:
-            # Found a break in the path names, yield and reset.
+        key = (str(path.parent), stem)
+        if last_key and key != last_key:
+            # Found a break in directory or stem, yield and reset.
             chunk, it = it[:index], it[index:]
             index = size
-            last_stem = None
+            last_key = None
             yield chunk
             continue
-        # Didn't find a name change, try again.
-        last_stem = stem
+        last_key = key
         index += 1
 
 

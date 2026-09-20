@@ -15,6 +15,8 @@ import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer, get_wrolpi_config
 from wrolpi.conftest import await_switches
+from sqlalchemy.exc import IntegrityError
+
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup, Directory
@@ -496,6 +498,143 @@ def test_ensure_file_group_stems_recomputes_on_version_change(test_session, test
     assert lib.get_stem_algorithm_version() == lib.STEM_ALGORITHM_VERSION
 
 
+def test_file_group_directory_stem_is_unique(test_session, test_directory, make_files_structure):
+    """Two FileGroups in the same directory cannot share a stem."""
+    foo_mp4, foo_png = make_files_structure(['foo.mp4', 'foo.png'])
+    FileGroup.from_paths(test_session, foo_mp4)
+    test_session.commit()
+
+    other = FileGroup(
+        directory=foo_png.parent,
+        primary_path=foo_png,
+        stem='foo',
+        files=[{'path': foo_png.name, 'mimetype': 'image/png'}],
+    )
+    test_session.add(other)
+    with pytest.raises(IntegrityError):
+        test_session.commit()
+
+
+def test_choose_primary_file_is_sorted_and_set_stable(test_directory, make_files_structure):
+    """Unmodeled groups must pick the same primary regardless of set iteration order."""
+    csv, txt = make_files_structure(['n.csv', 'n.txt'])
+    assert lib.choose_primary_file([txt, csv]) == csv
+    assert lib.choose_primary_file({txt, csv}) == csv
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_tag_when_sidecar_added(async_client, test_session, test_directory,
+                                                    make_files_structure, tag_factory, refresh_files):
+    """Adding a sidecar to a tagged unmodeled FileGroup must not drop the tag on refresh."""
+    txt, = make_files_structure(['note.txt'])
+    fg = FileGroup.from_paths(test_session, txt)
+    test_session.commit()
+    tag = await tag_factory('keep')
+    fg.add_tag(test_session, tag.id)
+    test_session.commit()
+    fg_id = fg.id
+
+    (test_directory / 'note.csv').write_text('a,b\n')
+    await refresh_files()
+    test_session.expire_all()
+
+    remaining = test_session.query(FileGroup).filter_by(id=fg_id).one()
+    assert remaining.tag_names == ['keep']
+    names = {pathlib.Path(f['path']).name for f in remaining.files}
+    assert names == {'note.txt', 'note.csv'}
+
+
+@pytest.mark.asyncio
+async def test_rename_into_existing_stem_merges(async_client, test_session, test_directory, make_files_structure):
+    """Renaming onto another FileGroup's stem merges before moving files, so disk and DB agree."""
+    make_files_structure({'foo.jpg': 'x', 'bar.mp4': 'video'})
+    jpg = test_directory / 'foo.jpg'
+    mp4 = test_directory / 'bar.mp4'
+    FileGroup.from_paths(test_session, jpg)
+    FileGroup.from_paths(test_session, mp4)
+    test_session.commit()
+    assert test_session.query(FileGroup).count() == 2
+    assert {fg.primary_path.name for fg in test_session.query(FileGroup)} == {'foo.jpg', 'bar.mp4'}
+
+    await lib.rename_file(mp4, 'foo.mp4')
+    test_session.expire_all()
+
+    remaining = test_session.query(FileGroup).one()
+    names = {pathlib.Path(f['path']).name for f in remaining.files}
+    assert names == {'foo.jpg', 'foo.mp4'}
+    assert (test_directory / 'foo.mp4').is_file()
+    assert (test_directory / 'foo.jpg').is_file()
+    assert not (test_directory / 'bar.mp4').exists()
+
+
+@pytest.mark.asyncio
+async def test_dedupe_file_groups_merges_tags_onto_winner(async_client, test_session, test_directory,
+                                                          make_files_structure, tag_factory):
+    """Duplicates sharing (directory, stem) collapse onto one row; tags on the loser move."""
+    from sqlalchemy import text
+
+    foo, sidecar = make_files_structure(['foo.mp4', 'foo.info.json'])
+    test_session.execute(text('DROP INDEX IF EXISTS file_group_directory_stem_idx'))
+
+    keeper = FileGroup.from_paths(test_session, foo)
+    keeper.model = 'video'
+    loser = FileGroup(
+        directory=foo.parent,
+        primary_path=sidecar,
+        stem='foo',
+        files=[{'path': sidecar.name, 'mimetype': 'application/json'}],
+    )
+    test_session.add(loser)
+    test_session.commit()
+
+    tag = await tag_factory('keepme')
+    loser.add_tag(test_session, tag.id)
+    test_session.commit()
+    keeper_id, loser_id = keeper.id, loser.id
+    assert test_session.query(FileGroup).count() == 2
+
+    deleted = lib.dedupe_file_groups_by_directory_stem()
+    test_session.expire_all()
+
+    assert deleted == 1
+    remaining = test_session.query(FileGroup).one()
+    assert remaining.id == keeper_id
+    assert remaining.tag_names == ['keepme']
+    assert test_session.query(FileGroup).filter_by(id=loser_id).one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_dedupe_file_groups_prefers_tagged_row(async_client, test_session, test_directory,
+                                                     make_files_structure, tag_factory):
+    """The tagged FileGroup wins even when it has the lower id and no model."""
+    from sqlalchemy import text
+
+    a, b = make_files_structure(['bar.mp4', 'bar.png'])
+    test_session.execute(text('DROP INDEX IF EXISTS file_group_directory_stem_idx'))
+    first = FileGroup.from_paths(test_session, a)
+    second = FileGroup(
+        directory=b.parent,
+        primary_path=b,
+        stem='bar',
+        files=[{'path': b.name, 'mimetype': 'image/png'}],
+        model='video',
+    )
+    test_session.add(second)
+    test_session.commit()
+    assert first.id < second.id
+    tag = await tag_factory('tagged-first')
+    first.add_tag(test_session, tag.id)
+    test_session.commit()
+
+    lib.dedupe_file_groups_by_directory_stem()
+    test_session.expire_all()
+
+    remaining = test_session.query(FileGroup).one()
+    # has_model ranks above tags, so the modeled later row wins; tags move onto it.
+    assert remaining.id == second.id
+    assert remaining.tag_names == ['tagged-first']
+
+
 @pytest.mark.asyncio
 async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches,
                               refresh_files):
@@ -791,6 +930,13 @@ def test_group_files_by_stem(make_files_structure, test_directory):
          test_directory / 'foo.txt'],
     ]
 
+    make_files_structure(['dir_a/s3.bin', 'dir_b/s3.bin'])
+    same_stem = [test_directory / 'dir_a/s3.bin', test_directory / 'dir_b/s3.bin']
+    assert list(lib.group_files_by_stem(same_stem)) == [
+        [test_directory / 'dir_a/s3.bin'],
+        [test_directory / 'dir_b/s3.bin'],
+    ]
+
 
 def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, example_mobi, example_pdf,
                           singlefile_contents_factory, make_files_structure):
@@ -822,7 +968,7 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
 @pytest.mark.asyncio
 async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure,
                                        zip_file_factory, refresh_files):
-    """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
+    """Files that share a stem are one FileGroup even when neither is a modeled primary."""
     foo_txt, foo_zip = make_files_structure({
         'foo.txt': 'text',
         'foo.zip': zip_file_factory(),
@@ -831,11 +977,12 @@ async def test_refresh_files_no_groups(async_client, test_session, test_director
 
     await refresh_files()
 
-    # Two distinct FileGroups.
-    assert test_session.query(FileGroup).count() == 2
-    txt, zip_ = test_session.query(FileGroup)
-    assert txt.primary_path == foo_txt and txt.size == foo_txt.stat().st_size
-    assert zip_.primary_path == foo_zip and zip_.size == foo_zip.stat().st_size
+    # Same stem is one FileGroup even when neither file is a modeled primary.
+    assert test_session.query(FileGroup).count() == 1
+    fg = test_session.query(FileGroup).one()
+    names = {pathlib.Path(f['path']).name for f in fg.files}
+    assert names == {'foo.txt', 'foo.zip'}
+    assert fg.size == foo_txt.stat().st_size + foo_zip.stat().st_size
 
 
 @pytest.mark.asyncio
@@ -890,53 +1037,34 @@ async def test_upsert_directories_chunks_large_batches(test_session, test_direct
 @pytest.mark.asyncio
 async def test_file_group_merge(async_client, test_session, test_directory, make_files_structure, tag_factory,
                                 video_bytes, srt_file3):
-    """A FileGroup can be created from multiple existing FileGroups.  Any Tags applied to the existing groups will be
-    migrated."""
+    """from_paths on a sidecar finds the existing (directory, stem) FileGroup instead of inserting a duplicate."""
     vid, srt = make_files_structure({
         'vid.mp4': video_bytes,
         'vid.srt': (PROJECT_DIR / 'test/example3.en.srt').read_text(),
     })
     one, two = await tag_factory(), await tag_factory()
     vid_group = FileGroup.from_paths(test_session, vid)
-    srt_group = FileGroup.from_paths(test_session, srt)
-    test_session.add_all([vid_group, srt_group])
-    test_session.flush([vid_group, srt_group])
+    test_session.flush([vid_group])
     vid_tag_file = vid_group.add_tag(test_session, one.name)
-    srt_tag_file = srt_group.add_tag(test_session, two.name)
-    test_session.flush([vid_tag_file, srt_tag_file])
     tag_file_created_at = vid_tag_file.created_at
+    test_session.commit()
+
+    srt_group = FileGroup.from_paths(test_session, srt)
+    assert srt_group.id == vid_group.id
+    srt_tag_file = srt_group.add_tag(test_session, two.name)
     srt_file_created_at = srt_tag_file.created_at
     test_session.commit()
 
-    assert vid_group.mimetype == 'video/mp4'
-    assert srt_group.mimetype == 'text/srt'
-
-    # Add srt to vid_group so both groups have it (simulates race condition scenario)
-    vid_group.append_files(srt)
+    merged = FileGroup.from_paths(test_session, vid, srt)
     test_session.commit()
-
-    # Verify both groups have the srt file
-    assert 'vid.srt' in [f['path'] for f in vid_group.files]
-    assert 'vid.srt' in [f['path'] for f in srt_group.files]
-
-    # Both FileGroups are merged.
-    vid = FileGroup.from_paths(test_session, vid, srt)
-    test_session.commit()
-    # files now stores relative filenames as strings, use my_files() to get resolved Paths
-    assert {i['path'].name for i in vid.my_files()} == {'vid.mp4', 'vid.srt'}
-
+    assert merged.id == vid_group.id
     assert test_session.query(FileGroup).count() == 1
-    assert set(vid.tag_names) == {'one', 'two'}
-    assert {i['path'].name for i in vid.my_files()} == {'vid.mp4', 'vid.srt'}
-    # TagFile.created_at is preserved.
-    assert [i for i in vid.tag_files if i.tag.name == 'one'][0].created_at == tag_file_created_at
-    assert [i for i in vid.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
-    # Size is combined
-    assert vid.size > len(video_bytes)
-    assert vid.mimetype == 'video/mp4'
-
-    # Verify no duplicate files were created during merge
-    filenames = [f['path'] for f in vid.files]
+    assert set(merged.tag_names) == {'one', 'two'}
+    assert {i['path'].name for i in merged.my_files()} == {'vid.mp4', 'vid.srt'}
+    assert [i for i in merged.tag_files if i.tag.name == 'one'][0].created_at == tag_file_created_at
+    assert [i for i in merged.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
+    assert merged.mimetype == 'video/mp4'
+    filenames = [f['path'] for f in merged.files]
     assert len(filenames) == len(set(filenames)), f"Duplicate files found: {filenames}"
 
 

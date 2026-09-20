@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON, or_
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
@@ -83,8 +83,9 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_size_ix', 'size'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
-        # Speeds compare joins.  Not UNIQUE: duplicates are collapsed at refresh time.
-        Index('file_group_directory_stem_idx', 'directory', 'stem'),
+        # Identity of a FileGroup.  Duplicates are collapsed by
+        # dedupe_file_groups_by_directory_stem before this unique index is created.
+        Index('file_group_directory_stem_idx', 'directory', 'stem', unique=True),
     )
     # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
     id: int = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
@@ -517,18 +518,27 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype, sanitize_filename_surrogates, \
+        from wrolpi.files.lib import choose_primary_file, get_mimetype, sanitize_filename_surrogates, \
             split_path_stem_and_suffix
 
         # Sanitize any paths with invalid UTF-8 characters (renames files on disk if needed)
         paths = tuple(sanitize_filename_surrogates(p) for p in paths)
 
-        existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
+        primary_path = choose_primary_file(paths) if paths else None
+        stem = split_path_stem_and_suffix(primary_path)[0] if primary_path else None
+        directory = str(primary_path.parent) if primary_path else None
+        filters = [FileGroup.primary_path.in_(list(map(str, paths)))]
+        if stem:
+            filters.append((FileGroup.directory == directory) & (FileGroup.stem == stem))
+        existing_groups = unique_by_predicate(
+            session.query(FileGroup).filter(or_(*filters)).all(),
+            lambda fg: fg.id,
+        )
         logger.trace(f'FileGroup.from_paths: {len(existing_groups)=}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
-            primary_path = get_primary_file(paths)
+            primary_path = choose_primary_file(paths)
             file_group.primary_path = primary_path
             file_group.append_files(*paths)
             session.add(file_group)
@@ -536,10 +546,10 @@ class FileGroup(ModelHelper, Base):
             # Found one FileGroup with these paths, no need to create a new FileGroup.
             file_group = existing_groups[0]
             file_group.append_files(*paths)
-            primary_path = get_primary_file(file_group.my_paths())
+            primary_path = choose_primary_file(file_group.my_paths())
         else:
             # Multiple FileGroups contain these paths as primary.
-            primary_path = get_primary_file(paths)
+            primary_path = choose_primary_file(paths)
             file_group: FileGroup = next(filter(lambda i: i.primary_path == primary_path, existing_groups), None)
             if not file_group:
                 file_group = FileGroup.from_paths(session, primary_path)
@@ -689,15 +699,33 @@ class FileGroup(ModelHelper, Base):
 
         new_name, _ = split_path_stem_and_suffix(new_primary_path, full=True)
         new_directory = new_primary_path.parent
+        new_stem, _ = split_path_stem_and_suffix(new_primary_path)
+
+        # Unique (directory, stem): merge into the destination group before touching disk.
+        # Otherwise shutil.move succeeds, then commit hits IntegrityError and disk/DB disagree.
+        session = Session.object_session(self)
+        if session is not None:
+            existing = session.query(FileGroup).filter(
+                FileGroup.directory == str(new_directory),
+                FileGroup.stem == new_stem,
+                FileGroup.id != self.id,
+            ).one_or_none()
+            if existing is not None:
+                self.merge([existing])
+                # Flush the DELETE first.  Otherwise SQLAlchemy UPDATEs our stem before
+                # removing the other row and hits UNIQUE (directory, stem).
+                session.flush()
 
         # Get current files with resolved absolute paths for moving
         current_files = self.my_files()
 
         # Ensure that all destination files do not yet exist before move.
+        # After merging a same-stem group, some dest paths are the files we already own.
         for file in current_files:
-            _, suffix = split_path_stem_and_suffix(file['path'])
+            old_path = file['path']
+            _, suffix = split_path_stem_and_suffix(old_path)
             new_path = pathlib.Path(f'{new_name}{suffix}')
-            if new_path.exists():
+            if new_path.exists() and new_path != old_path:
                 raise FileExistsError(f'Cannot move {self} to {new_path} because it already exists.')
 
         # Move physical files and collect new relative file entries
@@ -707,7 +735,8 @@ class FileGroup(ModelHelper, Base):
             _, suffix = split_path_stem_and_suffix(old_path)
             new_path = pathlib.Path(f'{new_name}{suffix}')
             if old_path.is_file():
-                shutil.move(old_path, new_path)
+                if old_path != new_path:
+                    shutil.move(old_path, new_path)
                 # Store just the filename (relative path)
                 new_files.append({'path': new_path.name, 'mimetype': file['mimetype']})
 

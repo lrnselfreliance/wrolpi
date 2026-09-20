@@ -299,7 +299,8 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
                 await proc.wait()
 
             if reader_task:
-                reader_task.cancel()
+                # Drain remaining stdout.  Cancelling here races the last lines on a fast process
+                # (CI often loses "line three" because wait() returns before the reader finishes).
                 try:
                     await reader_task
                 except (CancelledError, asyncio.CancelledError):

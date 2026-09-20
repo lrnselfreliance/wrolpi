@@ -20,6 +20,8 @@ from wrolpi.files.worker import (
     FileTaskType,
     FileWorkerJobFailed,
     QUEUE_STALL_SECONDS,
+)
+from wrolpi.files.refresh import (
     _split_nul_field_triples,
     _entry_from_printf_fields,
     _normalize_roots,
@@ -333,8 +335,8 @@ async def test_compare_file_groups_survives_concurrent_commit(
     """
     make_files_structure(['docs/file1.txt', 'docs/file2.txt'])
 
-    from wrolpi.files import worker as worker_mod
-    original = worker_mod._stream_filesystem_entries
+    from wrolpi.files import refresh as refresh_mod
+    original = refresh_mod._stream_filesystem_entries
 
     async def commit_after_first(roots):
         first = True
@@ -344,7 +346,7 @@ async def test_compare_file_groups_survives_concurrent_commit(
                 first = False
                 test_session.commit()
 
-    with mock.patch.object(worker_mod, '_stream_filesystem_entries', commit_after_first):
+    with mock.patch.object(refresh_mod, '_stream_filesystem_entries', commit_after_first):
         result = await compare_file_groups(test_directory)
 
     assert len(result.new) == 2
@@ -358,8 +360,8 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
     dropped (no orphan tables left behind)."""
     make_files_structure(['docs/file1.txt'])
 
-    from wrolpi.files import worker as worker_mod
-    original = worker_mod._stream_filesystem_entries
+    from wrolpi.files import refresh as refresh_mod
+    original = refresh_mod._stream_filesystem_entries
 
     async def commit_then_abort_then_raise(roots):
         async for entry in original(roots):
@@ -372,7 +374,7 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
                 pass
             raise RuntimeError('simulated crash mid-scan')
 
-    with mock.patch.object(worker_mod, '_stream_filesystem_entries', commit_then_abort_then_raise):
+    with mock.patch.object(refresh_mod, '_stream_filesystem_entries', commit_then_abort_then_raise):
         with pytest.raises(RuntimeError):
             await compare_file_groups(test_directory)
 

@@ -36,6 +36,9 @@ def test_ensure_db_creates_and_migrates(test_directory):
         fts_tables = {i[0] for i in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('file_group_fts', 'doc_section_fts')")}
         assert fts_tables == {'file_group_fts', 'doc_section_fts'}
+        file_group_cols = {r[1] for r in conn.execute('PRAGMA table_info(file_group)')}
+        assert 'idempotency' not in file_group_cols
+        assert 'stem' in file_group_cols
 
     # Running again is a no-op.
     assert db_bootstrap.ensure_db() is True
@@ -115,6 +118,44 @@ def test_unique_stem_migration_collapses_duplicates(test_directory):
             "SELECT sql FROM sqlite_master WHERE type='index' AND name='file_group_directory_stem_idx'"
         ).fetchone()[0]
         assert 'UNIQUE' in sql.upper()
+
+
+def test_drop_file_group_idempotency_preserves_fts(test_directory):
+    """DROP COLUMN idempotency must not rebuild file_group or break file_group_fts."""
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_09_18_1200')
+
+    db_file = get_db_file()
+    with sqlite3.connect(db_file) as conn:
+        cols = {r[1] for r in conn.execute('PRAGMA table_info(file_group)')}
+        assert 'idempotency' in cols
+        conn.execute(
+            'INSERT INTO file_group (directory, primary_path, files, stem, indexed, a_text) '
+            'VALUES (?,?,?,?,0,?)',
+            (str(test_directory), str(test_directory / 'searchable.txt'), '[]', 'searchable', 'alpha uniquephrase'),
+        )
+        conn.commit()
+        hits = conn.execute(
+            "SELECT rowid FROM file_group_fts WHERE file_group_fts MATCH 'uniquephrase'"
+        ).fetchall()
+        assert len(hits) == 1
+
+    command.upgrade(config, 'head')
+
+    with sqlite3.connect(db_file) as conn:
+        cols = {r[1] for r in conn.execute('PRAGMA table_info(file_group)')}
+        assert 'idempotency' not in cols
+        hits = conn.execute(
+            "SELECT rowid FROM file_group_fts WHERE file_group_fts MATCH 'uniquephrase'"
+        ).fetchall()
+        assert len(hits) == 1
 
 
 def test_bootstrap_lock(test_directory):

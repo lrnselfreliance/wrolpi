@@ -300,8 +300,19 @@ class JobLogHandler(logging.Handler):
 
 _log_handler = JobLogHandler()
 _log_handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
-if not any(isinstance(i, JobLogHandler) for i in logging.getLogger().handlers):
-    logging.getLogger().addHandler(_log_handler)
+
+
+def _ensure_log_handler():
+    """Sanic/pytest dictConfig replaces root handlers and would drop JobLogHandler.
+
+    Attach to this module's logger (not only root) so capture survives that reset.
+    """
+    for target in (logging.getLogger(), logger):
+        if not any(isinstance(i, JobLogHandler) for i in target.handlers):
+            target.addHandler(_log_handler)
+
+
+_ensure_log_handler()
 
 
 def _json_safe(value):
@@ -314,6 +325,7 @@ def _json_safe(value):
 
 async def _run_job(job_id: str):
     """Run one Job to completion (or failure/cancellation) in this process."""
+    _ensure_log_handler()
     record = _claim_job(job_id)
     if not record:
         # Cancelled while it was waiting in the queue.
@@ -360,8 +372,13 @@ async def _run_job(job_id: str):
             raise
         except Exception as e:
             logger.error(f'Job {job_id} failed', exc_info=e)
+            # Do not rely on JobLogHandler for this line: Sanic/pytest dictConfig can
+            # strip root handlers (especially under xdist on CI), so the traceback
+            # never reaches the Job log even though `error` is set.
+            context.log(f'{type(e).__name__}: {e}')
             context.flush()
-            _update_job(job_id, status=FAILED, error=str(e) or repr(e), finished_at=now().isoformat())
+            _update_job(job_id, status=FAILED, error=str(e) or repr(e),
+                        log=list(context._log), finished_at=now().isoformat())
             Events.send_user_notify(f'Failed: {record["description"]}')
             return
 

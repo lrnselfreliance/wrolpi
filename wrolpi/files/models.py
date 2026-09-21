@@ -99,9 +99,6 @@ class FileGroup(ModelHelper, Base):
     data = Column(FancyJSON)  # populated by the modeler
     download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
     files = Column(FancyJSON)  # populated during discovery
-    # Leftover from the idempotency-stamp refresh.  FileWorker no longer writes this.
-    # directory.idempotency is still used.  Do not drop: file_group is the FTS content table.
-    idempotency = Column(TZDateTime)
     indexed = Column(Boolean, default=lambda: False)  # see indexing state machine on apply_indexers
     # Cached output of split_path_stem_and_suffix(primary_path).  Identity of a group is
     # (directory, stem); primary_path is the preferred file inside the group.  Recomputed on

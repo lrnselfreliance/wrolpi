@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import pathlib
 import sqlite3
@@ -1769,8 +1770,28 @@ def _make_processed_download(session, downloader_name, url, *, when=None, freque
     return download
 
 
-def _dispatched_urls(dispatch_mock) -> set:
-    return {c.kwargs['context']['download_url'] for c in dispatch_mock.call_args_list}
+@contextlib.contextmanager
+def _capture_started_downloads():
+    """Record the downloads `_dispatch_new_downloads` starts (as background tasks) without running them."""
+    started = mock.Mock()
+
+    async def _never_runs():
+        pass
+
+    def fake_signal_download_download(**kwargs):
+        started(**kwargs)
+        return _never_runs()
+
+    def fake_background_task(coro):
+        coro.close()
+
+    with mock.patch('wrolpi.downloader.signal_download_download', fake_signal_download_download), \
+            mock.patch('wrolpi.downloader.background_task', fake_background_task):
+        yield started
+
+
+def _dispatched_urls(started_mock) -> set:
+    return {c.kwargs['download_url'] for c in started_mock.call_args_list}
 
 
 @pytest.mark.asyncio
@@ -1807,7 +1828,7 @@ async def test_daily_limit_per_domain_blocks(test_session, test_download_manager
     test_session.add_all([new_blocked, new_allowed])
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     dispatched = _dispatched_urls(dispatch)
@@ -1830,7 +1851,7 @@ async def test_daily_limit_per_domain_allows_under_limit(test_session, test_down
     test_session.add(new)
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     assert 'https://example.com/new' in _dispatched_urls(dispatch)
@@ -1840,14 +1861,14 @@ async def test_daily_limit_per_domain_allows_under_limit(test_session, test_down
 
 @pytest.mark.asyncio
 async def test_download_dispatched_outside_immediate_transaction(test_session, test_download_manager, test_downloader):
-    """The download signal must be dispatched AFTER the claiming write transaction commits.
+    """The download task must be started AFTER the claiming write transaction commits.
 
     Regression test for a production deadlock (downloads silently stopped on a test device):
-    `_dispatch_new_downloads` claimed downloads inside its write transaction and `await`ed
-    `api_app.dispatch(...)` while that transaction was still open.  Under NullPool (production) the
-    dispatched `signal_download_download` opens its OWN connection and also issues BEGIN IMMEDIATE,
-    which blocks on the write lock the outer transaction still holds until `busy_timeout` (30s)
-    expires: `database is locked`, and no download ever starts.
+    `_dispatch_new_downloads` claimed downloads inside its write transaction and started
+    `signal_download_download` while that transaction was still open.  Under NullPool (production)
+    `signal_download_download` opens its OWN connection and also issues BEGIN IMMEDIATE, which blocks
+    on the write lock the outer transaction still holds until `busy_timeout` (30s) expires:
+    `database is locked`, and no download ever starts.
 
     `production_like_sessions` gives the dispatcher its own connection, so the write lock is real
     and a competing connection can probe for it at dispatch time.
@@ -1860,18 +1881,17 @@ async def test_download_dispatched_outside_immediate_transaction(test_session, t
 
     write_lock_held_at_dispatch = []
 
-    async def record(event, *args, **kwargs):
-        if event == 'wrolpi.download.download':
-            write_lock_held_at_dispatch.append(probe_write_lock_is_held(db_file))
+    def record(coro):
+        write_lock_held_at_dispatch.append(probe_write_lock_is_held(db_file))
+        coro.close()  # never run the download itself
 
     with production_like_sessions(test_session):
-        with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
-            dispatch.side_effect = record
+        with mock.patch('wrolpi.downloader.background_task', record):
             await test_download_manager.dispatch_downloads()
 
-    assert write_lock_held_at_dispatch, 'expected the download to be dispatched'
+    assert write_lock_held_at_dispatch, 'expected the download to be started'
     assert not any(write_lock_held_at_dispatch), \
-        'download signal was dispatched while the claim still held the write lock (deadlocks under NullPool)'
+        'download was started while the claim still held the write lock (deadlocks under NullPool)'
 
 
 @pytest.mark.asyncio
@@ -1915,7 +1935,7 @@ async def test_dispatch_releases_claimed_domains_when_transaction_fails(test_ses
 
     # Fail the claim transaction's commit (e.g. an I/O error while the write lock is held).
     locked = OperationalError('COMMIT', {}, sqlite3.OperationalError('database is locked'))
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock), \
+    with _capture_started_downloads(), \
             mock.patch.object(test_session, 'commit', side_effect=locked):
         # A transient lock is swallowed by dispatch_downloads; it must not leave the claim leaked.
         await test_download_manager.dispatch_downloads()
@@ -1964,7 +1984,7 @@ async def test_daily_limit_resets_next_day(test_session, test_download_manager, 
     test_session.add(new)
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     assert 'https://example.com/new' in _dispatched_urls(dispatch)
@@ -1983,7 +2003,7 @@ async def test_daily_limit_counts_failed_attempts(test_session, test_download_ma
     test_session.add(new)
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     assert 'https://example.com/new' not in _dispatched_urls(dispatch)
@@ -2049,7 +2069,7 @@ async def test_daily_limit_global_blocks(test_session, test_download_manager, te
     test_session.add(new)
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     assert _dispatched_urls(dispatch) == set()
@@ -2069,7 +2089,7 @@ async def test_daily_limit_global_allows_under_limit(test_session, test_download
     test_session.add(new)
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     assert 'https://wikipedia.org/new' in _dispatched_urls(dispatch)
@@ -2092,7 +2112,7 @@ async def test_recurring_downloads_bypass_daily_limits(test_session, test_downlo
     test_session.add_all([recurring, non_recurring])
     test_session.commit()
 
-    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+    with _capture_started_downloads() as dispatch:
         await test_download_manager.dispatch_downloads()
 
     dispatched = _dispatched_urls(dispatch)

@@ -1,7 +1,7 @@
 """In-memory FIFO queue of background Jobs.
 
 A Job is a call of a *registered* function with JSON-able kwargs.  Any Sanic worker may enqueue a
-Job; the perpetual-tasks owner process runs them one at a time, in order.  Python logging emitted
+Job; the perpetual process runs them one at a time, in order.  Python logging emitted
 while a Job runs, and the output of subprocesses started through `JobContext.run_command`, are
 captured into the Job's log.  A caller may wait for a Job, poll it, or cancel it.
 
@@ -406,7 +406,7 @@ async def process_job_queue() -> int:
 
 @perpetual_signal(sleep=0.5)
 async def job_worker():
-    """The single consumer of the Job queue; runs in the perpetual-tasks owner process only."""
+    """The single consumer of the Job queue; runs in the perpetual process only."""
     try:
         job_id = _queue().get_nowait()
     except queue.Empty:

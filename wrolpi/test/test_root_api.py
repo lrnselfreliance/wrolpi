@@ -422,6 +422,29 @@ async def test_get_status(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_status_reports_perpetual_process(async_client, monkeypatch):
+    """/api/status lists the perpetual process next to the server workers, and nothing else the manager tracks."""
+    from unittest import mock
+    from wrolpi.api_utils import api_app
+
+    multiplexer = mock.Mock()
+    multiplexer.workers = {
+        'Sanic-Main': {'pid': 1},
+        'Sanic-Server-0': {'pid': 2, 'state': 'ACKED'},
+        'Sanic-Perpetual-0': {'pid': 3, 'state': 'STARTED'},
+        'Sanic-Inspector-0': {'pid': 4, 'state': 'STARTED'},
+    }
+    monkeypatch.setattr(api_app, 'multiplexer', multiplexer, raising=False)
+
+    request, response = await async_client.get('/api/status')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['sanic_workers'] == {
+        'Sanic-Server-0': {'pid': 2, 'state': 'ACKED'},
+        'Sanic-Perpetual-0': {'pid': 3, 'state': 'STARTED'},
+    }
+
+
+@pytest.mark.asyncio
 async def test_status_local_time_with_timezone(async_client, test_session, test_wrolpi_config):
     """Status endpoint includes local_time using configured timezone."""
     from wrolpi.common import get_wrolpi_config

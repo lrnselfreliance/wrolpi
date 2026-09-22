@@ -12,7 +12,7 @@ from sanic.signals import Event
 from modules.videos.lib import get_videos_downloader_config
 from wrolpi import flags
 from wrolpi import root_api  # noqa
-from wrolpi.api_utils import api_app, perpetual_signal
+from wrolpi.api_utils import api_app, perpetual_signal, per_worker_task
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
     create_empty_config_files, TRACE_LEVEL
@@ -22,6 +22,7 @@ from modules.videos.cookies import lock_cookies
 from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
+from wrolpi.perpetual import run_perpetual_process, PERPETUAL_PROCESS_NAME, perpetual_process_health_check
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -168,11 +169,12 @@ def main():
 @api_app.main_process_ready
 async def main_process_startup(app: Sanic):
     """
-    Initializes multiprocessing tools, flags, etc.
+    Initializes multiprocessing tools, flags, etc., then registers the perpetual process.
 
     Performed only once when the server starts, this is done before server processes are forked.
 
-    @warning: This is NOT run after auto-reload!  You must stop and start Sanic.
+    @warning: This is NOT run after auto-reload!  You must stop and start Sanic.  (The perpetual process is
+    `transient`, so the manager does restart it on auto-reload.)
     """
     logger.debug('main_process_startup')
 
@@ -199,6 +201,10 @@ async def main_process_startup(app: Sanic):
     except Exception as e:
         logger.error('Failed to create/migrate the database', exc_info=e)
 
+    # The singleton background loops run in ONE process the Worker Manager owns (not in a server worker), so no
+    # worker can claim or take them over.  `shared_ctx` is populated above; the fork inherits it.
+    app.manager.manage(PERPETUAL_PROCESS_NAME, run_perpetual_process, {}, transient=True)
+
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
 async def initialize_configs(app: Sanic):
@@ -220,7 +226,9 @@ async def initialize_configs(app: Sanic):
 @api_app.listener('reload_process_stop')
 @limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
-    """Stop downloads and securely clear sensitive data when server is shutting down."""
+    """Stop downloads and securely clear sensitive data when server is shutting down.
+
+    Runs in each server worker.  The perpetual process does the same for itself (wrolpi/perpetual.py)."""
     logger.warning('Shutting down')
     try:
         download_manager.stop()
@@ -324,13 +332,17 @@ async def perpetual_file_worker_queue():
     file_worker.check_queue_stall(processed=processed)
 
 
-@perpetual_signal(sleep=1)
+@per_worker_task(sleep=1)
 async def perpetual_check_log_level():
     """Copies global log level into this Sanic worker's logger."""
     log_level = api_app.shared_ctx.log_level.value
     if log_level != logger.getEffectiveLevel():
         logger.info(f'changing log level from {logger.getEffectiveLevel()} to {log_level}')
         set_log_level(log_level, warn_level=False)
+
+
+# Every server worker watches the perpetual process and asks the manager to restart it if it dies.
+per_worker_task(sleep=10)(perpetual_process_health_check)
 
 
 @perpetual_signal(sleep=10)
@@ -416,7 +428,7 @@ async def perpetual_check_for_updates():
     Only runs on native installs (not Docker).
     """
     # Local import to avoid loading upgrade module at startup
-    from wrolpi.upgrade import check_for_update
+    from wrolpi.upgrade import refresh_update_status
 
     # Don't check for updates in Docker environments
     if DOCKERIZED:
@@ -431,13 +443,8 @@ async def perpetual_check_for_updates():
         return
 
     try:
-        result = check_for_update(fetch=True)
-        # Store in shared_ctx.status (a manager.dict) to share across all workers.
-        api_app.shared_ctx.status['update_available'] = result.get('update_available', False)
-        api_app.shared_ctx.status['latest_commit'] = result.get('latest_commit')
-        api_app.shared_ctx.status['current_commit'] = result.get('current_commit')
-        api_app.shared_ctx.status['commits_behind'] = result.get('commits_behind', 0)
-        api_app.shared_ctx.status['git_branch'] = result.get('branch')
+        # Runs `git fetch` in a thread and stores the result in shared_ctx.status for all workers.
+        result = await refresh_update_status(api_app.shared_ctx.status)
 
         if result.get('update_available'):
             logger.info(f"Update available: {result['commits_behind']} commits behind on {result['branch']}")

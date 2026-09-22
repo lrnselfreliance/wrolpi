@@ -4,6 +4,7 @@ WROLPi upgrade system.
 This module provides functionality to check for available updates by comparing the local git HEAD
 with the remote origin branch, and to trigger the upgrade process.
 """
+import asyncio
 import pathlib
 import subprocess
 
@@ -209,6 +210,21 @@ def check_for_update(fetch: bool = True) -> dict:
         result['commits_behind'] = commits_behind
         result['update_available'] = commits_behind > 0
 
+    return result
+
+
+async def refresh_update_status(status, fetch: bool = True) -> dict:
+    """Run check_for_update (which shells out to git; `git fetch` may take up to 60 s) off the event loop
+    and record the result in `status` (the shared_ctx.status dict read by /api/status).
+
+    Nothing that shells out may block the event loop of the process that runs it.
+    """
+    result = await asyncio.to_thread(check_for_update, fetch=fetch)
+    status['update_available'] = result.get('update_available', False)
+    status['latest_commit'] = result.get('latest_commit')
+    status['current_commit'] = result.get('current_commit')
+    status['commits_behind'] = result.get('commits_behind', 0)
+    status['git_branch'] = result.get('branch')
     return result
 
 

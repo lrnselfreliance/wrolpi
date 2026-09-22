@@ -59,13 +59,6 @@ def attach_shared_contexts(app: Sanic):
 
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
-    app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()
-    # PID of the worker that started the single-process perpetual loops.
-    # The Event alone survives that worker dying (Sanic auto_reload / crash),
-    # so replacement workers check this PID before skipping startup.
-    app.shared_ctx.perpetual_tasks_owner_pid = multiprocessing.Value(ctypes.c_int, 0)
-    app.shared_ctx.perpetual_tasks_heartbeat = multiprocessing.Value(ctypes.c_double, 0.0)
-    app.shared_ctx.perpetual_tasks_lock = multiprocessing.Lock()
 
     # Transcode
     # Transcoding saturates every core; only one ffmpeg transcode may run machine-wide,
@@ -106,7 +99,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.file_worker_jobs = manager.dict()
 
     # Jobs (wrolpi/jobs.py): FIFO queue of registered functions run one at a time by the
-    # perpetual-tasks owner.  Never persisted; an API restart loses them.
+    # perpetual process.  Never persisted; an API restart loses them.
     app.shared_ctx.jobs = manager.dict()
     app.shared_ctx.jobs_queue = manager.Queue()
     app.shared_ctx.jobs_lock = multiprocessing.Lock()
@@ -233,11 +226,6 @@ def reset_shared_contexts(app: Sanic):
     del app.shared_ctx.events_history[:]
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.flags_initialized.clear()
-    app.shared_ctx.perpetual_tasks_started.clear()
-    if hasattr(app.shared_ctx, 'perpetual_tasks_owner_pid'):
-        app.shared_ctx.perpetual_tasks_owner_pid.value = 0
-    if hasattr(app.shared_ctx, 'perpetual_tasks_heartbeat'):
-        app.shared_ctx.perpetual_tasks_heartbeat.value = 0.0
 
     # Do not start downloads when reloading.
     app.shared_ctx.download_manager_stopped.set()

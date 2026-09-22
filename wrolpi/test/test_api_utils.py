@@ -5,8 +5,16 @@ from unittest import mock
 import pytest
 
 from wrolpi import perpetual
-from wrolpi.api_utils import perpetual_signal, per_worker_task, start_per_worker_tasks, stop_per_worker_tasks
+from wrolpi.api_utils import api_app, perpetual_signal, per_worker_task, start_per_worker_tasks, \
+    stop_per_worker_tasks
 from wrolpi.perpetual import PerpetualLoop
+
+
+def test_per_worker_listeners_are_registered_on_the_app():
+    """A typo in the listener event name would leave per-worker tasks never started or never stopped."""
+    registered = {(i.event, i.listener) for i in api_app._future_listeners}
+    assert ('after_server_start', start_per_worker_tasks) in registered
+    assert ('before_server_stop', stop_per_worker_tasks) in registered
 
 
 def test_registrars_are_noops_under_pytest():

@@ -69,6 +69,10 @@ def attach_shared_contexts(app: Sanic):
     # Speed tests in flight across all workers (wrolpi.speedtest).  Informational only, no lock.
     app.shared_ctx.speedtest_active = multiprocessing.Value(ctypes.c_int, 0)
 
+    # When any server worker last asked the manager to restart the perpetual process (wrolpi/perpetual.py).
+    # Shared so the N workers issue one request per cooldown, not N.
+    app.shared_ctx.perpetual_restart_requested_at = multiprocessing.Value(ctypes.c_double, 0.0)
+
     # Switches
     app.shared_ctx.switches = manager.dict()
     app.shared_ctx.switches_lock = multiprocessing.Lock()
@@ -226,6 +230,8 @@ def reset_shared_contexts(app: Sanic):
     del app.shared_ctx.events_history[:]
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.flags_initialized.clear()
+    if hasattr(app.shared_ctx, 'perpetual_restart_requested_at'):
+        app.shared_ctx.perpetual_restart_requested_at.value = 0.0
 
     # Do not start downloads when reloading.
     app.shared_ctx.download_manager_stopped.set()

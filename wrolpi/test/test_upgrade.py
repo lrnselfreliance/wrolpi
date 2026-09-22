@@ -364,9 +364,8 @@ async def test_status_endpoint_includes_git_branch(async_client):
 async def test_refresh_update_status_does_not_block_event_loop():
     """`git fetch` must run off the event loop.
 
-    A synchronous fetch (up to its 60 s timeout) stalls every request and the
-    perpetual-owner heartbeat on that worker; a stale heartbeat triggers a
-    takeover by another worker.
+    A synchronous fetch (up to its 60 s timeout) would stall the event loop of the process that
+    also runs downloads and the file worker.
     """
     import asyncio
     import threading

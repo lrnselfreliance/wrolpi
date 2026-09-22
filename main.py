@@ -22,7 +22,7 @@ from modules.videos.cookies import lock_cookies
 from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
-from wrolpi.perpetual import run_perpetual_process, PERPETUAL_PROCESS_NAME, perpetual_process_health_check
+from wrolpi.perpetual import register_perpetual_process, perpetual_process_health_check
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -203,7 +203,7 @@ async def main_process_startup(app: Sanic):
 
     # The singleton background loops run in ONE process the Worker Manager owns (not in a server worker), so no
     # worker can claim or take them over.  `shared_ctx` is populated above; the fork inherits it.
-    app.manager.manage(PERPETUAL_PROCESS_NAME, run_perpetual_process, {}, transient=True)
+    register_perpetual_process(app)
 
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
@@ -332,9 +332,11 @@ async def perpetual_file_worker_queue():
     file_worker.check_queue_stall(processed=processed)
 
 
+@perpetual_signal(sleep=1)
 @per_worker_task(sleep=1)
 async def perpetual_check_log_level():
-    """Copies global log level into this Sanic worker's logger."""
+    """Copies the global log level into this process's logger.  Registered for every server worker AND the
+    perpetual process (which does most of the interesting logging)."""
     log_level = api_app.shared_ctx.log_level.value
     if log_level != logger.getEffectiveLevel():
         logger.info(f'changing log level from {logger.getEffectiveLevel()} to {log_level}')

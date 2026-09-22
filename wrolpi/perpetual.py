@@ -159,7 +159,6 @@ def reconcile_after_predecessor(app) -> dict:
     """
     from wrolpi.downloader import download_manager, Download, DownloadStatus
     from wrolpi.files.worker import file_worker
-    from wrolpi.jobs import fail_orphaned_jobs
     from wrolpi.db import get_db_session
 
     report = dict(locks=[], jobs=0, downloads=0, processing_domains=0, file_worker_jobs=0)
@@ -167,6 +166,7 @@ def reconcile_after_predecessor(app) -> dict:
     report['locks'] = heal_shared_locks(app)
 
     try:
+        from wrolpi.jobs import fail_orphaned_jobs
         report['jobs'] = fail_orphaned_jobs()
     except Exception as e:
         logger.error('reconcile: failed to fail orphaned Jobs', exc_info=e)

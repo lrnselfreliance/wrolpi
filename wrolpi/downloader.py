@@ -1122,10 +1122,10 @@ class DownloadManager:
         #   * `_add_processing_domain` — it mutates shared, non-transactional state, so adding it
         #     before commit would leak the domain forever if the transaction fails (dispatch is then
         #     skipped and no signal handler ever runs to release it);
-        #   * `api_app.dispatch` — dispatching inside the transaction deadlocks, because the awaited
-        #     `signal_download_download` opens its own write session (also `BEGIN IMMEDIATE`,
-        #     inheriting `_immediate_txn`) and blocks on the write lock this transaction still holds,
-        #     timing out after `busy_timeout` with "database is locked" so no download ever starts.
+        #   * starting `signal_download_download` — starting it inside the transaction deadlocks, because it
+        #     opens its own write session (also `BEGIN IMMEDIATE`, inheriting `_immediate_txn`) and blocks on
+        #     the write lock this transaction still holds, timing out after `busy_timeout` with "database is
+        #     locked" so no download ever starts.
         # `claimed` tracks the domains taken this cycle so the loop's own dedup / concurrency cap
         # still holds even though `processing_domains` is not mutated until after commit.
         to_dispatch = []
@@ -1237,12 +1237,13 @@ class DownloadManager:
                     pass
 
         # The immediate (write) transaction has now committed and released the write lock.  Claim the
-        # shared processing_domain and dispatch each signal: doing both here (not inside the txn)
-        # means a failed transaction leaks nothing, and the handler's write session cannot deadlock
-        # against a lock we no longer hold.
+        # shared processing_domain and start each download as its own task: doing both here (not inside
+        # the txn) means a failed transaction leaks nothing, and the download's write session cannot
+        # deadlock against a lock we no longer hold.  (Plain tasks, not Sanic signals: the perpetual
+        # process has no Sanic server, so it has no finalized signal router.)
         for context in to_dispatch:
             self._add_processing_domain(context.pop('domain'))
-            await api_app.dispatch('wrolpi.download.download', context=context)
+            background_task(signal_download_download(**context))
 
     async def do_downloads(self):
         """Schedule any downloads that are new.
@@ -1822,9 +1823,10 @@ class DownloadManager:
 download_manager = DownloadManager()
 
 
-@api_app.signal('wrolpi.download.download')
 async def signal_download_download(download_id: int, download_url: str):
-    """Calls Downloaders based on the download information provided, as well as what is in the DB."""
+    """Runs one Download: calls its Downloader based on the download information provided and what is in the DB.
+
+    Started as a background task by `DownloadManager._dispatch_new_downloads` in the perpetual process."""
     from wrolpi.db import get_db_session
 
     with timer('signal_download_download', 'trace'):

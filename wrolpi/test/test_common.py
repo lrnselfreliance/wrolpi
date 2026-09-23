@@ -1423,3 +1423,19 @@ async def test_verify_gpg_signature_tampered(tmp_path, gpg_test_key):
 
     with mock.patch('wrolpi.common.GPG_PUBLIC_KEY', test_pubkey):
         assert await verify_gpg_signature(data_file, sig_file) is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_background_tasks_does_not_raise_for_cancelled_children():
+    """Cancelling children raises CancelledError (a BaseException) from `gather` unless exceptions are collected;
+    that aborted the shutdown of the process calling this."""
+    from wrolpi.common import background_task, cancel_background_tasks, BACKGROUND_TASKS
+
+    tasks = [background_task(asyncio.sleep(3600)) for _ in range(3)]
+    await asyncio.sleep(0)
+    assert all(t in BACKGROUND_TASKS for t in tasks)
+
+    await cancel_background_tasks()
+
+    assert all(t.cancelled() for t in tasks)
+    assert not any(t in BACKGROUND_TASKS for t in tasks)

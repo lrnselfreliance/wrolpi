@@ -2,18 +2,17 @@ import asyncio
 import json
 import logging
 import os
-from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
-from time import time
 
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
-from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG, TRACE_LEVEL
+from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
 from wrolpi.errors import APIError
+from wrolpi.perpetual import PERPETUAL_LOOPS, PER_WORKER_TASKS, PerpetualLoop, run_loop
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -163,254 +162,51 @@ async def cleanup_session(request: Request, response_: HTTPResponse):
     return response_
 
 
-PERPETUAL_WORKERS = list()
+def perpetual_signal(sleep: int | float = 1, run_while_testing: bool = False):
+    """Register a singleton background loop.  The wrapped function is called forever, `sleep` seconds after each
+    call returns, in the ONE perpetual process that Sanic's Worker Manager owns (see wrolpi/perpetual.py).  Errors
+    are logged and the loop continues; a long call is not re-entered until it returns.
 
-FILE_WORKER_PERPETUAL_EVENT = 'wrolpi.perpetual.perpetual_file_worker_queue'
-OWNER_WATCHDOG_EVENT = 'wrolpi.perpetual.perpetual_owner_watchdog'
-OWNER_HEARTBEAT_STALE_SECONDS = 30
-
-
-def _touch_heartbeat(app) -> None:
-    try:
-        app.shared_ctx.perpetual_tasks_heartbeat.value = time()
-    except Exception:
-        logger.error('Failed to update perpetual-tasks heartbeat', exc_info=True)
-
-
-def _i_am_owner(app) -> bool:
-    try:
-        return app.shared_ctx.perpetual_tasks_owner_pid.value == os.getpid()
-    except Exception:
-        return False
-
-
-def _perpetual_owner_is_alive(app) -> bool:
-    """True if the claiming worker is still running *and* keeping a heartbeat.
-
-    pid_is_running alone is not enough: after a crash the kernel can reuse the
-    owner PID for an unrelated process.  A zero heartbeat means the owner just
-    claimed and has not ticked yet, so a live PID still counts.
-    """
-    try:
-        pid = app.shared_ctx.perpetual_tasks_owner_pid.value
-    except Exception:
-        return False
-    if not pid:
-        return False
-    from wrolpi.cmd import pid_is_running
-    if not pid_is_running(pid):
-        return False
-    try:
-        heartbeat = app.shared_ctx.perpetual_tasks_heartbeat.value
-    except Exception:
-        return True
-    if not heartbeat:
-        return True
-    return (time() - heartbeat) < OWNER_HEARTBEAT_STALE_SECONDS
-
-
-def _claim_perpetual_tasks(app) -> bool:
-    """Return True if this process should start the single-process perpetual loops.
-
-    ``perpetual_tasks_started`` is a shared Event.  If the worker that set it
-    exits (Sanic auto_reload in docker, crash), the Event stays set and every
-    replacement ``after_server_start`` used to no-op — file processing, downloads,
-    and switches stayed dead until a full API restart.  Track the owner PID and
-    a heartbeat, and retake the claim when that process is gone or silent.
-    """
-    lock = getattr(app.shared_ctx, 'perpetual_tasks_lock', None)
-    if lock is None:
-        return _claim_perpetual_tasks_unlocked(app)
-    with lock:
-        return _claim_perpetual_tasks_unlocked(app)
-
-
-def _claim_perpetual_tasks_unlocked(app) -> bool:
-    if app.shared_ctx.perpetual_tasks_started.is_set() and _perpetual_owner_is_alive(app):
-        return False
-    app.shared_ctx.perpetual_tasks_started.set()
-    try:
-        app.shared_ctx.perpetual_tasks_owner_pid.value = os.getpid()
-    except Exception:
-        logger.error('Failed to record perpetual-tasks owner pid', exc_info=True)
-    _touch_heartbeat(app)
-    return True
-
-
-def _perpetual_events_for_this_process(app) -> list[str]:
-    """Events this worker should dispatch at startup.
-
-    The claiming worker starts every perpetual loop (one file-worker consumer).
-    Every other worker starts only the owner watchdog, which reclaims if the
-    owner dies later — after_server_start will not run again on those processes.
-    """
-    if _claim_perpetual_tasks(app):
-        events = list(PERPETUAL_WORKERS)
-        if OWNER_WATCHDOG_EVENT not in events:
-            events.append(OWNER_WATCHDOG_EVENT)
-        return events
-    return [OWNER_WATCHDOG_EVENT]
-
-
-def _app_is_stopping() -> bool:
-    """True when Sanic is shutting down (perpetual workers should not reschedule).
-
-    Only the ``before_server_stop`` flag (and Sanic's ``is_stopping`` if it is
-    ever set) count.  ``state.is_running`` stays False in some serving modes
-    (including this project's docker Sanic workers), so treating
-    ``is_started and not is_running`` as shutdown killed every perpetual
-    worker after its first tick.
-    """
-    try:
-        if getattr(api_app.ctx, 'perpetual_shutdown', False):
-            return True
-        state = getattr(api_app, 'state', None)
-        return bool(state is not None and getattr(state, 'is_stopping', False))
-    except Exception:
-        return False
-
-
-def _uncancel_current_task():
-    """Allow a perpetual worker to continue after an unexpected CancelledError.
-
-    Python 3.11+ re-raises CancelledError at the next await unless uncancel()
-    is called.  Without this, catching CancelledError cannot reschedule.
-    """
-    task = asyncio.current_task()
-    if task is not None and hasattr(task, 'uncancel'):
-        task.uncancel()
-
-
-@api_app.listener('before_server_start')
-async def _clear_perpetual_shutdown(app):
-    app.ctx.perpetual_shutdown = False
-
-
-@api_app.listener('before_server_stop')
-async def _set_perpetual_shutdown(app):
-    app.ctx.perpetual_shutdown = True
-
-
-async def _dispatch_perpetual(event_: str):
-    """Dispatch a perpetual-signal event.  Isolated so tests can stub it."""
-    await api_app.dispatch(event_)
-
-
-@api_app.after_server_start
-async def start_perpetual_tasks(app: Sanic):
-    events = _perpetual_events_for_this_process(app)
-    logger.info(f'start_perpetual_tasks started pid={os.getpid()} events={len(events)}')
-    logger.debug(f'start_perpetual_tasks: {events}')
-
-    try:
-        for event_ in events:
-            logger.debug(f'start_perpetual_tasks {event_}')
-            await app.dispatch(event_)
-    except Exception as e:
-        logger.error('Failed to start perpetual tasks', exc_info=e)
-        raise
-
-    logger.debug('start_perpetual_tasks completed')
-
-
-async def _run_perpetual_iteration(func: callable, event_: str, sleep: int | float):
-    """Run one perpetual-worker iteration and reschedule unless shutting down.
-
-    An ordinary Exception is logged and the loop continues.  CancelledError is
-    terminal only during shutdown; any other cancellation is logged and the
-    worker is rescheduled.  Previously any CancelledError skipped reschedule
-    with no log, silently killing file processing for the life of the process.
-    """
-    logger.trace(f'perpetual_signal {event_}')
-    start = time()
-    try:
-        await func()
-    except CancelledError:
-        if _app_is_stopping():
-            logger.info(f'Perpetual worker {event_} cancelled during shutdown')
-            raise
-        logger.warning(
-            f'Perpetual worker {event_} cancelled unexpectedly; will reschedule',
-            exc_info=True,
-        )
-        _uncancel_current_task()
-    except Exception as e:
-        logger.error(f'Perpetual worker {event_} had error', exc_info=e)
-    finally:
-        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-            elapsed = int(time() - start)
-            logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
-
-    if PYTEST:
-        return
-    if _app_is_stopping():
-        logger.info(f'Perpetual worker {event_} not rescheduling because the app is stopping')
-        return
-
-    try:
-        await asyncio.sleep(sleep)
-    except CancelledError:
-        if _app_is_stopping():
-            logger.info(f'Perpetual worker {event_} stopped during shutdown')
-            raise
-        logger.warning(
-            f'Perpetual worker {event_} cancelled while sleeping; rescheduling immediately'
-        )
-        _uncancel_current_task()
-
-    try:
-        await _dispatch_perpetual(event_)
-    except CancelledError:
-        logger.info(f'Perpetual worker {event_} cancelled while dispatching next run')
-        raise
-
-
-def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testing: bool = False):
-    """Use Sanic signals to continually call the wrapped function.  The wrapped function will continually be called,
-    even if it has errors.  If the function is long-running, it will only be called again after it has finished."""
+    The function is returned unchanged so tests can call it directly.  Under pytest nothing is registered unless
+    `run_while_testing` is set."""
 
     def wrapper(func: callable):
         if PYTEST and not run_while_testing:
-            # Do not run perpetual signal worker while testing, unless explicitly required.
             return func
-
-        # Create a Sanic "signal" for the provided function.
-        event_ = event or f'wrolpi.perpetual.{func.__name__}'
-
-        # Wrap the function in a worker that will call it perpetually.
-        @api_app.signal(event_)
-        async def worker(*args, **kwargs):
-            await _run_perpetual_iteration(lambda: func(*args, **kwargs), event_, sleep)
-
-        # Add this new signal to the global list so that a task will be started after server startup.
-        PERPETUAL_WORKERS.append(event_)
+        PERPETUAL_LOOPS.append(PerpetualLoop(func.__name__, func, sleep))
         return func
 
     return wrapper
 
 
-async def perpetual_owner_watchdog():
-    """Keep the owner heartbeat fresh, or reclaim the loops if the owner is gone.
+def per_worker_task(sleep: int | float = 1):
+    """Register a loop that EVERY Sanic server worker runs for itself (e.g. syncing its own log level).  Anything
+    that must happen exactly once belongs in `perpetual_signal` instead."""
 
-    Non-owner Sanic workers run only this tick — not the file-worker pump — so
-    file jobs stay single-consumer.  cancel_background_tasks / cancel_refresh_tasks
-    do not cancel perpetual signals; the only intentional stop is shutdown.
-    """
-    if _app_is_stopping():
-        return
-    if _i_am_owner(api_app):
-        _touch_heartbeat(api_app)
-        return
-    if not _claim_perpetual_tasks(api_app):
-        return
-    logger.warning(f'Perpetual-loop owner is gone; this worker is taking over pid={os.getpid()}')
-    _touch_heartbeat(api_app)
-    for event_ in list(PERPETUAL_WORKERS):
-        if event_ == OWNER_WATCHDOG_EVENT:
-            continue
-        await _dispatch_perpetual(event_)
+    def wrapper(func: callable):
+        if PYTEST:
+            return func
+        PER_WORKER_TASKS.append(PerpetualLoop(func.__name__, func, sleep))
+        return func
+
+    return wrapper
 
 
-# Register after perpetual_signal is defined.  In PYTEST the decorator is a
-# no-op, so tests call perpetual_owner_watchdog() directly.
-perpetual_signal(sleep=5)(perpetual_owner_watchdog)
+@api_app.after_server_start
+async def start_per_worker_tasks(app: Sanic):
+    stop = asyncio.Event()
+    app.ctx.per_worker_stop = stop
+    app.ctx.per_worker_tasks = [asyncio.create_task(run_loop(loop, stop), name=loop.name) for loop in PER_WORKER_TASKS]
+    logger.info(f'start_per_worker_tasks pid={os.getpid()} tasks={[i.name for i in PER_WORKER_TASKS]}')
+
+
+@api_app.listener('before_server_stop')
+async def stop_per_worker_tasks(app: Sanic):
+    stop = getattr(app.ctx, 'per_worker_stop', None)
+    if stop is not None:
+        stop.set()
+    tasks = getattr(app.ctx, 'per_worker_tasks', None) or []
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)

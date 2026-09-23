@@ -572,7 +572,7 @@ async def get_status(request: Request):
         sanic_workers = {
             i: {'pid': j['pid'], 'state': j['state']}
             for i, j in request.app.multiplexer.workers.items()
-            if i.startswith('Sanic-Server')
+            if i.startswith(('Sanic-Server', 'Sanic-Perpetual'))
         }
 
     wrolpi_config = get_wrolpi_config()
@@ -732,17 +732,11 @@ async def get_upgrade_check(request: Request):
     Query params:
         force: If 'true', force a fresh git fetch before checking.
     """
-    from wrolpi.upgrade import check_for_update
+    from wrolpi.upgrade import refresh_update_status
 
     force = request.args.get('force', 'false').lower() == 'true'
-    result = check_for_update(fetch=force)
-
-    # Update shared_ctx.status so /api/status returns the latest info.
-    # Using shared_ctx.status (a manager.dict) ensures info is shared across all workers.
-    api_app.shared_ctx.status['update_available'] = result.get('update_available', False)
-    api_app.shared_ctx.status['latest_commit'] = result.get('latest_commit')
-    api_app.shared_ctx.status['current_commit'] = result.get('current_commit')
-    api_app.shared_ctx.status['commits_behind'] = result.get('commits_behind', 0)
+    # Runs git off the event loop and updates shared_ctx.status so /api/status returns the latest info.
+    result = await refresh_update_status(api_app.shared_ctx.status, fetch=force)
 
     return json_response(result)
 

@@ -422,6 +422,38 @@ async def test_get_status(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_status_reports_perpetual_process(async_client, monkeypatch):
+    """/api/status lists the perpetual process next to the server workers, and nothing else the manager tracks."""
+    import multiprocessing
+    from unittest import mock
+    from sanic.worker.process import Worker, WorkerProcess
+    from wrolpi.api_utils import api_app
+    from wrolpi.perpetual import PERPETUAL_PROCESS_NAME
+
+    def sanic_name(name):
+        worker = Worker(name, name, lambda: None, {}, multiprocessing.get_context(), {}, 1)
+        return next(iter(worker.processes)).name
+
+    server = sanic_name(f'{WorkerProcess.SERVER_LABEL}-0')
+    perpetual_name = sanic_name(PERPETUAL_PROCESS_NAME)
+    multiplexer = mock.Mock()
+    multiplexer.workers = {
+        'Sanic-Main': {'pid': 1},
+        server: {'pid': 2, 'state': 'ACKED'},
+        perpetual_name: {'pid': 3, 'state': 'STARTED'},
+        sanic_name('Inspector'): {'pid': 4, 'state': 'STARTED'},
+    }
+    monkeypatch.setattr(api_app, 'multiplexer', multiplexer, raising=False)
+
+    request, response = await async_client.get('/api/status')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['sanic_workers'] == {
+        server: {'pid': 2, 'state': 'ACKED'},
+        perpetual_name: {'pid': 3, 'state': 'STARTED'},
+    }
+
+
+@pytest.mark.asyncio
 async def test_status_local_time_with_timezone(async_client, test_session, test_wrolpi_config):
     """Status endpoint includes local_time using configured timezone."""
     from wrolpi.common import get_wrolpi_config

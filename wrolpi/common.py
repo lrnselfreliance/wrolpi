@@ -2560,12 +2560,16 @@ def background_task(coro) -> Task:
 
 
 async def cancel_background_tasks():
-    """Cancels any background async tasks, if any."""
-    if BACKGROUND_TASKS:
-        logger_.warning(f'Canceling {len(BACKGROUND_TASKS)} background tasks')
-        for task in BACKGROUND_TASKS:
+    """Cancels any background async tasks, if any, and waits for them to finish.
+
+    Never raises for a task's own outcome: a cancelled child would otherwise surface as CancelledError here (a
+    BaseException) and abort the shutdown that called us."""
+    tasks = [task for task in BACKGROUND_TASKS if not task.done()]
+    if tasks:
+        logger_.warning(f'Canceling {len(tasks)} background tasks')
+        for task in tasks:
             task.cancel()
-            await asyncio.gather(*BACKGROUND_TASKS)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def await_background_tasks(timeout: int = 10):
@@ -2669,11 +2673,13 @@ REFRESH_TASKS: List[Task] = []
 
 async def cancel_refresh_tasks():
     """Cancel all refresh tasks, if any."""
-    if REFRESH_TASKS:
-        logger_.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
-        for task in REFRESH_TASKS:
+    tasks = [task for task in REFRESH_TASKS if not task.done()]
+    if tasks:
+        logger_.warning(f'Canceling {len(tasks)} refreshes')
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*REFRESH_TASKS)
+        # See cancel_background_tasks: the children's CancelledError must not abort the caller.
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def cancelable_wrapper(func: callable):

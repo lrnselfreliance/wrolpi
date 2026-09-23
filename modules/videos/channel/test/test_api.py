@@ -211,8 +211,6 @@ async def test_channel_download_requires_refresh(
         assert channel.refreshed == expected
         assert bool(channel.info_json) == expected
 
-    await async_client.sanic_app.dispatch('wrolpi.download.download')
-
     assert_refreshed(False)
     test_session.commit()
 

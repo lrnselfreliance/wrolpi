@@ -1,7 +1,7 @@
 """In-memory FIFO queue of background Jobs.
 
 A Job is a call of a *registered* function with JSON-able kwargs.  Any Sanic worker may enqueue a
-Job; the perpetual-tasks owner process runs them one at a time, in order.  Python logging emitted
+Job; the perpetual process runs them one at a time, in order.  Python logging emitted
 while a Job runs, and the output of subprocesses started through `JobContext.run_command`, are
 captured into the Job's log.  A caller may wait for a Job, poll it, or cancel it.
 
@@ -211,6 +211,24 @@ def _claim_job(job_id: str) -> Optional[dict]:
         return record
 
 
+def fail_orphaned_jobs() -> int:
+    """Mark RUNNING Jobs owned by another (dead) process as FAILED.  Called by the perpetual process when it
+    starts: only it runs Jobs, so any RUNNING record not carrying its pid belongs to a predecessor that died
+    mid-Job.  Returns how many were failed."""
+    count = 0
+    with _lock():
+        for job_id, record in list(_jobs().items()):
+            if record['status'] == RUNNING and record.get('pid') != os.getpid():
+                record = dict(record)
+                record.update(status=FAILED, finished_at=now().isoformat(),
+                              error='The process running this Job exited before it finished')
+                _jobs()[job_id] = record
+                count += 1
+    if count:
+        logger.warning(f'fail_orphaned_jobs: failed {count} Job(s) left running by a previous process')
+    return count
+
+
 def _cancel_requested(job_id: str) -> bool:
     record = _jobs().get(job_id)
     return bool(record and record.get('cancel_requested'))
@@ -406,7 +424,7 @@ async def process_job_queue() -> int:
 
 @perpetual_signal(sleep=0.5)
 async def job_worker():
-    """The single consumer of the Job queue; runs in the perpetual-tasks owner process only."""
+    """The single consumer of the Job queue; runs in the perpetual process only."""
     try:
         job_id = _queue().get_nowait()
     except queue.Empty:

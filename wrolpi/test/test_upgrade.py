@@ -13,6 +13,7 @@ from wrolpi.upgrade import (
     get_remote_commit,
     get_commits_behind,
     git_fetch,
+    refresh_update_status,
     start_upgrade,
 )
 
@@ -357,3 +358,57 @@ async def test_status_endpoint_includes_git_branch(async_client):
     finally:
         # Clean up
         api_app.shared_ctx.status.pop('git_branch', None)
+
+
+@pytest.mark.asyncio
+async def test_refresh_update_status_does_not_block_event_loop():
+    """`git fetch` must run off the event loop.
+
+    A synchronous fetch (up to its 60 s timeout) would stall the event loop of the process that
+    also runs downloads and the file worker.
+    """
+    import asyncio
+    import threading
+    import time
+
+    seen_threads = []
+
+    def slow_check(fetch=True):
+        seen_threads.append(threading.current_thread())
+        time.sleep(0.3)
+        return {'update_available': True, 'commits_behind': 3, 'branch': 'master'}
+
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            ticks += 1
+            await asyncio.sleep(0.01)
+
+    status = {}
+    with patch('wrolpi.upgrade.check_for_update', slow_check):
+        ticker_task = asyncio.ensure_future(ticker())
+        await refresh_update_status(status)
+        ticker_task.cancel()
+
+    assert seen_threads and seen_threads[0] is not threading.main_thread(), \
+        'check_for_update ran on the event loop thread'
+    assert ticks >= 10, f'event loop was starved during check_for_update (only {ticks} ticks)'
+    assert status['update_available'] is True and status['commits_behind'] == 3 and status['git_branch'] == 'master'
+
+
+
+@pytest.mark.asyncio
+async def test_refresh_update_status_can_skip_fetch():
+    """The upgrade-check endpoint passes fetch=False unless the user forces a fetch."""
+    seen = []
+
+    def fake_check(fetch=True):
+        seen.append(fetch)
+        return {'update_available': False, 'branch': 'master'}
+
+    with patch('wrolpi.upgrade.check_for_update', fake_check):
+        await refresh_update_status({}, fetch=False)
+        await refresh_update_status({})
+    assert seen == [False, True]

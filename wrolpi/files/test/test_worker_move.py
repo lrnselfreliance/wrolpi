@@ -380,7 +380,7 @@ async def test_file_worker_move_rollback_on_failure(
             raise IOError("Simulated disk failure")
         return original_move(fg, new_path)
 
-    monkeypatch.setattr('wrolpi.files.worker._move_file_group_files', failing_move)
+    monkeypatch.setattr('wrolpi.files.move._move_file_group_files', failing_move)
 
     task = FileTask(FileTaskType.move, [test_directory / 'source'], destination=dest)
     file_worker.private_queue.put_nowait(task)
@@ -417,7 +417,7 @@ async def test_handle_move_marks_job_failed_on_exception(
     def failing_move(fg, new_path):
         raise IOError('Simulated disk failure')
 
-    monkeypatch.setattr('wrolpi.files.worker._move_file_group_files', failing_move)
+    monkeypatch.setattr('wrolpi.files.move._move_file_group_files', failing_move)
 
     job_id = 'move-will-fail'
     task = FileTask(FileTaskType.move, [source_file], destination=dest, job_id=job_id)
@@ -518,7 +518,7 @@ async def test_file_worker_move_preserves_existing_destination_on_failure(
     def failing_move(fg, new_path):
         raise IOError("Simulated failure")
 
-    monkeypatch.setattr('wrolpi.files.worker._move_file_group_files', failing_move)
+    monkeypatch.setattr('wrolpi.files.move._move_file_group_files', failing_move)
 
     task = FileTask(FileTaskType.move, [source_file], destination=dest)
     file_worker.private_queue.put_nowait(task)
@@ -547,7 +547,7 @@ async def test_file_worker_move_removes_created_destination_on_failure(
     def failing_move(fg, new_path):
         raise IOError("Simulated failure")
 
-    monkeypatch.setattr('wrolpi.files.worker._move_file_group_files', failing_move)
+    monkeypatch.setattr('wrolpi.files.move._move_file_group_files', failing_move)
 
     task = FileTask(FileTaskType.move, [source_file], destination=dest)
     file_worker.private_queue.put_nowait(task)
@@ -656,7 +656,8 @@ async def test_file_worker_move_survives_concurrent_writer(
     with contextlib.ExitStack() as stack:
         maker = stack.enter_context(production_like_sessions(test_session))
 
-        real_build_move_plan_bulk = worker_module.build_move_plan_bulk
+        from wrolpi.files import move as move_module
+        real_build_move_plan_bulk = move_module.build_move_plan_bulk
 
         async def build_plan_then_hold_write_lock(*args, **kwargs):
             plan = await real_build_move_plan_bulk(*args, **kwargs)
@@ -664,7 +665,7 @@ async def test_file_worker_move_survives_concurrent_writer(
             stack.enter_context(write_lock_held_briefly(db_file))
             return plan
 
-        monkeypatch.setattr(worker_module, 'build_move_plan_bulk', build_plan_then_hold_write_lock)
+        monkeypatch.setattr(move_module, 'build_move_plan_bulk', build_plan_then_hold_write_lock)
 
         await file_worker.process_queue()
 

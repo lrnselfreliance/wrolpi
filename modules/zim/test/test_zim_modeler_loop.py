@@ -8,13 +8,10 @@ import shutil
 
 import pytest
 
-from modules.zim.lib import zim_modeler
+from modules.zim.lib import zim_modeler, ZIM_PROCESSING_LIMIT
 from modules.zim.models import Zim
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
-
-# The zim_modeler uses a hardcoded limit of 10
-ZIM_PROCESSING_LIMIT = 10
 
 
 @pytest.mark.asyncio

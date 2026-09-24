@@ -1,4 +1,3 @@
-import asyncio
 import functools
 import json
 import pathlib
@@ -26,6 +25,7 @@ from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import split_file_name_words
+from wrolpi.files.modeler import run_modeler_loop, skip_clause
 from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
@@ -73,58 +73,43 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
     return zim
 
 
+ZIM_PROCESSING_LIMIT = 10
+
+
+def _select_zim_ids(session, skip_ids: set) -> list[int]:
+    query = session.query(FileGroup.id) \
+        .outerjoin(Zim, Zim.file_group_id == FileGroup.id) \
+        .filter(FileGroup.primary_path.ilike('%.zim')) \
+        .filter(
+        # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
+        # already set indexed=True, and re-model when files changed.
+        or_(Zim.id.is_(None), FileGroup.indexed != True),
+    )
+    query = skip_clause(query, FileGroup.id, skip_ids)
+    return [row[0] for row in query.limit(ZIM_PROCESSING_LIMIT).all()]
+
+
+def _apply_zim(session: Session, file_group: FileGroup, prepared):
+    zim = session.query(Zim).filter_by(file_group_id=file_group.id).one_or_none()
+    if not zim:
+        zim = model_zim(file_group, session)
+        zim.flush()
+    else:
+        file_group.title = file_group.primary_path.name
+        file_group.a_text = split_file_name_words(file_group.primary_path.name)
+        file_group.model = 'zim'
+
+
 @register_modeler
 async def zim_modeler(progress_callback: Callable[[int], None] = None):
-    total_processed = 0
-    failed_ids: set = set()
-    while True:
-        with get_db_session(commit=True) as session:
-            query = session.query(FileGroup, Zim) \
-                .outerjoin(Zim, Zim.file_group_id == FileGroup.id) \
-                .filter(FileGroup.primary_path.ilike('%.zim')) \
-                .filter(
-                # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
-                # already set indexed=True, and re-model when files changed.
-                or_(Zim.id.is_(None), FileGroup.indexed != True),
-            )
-            if failed_ids:
-                query = query.filter(FileGroup.id.notin_(failed_ids))
-            file_groups: List[Tuple[FileGroup, Zim]] = list(query.limit(10))
-
-            processed = 0
-            for file_group, zim in file_groups:
-                processed += 1
-
-                zim_id = None
-                try:
-                    if not zim:
-                        zim = model_zim(file_group, session)
-                        zim.flush()
-                    else:
-                        zim_id = zim.id
-                        file_group.title = file_group.primary_path.name
-                        file_group.a_text = split_file_name_words(file_group.primary_path.name)
-                        file_group.indexed = True
-                        file_group.model = 'zim'
-                except Exception as e:
-                    failed_ids.add(file_group.id)
-                    if PYTEST:
-                        raise
-                    logger.error(f'Unable to model Zim {zim_id=} {file_group.primary_path=}', exc_info=e)
-
-            logger.debug(f'Modeled {processed} zim files')
-
-            # Report batch progress
-            total_processed += len(file_groups)
-            if progress_callback and len(file_groups) > 0:
-                progress_callback(total_processed)
-
-            if processed < 10:
-                # Did not reach limit, do not query again.
-                break
-
-        # Sleep to catch cancel.
-        await asyncio.sleep(0)
+    await run_modeler_loop(
+        name='zim_modeler',
+        batch_size=ZIM_PROCESSING_LIMIT,
+        select_ids=_select_zim_ids,
+        apply=_apply_zim,
+        txn='batch',
+        progress_callback=progress_callback,
+    )
 
 
 def get_all_entries_tags():

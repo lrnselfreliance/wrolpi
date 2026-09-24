@@ -167,7 +167,7 @@ async def test_doc_modeler_terminates_on_persistent_failure(async_client, test_s
     # PYTEST re-raises inside the loop's per-item handler; disable that so we exercise the failure
     # path and the loop's termination guard, not the re-raise.
     with patch('modules.docs._model_doc', side_effect=RuntimeError('boom')), \
-            patch('modules.docs.PYTEST', False):
+            patch('wrolpi.files.modeler.PYTEST', False):
         await asyncio.wait_for(doc_modeler(), timeout=10)
 
     # No Doc rows were created (every attempt failed), but the loop still terminated.

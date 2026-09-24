@@ -10,6 +10,7 @@ from modules.videos.common import get_or_create_ffprobe_json
 from modules.videos.models import Video, AUDIO_PLAYLIST_MIMETYPES
 from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.files.modeler import run_modeler_loop, skip_clause
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from .downloader import video_downloader  # Import downloaders so they are registered.
@@ -43,76 +44,55 @@ def _model_video(session: Session, file_group: FileGroup, video: Video | None, p
     return video
 
 
+def _select_video_ids(session, skip_ids: set) -> list[int]:
+    query = session.query(FileGroup.id) \
+        .outerjoin(Video, Video.file_group_id == FileGroup.id) \
+        .filter(
+        or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
+        FileGroup.mimetype.notin_(AUDIO_PLAYLIST_MIMETYPES),
+        # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
+        # already set indexed=True, and re-model when files changed (indexed != True).
+        or_(Video.id.is_(None), FileGroup.indexed != True),
+    )
+    query = skip_clause(query, FileGroup.id, skip_ids)
+    return [row[0] for row in query.limit(VIDEO_PROCESSING_LIMIT).all()]
+
+
+async def _prepare_videos(ids: list[int]) -> dict:
+    """ffprobe with no write transaction open.  A subprocess per video can run for seconds."""
+    with get_db_session() as session:
+        rows = session.query(FileGroup.id, FileGroup.primary_path).filter(FileGroup.id.in_(ids)).all()
+    probed = dict()
+    for file_group_id, primary_path in rows:
+        try:
+            probed[file_group_id] = await get_or_create_ffprobe_json(pathlib.Path(str(primary_path)))
+        except Exception as e:
+            if PYTEST:
+                raise
+            logger.error(f'Unable to ffprobe Video: {primary_path}', exc_info=e)
+        await asyncio.sleep(0)
+    return probed
+
+
+def _apply_video(session: Session, file_group: FileGroup, prepared: dict):
+    video = session.query(Video).filter_by(file_group_id=file_group.id).one_or_none()
+    _model_video(session, file_group, video, prepared or {})
+
+
 @register_modeler
 async def video_modeler(progress_callback: Callable[[int], None] = None):
-    total_processed = 0
-    # Ids that failed to model this run.  A failure leaves no Video row, so the `Video.id IS
-    # NULL` gate below would re-select it forever; failures are retried on the next refresh.
-    failed_ids: set = set()
-    while True:
-        # Read the batch; nothing is claimed yet, so the write lock stays free while ffprobe runs.
-        with get_db_session() as session:
-            query = session.query(FileGroup.id, FileGroup.primary_path) \
-                .outerjoin(Video, Video.file_group_id == FileGroup.id) \
-                .filter(
-                or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
-                FileGroup.mimetype.notin_(AUDIO_PLAYLIST_MIMETYPES),
-                # Exclusive-mimetype modeler: claim unmodeled rows even if apply_indexers
-                # already set indexed=True, and re-model when files changed (indexed != True).
-                or_(Video.id.is_(None), FileGroup.indexed != True),
-            )
-            if failed_ids:
-                query = query.filter(FileGroup.id.notin_(failed_ids))
-            batch: List[Tuple[int, pathlib.Path]] = list(query.limit(VIDEO_PROCESSING_LIMIT).all())
-
-        if not batch:
-            break
-
-        # ffprobe each file with no transaction open.  This is a subprocess per video and can run
-        # for seconds; inside the write transaction below it would hold the write lock for the whole
-        # batch, and every other writer on the box would wait out `busy_timeout` (30s).
-        probed = dict()
-        for file_group_id, primary_path in batch:
-            try:
-                probed[file_group_id] = await get_or_create_ffprobe_json(pathlib.Path(str(primary_path)))
-            except Exception as e:
-                if PYTEST:
-                    raise
-                logger.error(f'Unable to ffprobe Video: {primary_path}', exc_info=e)
-            # Sleep to catch cancel.
-            await asyncio.sleep(0)
-
-        with get_db_session(commit=True) as session:
-            file_groups: List[Tuple[FileGroup, Video]] = list(
-                session.query(FileGroup, Video)
-                .filter(FileGroup.id.in_([i for i, _ in batch]))
-                .outerjoin(Video, Video.file_group_id == FileGroup.id))
-
-            for file_group, video in file_groups:
-                try:
-                    _model_video(session, file_group, video, probed)
-                except Exception as e:
-                    # Before the re-raise, so no failure path can re-select this id forever.
-                    failed_ids.add(file_group.id)
-                    if PYTEST:
-                        raise
-                    logger.error(f'Unable to model Video: {file_group.primary_path}', exc_info=e)
-
-                file_group.indexed = True
-
-        # Report batch progress
-        total_processed += len(batch)
-        if progress_callback:
-            progress_callback(total_processed)
-
-        logger.debug(f'Modeled {len(batch)} videos')
-
-        if len(batch) < VIDEO_PROCESSING_LIMIT:
-            # Did not reach limit, do not query again.
-            break
-
-        # Sleep to catch cancel.
-        await asyncio.sleep(0)
+    await run_modeler_loop(
+        name='video_modeler',
+        batch_size=VIDEO_PROCESSING_LIMIT,
+        select_ids=_select_video_ids,
+        prepare=_prepare_videos,
+        apply=_apply_video,
+        txn='batch',
+        # A failure leaves no Video row, so Video.id IS NULL would re-select it.  Mark indexed
+        # anyway; the skip set covers this run, the next refresh retries via Video.id IS NULL.
+        mark_indexed_on_failure=True,
+        progress_callback=progress_callback,
+    )
 
 
 # Rows written per transaction when claiming Videos for their Channels.  Small enough that the

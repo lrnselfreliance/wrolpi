@@ -1,17 +1,16 @@
-import asyncio
 import logging
-from typing import Callable, List
+from typing import Callable
 
 from sqlalchemy import or_
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from wrolpi.common import register_modeler, register_refresh_cleanup, \
     truncate_object_bytes, split_lines_by_length
 from wrolpi.db import get_db_session
 from wrolpi.files.indexers import Indexer
+from wrolpi.files.modeler import run_modeler_loop, skip_clause
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
+from wrolpi.vars import FILE_MAX_TEXT_SIZE
 from .extractors import extract_metadata
 from .lib import get_or_create_subject_collection, get_or_create_author_collection, is_valid_author, split_authors, \
     normalize_author, normalize_subject, split_subjects, is_valid_subject, discover_calibre_cover
@@ -22,6 +21,33 @@ logger = logging.getLogger(__name__)
 DOC_PROCESSING_LIMIT = 10
 # Retries for a single doc when it hits SQLite's "database is locked" (SQLITE_BUSY_SNAPSHOT).
 DOC_LOCK_RETRIES = 3
+
+
+def _select_doc_ids(session, skip_ids: set) -> list[int]:
+    query = session.query(FileGroup.id) \
+        .outerjoin(Doc, Doc.file_group_id == FileGroup.id) \
+        .filter(
+        or_(
+            *[FileGroup.mimetype == mt for mt in DOC_MIMETYPES],
+            *[FileGroup.primary_path.like(f'%{suffix}') for suffix in COMIC_BOOK_SUFFIXES],
+        ),
+        # Model any doc that has no Doc row yet (even if `apply_indexers` already set
+        # `indexed=True` before this modeler ran), or any doc explicitly flagged for
+        # re-indexing.  Gating solely on `indexed == False` left already-indexed docs
+        # permanently unmodeled and invisible in /api/docs.
+        or_(
+            Doc.id.is_(None),
+            FileGroup.indexed != True,
+        ),
+    )
+    query = skip_clause(query, FileGroup.id, skip_ids)
+    return [row[0] for row in query.limit(DOC_PROCESSING_LIMIT).all()]
+
+
+def _apply_doc(session: Session, file_group: FileGroup, prepared):
+    doc = _model_doc(file_group, session)
+    session.add(doc)
+    file_group.model = Doc.__tablename__
 
 
 @register_modeler
@@ -36,78 +62,15 @@ async def doc_modeler(progress_callback: Callable[[int], None] = None):
     modeler run.  Per-doc transactions keep the write window short and isolate failures so one
     locked/broken doc cannot poison the rest of the run.
     """
-    total_processed = 0
-    # Ids of docs that failed to model this run.  A failed doc keeps matching the `Doc.id IS NULL`
-    # gate below, so without excluding it the loop would re-select it forever, hang, and starve
-    # later docs.  Successfully-modeled docs are excluded automatically (they gain a Doc row), so
-    # only failures need tracking -- keeping this set (and the `notin_` clause) small.  Failed docs
-    # are retried on the next refresh.
-    failed_ids: set = set()
-    while True:
-        # Short read-only transaction to choose the next batch of ids.  Do NOT hold it open across
-        # the slow per-doc modeling below.
-        with get_db_session() as session:
-            query = session.query(FileGroup.id) \
-                .outerjoin(Doc, Doc.file_group_id == FileGroup.id) \
-                .filter(
-                or_(
-                    *[FileGroup.mimetype == mt for mt in DOC_MIMETYPES],
-                    *[FileGroup.primary_path.like(f'%{suffix}') for suffix in COMIC_BOOK_SUFFIXES],
-                ),
-                # Model any doc that has no Doc row yet (even if `apply_indexers` already set
-                # `indexed=True` before this modeler ran), or any doc explicitly flagged for
-                # re-indexing.  Gating solely on `indexed == False` left already-indexed docs
-                # permanently unmodeled and invisible in /api/docs.
-                or_(
-                    Doc.id.is_(None),
-                    FileGroup.indexed != True,
-                ),
-            )
-            if failed_ids:
-                query = query.filter(FileGroup.id.notin_(failed_ids))
-            fg_ids: List[int] = [row[0] for row in query.limit(DOC_PROCESSING_LIMIT).all()]
-
-        if not fg_ids:
-            break
-
-        for fg_id in fg_ids:
-            for attempt in range(DOC_LOCK_RETRIES):
-                try:
-                    # One short write transaction per doc.
-                    with get_db_session(commit=True) as session:
-                        file_group = session.query(FileGroup).get(fg_id)
-                        if file_group is None:
-                            # Deleted between discovery and now; nothing to model.
-                            break
-                        doc = _model_doc(file_group, session)
-                        session.add(doc)
-                        file_group.model = Doc.__tablename__
-                        file_group.indexed = True
-                    break
-                except OperationalError as e:
-                    # Another connection committed during our transaction.  Retrying with a fresh
-                    # transaction gets a fresh snapshot and usually succeeds.
-                    if 'locked' in str(e).lower() and attempt < DOC_LOCK_RETRIES - 1:
-                        await asyncio.sleep(0.2 * (attempt + 1))
-                        continue
-                    logger.error(f'Failed to model doc file_group_id={fg_id}: database error', exc_info=e)
-                    failed_ids.add(fg_id)
-                    break
-                except Exception as e:
-                    # Never reference the ORM object here: after a failed flush the session is
-                    # rolled back, so touching a lazy/expired attribute (e.g. in its repr) raises a
-                    # second exception that would abort the whole modeler.  Log the plain id only.
-                    logger.error(f'Failed to model doc file_group_id={fg_id}', exc_info=e)
-                    failed_ids.add(fg_id)
-                    if PYTEST:
-                        raise
-                    break
-            # Yield so a cancel/other tasks can run between docs.
-            await asyncio.sleep(0)
-
-        total_processed += len(fg_ids)
-        if progress_callback:
-            progress_callback(total_processed)
+    await run_modeler_loop(
+        name='doc_modeler',
+        batch_size=DOC_PROCESSING_LIMIT,
+        select_ids=_select_doc_ids,
+        apply=_apply_doc,
+        txn='per_item',
+        lock_retries=DOC_LOCK_RETRIES,
+        progress_callback=progress_callback,
+    )
 
 
 def _model_doc(file_group: FileGroup, session: Session) -> Doc:

@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 from typing import Awaitable, Callable, Iterable
 
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import InvalidRequestError, OperationalError
 
 from wrolpi.common import logger
 from wrolpi.db import get_db_session
@@ -105,6 +105,11 @@ async def _apply_batch(
                 except SkipModeler:
                     file_group.indexed = False
                     skip_ids.add(file_group.id)
+                except InvalidRequestError:
+                    # A previous apply already flushed and rolled the session back.
+                    # Remaining items would each log the same error; skip the page.
+                    skip_ids.update(ids)
+                    break
                 except Exception as e:
                     skip_ids.add(file_group.id)
                     if mark_indexed_on_failure:
@@ -116,9 +121,9 @@ async def _apply_batch(
         # One poisoned commit must not kill the modeler.  Skip this page for the rest of
         # the run; the next refresh retries it.
         skip_ids.update(ids)
-        logger.error(f'{name}: failed to commit batch of {len(ids)} FileGroups', exc_info=e)
         if PYTEST:
             raise
+        logger.error(f'{name}: failed to commit batch of {len(ids)} FileGroups', exc_info=e)
 
 
 async def _apply_per_item(

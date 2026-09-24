@@ -1,9 +1,7 @@
-import asyncio
 import logging
-from typing import Callable, List
+from typing import Callable
 
 from sqlalchemy import or_
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from wrolpi.common import register_modeler, register_refresh_cleanup, \
@@ -12,7 +10,7 @@ from wrolpi.db import get_db_session
 from wrolpi.files.indexers import Indexer
 from wrolpi.files.modeler import run_modeler_loop, skip_clause
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
+from wrolpi.vars import FILE_MAX_TEXT_SIZE
 from .extractors import extract_metadata
 from .lib import get_or_create_subject_collection, get_or_create_author_collection, is_valid_author, split_authors, \
     normalize_author, normalize_subject, split_subjects, is_valid_subject, discover_calibre_cover

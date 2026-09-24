@@ -740,12 +740,27 @@ async def read_content(request: Request, file_group_id: int):
 async def manage_catalog(_: Request):
     models, source = await catalog.get_models_catalog()
     models_directory = catalog.get_models_directory()
-    downloaded = {i.name for i in models_directory.glob('*.gguf')} if models_directory.is_dir() else set()
+    on_disk = {i.name: i for i in models_directory.glob('*.gguf')} if models_directory.is_dir() else dict()
     disk_usage = sum(i.stat().st_size for i in models_directory.glob('*')) if models_directory.is_dir() else 0
 
     config = get_ai_config()
-    models = [dict(i, downloaded=i['name'] in downloaded, active=i['name'] == config.active_model)
+    models = [dict(i, downloaded=i['name'] in on_disk, active=i['name'] == config.active_model)
               for i in models]
+    # Any GGUF the user copied into ai/models themselves is a "custom" model.  It is discovered
+    # here on every request (no file refresh) so it appears in the Active Model dropdown.
+    catalog_names = {i['name'] for i in models}
+    for name, path in sorted(on_disk.items()):
+        # Skip names start_llama_server.sh could not load (see is_loadable_model_name).
+        if name not in catalog_names and path.is_file() and catalog.is_loadable_model_name(name):
+            models.append(dict(
+                name=name,
+                tier='custom',
+                url=None,
+                size=path.stat().st_size,
+                description='Custom model found in ai/models/. Not from the WROLPi catalog.',
+                downloaded=True,
+                active=name == config.active_model,
+            ))
 
     total_ram = catalog.get_total_ram_bytes()
     return json_response(dict(
@@ -774,11 +789,16 @@ async def manage_settings(_: Request, body: schema.AIManageSettingsRequest):
     if body.active_model is not None:
         if body.active_model and not (catalog.get_models_directory() / body.active_model).is_file():
             raise ValidationError(f'Model is not downloaded: {body.active_model}')
+        if body.active_model and not catalog.is_loadable_model_name(body.active_model):
+            raise ValidationError(f'Model file name cannot be loaded by llama-server; rename it to plain ASCII'
+                                  f' without #, quotes, or "..": {body.active_model}')
         config.active_model = body.active_model
         # Each model has its own context default (the 4B runs 16k, the small tier 8k); selecting
-        # a model adopts it unless this request also sets context_size explicitly.
-        if body.context_size is None and (default := catalog.get_model_default_context(body.active_model)):
-            config.context_size = default
+        # a model adopts it unless this request also sets context_size explicitly.  A custom model
+        # has no catalog default, so the previous model's explicit value is cleared rather than
+        # carried over.
+        if body.context_size is None:
+            config.context_size = catalog.get_model_default_context(body.active_model)
     if body.enabled is not None:
         config.enabled = body.enabled
     if body.idle_unload_minutes is not None:

@@ -187,9 +187,10 @@ export function ManageAi() {
                 is downloaded. Download a model, select it, then enable the assistant. Monitor
                 download progress on the <b>Downloads</b> page.</p>
             <p>You can also copy your own GGUF file into <b>ai/models/</b>; it will appear here as a
-                <b>custom</b> model the next time this page loads. The model must support tool calling
-                (Qwen3, Llama 3.x, and Mistral instruct models do). Custom models use the default
-                context size unless you set <b>context_size</b> in <b>ai.yaml</b>.</p>
+                <b>custom</b> model the next time this page loads. Use a plain ASCII file name without
+                <b>#</b>, quotes, or <b>..</b>. The model must support tool calling (Qwen3, Llama 3.x,
+                and Mistral instruct models do). Selecting a custom model resets the context size to the
+                default; set <b>context_size</b> in <b>ai.yaml</b> to override it.</p>
         </InfoMessage>
     </>;
 }

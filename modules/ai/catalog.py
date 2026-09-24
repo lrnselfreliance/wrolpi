@@ -51,6 +51,24 @@ def get_models_directory() -> Path:
     return get_media_directory() / 'ai/models'
 
 
+# Printable ASCII only, minus the characters the shell config reader cannot round-trip.
+# start_llama_server.sh reads active_model back out of ai.yaml with read_config_value.sh: PyYAML
+# escapes non-ASCII (\xE9), the reader strips " #..." before unquoting, and quotes/backslashes
+# survive as literal characters.  The start script's traversal guard also rejects any ".." run.
+_UNLOADABLE_CHARS = set('#"\'\\/')
+
+
+def is_loadable_model_name(name: str) -> bool:
+    """True when llama-server can be started with this file name from ai/models.
+
+    Catalog names always pass; this exists for GGUFs the user copies in by hand."""
+    if not name or not name.endswith('.gguf') or name != name.strip():
+        return False
+    if '..' in name or any(c in _UNLOADABLE_CHARS for c in name):
+        return False
+    return all(0x20 <= ord(c) < 0x7F for c in name)
+
+
 async def fetch_models_manifest(url: str = None) -> dict:
     """Fetch the models manifest from the CDN and verify its GPG signature (map-manifest pattern)."""
     url = url or MODELS_MANIFEST_URL

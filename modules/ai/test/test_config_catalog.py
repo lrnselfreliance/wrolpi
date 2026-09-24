@@ -218,13 +218,70 @@ async def test_manage_catalog_lists_custom_models(async_client, test_directory, 
     assert custom['size'] == 40
     assert custom['url'] is None
 
-    # It can be activated like any downloaded model; it has no catalog context default.
+    # Selecting a catalog model first stores its context default in ai.yaml ...
+    content = dict(active_model='Qwen3-1.7B-Q4_K_M.gguf')
+    request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['context_size'] == 8_192
+
+    # ... and switching to the custom model clears it, since a custom model has no catalog
+    # default; it must not silently keep the previous model's value.
     content = dict(active_model='My-Custom-Model-Q8_0.gguf')
     request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['active_model'] == 'My-Custom-Model-Q8_0.gguf'
     assert response.json['context_size'] is None
+    assert catalog.get_effective_context_size() == 8_192  # the conservative default
+
+    # An explicit context_size in the same request still wins for a custom model.
+    content = dict(active_model='My-Custom-Model-Q8_0.gguf', context_size=4_096)
+    request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
+    assert response.json['context_size'] == 4_096
     with mock.patch('modules.ai.catalog.fetch_models_manifest', side_effect=RuntimeError('offline')):
         request, response = await async_client.get('/api/ai/manage/catalog')
     custom = next(i for i in response.json['models'] if i['name'] == 'My-Custom-Model-Q8_0.gguf')
     assert custom['active'] is True
+
+
+@pytest.mark.parametrize('name,loadable', [
+    ('My-Custom-Model-Q8_0.gguf', True),
+    ('model (v2) [q4].gguf', True),  # shell-safe once quoted by PyYAML
+    ('café.gguf', False),  # PyYAML dumps \xE9; read_config_value.sh prints the escape literally
+    ('模型-Q4.gguf', False),
+    ('model #1.gguf', False),  # the reader strips " #..." before unquoting
+    ('foo..bar.gguf', False),  # start_llama_server.sh's traversal guard rejects any ".."
+    ('it\'s.gguf', False),
+    ('say "hi".gguf', False),
+    ('back\\slash.gguf', False),
+    (' padded.gguf', False),
+    ('model.bin', False),
+])
+def test_is_loadable_model_name(name, loadable):
+    """Only names start_llama_server.sh can read back out of ai.yaml are loadable."""
+    assert catalog.is_loadable_model_name(name) is loadable
+
+
+@pytest.mark.asyncio
+async def test_manage_catalog_skips_unloadable_custom_models(async_client, test_directory, test_ai_config):
+    """A copied-in GGUF whose name cannot round-trip through ai.yaml and the shell reader is neither
+    listed nor accepted, so the UI never reports an activation that llama-server would refuse."""
+    models_dir = test_directory / 'ai/models'
+    models_dir.mkdir(parents=True)
+    (models_dir / 'café.gguf').write_bytes(b'GGUF')
+    (models_dir / 'model #1.gguf').write_bytes(b'GGUF')
+    (models_dir / 'foo..bar.gguf').write_bytes(b'GGUF')
+    (models_dir / 'Fine-Model.gguf').write_bytes(b'GGUF')
+    (models_dir / 'a-directory.gguf').mkdir()
+
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', side_effect=RuntimeError('offline')):
+        request, response = await async_client.get('/api/ai/manage/catalog')
+    names = [i['name'] for i in response.json['models']]
+    assert 'Fine-Model.gguf' in names
+    for bad in ('café.gguf', 'model #1.gguf', 'foo..bar.gguf', 'a-directory.gguf'):
+        assert bad not in names
+
+    for bad in ('café.gguf', 'model #1.gguf', 'foo..bar.gguf'):
+        request, response = await async_client.post('/api/ai/manage/settings',
+                                                    content=json.dumps(dict(active_model=bad)))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, bad
+        assert 'cannot be loaded' in response.json['error']

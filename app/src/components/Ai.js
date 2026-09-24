@@ -26,7 +26,9 @@ export function AiModelRow({model, onDownload}) {
         <Table.Cell>{humanFileSize(size)}</Table.Cell>
         <Table.Cell>
             {downloaded
-                ? <Button size='xs' icon='check' disabled role='save'>Downloaded</Button>
+                ? <Button size='xs' icon='check' disabled role='save'>
+                    {tier === 'custom' ? 'On disk' : 'Downloaded'}
+                </Button>
                 : <APIButton size='xs' icon='download' color='violet' onClick={() => onDownload(model)}>
                     Download
                 </APIButton>}
@@ -184,6 +186,10 @@ export function ManageAi() {
             <p>The AI assistant runs entirely on this WROLPi — no internet is needed after a model
                 is downloaded. Download a model, select it, then enable the assistant. Monitor
                 download progress on the <b>Downloads</b> page.</p>
+            <p>You can also copy your own GGUF file into <b>ai/models/</b>; it will appear here as a
+                <b>custom</b> model the next time this page loads. The model must support tool calling
+                (Qwen3, Llama 3.x, and Mistral instruct models do). Custom models use the default
+                context size unless you set <b>context_size</b> in <b>ai.yaml</b>.</p>
         </InfoMessage>
     </>;
 }

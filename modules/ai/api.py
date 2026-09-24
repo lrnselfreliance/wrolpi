@@ -740,12 +740,26 @@ async def read_content(request: Request, file_group_id: int):
 async def manage_catalog(_: Request):
     models, source = await catalog.get_models_catalog()
     models_directory = catalog.get_models_directory()
-    downloaded = {i.name for i in models_directory.glob('*.gguf')} if models_directory.is_dir() else set()
+    on_disk = {i.name: i for i in models_directory.glob('*.gguf')} if models_directory.is_dir() else dict()
     disk_usage = sum(i.stat().st_size for i in models_directory.glob('*')) if models_directory.is_dir() else 0
 
     config = get_ai_config()
-    models = [dict(i, downloaded=i['name'] in downloaded, active=i['name'] == config.active_model)
+    models = [dict(i, downloaded=i['name'] in on_disk, active=i['name'] == config.active_model)
               for i in models]
+    # Any GGUF the user copied into ai/models themselves is a "custom" model.  It is discovered
+    # here on every request (no file refresh) so it appears in the Active Model dropdown.
+    catalog_names = {i['name'] for i in models}
+    for name, path in sorted(on_disk.items()):
+        if name not in catalog_names:
+            models.append(dict(
+                name=name,
+                tier='custom',
+                url=None,
+                size=path.stat().st_size,
+                description='Custom model found in ai/models/. Not from the WROLPi catalog.',
+                downloaded=True,
+                active=name == config.active_model,
+            ))
 
     total_ram = catalog.get_total_ram_bytes()
     return json_response(dict(

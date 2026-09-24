@@ -7,7 +7,6 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Iterable
 
-from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT
@@ -17,6 +16,7 @@ from wrolpi.common import logger, register_modeler, register_refresh_cleanup, li
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
+from wrolpi.files.modeler import run_modeler_loop, skip_clause, SkipModeler
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT, PROJECT_DIR
 from . import lib
@@ -358,85 +358,46 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
         raise InvalidArchive(f'Failed to model Archive {file_group}') from e
 
 
+ARCHIVE_PROCESSING_LIMIT = 20
+
+
+def _select_archive_ids(session, skip_ids: set) -> list[int]:
+    query = session.query(FileGroup.id).filter(
+        # Archive shares text/html with generic HTML.  Unlike video/doc/zim, do NOT
+        # select Archive.id IS NULL: that would re-probe every leftover HTML file
+        # every refresh.  Non-SingleFile HTML stays indexed=0 so apply_indexers
+        # can claim it.
+        FileGroup.indexed != True,
+        FileGroup.mimetype == 'text/html',
+    )
+    query = skip_clause(query, FileGroup.id, skip_ids)
+    return [row[0] for row in query.limit(ARCHIVE_PROCESSING_LIMIT).all()]
+
+
+def _apply_archive(session: Session, file_group: FileGroup, prepared):
+    with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}', logger__=logger):
+        archive = session.query(Archive).filter_by(file_group_id=file_group.id).one_or_none()
+        if archive:
+            archive.validate()
+            return
+        try:
+            model_archive(session, file_group)
+        except InvalidArchive as e:
+            raise SkipModeler from e
+
+
 @register_modeler
 async def archive_modeler(progress_callback: Callable[[int], None] = None):
     """Searches DB for FileGroups that contain an HTML file.  If the HTML file is a SingleFile, we model it as an
     Archive."""
-    invalid_archives = set()
-    total_processed = 0
-
-    while True:
-        with get_db_session(commit=True) as session:
-            results = session.query(FileGroup, Archive) \
-                .filter(
-                # Archive shares text/html with generic HTML.  Unlike video/doc/zim, do NOT
-                # select Archive.id IS NULL: that would re-probe every leftover HTML file
-                # every refresh.  Non-SingleFile HTML stays indexed=0 so apply_indexers
-                # can claim it.
-                FileGroup.indexed != True,
-                FileGroup.mimetype == 'text/html',
-            ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \
-                .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
-                .limit(20)
-            results: Iterable[Tuple[FileGroup, Archive]]
-            results_list = list(results)
-
-            processed = 0
-            for processed, (file_group, archive) in enumerate(results_list):
-                with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
-                                 logger__=logger):
-                    if archive:
-                        try:
-                            archive_id = archive.id
-                            archive.validate()
-                            # Successfully validated, mark as indexed
-                            file_group.indexed = True
-                        except Exception as e:
-                            logger.error(f'Unable to validate Archive {archive_id}')
-                            # Don't mark as indexed - will retry later
-                            if PYTEST:
-                                raise
-                    else:
-                        try:
-                            model_archive(session, file_group)
-                            # Successfully modeled, mark as indexed
-                            file_group.indexed = True
-                        except InvalidArchive:
-                            # It was not a real Archive.  Many HTML files will not be an Archive.
-                            file_group.indexed = False
-                            invalid_archives.add(file_group.id)
-                        except Exception as e:
-                            # Some other error occurred during modeling - don't mark as indexed so we can retry
-                            logger.error(f'Failed to model Archive for FileGroup {file_group.id}: {e}')
-                            if PYTEST:
-                                raise
-
-            try:
-                session.commit()
-            except Exception as e:
-                # One poisoned row must not kill the modeler: skip this batch for the rest of this
-                # run and keep modeling.  The batch stays unindexed, so the next refresh retries it.
-                session.rollback()
-                logger.error(f'archive_modeler failed to commit batch, skipping {len(results_list)} FileGroups',
-                             exc_info=e)
-                invalid_archives.update(fg.id for fg, _ in results_list)
-                if PYTEST:
-                    raise
-
-            # Report batch progress
-            batch_count = len(results_list)
-            total_processed += batch_count
-            if progress_callback and batch_count > 0:
-                progress_callback(total_processed)
-
-            if processed < 19:
-                # Did not reach limit (enumerate is 0-indexed, so 19 = 20 items), do not query again.
-                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-                    logger.trace(f'archive_modeler: DONE (processed {processed + 1} files)')
-                break
-
-        # Sleep to catch cancel.
-        await asyncio.sleep(0)
+    await run_modeler_loop(
+        name='archive_modeler',
+        batch_size=ARCHIVE_PROCESSING_LIMIT,
+        select_ids=_select_archive_ids,
+        apply=_apply_archive,
+        txn='batch',
+        progress_callback=progress_callback,
+    )
 
 
 @register_refresh_cleanup

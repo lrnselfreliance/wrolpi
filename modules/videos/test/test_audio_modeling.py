@@ -163,7 +163,7 @@ async def test_video_modeler_terminates_on_persistent_failure(async_client, test
     # loop's per-item handler; disable that to exercise the failure path and the termination
     # guard, not the re-raise.
     with patch('modules.videos._model_video', side_effect=RuntimeError('boom')), \
-            patch('modules.videos.PYTEST', False):
+            patch('wrolpi.files.modeler.PYTEST', False):
         await asyncio.wait_for(video_modeler(), timeout=10)
 
     assert test_session.query(Video).count() == 0, 'every attempt failed, yet the loop terminated'

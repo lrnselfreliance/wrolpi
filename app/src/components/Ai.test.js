@@ -104,6 +104,24 @@ describe('ManageAi', () => {
         await waitFor(() => expect(postAiSettings).toHaveBeenCalledWith({enabled: true}));
     });
 
+    it('lists a custom GGUF from ai/models in the Active Model dropdown', async () => {
+        const custom = {
+            name: 'My-Custom-Model-Q8_0.gguf', tier: 'custom', size: 3_000_000_000, url: null,
+            description: 'Custom model found in ai/models/. Not from the WROLPi catalog.',
+            downloaded: true, active: false,
+        };
+        const fixture = catalogFixture();
+        getAiCatalog.mockResolvedValue({...fixture, models: [...fixture.models, custom]});
+        render(<ManageAi/>);
+        await waitFor(() => expect(screen.getByText('On disk')).toBeInTheDocument());
+        expect(screen.getByRole('cell', {name: 'custom'})).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('textbox', {name: 'Active Model'}));
+        const option = await screen.findByRole('option', {name: 'My-Custom-Model-Q8_0.gguf'});
+        fireEvent.click(option);
+        await waitFor(() => expect(postAiSettings).toHaveBeenCalledWith({active_model: 'My-Custom-Model-Q8_0.gguf'}));
+    });
+
     it('shows the slow-hardware warning on a Pi 4', async () => {
         getAiCatalog.mockResolvedValue(catalogFixture({slow_hardware: true}));
         render(<ManageAi/>);

@@ -192,3 +192,39 @@ async def test_manage_settings_adopts_model_context(async_client, test_directory
     content = dict(active_model='Qwen3-4B-Instruct-2507-Q4_K_M.gguf', context_size=4_096)
     request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
     assert response.json['context_size'] == 4_096
+
+
+@pytest.mark.asyncio
+async def test_manage_catalog_lists_custom_models(async_client, test_directory, test_ai_config):
+    """A GGUF the user copied into ai/models (not from the catalog) is listed as a custom model so it
+    can be selected in the Manage tab.  It is discovered on every request; no file refresh needed."""
+    models_dir = test_directory / 'ai/models'
+    models_dir.mkdir(parents=True)
+    (models_dir / 'My-Custom-Model-Q8_0.gguf').write_bytes(b'GGUF' * 10)
+    (models_dir / 'Qwen3-1.7B-Q4_K_M.gguf').write_bytes(b'GGUF')
+    (models_dir / 'partial.gguf.tmp').write_bytes(b'x')  # an in-progress download is not a model
+
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', side_effect=RuntimeError('offline')):
+        request, response = await async_client.get('/api/ai/manage/catalog')
+    assert response.status_code == HTTPStatus.OK
+    names = [i['name'] for i in response.json['models']]
+    assert names.count('Qwen3-1.7B-Q4_K_M.gguf') == 1, 'catalog model must not be duplicated'
+    assert 'partial.gguf.tmp' not in names
+
+    custom = next(i for i in response.json['models'] if i['name'] == 'My-Custom-Model-Q8_0.gguf')
+    assert custom['tier'] == 'custom'
+    assert custom['downloaded'] is True
+    assert custom['active'] is False
+    assert custom['size'] == 40
+    assert custom['url'] is None
+
+    # It can be activated like any downloaded model; it has no catalog context default.
+    content = dict(active_model='My-Custom-Model-Q8_0.gguf')
+    request, response = await async_client.post('/api/ai/manage/settings', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['active_model'] == 'My-Custom-Model-Q8_0.gguf'
+    assert response.json['context_size'] is None
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', side_effect=RuntimeError('offline')):
+        request, response = await async_client.get('/api/ai/manage/catalog')
+    custom = next(i for i in response.json['models'] if i['name'] == 'My-Custom-Model-Q8_0.gguf')
+    assert custom['active'] is True

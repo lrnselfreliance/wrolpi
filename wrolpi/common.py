@@ -1183,6 +1183,12 @@ async def import_all_db_configs() -> dict[str, bool]:
     Returns a dict mapping config name to success status.
     Used by main.py startup and disaster recovery tests.
 
+    This runs in a Sanic worker's after_server_start listener while that worker is already
+    accepting connections.  Each synchronous import is run in a thread so a large config (minutes
+    of tags/channels/downloads work) does not freeze the worker's event loop and hang every
+    request routed to it.  The SQLite engine allows cross-thread connections (check_same_thread
+    off); imports still run one at a time, in order.
+
     Import order matters:
     1. Tags - no dependencies
     2. Downloads - no dependencies
@@ -1200,7 +1206,7 @@ async def import_all_db_configs() -> dict[str, bool]:
 
     # Tags first (channels/domains depend on tags existing)
     try:
-        tags.import_tags_config()
+        await asyncio.to_thread(tags.import_tags_config)
         results['tags'] = True
         logger.debug('tags config imported')
     except Exception as e:
@@ -1218,7 +1224,7 @@ async def import_all_db_configs() -> dict[str, bool]:
 
     # Channels (uses tags, links to downloads)
     try:
-        import_channels_config()
+        await asyncio.to_thread(import_channels_config)
         results['channels'] = True
         logger.debug('channels config imported')
     except Exception as e:
@@ -1227,7 +1233,7 @@ async def import_all_db_configs() -> dict[str, bool]:
 
     # Domains (uses tags)
     try:
-        import_domains_config()
+        await asyncio.to_thread(import_domains_config)
         results['domains'] = True
         logger.debug('domains config imported')
     except Exception as e:
@@ -1236,7 +1242,7 @@ async def import_all_db_configs() -> dict[str, bool]:
 
     # Inventories (config-only, no DB).  Migrates any legacy inventories.yaml, then loads per-inventory files.
     try:
-        import_inventories_config()
+        await asyncio.to_thread(import_inventories_config)
         results['inventories'] = True
         logger.debug('inventories config imported')
     except Exception as e:
@@ -1249,7 +1255,7 @@ async def import_all_db_configs() -> dict[str, bool]:
     # user-curated with no other config home, so they own playlists.yaml.
     try:
         from wrolpi.collections.config import playlists_config
-        playlists_config.import_config()
+        await asyncio.to_thread(playlists_config.import_config)
         results['playlists'] = True
         logger.debug('playlists config imported')
     except Exception as e:
@@ -1259,7 +1265,7 @@ async def import_all_db_configs() -> dict[str, bool]:
     # Map pins (YAML-only, no DB)
     try:
         from modules.map.pins import get_map_pins_config
-        get_map_pins_config().import_config()
+        await asyncio.to_thread(get_map_pins_config().import_config)
         results['map_pins'] = True
         logger.debug('map pins config imported')
     except Exception as e:
@@ -1269,7 +1275,7 @@ async def import_all_db_configs() -> dict[str, bool]:
     # Flasher saved firmware configurations (YAML-only, no DB)
     try:
         from modules.flasher.config import get_flasher_config
-        get_flasher_config().import_config()
+        await asyncio.to_thread(get_flasher_config().import_config)
         results['flasher'] = True
         logger.debug('flasher config imported')
     except Exception as e:

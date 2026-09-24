@@ -19,11 +19,13 @@ Import Order (from import_all_db_configs):
 4. Domains
 5. Inventories
 """
+import asyncio
 import pathlib
 import shutil
 
 import pytest
 import yaml
+from unittest import mock
 
 from modules.archive.lib import get_domains_config
 from modules.videos.lib import get_channels_config
@@ -576,3 +578,35 @@ class TestMissingTagsConfig:
         assert domains[0].name == 'tagged-domain.com'
         # Tag reference should resolve to None
         assert domains[0].tag is None
+
+
+@pytest.mark.asyncio
+async def test_import_all_db_configs_does_not_block_event_loop(test_session, test_directory):
+    """A slow config import must not freeze the API worker that runs startup.
+
+    Large tags/channels/downloads configs can take minutes to import.  They run in a Sanic worker's
+    after_server_start listener while that worker is already accepting connections, so a blocking
+    import makes every request routed to that worker hang.  The imports must run off the loop."""
+    import time
+
+    def slow_import(*args, **kwargs):
+        time.sleep(0.5)  # deliberately synchronous, like a real large import
+
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.05)
+            ticks += 1
+
+    ticker_task = asyncio.create_task(ticker())
+    try:
+        with mock.patch('wrolpi.tags.import_tags_config', slow_import), \
+                mock.patch('modules.videos.lib.import_channels_config', slow_import):
+            await import_all_db_configs()
+    finally:
+        ticker_task.cancel()
+
+    # Two 0.5s imports; a responsive loop ticks ~20 times.  A blocked loop ticks ~0.
+    assert ticks >= 10, f'event loop was blocked during import ({ticks=})'

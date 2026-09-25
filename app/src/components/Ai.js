@@ -8,7 +8,7 @@ import {StatusContext} from '../contexts/contexts';
 import {AiChat} from './AiChat';
 import {APIButton, humanFileSize, InfoMessage, PageContainer, TabLinks, useTitle, WROLModeMessage} from './Common';
 import {SortableTable} from './SortableTable';
-import {Button, Divider, Group, Header, NumberInput, Select, Table, Text, Toggle, toast} from './ui';
+import {Button, Divider, Group, Header, Loading, Message, NumberInput, Select, Table, Text, Toggle, toast} from './ui';
 import {Downloaders} from './Vars';
 
 // The Controller's name for llama-server: the compose service in docker, the systemd unit natively.
@@ -38,6 +38,7 @@ export function AiModelRow({model, onDownload}) {
 
 export function ManageAi() {
     const [catalog, setCatalog] = useState(null);
+    const [catalogError, setCatalogError] = useState(null);
     const [serviceStatus, setServiceStatus] = useState(null);
     const [pendingSave, setPendingSave] = useState(false);
     const {status} = useContext(StatusContext);
@@ -48,9 +49,13 @@ export function ManageAi() {
             const data = await getAiCatalog();
             if (data) {
                 setCatalog(data);
+                setCatalogError(null);
+            } else {
+                setCatalogError('The API did not return the model catalog.');
             }
         } catch (e) {
             console.error(e);
+            setCatalogError(e.message || 'Failed to fetch the model catalog.');
         }
     };
 
@@ -108,7 +113,18 @@ export function ManageAi() {
     };
 
     if (!catalog) {
-        return <WROLModeMessage content='Cannot modify AI'/>;
+        // Waiting on the first catalog response.  On a slow first start this can take a while, so
+        // say so rather than showing an empty tab.
+        return <>
+            <WROLModeMessage content='Cannot modify AI'/>
+            {catalogError
+                ? <Message kind='error' title='Could not load the model catalog'>
+                    <p>{catalogError}</p>
+                    <p>The API may still be starting. This page retries automatically, or</p>
+                    <Button size='xs' onClick={fetchCatalog}>Retry now</Button>
+                </Message>
+                : <Loading>Loading the model catalog…</Loading>}
+        </>;
     }
 
     const {models, recommended_tier, total_ram, slow_hardware, disk_usage, enabled, active_model} = catalog;

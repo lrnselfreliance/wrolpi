@@ -54,6 +54,7 @@ async def test_models_catalog_fallback(async_client):
     assert source == 'bundled'
     assert models == catalog.AI_MODELS
 
+    catalog.clear_models_catalog_cache()  # the failed attempt is cached; see test_models_catalog_is_cached
     manifest = dict(version=1, models=[dict(name='new.gguf', tier='small')])
     with mock.patch('modules.ai.catalog.fetch_models_manifest', return_value=manifest):
         models, source = await catalog.get_models_catalog()
@@ -285,3 +286,53 @@ async def test_manage_catalog_skips_unloadable_custom_models(async_client, test_
                                                     content=json.dumps(dict(active_model=bad)))
         assert response.status_code == HTTPStatus.BAD_REQUEST, bad
         assert 'cannot be loaded' in response.json['error']
+
+
+@pytest.mark.asyncio
+async def test_models_catalog_is_cached(async_client):
+    """The CDN manifest is fetched once per hour, and a failed attempt is cached too.
+
+    The Manage tab polls the catalog every 30s; without a cache an offline device paid the fetch
+    timeout on every poll."""
+    manifest = dict(version=1, models=[dict(name='new.gguf', tier='small')])
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', return_value=manifest) as fetch:
+        assert (await catalog.get_models_catalog())[1] == 'cdn'
+        assert (await catalog.get_models_catalog())[1] == 'cdn'
+        assert fetch.call_count == 1
+
+    # A failure is cached for the same window: the next call does not retry.
+    catalog.clear_models_catalog_cache()
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', side_effect=RuntimeError('offline')) as fetch:
+        assert (await catalog.get_models_catalog())[1] == 'bundled'
+        assert (await catalog.get_models_catalog())[1] == 'bundled'
+        assert fetch.call_count == 1
+
+    # Once the window passes, the CDN is tried again.
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', return_value=manifest) as fetch, \
+            mock.patch('modules.ai.catalog.time.monotonic', return_value=1e9):
+        assert (await catalog.get_models_catalog())[1] == 'cdn'
+        assert fetch.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_models_catalog_skips_cdn_without_internet(async_client, flags_lock):
+    """When the have_internet flag is clear the bundled catalog is served without touching the
+    network, so an offline Manage page renders immediately.  A skipped attempt is not cached: the
+    CDN is tried as soon as internet comes up."""
+    from wrolpi import flags
+    flags.have_internet.clear()
+    with mock.patch('modules.ai.catalog.fetch_models_manifest') as fetch:
+        models, source = await catalog.get_models_catalog()
+    assert source == 'bundled' and models == catalog.AI_MODELS
+    fetch.assert_not_called()
+
+    flags.have_internet.set()
+    manifest = dict(version=1, models=[dict(name='new.gguf', tier='small')])
+    with mock.patch('modules.ai.catalog.fetch_models_manifest', return_value=manifest) as fetch:
+        assert (await catalog.get_models_catalog())[1] == 'cdn'
+    fetch.assert_called_once()
+
+
+def test_manifest_fetch_timeout_is_short():
+    """A 2KB manifest must not wait 30s per request on a black-holed network."""
+    assert catalog.MANIFEST_TIMEOUT <= 5

@@ -15,3 +15,12 @@ def test_ai_config(test_directory, async_client):
     with ai_config_context() as config:
         config.initialize(api_app.shared_ctx.ai_config)
         yield config_path
+
+
+@pytest.fixture(autouse=True)
+def _clear_models_catalog_cache():
+    """Each test starts with an empty manifest cache."""
+    from modules.ai import catalog
+    catalog.clear_models_catalog_cache()
+    yield
+    catalog.clear_models_catalog_cache()

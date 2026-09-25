@@ -15,6 +15,10 @@ Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/
 Restart=on-failure
+# Signal only Sanic's main process on stop; it shuts its workers, the perpetual process and the multiprocessing
+# Manager down itself.  Signalling the whole cgroup at once kills the Manager under main's own cleanup (broken
+# pipe, exit 1).  Stragglers still get SIGKILL at TimeoutStopSec.
+KillMode=mixed
 # Higher than the App so the API can start.
 Nice=4
 

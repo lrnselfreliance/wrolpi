@@ -2381,7 +2381,9 @@ async def import_downloads_config():
         logger.warning(f'Refusing to import downloads config when DB is not up.')
         return
 
-    get_download_manager_config().import_config()
+    # The import upserts every download on the calling thread; keep it off the event loop (this runs
+    # from a worker's after_server_start while the worker is already accepting requests).
+    await asyncio.to_thread(get_download_manager_config().import_config)
 
 
 def parse_feed(url: str) -> FeedParserDict:

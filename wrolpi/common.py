@@ -1183,11 +1183,8 @@ async def import_all_db_configs() -> dict[str, bool]:
     Returns a dict mapping config name to success status.
     Used by main.py startup and disaster recovery tests.
 
-    This runs in a Sanic worker's after_server_start listener while that worker is already
-    accepting connections.  Each synchronous import is run in a thread so a large config (minutes
-    of tags/channels/downloads work) does not freeze the worker's event loop and hang every
-    request routed to it.  The SQLite engine allows cross-thread connections (check_same_thread
-    off); imports still run one at a time, in order.
+    This runs from a worker's after_server_start while the worker is already accepting requests,
+    so no import may block the event loop.
 
     Import order matters:
     1. Tags - no dependencies

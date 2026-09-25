@@ -20,6 +20,7 @@ Import Order (from import_all_db_configs):
 5. Inventories
 """
 import asyncio
+import contextlib
 import pathlib
 import shutil
 
@@ -589,24 +590,45 @@ async def test_import_all_db_configs_does_not_block_event_loop(test_session, tes
     import makes every request routed to that worker hang.  The imports must run off the loop."""
     import time
 
+    sleep_seconds = 0.2
+
     def slow_import(*args, **kwargs):
-        time.sleep(0.5)  # deliberately synchronous, like a real large import
+        time.sleep(sleep_seconds)  # deliberately synchronous, like a real large import
+
+    # Every import import_all_db_configs performs, including the sync import behind the async
+    # downloads wrapper.  Each is replaced with the same blocking sleep.
+    patched = [
+        'wrolpi.tags.import_tags_config',
+        'wrolpi.downloader.DownloadManagerConfig.import_config',
+        'modules.videos.lib.import_channels_config',
+        'modules.archive.lib.import_domains_config',
+        'modules.inventory.common.import_inventories_config',
+        'wrolpi.collections.config.PlaylistsConfig.import_config',
+        'modules.map.pins.MapPinsConfig.import_config',
+        'modules.flasher.config.FlasherConfig.import_config',
+    ]
 
     ticks = 0
+    tick_seconds = 0.05
 
     async def ticker():
         nonlocal ticks
         while True:
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(tick_seconds)
             ticks += 1
 
     ticker_task = asyncio.create_task(ticker())
     try:
-        with mock.patch('wrolpi.tags.import_tags_config', slow_import), \
-                mock.patch('modules.videos.lib.import_channels_config', slow_import):
+        with contextlib.ExitStack() as stack:
+            for target in patched:
+                stack.enter_context(mock.patch(target, slow_import))
             await import_all_db_configs()
     finally:
         ticker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await ticker_task
 
-    # Two 0.5s imports; a responsive loop ticks ~20 times.  A blocked loop ticks ~0.
-    assert ticks >= 10, f'event loop was blocked during import ({ticks=})'
+    # A responsive loop ticks through the whole sleep budget; require most of it so that any one
+    # import moving back onto the loop (losing its share of ticks) fails.
+    expected = len(patched) * sleep_seconds / tick_seconds
+    assert ticks >= expected * 0.9, f'event loop was blocked during import ({ticks=}, {expected=})'

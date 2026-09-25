@@ -122,6 +122,30 @@ describe('ManageAi', () => {
         await waitFor(() => expect(postAiSettings).toHaveBeenCalledWith({active_model: 'My-Custom-Model-Q8_0.gguf'}));
     });
 
+    it('shows a loading state, not a blank tab, until the catalog arrives', async () => {
+        let resolveCatalog;
+        getAiCatalog.mockReturnValue(new Promise(resolve => resolveCatalog = resolve));
+        render(<ManageAi/>);
+        expect(screen.getByText('Loading the model catalog…')).toBeInTheDocument();
+        expect(screen.queryByText(/tier is recommended/)).not.toBeInTheDocument();
+
+        resolveCatalog(catalogFixture());
+        await waitFor(() => expect(screen.getByText(/tier is recommended/)).toBeInTheDocument());
+        expect(screen.queryByText('Loading the model catalog…')).not.toBeInTheDocument();
+    });
+
+    it('shows the error with a retry when the catalog request fails', async () => {
+        getAiCatalog.mockRejectedValueOnce(new Error('promise timeout'));
+        render(<ManageAi/>);
+        await waitFor(() => expect(screen.getByText('Could not load the model catalog')).toBeInTheDocument());
+        expect(screen.getByText('promise timeout')).toBeInTheDocument();
+
+        getAiCatalog.mockResolvedValue(catalogFixture());
+        fireEvent.click(screen.getByText('Retry now'));
+        await waitFor(() => expect(screen.getByText(/tier is recommended/)).toBeInTheDocument());
+        expect(screen.queryByText('Could not load the model catalog')).not.toBeInTheDocument();
+    });
+
     it('shows the slow-hardware warning on a Pi 4', async () => {
         getAiCatalog.mockResolvedValue(catalogFixture({slow_hardware: true}));
         render(<ManageAi/>);

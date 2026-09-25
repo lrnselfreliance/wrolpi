@@ -306,4 +306,81 @@ describe('useVideoExtras', () => {
         expect(result.current.comments).toBeNull();
         expect(result.current.description).toBeNull();
     });
+
+    // State contract, matching the rest of the hooks: null = pending, undefined = error,
+    // [] / '' = loaded and empty.  The page branches on these to choose between a placeholder,
+    // an error, and "No comments have been downloaded".
+    test('both are pending (null) until the responses arrive', () => {
+        getVideoComments.mockReturnValue(new Promise(() => {
+        }));
+        getVideoDescription.mockReturnValue(new Promise(() => {
+        }));
+        const {result} = renderHook(() => useVideoExtras(7));
+        expect(result.current.comments).toBeNull();
+        expect(result.current.description).toBeNull();
+    });
+
+    test('a video with no comments or description loads as empty, not pending', async () => {
+        // The API serializes a missing info_json field as null.
+        getVideoComments.mockResolvedValue({comments: null});
+        getVideoDescription.mockResolvedValue({description: null});
+        const {result} = renderHook(() => useVideoExtras(7));
+        await act(async () => {
+        });
+        expect(result.current.comments).toEqual([]);
+        expect(result.current.description).toBe('');
+    });
+
+    test('a failed fetch yields undefined so the page can show an error instead of "no comments"', async () => {
+        getVideoComments.mockRejectedValue(new Error('boom'));
+        getVideoDescription.mockRejectedValue(new Error('boom'));
+        jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        const {result} = renderHook(() => useVideoExtras(7));
+        await act(async () => {
+        });
+        expect(result.current.comments).toBeUndefined();
+        expect(result.current.description).toBeUndefined();
+        console.error.mockRestore();
+    });
+
+    test('switching video resets both to pending before the new responses arrive', async () => {
+        getVideoComments.mockResolvedValue({comments: [{id: 'c1', parent: 'root'}]});
+        getVideoDescription.mockResolvedValue({description: 'first'});
+        const {result, rerender} = renderHook(({id}) => useVideoExtras(id), {initialProps: {id: 7}});
+        await act(async () => {
+        });
+        expect(result.current.description).toBe('first');
+
+        // The next video's responses are slow: the previous video's data must not linger.
+        getVideoComments.mockReturnValue(new Promise(() => {
+        }));
+        getVideoDescription.mockReturnValue(new Promise(() => {
+        }));
+        rerender({id: 8});
+        expect(result.current.comments).toBeNull();
+        expect(result.current.description).toBeNull();
+    });
+
+    test('a slow response for the previous video does not overwrite the current one', async () => {
+        // Video 7's responses are slow; the user moves on to video 8 before they arrive.
+        let resolveComments, resolveDescription;
+        getVideoComments.mockReturnValueOnce(new Promise(res => resolveComments = res));
+        getVideoDescription.mockReturnValueOnce(new Promise(res => resolveDescription = res));
+        const {result, rerender} = renderHook(({id}) => useVideoExtras(id), {initialProps: {id: 7}});
+
+        getVideoComments.mockResolvedValue({comments: [{id: 'c8', parent: 'root'}]});
+        getVideoDescription.mockResolvedValue({description: 'eighth'});
+        rerender({id: 8});
+        await act(async () => {
+        });
+        expect(result.current.description).toBe('eighth');
+
+        await act(async () => {
+            resolveComments({comments: [{id: 'c7', parent: 'root'}]});
+            resolveDescription({description: 'seventh'});
+        });
+        expect(result.current.comments).toEqual([{id: 'c8', parent: 'root'}]);
+        expect(result.current.description).toBe('eighth');
+    });
 });

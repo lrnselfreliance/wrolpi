@@ -767,34 +767,51 @@ export const useVideo = (fileGroupId) => {
 export const useVideoExtras = (fileGroupId) => {
     // Fetches extra data to display on a Video's page.  These are served separately from the
     // Video itself so list responses stay small and never read files from disk.
+    //
+    // Each value is null while pending, undefined when the fetch failed, and empty ([] or '') when
+    // the server confirmed there is nothing.  The API serializes a missing info_json field as null,
+    // so a null response is normalized to empty here; consumers must never see null for "none".
     const [comments, setComments] = useState(null);
     const [description, setDescription] = useState(null);
+    // The video currently shown.  A response for any other video is stale and is dropped.
+    const currentIdRef = useRef(fileGroupId);
 
     const fetchComments = async () => {
         try {
             const result = await getVideoComments(fileGroupId);
-            setComments(result.comments);
+            if (currentIdRef.current === fileGroupId) {
+                setComments(result.comments || []);
+            }
         } catch (e) {
             console.error(e);
+            if (currentIdRef.current === fileGroupId) {
+                setComments(undefined);
+            }
         }
     }
 
     const fetchDescription = async () => {
         try {
             const result = await getVideoDescription(fileGroupId);
-            setDescription(result.description);
+            if (currentIdRef.current === fileGroupId) {
+                setDescription(result.description || '');
+            }
         } catch (e) {
             console.error(e);
+            if (currentIdRef.current === fileGroupId) {
+                setDescription(undefined);
+            }
         }
     }
 
     useEffect(() => {
+        // Whether switching to a new video or to none, the previous video's data must not linger.
+        currentIdRef.current = fileGroupId;
+        setComments(null);
+        setDescription(null);
         if (fileGroupId) {
             fetchComments();
             fetchDescription();
-        } else {
-            setComments(null);
-            setDescription(null);
         }
     }, [fileGroupId]);
 

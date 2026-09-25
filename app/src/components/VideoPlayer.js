@@ -8,6 +8,7 @@ import {
     BackButton,
     DirectoryLink,
     encodeMediaPath,
+    ErrorMessage,
     humanFileSize,
     humanNumber,
     isoDatetimeToAgoPopup,
@@ -19,7 +20,7 @@ import {
 } from "./Common";
 import {VideoPlaceholder} from "./Placeholder";
 import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
-import {Button, Grid, Header, Icon, Label, Loading, Panel, Tabs, TextInput} from "./ui";
+import {Button, Grid, Header, Icon, Label, Loading, Panel, Placeholder, Tabs, TextInput} from "./ui";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
@@ -170,8 +171,14 @@ const VideoComment = ({comment, children}) => {
 }
 
 
-const Comments = ({comments, video}) => {
-    if (!comments || _.isEmpty(comments)) {
+// `comments` follows useVideoExtras: null = pending, undefined = fetch failed, [] = none downloaded.
+// Only the last of those may offer the Refresh button.
+export const Comments = ({comments, video}) => {
+    if (comments === null) {
+        return <Placeholder lines={3}/>
+    } else if (comments === undefined) {
+        return <ErrorMessage>Could not fetch the comments.</ErrorMessage>
+    } else if (_.isEmpty(comments)) {
         return <NoComments video={video}/>
     }
 
@@ -342,12 +349,6 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const captionUrls = caption_files && caption_files.length > 0 ?
         caption_files.filter(i => i['mimetype'] === 'text/vtt').map(i => `${MEDIA_PATH}/${encodeMediaPath(i['path'])}`)
         : [];
-
-    let description = 'No description available.';
-    if (videoDescription) {
-        // Only replace empty description if there is one available.
-        description = formatVideoDescription(videoDescription, setVideoTime)
-    }
 
     const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));
     const fileSize = (file) => file && file.size
@@ -550,9 +551,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                 </Tabs.Panel>
 
                 <Tabs.Panel value='description' style={{paddingTop: '1em'}}>
-                    <pre className="wrap-text">
-                        {description}
-                    </pre>
+                    <VideoDescription description={videoDescription} setVideoTime={setVideoTime}/>
                 </Tabs.Panel>
 
                 <Tabs.Panel value='files' style={{paddingTop: '1em'}}>
@@ -716,6 +715,18 @@ function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) 
 export default VideoPage;
 
 const chapterRegex = new RegExp('^(\\(?(?:((\\d?\\d):)?(?:(\\d?\\d):(\\d\\d)))\\)?)\.?\\s+(.*)$', 'i');
+
+// `description` follows useVideoExtras: null = pending, undefined = fetch failed, '' = none.
+export const VideoDescription = ({description, setVideoTime}) => {
+    if (description === null) {
+        return <Placeholder lines={3}/>
+    } else if (description === undefined) {
+        return <ErrorMessage>Could not fetch the description.</ErrorMessage>
+    }
+    return <pre className="wrap-text">
+        {description ? formatVideoDescription(description, setVideoTime) : 'No description available.'}
+    </pre>
+}
 
 function formatVideoDescription(description, setVideoTime) {
     // Convert timestamps to links which change the video's playback location.  Change hashtags to search links.

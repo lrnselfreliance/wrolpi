@@ -195,6 +195,13 @@ export const useRecurringTimeout = (callback, delay) => {
 export const useLatestRequest = (delay = 300, defaultLoading = false) => {
     // A hook which ignores older requests and will only set `data` to the latest response's data.
     // usage: sendRequest(async () => await yourAPICall(...args));
+    //
+    // Invariants:
+    //  * `loading` is true from the moment `sendRequest` is called until the latest request settles,
+    //    including the debounce delay.  Consumers use `loading` to choose between a spinner and an
+    //    empty state, so it must never be false while a request is pending.
+    //  * Only the latest request may write `data` or clear `loading`.  A stale request that settles
+    //    late (resolve or reject) is ignored.
 
     // The results from awaiting `fetchFunction`.
     const [data, setData] = React.useState(null);
@@ -207,10 +214,16 @@ export const useLatestRequest = (delay = 300, defaultLoading = false) => {
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
         }
+        // Claim the latest id now, not when the debounce fires, so an earlier fetch that is still
+        // in flight is already stale and cannot write `data` or clear `loading` while this
+        // request is pending.
+        const requestId = ++latestRequestRef.current;
+        // Report the pending request before the debounce so the caller never shows "no results"
+        // for a search that has not run yet.
+        setLoading(true);
 
         debounceTimerRef.current = setTimeout(async () => {
-            setLoading(true);
-            const requestId = ++latestRequestRef.current;
+            debounceTimerRef.current = null;
 
             try {
                 const result = await fetchFunction();
@@ -220,7 +233,9 @@ export const useLatestRequest = (delay = 300, defaultLoading = false) => {
                 }
             } catch (error) {
                 console.error('Request failed:', error);
-                setData(null);
+                if (requestId === latestRequestRef.current) {
+                    setData(null);
+                }
             } finally {
                 if (requestId === latestRequestRef.current) {
                     setLoading(false);
@@ -228,6 +243,18 @@ export const useLatestRequest = (delay = 300, defaultLoading = false) => {
             }
         }, delay);
     }, [delay]);
+
+    // Do not fire a debounced request after the caller has unmounted, and treat any fetch still in
+    // flight as stale so it does not set state on the unmounted hook.
+    React.useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+                debounceTimerRef.current = null;
+            }
+            latestRequestRef.current++;
+        };
+    }, []);
 
     return {data, sendRequest, loading};
 };

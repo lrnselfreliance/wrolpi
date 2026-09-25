@@ -243,6 +243,17 @@ function switchTab(name) {
     fireEvent.click(screen.getAllByText(name)[0]);
 }
 
+// A drop event's dataTransfer as a browser actually builds it.  react-dropzone reads dropped files from `items`
+// (a DataTransferItemList of {kind, getAsFile()}), not from `files`, so supplying only `files` makes it throw
+// "undefined is not iterable".  Both are populated here, matching the real thing.
+function dropData(files) {
+    return {
+        files,
+        items: files.map(file => ({kind: 'file', type: file.type, getAsFile: () => file})),
+        types: ['Files'],
+    };
+}
+
 describe('FlasherPage', () => {
     const original = Object.getOwnPropertyDescriptor(global.navigator, 'serial');
 
@@ -391,7 +402,7 @@ describe('FlasherPage', () => {
         // The dropzone root wraps the whole page; a drop on any descendant bubbles up to it.  react-dropzone
         // requires dataTransfer.types to include 'Files' before it reads the dropped files.
         const target = screen.getAllByText('1. Firmware files')[0];
-        fireEvent.drop(target, {dataTransfer: {files: [binFile, txtFile], types: ['Files']}});
+        fireEvent.drop(target, {dataTransfer: dropData([binFile, txtFile])});
 
         // The .bin is added (shown in the selected-firmware table) and the .txt is ignored.
         expect((await screen.findAllByText('dropped.bin')).length).toBeGreaterThan(0);
@@ -411,8 +422,7 @@ describe('FlasherPage', () => {
 
         // Changing the firmware selection (drop a new file) must drop the connection so it is re-checked.
         const bin = new File([new Uint8Array([0xe9, 0, 0])], 'swapped.bin');
-        fireEvent.drop(screen.getAllByText('1. Firmware files')[0],
-            {dataTransfer: {files: [bin], types: ['Files']}});
+        fireEvent.drop(screen.getAllByText('1. Firmware files')[0], {dataTransfer: dropData([bin])});
 
         await waitFor(() => expect(screen.getAllByText('Connect Device').length).toBeGreaterThan(0));
         expect(screen.queryByText('Disconnect')).not.toBeInTheDocument();

@@ -773,40 +773,47 @@ export const useVideoExtras = (fileGroupId) => {
     // so a null response is normalized to empty here; consumers must never see null for "none".
     const [comments, setComments] = useState(null);
     const [description, setDescription] = useState(null);
-    // The video currently shown.  A response for any other video is stale and is dropped.
-    const currentIdRef = useRef(fileGroupId);
+    // Every fetch takes the next generation number; only the newest generation may write state.
+    // Matching on the video id is not enough: leaving and returning to the same video, or a save
+    // that refetches the description, must both beat an older request still in flight.
+    const commentsGen = useRef(0);
+    const descriptionGen = useRef(0);
 
     const fetchComments = async () => {
+        const gen = ++commentsGen.current;
         try {
             const result = await getVideoComments(fileGroupId);
-            if (currentIdRef.current === fileGroupId) {
+            if (gen === commentsGen.current) {
                 setComments(result.comments || []);
             }
         } catch (e) {
             console.error(e);
-            if (currentIdRef.current === fileGroupId) {
+            if (gen === commentsGen.current) {
                 setComments(undefined);
             }
         }
     }
 
     const fetchDescription = async () => {
+        const gen = ++descriptionGen.current;
         try {
             const result = await getVideoDescription(fileGroupId);
-            if (currentIdRef.current === fileGroupId) {
+            if (gen === descriptionGen.current) {
                 setDescription(result.description || '');
             }
         } catch (e) {
             console.error(e);
-            if (currentIdRef.current === fileGroupId) {
+            if (gen === descriptionGen.current) {
                 setDescription(undefined);
             }
         }
     }
 
     useEffect(() => {
-        // Whether switching to a new video or to none, the previous video's data must not linger.
-        currentIdRef.current = fileGroupId;
+        // Whether switching to a new video or to none, the previous video's data must not linger,
+        // and any request still in flight for it must not land.
+        commentsGen.current++;
+        descriptionGen.current++;
         setComments(null);
         setDescription(null);
         if (fileGroupId) {

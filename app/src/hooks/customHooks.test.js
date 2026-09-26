@@ -334,14 +334,17 @@ describe('useVideoExtras', () => {
     test('a failed fetch yields undefined so the page can show an error instead of "no comments"', async () => {
         getVideoComments.mockRejectedValue(new Error('boom'));
         getVideoDescription.mockRejectedValue(new Error('boom'));
-        jest.spyOn(console, 'error').mockImplementation(() => {
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
         });
-        const {result} = renderHook(() => useVideoExtras(7));
-        await act(async () => {
-        });
-        expect(result.current.comments).toBeUndefined();
-        expect(result.current.description).toBeUndefined();
-        console.error.mockRestore();
+        try {
+            const {result} = renderHook(() => useVideoExtras(7));
+            await act(async () => {
+            });
+            expect(result.current.comments).toBeUndefined();
+            expect(result.current.description).toBeUndefined();
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('switching video resets both to pending before the new responses arrive', async () => {
@@ -382,5 +385,59 @@ describe('useVideoExtras', () => {
         });
         expect(result.current.comments).toEqual([{id: 'c8', parent: 'root'}]);
         expect(result.current.description).toBe('eighth');
+    });
+
+    test('returning to a video does not let its first, still-pending request land', async () => {
+        // The route clears the video between pages, so the id goes 7 -> undefined -> 8 -> 7 while
+        // the very first request for 7 is still in flight (the API timeout is a minute).
+        let rejectComments, rejectDescription;
+        getVideoComments.mockReturnValueOnce(new Promise((_, rej) => rejectComments = rej));
+        getVideoDescription.mockReturnValueOnce(new Promise((_, rej) => rejectDescription = rej));
+        const {result, rerender} = renderHook(({id}) => useVideoExtras(id), {initialProps: {id: 7}});
+
+        rerender({id: undefined});
+        getVideoComments.mockResolvedValue({comments: [{id: 'c8', parent: 'root'}]});
+        getVideoDescription.mockResolvedValue({description: 'eighth'});
+        rerender({id: 8});
+        getVideoComments.mockResolvedValue({comments: [{id: 'c7b', parent: 'root'}]});
+        getVideoDescription.mockResolvedValue({description: 'seventh again'});
+        rerender({id: 7});
+        await act(async () => {
+        });
+        expect(result.current.comments).toEqual([{id: 'c7b', parent: 'root'}]);
+        expect(result.current.description).toBe('seventh again');
+
+        // The first request finally times out.  Same id, but it is not the newest request.
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        try {
+            await act(async () => {
+                rejectComments(new Error('timeout'));
+                rejectDescription(new Error('timeout'));
+            });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(result.current.comments).toEqual([{id: 'c7b', parent: 'root'}]);
+        expect(result.current.description).toBe('seventh again');
+    });
+
+    test('a refetch after saving beats the initial description request still in flight', async () => {
+        let resolveInitial;
+        getVideoComments.mockResolvedValue({comments: []});
+        getVideoDescription.mockReturnValueOnce(new Promise(res => resolveInitial = res));
+        const {result} = renderHook(() => useVideoExtras(7));
+
+        // The user edits and saves before the page's first description request returned.
+        getVideoDescription.mockResolvedValue({description: 'edited'});
+        await act(async () => {
+            await result.current.fetchDescription();
+        });
+        expect(result.current.description).toBe('edited');
+
+        await act(async () => {
+            resolveInitial({description: 'pre-edit'});
+        });
+        expect(result.current.description).toBe('edited');
     });
 });

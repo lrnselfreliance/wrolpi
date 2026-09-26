@@ -12,8 +12,9 @@ const NO_COMMENTS = /No comments have been/;
 const NO_DESCRIPTION = /No description available/;
 
 describe('Comments', () => {
-    test('pending: shows neither "no comments" nor an error', () => {
-        render(<Comments comments={null} video={video}/>);
+    test('pending: shows a placeholder, not "no comments" or an error', () => {
+        const {container} = render(<Comments comments={null} video={video}/>);
+        expect(container.querySelector('.wrolpi-placeholder')).toBeInTheDocument();
         expect(screen.queryByText(NO_COMMENTS)).not.toBeInTheDocument();
         expect(screen.queryByText(/Could not/)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: 'Refresh'})).not.toBeInTheDocument();
@@ -39,8 +40,9 @@ describe('Comments', () => {
 });
 
 describe('VideoDescription', () => {
-    test('pending: shows neither "no description" nor an error', () => {
-        render(<VideoDescription description={null} setVideoTime={() => null}/>);
+    test('pending: shows a placeholder, not "no description" or an error', () => {
+        const {container} = render(<VideoDescription description={null} setVideoTime={() => null}/>);
+        expect(container.querySelector('.wrolpi-placeholder')).toBeInTheDocument();
         expect(screen.queryByText(NO_DESCRIPTION)).not.toBeInTheDocument();
         expect(screen.queryByText(/Could not/)).not.toBeInTheDocument();
     });

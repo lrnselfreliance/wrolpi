@@ -379,14 +379,27 @@ export function EditVideoModal({open, onClose, fileGroupId, videoFile, descripti
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [saving, setSaving] = useState(false);
+    // The description last copied into the textarea; the user has typed when the field differs.
+    const syncedDescription = useRef('');
 
     useEffect(() => {
         if (open) {
             // Start from the current details on every open, discarding an abandoned edit.
             setTitle(videoFile?.title || '');
             setDescription(currentDescription || '');
+            syncedDescription.current = currentDescription || '';
         }
-    }, [open, videoFile?.title, currentDescription]);
+    }, [open, videoFile?.title]);
+
+    useEffect(() => {
+        // The description may still be loading when the dialog opens (null), and it is refetched
+        // after a save.  Adopt what arrives only while the user has not typed, so a draft written
+        // over the placeholder is never wiped by the empty or failed value that follows it.
+        if (open && currentDescription != null && description === syncedDescription.current) {
+            setDescription(currentDescription);
+            syncedDescription.current = currentDescription;
+        }
+    }, [currentDescription]);
 
     const trimmed = title.trim();
     const titleChanged = trimmed !== (videoFile?.title || '');

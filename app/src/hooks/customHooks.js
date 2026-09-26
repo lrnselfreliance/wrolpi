@@ -2079,16 +2079,31 @@ export const useCalcQuery = () => {
 
 export const useSearchChannels = (defaultTagNames) => {
     const [tagNames, setTagNames] = useState(defaultTagNames || []);
-    const [channels, setChannels] = useState([]);
-    const [loading, setLoading] = useState(false);
+    // null = pending, undefined = fetch failed, [] = no channels.  A search starts on mount, so the
+    // first render is already loading; consumers must never see [] for a search that has not run.
+    const [channels, setChannels] = useState(null);
+    const [loading, setLoading] = useState(true);
+    // Only the newest request may write state; a slow response for previous tags is dropped.
+    const requestGen = useRef(0);
 
     const localSearchChannels = async () => {
+        const gen = ++requestGen.current;
+        setChannels(null);
         setLoading(true);
         try {
             const {channels: newChannels} = await searchChannels(tagNames);
-            setChannels(newChannels);
+            if (gen === requestGen.current) {
+                setChannels(newChannels || []);
+            }
+        } catch (e) {
+            console.error(e);
+            if (gen === requestGen.current) {
+                setChannels(undefined);
+            }
         } finally {
-            setLoading(false);
+            if (gen === requestGen.current) {
+                setLoading(false);
+            }
         }
     };
 

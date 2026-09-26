@@ -6,7 +6,7 @@ import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
 import {MapSearchView} from "./MapSearchView";
 import {searchEstimateFiles, searchEstimateMap, searchEstimateOthers, searchEstimateZims, searchSuggestions} from "../api";
-import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
+import {ErrorMessage, filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Accordion, Header, Icon, Label, Loading, Panel, Stack} from "./ui";
@@ -541,14 +541,17 @@ function SearchChannelPreview({channel}) {
     </div>
 }
 
-function OtherSearchView({loading}) {
+// `channels` follows useSearchChannels: null = pending, undefined = fetch failed, [] = none.
+export function OtherSearchView({loading}) {
     const {searchParams} = React.useContext(QueryContext);
     const [activeValue, setActiveValue] = React.useState('channels');
     const activeTags = searchParams.getAll('tag');
     const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
 
-    if (loading || channelsLoading) {
+    if (loading || channelsLoading || channels === null) {
         return <Panel><Loading/></Panel>
+    } else if (channels === undefined) {
+        return <Panel><ErrorMessage>Could not fetch the channels.</ErrorMessage></Panel>
     }
 
     return <Accordion value={activeValue} onChange={setActiveValue}>

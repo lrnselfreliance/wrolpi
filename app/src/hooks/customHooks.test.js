@@ -1,8 +1,8 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
-import {usePages, useDriveTemperature, useDriveHealth, useVideoExtras} from './customHooks';
-import {getVideoComments, getVideoDescription} from '../api';
+import {usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useVideoExtras} from './customHooks';
+import {getVideoComments, getVideoDescription, searchChannels} from '../api';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -38,6 +38,7 @@ jest.mock('../api', () => ({
     ...jest.requireActual('../api'),
     getVideoComments: jest.fn(),
     getVideoDescription: jest.fn(),
+    searchChannels: jest.fn(),
 }));
 
 // Mock Media so Paginator renders both mobile + tablet variants synchronously.
@@ -439,5 +440,69 @@ describe('useVideoExtras', () => {
             resolveInitial({description: 'pre-edit'});
         });
         expect(result.current.description).toBe('edited');
+    });
+});
+
+describe('useSearchChannels', () => {
+    // State contract: null = pending, undefined = fetch failed, [] = no channels.  The Other tab
+    // shows "No Channels" only for the last of those; `loading` is true from the first render.
+    beforeEach(() => searchChannels.mockReset());
+
+    test('is loading with no channels on the first render', () => {
+        searchChannels.mockReturnValue(new Promise(() => {
+        }));
+        const {result} = renderHook(() => useSearchChannels(['a']));
+        expect(result.current.loading).toBe(true);
+        expect(result.current.channels).toBeNull();
+    });
+
+    test('resolves to the channels and stops loading', async () => {
+        searchChannels.mockResolvedValue({channels: [{id: 1, name: 'One'}]});
+        const {result} = renderHook(() => useSearchChannels(['a']));
+        await act(async () => {
+        });
+        expect(searchChannels).toHaveBeenCalledWith(['a']);
+        expect(result.current.channels).toEqual([{id: 1, name: 'One'}]);
+        expect(result.current.loading).toBe(false);
+    });
+
+    test('a failed fetch yields undefined, not "no channels"', async () => {
+        // The api helper returns undefined on a non-OK response, which the hook cannot destructure.
+        searchChannels.mockResolvedValue(undefined);
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        try {
+            const {result} = renderHook(() => useSearchChannels(['a']));
+            await act(async () => {
+            });
+            expect(result.current.channels).toBeUndefined();
+            expect(result.current.loading).toBe(false);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('changing tags resets to pending, and a slow response for the old tags is dropped', async () => {
+        let resolveOld;
+        searchChannels.mockReturnValueOnce(new Promise(res => resolveOld = res));
+        const {result} = renderHook(() => useSearchChannels(['old']));
+        expect(result.current.loading).toBe(true);
+
+        searchChannels.mockResolvedValue({channels: [{id: 2, name: 'New'}]});
+        act(() => {
+            result.current.setTagNames(['new']);
+        });
+        expect(result.current.channels).toBeNull();
+        expect(result.current.loading).toBe(true);
+        await act(async () => {
+        });
+        expect(result.current.channels).toEqual([{id: 2, name: 'New'}]);
+        expect(result.current.loading).toBe(false);
+
+        await act(async () => {
+            resolveOld({channels: [{id: 1, name: 'Old'}]});
+        });
+        expect(result.current.channels).toEqual([{id: 2, name: 'New'}]);
+        expect(result.current.loading).toBe(false);
     });
 });

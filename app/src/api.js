@@ -1361,7 +1361,9 @@ export async function getFlasherConfigs() {
         const data = await response.json();
         return data['configurations'] || [];
     }
-    return [];
+    // Undefined, not [], so the page can tell a failed fetch from an empty list.
+    const message = await getErrorMessage(response, 'Could not get saved firmware configurations');
+    toast({type: 'error', title: 'Flasher Error', description: message, time: 5000});
 }
 
 export async function saveFlasherConfig(name, files, eraseAll) {

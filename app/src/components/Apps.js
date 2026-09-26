@@ -14,7 +14,8 @@ import {useStatistics} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 import {BookmarksPage} from "./Bookmarks";
 
-function StatisticsPage() {
+// `statistics` follows useStatistics: null = pending, undefined = fetch failed.
+export function StatisticsPage() {
     useTitle('Statistics');
 
     const {statistics} = useStatistics();
@@ -26,7 +27,7 @@ function StatisticsPage() {
         </>
     }
 
-    if (statistics['global_statistics']) {
+    if (statistics && statistics['global_statistics']) {
         let {global_statistics, file_statistics} = statistics;
         const {
             archive_count,

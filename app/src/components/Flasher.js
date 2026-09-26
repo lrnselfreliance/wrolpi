@@ -3,7 +3,7 @@ import {Route, Routes} from "react-router";
 import {ESPLoader, Transport} from "esptool-js";
 import {useDropzone} from "react-dropzone";
 import _ from "lodash";
-import {encodeMediaPath, humanFileSize, PageContainer, useTitle} from "./Common";
+import {encodeMediaPath, ErrorMessage, humanFileSize, PageContainer, useTitle} from "./Common";
 import {
     Button,
     Checkbox,
@@ -17,6 +17,7 @@ import {
     Message,
     Modal,
     Panel,
+    Placeholder,
     Progress,
     Select,
     Stack,
@@ -297,8 +298,12 @@ export function FlasherPage() {
     // Which firmware-source tab is active (controlled so a file drop can switch to "Add from computer").
     const [activeTab, setActiveTab] = useState(TAB_SAVED);
 
-    // Saved firmware configurations (flasher.yaml).
-    const [savedConfigs, setSavedConfigs] = useState([]);
+    // Saved firmware configurations (flasher.yaml).  null = pending, undefined = fetch failed,
+    // [] = none saved; the "No saved configurations yet." message is only for the last.
+    const [savedConfigs, setSavedConfigs] = useState(null);
+    // Only the newest configs request may write state: a save or delete refetches while the mount
+    // request may still be in flight.
+    const savedConfigsGen = useRef(0);
     const [saveModalOpen, setSaveModalOpen] = useState(false);
     const [saveName, setSaveName] = useState('');
 
@@ -424,7 +429,19 @@ export function FlasherPage() {
 
     // Saved firmware configurations.
     const fetchSavedConfigs = React.useCallback(async () => {
-        setSavedConfigs(await getFlasherConfigs());
+        const gen = ++savedConfigsGen.current;
+        try {
+            const configs = await getFlasherConfigs();
+            if (gen === savedConfigsGen.current) {
+                // The api helper returns undefined on a non-OK response.
+                setSavedConfigs(configs ?? undefined);
+            }
+        } catch (e) {
+            console.error(e);
+            if (gen === savedConfigsGen.current) {
+                setSavedConfigs(undefined);
+            }
+        }
     }, []);
 
     useEffect(() => {
@@ -812,7 +829,9 @@ export function FlasherPage() {
             Configure the firmware files and offsets, then save them as a named set to re-flash later
             (e.g. a Meshtastic T-Deck: firmware at <code>0x0</code>, littlefs at <code>0xc90000</code>).
         </p>
-        {savedConfigs.length > 0
+        {savedConfigs === null && <Placeholder lines={2}/>}
+        {savedConfigs === undefined && <ErrorMessage>Could not fetch saved configurations.</ErrorMessage>}
+        {Array.isArray(savedConfigs) && (savedConfigs.length > 0
             ? <Panel style={{padding: 0}}>
                 {savedConfigs.map((configuration, index) => <div
                     key={configuration.name}
@@ -846,7 +865,7 @@ export function FlasherPage() {
                                 onClick={() => handleDeleteConfig(configuration.name)}/>
                 </div>)}
             </Panel>
-            : <p style={{opacity: 0.7}}>No saved configurations yet.</p>}
+            : <p style={{opacity: 0.7}}>No saved configurations yet.</p>)}
     </>;
 
     return <div {...getRootProps()}>

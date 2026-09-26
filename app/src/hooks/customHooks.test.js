@@ -1,8 +1,10 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
-import {usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useVideoExtras} from './customHooks';
-import {getVideoComments, getVideoDescription, searchChannels} from '../api';
+import {
+    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useStatistics, useVideoExtras,
+} from './customHooks';
+import {getStatistics, getVideoComments, getVideoDescription, searchChannels} from '../api';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -39,6 +41,7 @@ jest.mock('../api', () => ({
     getVideoComments: jest.fn(),
     getVideoDescription: jest.fn(),
     searchChannels: jest.fn(),
+    getStatistics: jest.fn(),
 }));
 
 // Mock Media so Paginator renders both mobile + tablet variants synchronously.
@@ -532,5 +535,48 @@ describe('useSearchChannels', () => {
         });
         expect(result.current.channels).toEqual([{id: 2, name: 'New'}]);
         expect(result.current.loading).toBe(false);
+    });
+});
+
+describe('useStatistics', () => {
+    // null = pending, undefined = fetch failed, an object = loaded.  The Statistics page shows its
+    // error only for undefined, so the first render must not be undefined.
+    beforeEach(() => getStatistics.mockReset());
+
+    test('is pending (null) on the first render', () => {
+        getStatistics.mockReturnValue(new Promise(() => {
+        }));
+        const {result} = renderHook(() => useStatistics());
+        expect(result.current.statistics).toBeNull();
+    });
+
+    test('resolves to the statistics', async () => {
+        getStatistics.mockResolvedValue({global_statistics: {}, file_statistics: {}});
+        const {result} = renderHook(() => useStatistics());
+        await act(async () => {
+        });
+        expect(result.current.statistics).toEqual({global_statistics: {}, file_statistics: {}});
+    });
+
+    test('a non-OK response yields undefined', async () => {
+        getStatistics.mockResolvedValue(undefined);
+        const {result} = renderHook(() => useStatistics());
+        await act(async () => {
+        });
+        expect(result.current.statistics).toBeUndefined();
+    });
+
+    test('a thrown request yields undefined', async () => {
+        getStatistics.mockRejectedValue(new Error('boom'));
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        try {
+            const {result} = renderHook(() => useStatistics());
+            await act(async () => {
+            });
+            expect(result.current.statistics).toBeUndefined();
+        } finally {
+            spy.mockRestore();
+        }
     });
 });

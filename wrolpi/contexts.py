@@ -20,6 +20,8 @@ def attach_shared_contexts(app: Sanic):
     from wrolpi import flags
 
     app.shared_ctx.flags = manager.dict({i: False for i in flags.FLAG_NAMES})
+    # Flag name -> pid of the process inside `with flag:` (see Flag.holder_pid).
+    app.shared_ctx.flag_holders = manager.dict()
 
     # ConfigFile multiprocessing_dict's.
     # Shared Configs
@@ -230,6 +232,8 @@ def reset_shared_contexts(app: Sanic):
     del app.shared_ctx.events_history[:]
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.flags_initialized.clear()
+    if hasattr(app.shared_ctx, 'flag_holders'):
+        app.shared_ctx.flag_holders.clear()
     if hasattr(app.shared_ctx, 'perpetual_restart_requested_at'):
         app.shared_ctx.perpetual_restart_requested_at.value = 0.0
 

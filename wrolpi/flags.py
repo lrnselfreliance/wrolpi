@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import multiprocessing
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -68,6 +69,27 @@ class Flag:
         from wrolpi.api_utils import api_app
         return api_app.shared_ctx.flags[self.name]
 
+    def holder_pid(self) -> int | None:
+        """The pid of the process inside `with flag:`, or None if no process is (or the holder was not recorded).
+
+        A process killed inside the block never reaches `__exit__`; the perpetual process uses this on startup to
+        tell an orphaned flag from one a live process is still holding."""
+        if PYTEST and not TESTING_LOCK.is_set():
+            return None
+        from wrolpi.api_utils import api_app
+        holders = getattr(api_app.shared_ctx, 'flag_holders', None)
+        return holders.get(self.name) if holders is not None else None
+
+    def _record_holder(self, pid: int | None):
+        from wrolpi.api_utils import api_app
+        holders = getattr(api_app.shared_ctx, 'flag_holders', None)
+        if holders is None:
+            return
+        if pid is None:
+            holders.pop(self.name, None)
+        else:
+            holders[self.name] = pid
+
     def __enter__(self):
         if PYTEST and not TESTING_LOCK.is_set():
             # Testing, but the test does not need flags.
@@ -76,6 +98,7 @@ class Flag:
         if self.is_set():
             raise ValueError(f'{self} flag is already set!')
         self.set()
+        self._record_holder(os.getpid())
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if PYTEST and not TESTING_LOCK.is_set():
@@ -83,6 +106,7 @@ class Flag:
             return
 
         self.clear()
+        self._record_holder(None)
 
     def _save(self, value: bool):
         if self.store_db:

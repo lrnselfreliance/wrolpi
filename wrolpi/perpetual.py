@@ -36,8 +36,10 @@ PERPETUAL_PROCESS_IDENT = f'Sanic-{PERPETUAL_PROCESS_NAME}-0'
 # A managed (non-server) process never reaches ACKED; these are the states the manager reports for one that
 # is gone.  See sanic/worker/constants.py ProcessState.
 PERPETUAL_PROCESS_DEAD_STATES = frozenset({'FAILED', 'COMPLETED', 'TERMINATED'})
-# A restart request is idempotent to the manager, but five workers noticing one death should not log five times.
-PERPETUAL_RESTART_COOLDOWN = 60
+# One restart request per death across all workers.  The cooldown only has to outlast the manager acting on the
+# request (the replacement appears within a second or two); a longer one leaves the loops dead that much longer
+# when the replacement dies too.
+PERPETUAL_RESTART_COOLDOWN = 15
 # How long the runner waits for cancelled loops before abandoning them at shutdown.
 PERPETUAL_CANCEL_TIMEOUT = 15
 # Shared multiprocessing locks whose critical sections are short.  A predecessor SIGKILLed inside one leaves it
@@ -45,6 +47,20 @@ PERPETUAL_CANCEL_TIMEOUT = 15
 SHARED_LOCK_NAMES = ('jobs_lock', 'switches_lock', 'config_save_lock', 'config_update_lock', 'events_lock',
                      'secure_cookies_lock', 'transcode_lock')
 SHARED_LOCK_HEAL_TIMEOUT = 10
+# In-progress flags.  A SIGKILL inside `with flag:` leaves it set and the next enter raises "flag is already set"
+# forever (every file refresh, or every map search-index build).  Two kinds:
+#  * entered or set only by the perpetual process (FileWorker.process_queue, handle_refresh): at this process's
+#    startup any of them still set is orphaned, whoever the recorded holder is;
+#  * also entered by API workers (refresh_sync from the delete endpoints, the map rebuild endpoints): cleared only
+#    when the recorded holder pid is dead, because a live worker may be inside the block right now.
+# file_worker_busy is deliberately absent: the collection-move path in an API worker holds it as a mutex, and
+# process_queue already drops a stale set on its next idle tick.
+PERPETUAL_ONLY_FLAGS = ('file_worker_counting', 'file_worker_discovery', 'global_refresh_active')
+SHARED_PROGRESS_FLAGS = ('file_worker_modeling', 'file_worker_indexing', 'file_worker_cleanup',
+                         'map_search_building')
+
+# True only inside the process started by `run_perpetual_process`.
+IN_PERPETUAL_PROCESS = False
 
 
 @dataclass
@@ -149,6 +165,37 @@ def heal_shared_locks(app, timeout: float = SHARED_LOCK_HEAL_TIMEOUT) -> list[st
     return healed
 
 
+def clear_orphaned_flags() -> list[str]:
+    """Clear in-progress flags whose holder is gone; returns the names cleared.  See PERPETUAL_ONLY_FLAGS."""
+    from wrolpi import flags
+    from wrolpi.cmd import pid_is_running
+
+    cleared = []
+    for name in PERPETUAL_ONLY_FLAGS + SHARED_PROGRESS_FLAGS:
+        try:
+            flag = getattr(flags, name)
+            if not flag.is_set():
+                continue
+            holder = flag.holder_pid()
+            if name in PERPETUAL_ONLY_FLAGS:
+                reason = f'holder pid={holder}' if holder else 'no live holder possible'
+            elif holder is None:
+                logger.warning(f'reconcile: flag {name} is set with no recorded holder; leaving it')
+                continue
+            elif pid_is_running(holder) and holder != os.getpid():
+                logger.info(f'reconcile: flag {name} is held by live pid={holder}; leaving it')
+                continue
+            else:
+                reason = f'holder pid={holder} is dead'
+            logger.warning(f'reconcile: clearing in-progress flag {name} ({reason})')
+            flag.clear()
+            flag._record_holder(None)
+            cleared.append(name)
+        except Exception as e:
+            logger.error(f'reconcile: failed to check flag {name}', exc_info=e)
+    return cleared
+
+
 def reconcile_after_predecessor(app) -> dict:
     """Undo what a perpetual process that died mid-work left in shared state and the DB.
 
@@ -157,13 +204,17 @@ def reconcile_after_predecessor(app) -> dict:
     refresh that is not happening.  On a first start all of this is already clean, so this is idempotent.
     Each step is independent; one failing (e.g. no database yet) must not stop the others.
     """
+    from wrolpi import flags
     from wrolpi.downloader import download_manager, Download, DownloadStatus
     from wrolpi.files.worker import file_worker
     from wrolpi.db import get_db_session
 
-    report = dict(locks=[], jobs=0, downloads=0, processing_domains=0, file_worker_jobs=0)
+    report = dict(locks=[], flags=[], jobs=0, downloads=0, processing_domains=0, file_worker_jobs=0,
+                  file_worker_status=False)
 
     report['locks'] = heal_shared_locks(app)
+
+    report['flags'] = clear_orphaned_flags()
 
     try:
         from wrolpi.jobs import fail_orphaned_jobs
@@ -200,6 +251,7 @@ def reconcile_after_predecessor(app) -> dict:
                 report['file_worker_jobs'] += 1
         if report['file_worker_jobs'] or (file_worker.status and file_worker.status.get('status') != 'idle'):
             file_worker.reset_status()
+            report['file_worker_status'] = True
     except Exception as e:
         logger.error('reconcile: failed to reset the file worker status', exc_info=e)
 
@@ -239,6 +291,8 @@ def run_perpetual_process():
     the populated `shared_ctx`, and the module singletons, and needs no arguments."""
     # The fork inherited the manager's Python signal handlers; until the event loop installs ours, a signal
     # must do the default thing (exit) rather than run the manager's handler inside this process.
+    global IN_PERPETUAL_PROCESS
+    IN_PERPETUAL_PROCESS = True
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     if not PERPETUAL_LOOPS:

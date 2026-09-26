@@ -2158,3 +2158,22 @@ async def test_renew_recurring_downloads_scans_without_the_write_lock(test_sessi
     assert lock_held_during_scan, 'the recurring downloads were never scanned'
     assert not any(lock_held_during_scan), \
         'the write lock was held while scanning recurring downloads'
+
+
+@pytest.mark.asyncio
+async def test_create_downloads_does_not_dispatch_outside_the_perpetual_process(test_session, test_download_manager,
+                                                                                 test_downloader, monkeypatch):
+    """Only the perpetual process runs downloads.  A request worker creating Downloads must not start one itself;
+    perpetual_download_worker picks them up on its next cycle."""
+    from wrolpi import perpetual
+    monkeypatch.setattr('wrolpi.downloader.PYTEST', False)
+    monkeypatch.setattr(perpetual, 'IN_PERPETUAL_PROCESS', False)
+    with mock.patch.object(test_download_manager, 'dispatch_downloads') as dispatch:
+        test_download_manager.create_downloads(test_session, ['https://example.com/worker'], test_downloader.name)
+    dispatch.assert_not_called()
+
+    monkeypatch.setattr(perpetual, 'IN_PERPETUAL_PROCESS', True)
+    with mock.patch.object(test_download_manager, 'dispatch_downloads', new_callable=mock.AsyncMock) as dispatch:
+        test_download_manager.create_downloads(test_session, ['https://example.com/perpetual'], test_downloader.name)
+        await asyncio.sleep(0)
+    dispatch.assert_called_once()

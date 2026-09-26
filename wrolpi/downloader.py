@@ -998,8 +998,12 @@ class DownloadManager:
 
         session.flush(downloads)
         try:
-            # Start downloading ASAP.
-            background_task(self.dispatch_downloads())
+            from wrolpi import perpetual
+            if perpetual.IN_PERPETUAL_PROCESS or PYTEST:
+                # Start downloading ASAP.  Only the perpetual process runs downloads; a request worker leaves
+                # them for perpetual_download_worker's next cycle (a few seconds) rather than running a download
+                # inside the API worker.
+                background_task(self.dispatch_downloads())
             # Save the config now that new Downloads exist.
             save_downloads_config.activate_switch()
         except RuntimeError:

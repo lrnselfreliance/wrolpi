@@ -2107,6 +2107,14 @@ export const useSearchChannels = (defaultTagNames) => {
         }
     };
 
+    // The caller's tags come from the URL and change in place while the view stays mounted, so
+    // follow their contents.  Keyed on the serialized list because the caller builds a new array
+    // every render; adopting it by reference would refetch forever.
+    const tagKey = JSON.stringify(defaultTagNames || []);
+    useEffect(() => {
+        setTagNames(prev => JSON.stringify(prev) === tagKey ? prev : JSON.parse(tagKey));
+    }, [tagKey]);
+
     useEffect(() => {
         localSearchChannels();
     }, [tagNames]);

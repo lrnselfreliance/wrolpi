@@ -482,16 +482,44 @@ describe('useSearchChannels', () => {
         }
     });
 
-    test('changing tags resets to pending, and a slow response for the old tags is dropped', async () => {
+    test('a changed tag argument refetches and resets a loaded result to pending', async () => {
+        // The Other tab passes the URL's tags on every render; the filter modal changes them in
+        // place while the tab stays mounted.
+        searchChannels.mockResolvedValue({channels: [{id: 1, name: 'Old'}]});
+        const {result, rerender} = renderHook(({tags}) => useSearchChannels(tags), {initialProps: {tags: ['old']}});
+        await act(async () => {
+        });
+        expect(result.current.channels).toEqual([{id: 1, name: 'Old'}]);
+        expect(searchChannels).toHaveBeenCalledTimes(1);
+
+        searchChannels.mockReturnValue(new Promise(() => {
+        }));
+        rerender({tags: ['new']});
+        expect(searchChannels).toHaveBeenCalledTimes(2);
+        expect(searchChannels).toHaveBeenLastCalledWith(['new']);
+        expect(result.current.channels).toBeNull();
+        expect(result.current.loading).toBe(true);
+    });
+
+    test('a new array with the same tags does not refetch', async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        const {rerender} = renderHook(({tags}) => useSearchChannels(tags), {initialProps: {tags: ['a']}});
+        await act(async () => {
+        });
+        rerender({tags: ['a']});
+        await act(async () => {
+        });
+        expect(searchChannels).toHaveBeenCalledTimes(1);
+    });
+
+    test('a slow response for the old tags is dropped after the tags change', async () => {
         let resolveOld;
         searchChannels.mockReturnValueOnce(new Promise(res => resolveOld = res));
-        const {result} = renderHook(() => useSearchChannels(['old']));
+        const {result, rerender} = renderHook(({tags}) => useSearchChannels(tags), {initialProps: {tags: ['old']}});
         expect(result.current.loading).toBe(true);
 
         searchChannels.mockResolvedValue({channels: [{id: 2, name: 'New'}]});
-        act(() => {
-            result.current.setTagNames(['new']);
-        });
+        rerender({tags: ['new']});
         expect(result.current.channels).toBeNull();
         expect(result.current.loading).toBe(true);
         await act(async () => {

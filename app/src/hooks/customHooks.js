@@ -1697,12 +1697,15 @@ export const collectLocations = (inventories) => {
 };
 
 export const useStatistics = () => {
-    const [statistics, setStatistics] = useState();
+    // null = pending, undefined = fetch failed (the api helper returns undefined on a non-OK
+    // response), an object = loaded.  Never undefined on the first render: the page shows its
+    // error for undefined.
+    const [statistics, setStatistics] = useState(null);
 
     const fetchFileStatistics = async () => {
         try {
             const s = await getStatistics();
-            setStatistics(s);
+            setStatistics(s ?? undefined);
         } catch (e) {
             console.error(e);
             setStatistics(undefined);
@@ -1710,7 +1713,6 @@ export const useStatistics = () => {
     }
 
     useEffect(() => {
-        setStatistics({});
         fetchFileStatistics();
     }, []);
 

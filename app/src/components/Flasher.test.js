@@ -265,6 +265,31 @@ describe('FlasherPage', () => {
         }
     });
 
+    // The Saved Firmwares tab is the default tab.  "No saved configurations yet." may only appear once the
+    // server confirmed there are none; a pending or failed fetch must not read as an empty list.
+    it('shows a placeholder, not "no saved configurations", while the configs load', () => {
+        Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
+        getFlasherConfigs.mockReturnValue(new Promise(() => {
+        }));
+        const {container} = render(<FlasherPage/>);
+        expect(container.querySelector('.wrolpi-placeholder')).toBeInTheDocument();
+        expect(screen.queryAllByText('No saved configurations yet.')).toHaveLength(0);
+    });
+
+    it('shows an error, not "no saved configurations", when the configs fetch failed', async () => {
+        Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
+        getFlasherConfigs.mockResolvedValue(undefined);
+        render(<FlasherPage/>);
+        expect((await screen.findAllByText(/Could not fetch saved configurations/)).length).toBeGreaterThan(0);
+        expect(screen.queryAllByText('No saved configurations yet.')).toHaveLength(0);
+    });
+
+    it('shows "no saved configurations" once the server confirmed there are none', async () => {
+        Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
+        render(<FlasherPage/>);
+        expect((await screen.findAllByText('No saved configurations yet.')).length).toBeGreaterThan(0);
+    });
+
     // PageContainer renders both the mobile and desktop breakpoints (fresnel Media), so each label appears twice.
     it('warns when Web Serial is unavailable', () => {
         delete global.navigator.serial;

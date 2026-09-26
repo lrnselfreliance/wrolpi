@@ -1,8 +1,9 @@
 import React from 'react';
 import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {DestinationForm} from './Download';
-import {createTestForm} from '../test-utils';
+import {DepthInputForm, DestinationForm} from './Download';
+import {useForm} from '../hooks/useForm';
+import {createTestForm, renderWithProviders} from '../test-utils';
 
 // Mock DirectorySearch component - simplified to avoid useState/useEffect warnings
 jest.mock('./Common', () => {
@@ -249,5 +250,28 @@ describe('DestinationForm', () => {
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('');
         });
+    });
+});
+
+describe('NumberField', () => {
+    // Renders a NumberField against a real useForm: the Mantine NumberInput passes a value (not an
+    // event) to onChange, which used to reach `e.preventDefault()` and throw while typing.
+    function DepthHarness({onData}) {
+        const form = useForm({defaultFormData: {settings: {depth: ''}}, submitter: jest.fn()});
+        onData(form.formData);
+        return <DepthInputForm form={form}/>;
+    }
+
+    it('typing into a NumberField updates the form without throwing', async () => {
+        let latest = null;
+        renderWithProviders(<DepthHarness onData={(d) => latest = d}/>);
+
+        const input = screen.getByRole('textbox', {name: /Depth/});
+        await userEvent.type(input, '3');
+
+        await waitFor(() => {
+            expect(latest.settings.depth).toBe(3);
+        });
+        expect(input).toHaveValue('3');
     });
 });

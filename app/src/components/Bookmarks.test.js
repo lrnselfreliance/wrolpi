@@ -16,7 +16,7 @@ const tree = [
 ];
 
 describe('resolveBookmarkUrl', () => {
-    const location = {protocol: 'https:', hostname: '10.0.0.2'};
+    const location = {protocol: 'https:', hostname: '10.0.0.2', host: '10.0.0.2'};
 
     it.each([
         ['/videos', {internal: true, href: '/videos'}],
@@ -29,6 +29,26 @@ describe('resolveBookmarkUrl', () => {
         ['https://example.com/a?b=c', {internal: false, href: 'https://example.com/a?b=c'}],
     ])('resolves %s', (url, expected) => {
         expect(resolveBookmarkUrl(url, location)).toEqual(expected);
+    });
+
+    it.each([
+        // Paths a browser takes off this host: network paths, backslashes, and control
+        // characters a URL parser strips before deciding.
+        '//evil.com', '///evil.com', '/\\evil.com', '/\\@evil.com', '/\t/evil.com', '/\n/evil.com',
+        // Port forms where the host would become credentials.
+        ':8096@evil.com', 'http://:8096@evil.com', ':8096\t@evil.com', ':8096/x@evil.com', ':8096\\evil.com',
+        // Not http(s).
+        'javascript:alert(1)', 'data:text/html,hi', 'ftp://example.com', 'videos', '',
+    ])('refuses %j rather than guessing', (url) => {
+        expect(resolveBookmarkUrl(url, location)).toEqual({internal: false, href: null});
+    });
+
+    it('brackets an IPv6 host for a port bookmark', () => {
+        // The browser reports an IPv6 hostname bracketed already.
+        const v6 = {protocol: 'https:', hostname: '[::1]', host: '[::1]'};
+        expect(resolveBookmarkUrl(':8096/web', v6)).toEqual({internal: false, href: 'https://[::1]:8096/web'});
+        expect(resolveBookmarkUrl(':8096', {protocol: 'http:', hostname: '::1', host: '[::1]'}))
+            .toEqual({internal: false, href: 'http://[::1]:8096'});
     });
 });
 
@@ -72,6 +92,13 @@ describe('BookmarkTable', () => {
         expect(a.move).toHaveBeenCalledWith(tree[1].children[1], 2, 0);
     });
 
+    it('shows a bookmark whose URL does not resolve as text, not a link', () => {
+        const nodes = [{id: 1, name: 'Bad', url: '//evil.com', new_tab: false}];
+        render(<BookmarkTable nodes={nodes} actions={actions()}/>);
+        expect(screen.queryByRole('link', {name: 'Bad'})).not.toBeInTheDocument();
+        expect(screen.getByText('Bad')).toBeInTheDocument();
+    });
+
     it('edits with the parent the node lives in, and deletes a bookmark without asking', async () => {
         const a = actions();
         render(<BookmarkTable nodes={tree} actions={a}/>);
@@ -106,6 +133,18 @@ describe('BookmarkAddForms', () => {
 
         expect(onAddBookmark).toHaveBeenCalledWith({name: 'Home Assistant', url: ':8123/', new_tab: true, parent_id: null});
         expect(screen.getByLabelText('Bookmark URL')).toHaveValue('');
+    });
+
+    it('keeps what was typed when the server refuses the bookmark', async () => {
+        const onAddBookmark = jest.fn().mockRejectedValue(new Error('refused'));
+        render(<BookmarkAddForms nodes={tree} onAddBookmark={onAddBookmark} onAddDirectory={jest.fn()}/>);
+        await userEvent.type(screen.getByLabelText('Bookmark URL'), '//evil.com');
+        await userEvent.type(screen.getByLabelText('Bookmark name'), 'Oops');
+        await userEvent.click(screen.getAllByRole('button', {name: 'Add'})[0]);
+
+        expect(onAddBookmark).toHaveBeenCalled();
+        expect(screen.getByLabelText('Bookmark URL')).toHaveValue('//evil.com');
+        expect(screen.getByLabelText('Bookmark name')).toHaveValue('Oops');
     });
 
     it('adds a directory', async () => {

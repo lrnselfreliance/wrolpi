@@ -10,10 +10,14 @@ export const EDIT_BOOKMARKS_PATH = '/more/bookmarks';
 
 /**
  * The props that make a Menu.Item open a bookmark: an in-app Link for a path, a plain
- * anchor for everything else, and a new tab when the bookmark asks for one.
+ * anchor for everything else, and a new tab when the bookmark asks for one.  A URL that
+ * does not resolve (see resolveBookmarkUrl) gets a disabled item, never a raw href.
  */
 function bookmarkItemProps(node) {
     const {internal, href} = resolveBookmarkUrl(node.url);
+    if (!href) {
+        return {disabled: true};
+    }
     const target = node.new_tab ? {target: '_blank', rel: 'noopener noreferrer'} : {};
     if (internal) {
         return {component: Link, to: href, ...target};
@@ -203,11 +207,12 @@ function BookmarkTableRows({nodes, parentId, depth, editable, actions}) {
                         : <Icon name={node.new_tab ? 'external' : 'linkify'} size='large'/>}
                 </Table.Cell>
                 <Table.Cell style={{paddingLeft: depth ? `calc(0.75em + ${depth * 1.5}em)` : undefined}}>
-                    {directory
-                        ? <b>{node.name}</b>
-                        : <a href={href} target={node.new_tab ? '_blank' : undefined} rel='noopener noreferrer'>
+                    {directory && <b>{node.name}</b>}
+                    {!directory && (href
+                        ? <a href={href} target={node.new_tab ? '_blank' : undefined} rel='noopener noreferrer'>
                             {node.name}
-                        </a>}
+                        </a>
+                        : <span>{node.name}</span>)}
                     {!directory && <Text size='xs' c='dimmed' truncate='end'>{node.url}</Text>}
                 </Table.Cell>
                 {editable && <Table.Cell>
@@ -267,16 +272,26 @@ export function BookmarkAddForms({nodes, onAddBookmark, onAddDirectory}) {
     const locations = locationOptions(nodes);
     const parentOf = (value) => value === ROOT ? null : Number(value);
 
+    // The form is cleared only once the server has accepted the node.  A refused add has
+    // already shown its toast; the typed URL stays so the user can correct it.
     const handleAddBookmark = async () => {
         if (!url.trim() || !name.trim()) return;
-        await onAddBookmark({name: name.trim(), url: url.trim(), new_tab: newTab, parent_id: parentOf(location)});
+        try {
+            await onAddBookmark({name: name.trim(), url: url.trim(), new_tab: newTab, parent_id: parentOf(location)});
+        } catch (e) {
+            return;
+        }
         setUrl('');
         setName('');
     };
 
     const handleAddDirectory = async () => {
         if (!directoryName.trim()) return;
-        await onAddDirectory({name: directoryName.trim(), parent_id: parentOf(directoryLocation)});
+        try {
+            await onAddDirectory({name: directoryName.trim(), parent_id: parentOf(directoryLocation)});
+        } catch (e) {
+            return;
+        }
         setDirectoryName('');
     };
 
@@ -375,32 +390,38 @@ export function BookmarksPage() {
         },
     };
 
+    // These reject on failure (the API client has already shown the toast) so the add
+    // forms know to keep what was typed.
     const handleAddBookmark = async (bookmark) => {
-        try {
-            await addBookmark(bookmark);
-            await refresh();
-        } catch (e) {
-        }
+        await addBookmark(bookmark);
+        await refresh();
     };
 
     const handleAddDirectory = async (directory) => {
-        try {
-            await addBookmarkDirectory(directory);
-            await refresh();
-        } catch (e) {
-        }
+        await addBookmarkDirectory(directory);
+        await refresh();
     };
 
     const handleEditSave = async ({name, url, new_tab, parent_id}) => {
         const {node, directory, parentId} = modal;
         try {
             await updateBookmark(node.id, directory ? {name} : {name, url, new_tab});
-            if (parent_id !== parentId) {
-                await moveBookmark(node.id, parent_id);
-            }
-            await refresh();
-            setModal(null);
         } catch (e) {
+            return;  // Nothing changed; the modal stays open with the toast beside it.
+        }
+        // The rename is committed even if the move is refused, so the nav must show it
+        // either way; only a fully successful edit closes the modal.
+        let moved = true;
+        if (parent_id !== parentId) {
+            try {
+                await moveBookmark(node.id, parent_id);
+            } catch (e) {
+                moved = false;
+            }
+        }
+        await refresh();
+        if (moved) {
+            setModal(null);
         }
     };
 

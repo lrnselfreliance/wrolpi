@@ -13,6 +13,7 @@ A bookmark `url` may take three forms:
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from wrolpi.common import ConfigFile, logger
 from wrolpi.errors import ValidationError
@@ -20,8 +21,16 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 
 logger = logger.getChild(__name__)
 
-# The forms a bookmark URL may take.  See the module docstring.
-URL_PATTERN = re.compile(r'^(/|:\d+|https?://)', re.IGNORECASE)
+# Characters that a URL parser strips or that split a URL in surprising places.  Any of
+# them in a bookmark is a sign of an attempt to smuggle a host past the checks below.
+_FORBIDDEN = re.compile(r'[\x00-\x20\x7f\\]')
+# A port on this host: an optional scheme, then `:` and the port, then the end of the URL
+# or the start of a path, query or fragment.  `:8096@evil.com` does not match, because
+# `@` may not follow the port.
+_PORT_FORM = re.compile(r'^(?:(https?)://)?:(\d{1,5})(?=$|[/?#])(.*)$', re.IGNORECASE)
+_PORT_FORM_START = re.compile(r'^(?:https?://)?:', re.IGNORECASE)
+
+URL_HELP = 'Bookmark URL must be a path (/videos), a port (:8096/) or an absolute URL (https://)'
 
 
 @dataclass
@@ -43,9 +52,34 @@ def walk(nodes: List[dict], parent: Optional[dict] = None):
 
 
 def validate_url(url: str) -> str:
+    """Return `url` stripped, or raise if it is not one of the three forms.
+
+    The forms are checked by parsing, not by prefix.  A prefix check accepted `//evil.com`
+    as a path and `:8096@evil.com` as a port, both of which a browser takes off this host.
+    """
     url = (url or '').strip()
-    if not url or not URL_PATTERN.match(url):
-        raise ValidationError('Bookmark URL must be a path (/videos), a port (:8096/) or an absolute URL (https://)')
+    if not url or _FORBIDDEN.search(url):
+        raise ValidationError(URL_HELP)
+
+    if _PORT_FORM_START.match(url):
+        # A port on this host.  Everything after the port must be a path, query or
+        # fragment; `@` anywhere in it would turn the host into credentials.
+        match = _PORT_FORM.match(url)
+        if not match or not 0 < int(match.group(2)) < 65536 or '@' in match.group(3):
+            raise ValidationError(URL_HELP)
+        return url
+
+    if url.startswith('/'):
+        # A path on this WROLPi.  A second slash (`//evil.com`) is a network path, which
+        # leaves this host.  `urlsplit` agrees only when the netloc comes back empty.
+        parts = urlsplit(url)
+        if url.startswith('//') or parts.scheme or parts.netloc:
+            raise ValidationError(URL_HELP)
+        return url
+
+    parts = urlsplit(url)
+    if parts.scheme.lower() not in ('http', 'https') or not parts.netloc:
+        raise ValidationError(URL_HELP)
     return url
 
 
@@ -56,6 +90,43 @@ def validate_name(name: str) -> str:
     return name
 
 
+def validate_tree(nodes) -> None:
+    """Raise ValidationError unless `nodes` is a well-formed bookmarks tree.
+
+    Applied to every write, including a hand-edited config file and the config API, so
+    the nav never renders a URL that `validate_url` would have refused.
+    """
+    if not isinstance(nodes, list):
+        raise ValidationError('bookmarks must be a list')
+    seen_ids = set()
+    # Iterative, with the objects on the path tracked, so a cyclic structure (which a
+    # YAML anchor can build) is rejected rather than recursed into forever.
+    stack = [(nodes, ())]
+    while stack:
+        siblings, path = stack.pop()
+        if id(siblings) in path:
+            raise ValidationError('bookmarks tree contains a cycle')
+        for node in siblings:
+            if not isinstance(node, dict):
+                raise ValidationError(f'Bookmark is not a mapping: {node!r}')
+            node_id = node.get('id')
+            if not isinstance(node_id, int) or isinstance(node_id, bool) or node_id in seen_ids:
+                raise ValidationError(f'Bookmark id is missing or duplicated: {node_id!r}')
+            seen_ids.add(node_id)
+            validate_name(node.get('name'))
+            has_url, has_children = 'url' in node, 'children' in node
+            if has_url == has_children:
+                raise ValidationError(f'Bookmark {node_id} must have a url or children, not both')
+            if has_url:
+                validate_url(node['url'])
+                if 'new_tab' in node and not isinstance(node['new_tab'], bool):
+                    raise ValidationError(f'Bookmark {node_id} new_tab must be true or false')
+            else:
+                if not isinstance(node['children'], list):
+                    raise ValidationError(f'Bookmark {node_id} children must be a list')
+                stack.append((node['children'], path + (id(siblings),)))
+
+
 class BookmarksConfig(ConfigFile):
     file_name = 'bookmarks.yaml'
     default_config = dict(
@@ -64,7 +135,23 @@ class BookmarksConfig(ConfigFile):
     )
     validator = BookmarksConfigValidator
 
+    def validate(self, config: dict) -> bool:
+        # The dataclass validator sees only that `bookmarks` is a list.  Every writer
+        # (the bookmarks API, the config API, import) comes through here, so the tree
+        # itself is checked too.
+        if not super().validate(config):
+            return False
+        if 'bookmarks' in config:
+            try:
+                validate_tree(config['bookmarks'])
+            except ValidationError as e:
+                logger.error(f'{self.file_name}: {e}')
+                return False
+        return True
+
     def import_config(self, file=None, send_events=False):
+        # An invalid file raises here, leaving successful_import False so save() will not
+        # overwrite it.  A missing file is imported as empty, so the first save creates it.
         super().import_config(file, send_events)
         self.successful_import = True
 

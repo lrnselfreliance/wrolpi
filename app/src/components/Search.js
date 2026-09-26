@@ -131,12 +131,14 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
 }
 
 export function useSuggestions(searchStr, tagNames, filter, anyTag) {
+    // The general groups are null until the suggestion request returns: an empty list means the
+    // server found none, and the dropdown may say "No results" only for that.
     const defaultSuggestions = {
         fileGroups: [],
-        channels: [],
-        domains: [],
-        authors: [],
-        subjects: [],
+        channels: null,
+        domains: null,
+        authors: null,
+        subjects: null,
         zimsEstimates: [],
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
@@ -401,8 +403,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             zims: zimSum,
             otherSum: otherSum,
             mapPlaces: newSuggestions.mapPlaces || 0,
-            channels: newSuggestions.channels.length,
-            domains: newSuggestions.domains.length,
+            channels: newSuggestions.channels?.length,
+            domains: newSuggestions.domains?.length,
             authors: newSuggestions.authors?.length,
             subjects: newSuggestions.subjects?.length,
             tags: matchingTags?.length,

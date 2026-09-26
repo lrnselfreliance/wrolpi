@@ -46,6 +46,8 @@ export const ThemeContext = React.createContext({
 export const StatusContext = React.createContext({
     status: {},
     fetchStatus: null,
+    // True once the first status poll has landed.
+    loaded: false,
 });
 
 export const SettingsContext = React.createContext({
@@ -53,6 +55,9 @@ export const SettingsContext = React.createContext({
     fetchSettings: null,
     saveSettings: null,
     pending: false,
+    // True once settings have been fetched; `failed` when a fetch returned nothing before that.
+    loaded: false,
+    failed: false,
 });
 
 // `useQuery`

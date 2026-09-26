@@ -101,8 +101,8 @@ export function ShutdownButton() {
     </APIButton>
 }
 
-function UpgradeSegment() {
-    const {status, fetchStatus} = React.useContext(StatusContext);
+export function UpgradeSegment() {
+    const {status, fetchStatus, loaded} = React.useContext(StatusContext);
     const dockerized = useDockerized();
     const [upgrading, setUpgrading] = React.useState(false);
     const [checking, setChecking] = React.useState(false);
@@ -141,6 +141,14 @@ function UpgradeSegment() {
         return <Panel id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Upgrades are not available in Docker environments. Please upgrade your Docker images manually.</p>
+        </Panel>;
+    }
+
+    // Nothing is known until the first status poll lands; "up to date" is a claim about the server.
+    if (!loaded) {
+        return <Panel id='upgrade'>
+            <Header as='h3'>System Upgrade</Header>
+            <Loading/>
         </Panel>;
     }
 
@@ -325,7 +333,9 @@ export function SettingsPage() {
     const [isDevMode, setIsDevMode] = React.useState(false);
 
     // Get current settings from the API.
-    const {settings, saveSettings, fetchSettings} = React.useContext(SettingsContext);
+    const {
+        settings, saveSettings, fetchSettings, loaded: settingsLoaded, failed: settingsFailed,
+    } = React.useContext(SettingsContext);
     const {status} = React.useContext(StatusContext);
     // Used to track changes to the settings form between saves/loads.
     const [state, setState] = React.useState({});
@@ -463,7 +473,8 @@ export function SettingsPage() {
 
     React.useEffect(() => {
         console.debug('settings changed, replacing state...');
-        setReady(settings ? true : undefined);
+        // true = show the form, false = still loading, undefined = could not fetch.
+        setReady(settingsLoaded ? true : settingsFailed ? undefined : false);
         setState({
             // Only these settings can be changed on the SettingsPage.
             archive_destination: settings.archive_destination,
@@ -490,7 +501,7 @@ export function SettingsPage() {
             playlists_destination: settings.playlists_destination,
             save_ffprobe_json: settings.save_ffprobe_json,
         });
-    }, [JSON.stringify(settings)]);
+    }, [JSON.stringify(settings), settingsLoaded, settingsFailed]);
 
     const handleInputChange = async (name, value) => {
         setState({...state, [name]: value});

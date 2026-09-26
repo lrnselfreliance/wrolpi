@@ -1154,7 +1154,8 @@ export const useDownloads = () => {
 
 // Every hardware toggle works the same way: one field of the shared status object
 // says whether the subsystem is on, and starting/stopping it is a Controller call.
-// `on` is null when the status is unknown, which the UI renders as unsupported.
+// `on` is undefined until the status has loaded (unknown, the toggle is disabled), null once it
+// has loaded without the field (unsupported on this server), and otherwise a boolean.
 const useSubsystemToggle = ({
                                 statusField,
                                 onValue = 'on',
@@ -1165,23 +1166,26 @@ const useSubsystemToggle = ({
                                 errorDescription,
                                 refetchStatus = false,
                             }) => {
-    const [on, setOn] = useState(null);
-    const {status, fetchStatus} = useContext(StatusContext);
+    const [on, setOn] = useState(undefined);
+    const {status, fetchStatus, loaded} = useContext(StatusContext);
     const value = status?.[statusField];
 
     useEffect(() => {
-        if (value === onValue) {
+        if (!loaded) {
+            setOn(undefined);
+        } else if (value === onValue) {
             setOn(true);
         } else if (offValues.includes(value)) {
             setOn(false);
         } else {
             setOn(null);
         }
-    }, [value]);
+    }, [value, loaded]);
 
     const setSubsystem = async (enable) => {
         const previous = on;
-        setOn(null);
+        // Unknown while the call is in flight, not unsupported.
+        setOn(undefined);
         try {
             if (enable) {
                 await start();
@@ -1331,8 +1335,16 @@ export const useSearchDirectories = (value) => {
 }
 
 export const useSettings = () => {
+    // `settings` is {} until the first fetch lands, and a consumer cannot tell that from real
+    // settings by looking at it.  `loaded` is true once a fetch returned settings; `failed` is
+    // true when a fetch returned nothing before anything loaded.  A failed refresh after a load
+    // keeps the last known good values and `loaded`.
     const [settings, setSettings] = useState({});
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
     const [pending, setPending] = useState(false);
+    // Read by fetchSettings after an await, when the closed-over `loaded` may be stale.
+    const loadedRef = useRef(false);
 
     const fetchSettings = async () => {
         if (window.apiDown) {
@@ -1343,9 +1355,17 @@ export const useSettings = () => {
             const newSettings = await getSettings();
             if (newSettings) {
                 setSettings(newSettings);
+                loadedRef.current = true;
+                setLoaded(true);
+                setFailed(false);
+            } else if (!loadedRef.current) {
+                setFailed(true);
             }
         } catch (e) {
             // Don't clear settings on error — keep the last known good values.
+            if (!loadedRef.current) {
+                setFailed(true);
+            }
         } finally {
             setPending(false);
         }
@@ -1355,15 +1375,15 @@ export const useSettings = () => {
         fetchSettings();
     }, []);
 
-    return {settings, pending, fetchSettings, saveSettings};
+    return {settings, loaded, failed, pending, fetchSettings, saveSettings};
 }
 
 export const useSettingsInterval = () => {
-    const {settings, pending, fetchSettings, saveSettings} = useSettings();
+    const {settings, loaded, failed, pending, fetchSettings, saveSettings} = useSettings();
 
     useRecurringTimeout(fetchSettings, 1000 * 10);
 
-    return {settings, pending, fetchSettings, saveSettings};
+    return {settings, loaded, failed, pending, fetchSettings, saveSettings};
 }
 
 export const useMediaDirectory = () => {
@@ -1373,7 +1393,11 @@ export const useMediaDirectory = () => {
 }
 
 export const useStatus = () => {
+    // `status` is {} until the first poll lands, and a consumer cannot tell that from a server
+    // that reported nothing.  `loaded` is true once a poll returned a real status; the API being
+    // down does not count.
     const [status, setStatus] = useState({});
+    const [loaded, setLoaded] = useState(false);
 
     const fetchStatus = async () => {
         try {
@@ -1398,6 +1422,9 @@ export const useStatus = () => {
 
             // Merge both responses - controller stats override app status for system info
             setStatus({...appStatus, ...controllerStats});
+            if (!window.apiDown) {
+                setLoaded(true);
+            }
         } catch (e) {
             if (e instanceof ApiDownError) {
                 // API is down, do not log this error.
@@ -1417,15 +1444,15 @@ export const useStatus = () => {
         window.apiDown = false;
     }, []);
 
-    return {status, fetchStatus}
+    return {status, loaded, fetchStatus}
 }
 
 export const useStatusInterval = () => {
-    const {status, fetchStatus} = useStatus();
+    const {status, loaded, fetchStatus} = useStatus();
 
     useRecurringTimeout(fetchStatus, 1000 * 3);
 
-    return {status, fetchStatus};
+    return {status, loaded, fetchStatus};
 }
 
 export const StatusProvider = (props) => {

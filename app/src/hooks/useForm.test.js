@@ -465,6 +465,39 @@ describe('useForm', () => {
             expect(result.current.formData.sleep_requests).toBe(0.75);
         });
 
+        it('handleInputEvent accepts a value-shaped event with no preventDefault (Mantine NumberInput)', () => {
+            // Mantine's NumberInput hands back the value, so NumberField wraps it in a bare
+            // {target} object.  Typing must not throw "e.preventDefault is not a function".
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {settings: {sleep_requests: ''}},
+                submitter: jest.fn(),
+            }));
+
+            act(() => {
+                result.current.handleInputEvent({
+                    target: {type: 'number', value: 0.75, dataset: {path: 'settings.sleep_requests'}},
+                });
+            });
+
+            expect(result.current.formData.settings.sleep_requests).toBe(0.75);
+        });
+
+        it('getInputProps onChange accepts a value-shaped event with no preventDefault', async () => {
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {settings: {depth: ''}},
+                submitter: jest.fn(),
+            }));
+
+            await act(async () => {
+                const [inputProps] = result.current.getInputProps({name: 'depth', path: 'settings.depth', type: 'number'});
+                await inputProps.onChange({
+                    target: {type: 'number', value: 3, dataset: {path: 'settings.depth'}},
+                });
+            });
+
+            expect(result.current.formData.settings.depth).toBe(3);
+        });
+
         it('handleInputEvent uses data-path attribute when available', () => {
             const {result} = renderHook(() => useForm({
                 defaultFormData: {nested: {field: ''}},

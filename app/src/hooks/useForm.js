@@ -188,7 +188,9 @@ export function useForm({
     }, 300), [validators]);
 
     const handleInputEvent = (e) => {
-        if (e) e.preventDefault();
+        // Mantine inputs (NumberInput, etc.) hand back a value rather than a DOM event, so callers
+        // wrap it as a bare `{target: {...}}` object.  Only a real event has `preventDefault`.
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
         let {type, value} = e.target;
         let {path} = e.target.dataset;
         path = path || e.target.name;
@@ -286,7 +288,8 @@ export function useForm({
         const [customProps, inputAttrs] = getCustomProps({name, validator, path, type, required, afterChange});
 
         const localHandleInputEvent = async (e) => {
-            if (e) e.preventDefault();
+            // `handleInputEvent` already handles a real event's preventDefault, and tolerates the
+            // value-shaped objects Mantine-backed fields pass.
             const value = handleInputEvent(e);
             if (onChange) {
                 await onChange(value);

@@ -65,4 +65,25 @@ describe('InventoryImportModal', () => {
         renderModal();
         await waitFor(() => expect(getInventoryBackups).toHaveBeenCalledWith('food-storage'));
     });
+
+    // "No backups yet" may only appear once the server confirmed there are none.
+    test('says there are no backups when the server returned none', async () => {
+        getInventoryBackups.mockResolvedValue([]);
+        renderModal();
+        expect(await screen.findByText(/No backups yet/)).toBeInTheDocument();
+    });
+
+    test('a failed backups fetch shows an error, not "No backups yet"', async () => {
+        getInventoryBackups.mockResolvedValue(undefined);
+        renderModal();
+        expect(await screen.findByText(/Could not fetch backups/)).toBeInTheDocument();
+        expect(screen.queryByText(/No backups yet/)).not.toBeInTheDocument();
+    });
+
+    test('a thrown backups fetch shows an error, not a loader forever', async () => {
+        getInventoryBackups.mockRejectedValue(new Error('down'));
+        renderModal();
+        expect(await screen.findByText(/Could not fetch backups/)).toBeInTheDocument();
+        expect(screen.queryByText(/Loading backups/)).not.toBeInTheDocument();
+    });
 });

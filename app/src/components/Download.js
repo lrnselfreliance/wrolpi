@@ -247,19 +247,28 @@ export function DownloadFrequencySelector({
 }
 
 export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_downloader'}) {
-    const [downloaders, setDownloaders] = React.useState([]);
+    // null = pending, undefined = could not be fetched, a list = loaded.  Until loaded, the select is
+    // disabled and says why, rather than sitting empty as though there were no downloaders.
+    const [downloaders, setDownloaders] = React.useState(null);
 
     const fetchDownloaders = async () => {
-        let {downloaders: downloaders_} = await getDownloaders();
-        downloaders_ = downloaders_.map((i) => {
+        const result = await getDownloaders();
+        if (!result || !Array.isArray(result.downloaders)) {
+            setDownloaders(undefined);
+            return;
+        }
+        setDownloaders(result.downloaders.map((i) => {
             return {key: i.name, text: i.pretty_name || i.name, value: i.name}
-        })
-        setDownloaders(downloaders_);
+        }));
     }
 
     React.useEffect(() => {
         fetchDownloaders();
     }, []);
+
+    const placeholder = downloaders === null ? 'Loading downloaders…'
+        : downloaders === undefined ? 'Could not fetch downloaders'
+            : 'Select a downloader';
 
     return <SelectField
         form={form}
@@ -267,8 +276,9 @@ export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_d
         path={path}
         required
         label='Downloader'
-        placeholder='Select a downloader'
-        options={downloaders}
+        placeholder={placeholder}
+        options={downloaders || []}
+        disabled={!Array.isArray(downloaders)}
     />
 }
 

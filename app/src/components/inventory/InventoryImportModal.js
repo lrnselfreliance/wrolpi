@@ -25,7 +25,7 @@ function ItemNameList({items}) {
  * `onChanged` refreshes the page's inventory state after a successful action.
  */
 export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
-    const [dates, setDates] = useState(null);          // null while loading
+    const [dates, setDates] = useState(null);          // null while loading, undefined if the fetch failed
     const [reimporting, setReimporting] = useState(false);
     const [selected, setSelected] = useState(null);    // {date, mode, preview} confirmation view
     const [previewing, setPreviewing] = useState(null); // `${date}:${mode}` currently loading a preview
@@ -41,11 +41,19 @@ export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
         setReimporting(false);
         setApplying(false);
         setPreviewing(null);
-        getInventoryBackups(slug).then(result => {
-            if (!cancelled) {
-                setDates(result || []);
-            }
-        });
+        getInventoryBackups(slug)
+            .then(result => {
+                if (!cancelled) {
+                    // The api helper returns undefined on a non-OK response.
+                    setDates(result === undefined ? undefined : result || []);
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                if (!cancelled) {
+                    setDates(undefined);
+                }
+            });
         return () => {
             cancelled = true;
         };
@@ -153,6 +161,8 @@ export function InventoryImportModal({open, onClose, slug, name, onChanged}) {
             </p>
             {dates === null
                 ? <Loading>Loading backups…</Loading>
+                : dates === undefined
+                    ? <p style={{color: 'var(--danger)'}}>Could not fetch backups for this inventory.</p>
                 : dates.length === 0
                     ? <p>No backups yet. A backup is saved automatically whenever this inventory changes.</p>
                     : <div style={{maxHeight: '320px', overflowY: 'auto'}}>

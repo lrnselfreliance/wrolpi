@@ -290,6 +290,18 @@ describe('FlasherPage', () => {
         expect((await screen.findAllByText('No saved configurations yet.')).length).toBeGreaterThan(0);
     });
 
+    // "No .bin firmware found" may only appear once the server searched and found none.
+    it('shows an error, not "no firmware found", when the firmware search failed', async () => {
+        Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
+        // The api helper returns undefined on a non-OK response.
+        flasherSearch.mockResolvedValue(undefined);
+        render(<FlasherPage/>);
+        await waitFor(() => expect(flasherSearch).toHaveBeenCalled());
+        switchTab('Choose from your WROLPi');
+        expect((await screen.findAllByText(/Could not search firmware/)).length).toBeGreaterThan(0);
+        expect(screen.queryAllByText(/firmware found/)).toHaveLength(0);
+    });
+
     // PageContainer renders both the mobile and desktop breakpoints (fresnel Media), so each label appears twice.
     it('warns when Web Serial is unavailable', () => {
         delete global.navigator.serial;

@@ -270,7 +270,8 @@ export function FlasherPage() {
 
     // Media-directory firmware picker.
     const [mediaFilter, setMediaFilter] = useState('');
-    const [mediaResults, setMediaResults] = useState([]);
+    // null = not searched yet, undefined = the search failed, a list = the server's results.
+    const [mediaResults, setMediaResults] = useState(null);
     const [mediaLoading, setMediaLoading] = useState(false);
     // When set (e.g. "ESP32-S2"), the picker only shows firmware for that chip (detected from the device).
     const [deviceChip, setDeviceChip] = useState(null);
@@ -393,14 +394,15 @@ export function FlasherPage() {
     const fetchMediaFirmware = React.useCallback(async (pathFilter, chip) => {
         setMediaLoading(true);
         try {
-            const [fileGroups] = await flasherSearch(chip || null, pathFilter || null);
-            setMediaResults(fileGroups || []);
+            const result = await flasherSearch(chip || null, pathFilter || null);
+            // The api helper returns undefined (and toasts) on a non-OK response.
+            setMediaResults(result ? result[0] || [] : undefined);
         } catch (e) {
             // Surface connectivity errors instead of showing the empty "no firmware found" state, which would
             // be indistinguishable from genuinely having no firmware.
             setError(e && e.message ? e.message : String(e));
             setBootHint(false);
-            setMediaResults([]);
+            setMediaResults(undefined);
         } finally {
             setMediaLoading(false);
         }
@@ -767,8 +769,10 @@ export function FlasherPage() {
             onChange={(e) => handleMediaFilterChange(e.currentTarget.value)}
         />
         <div style={{marginTop: '1em', overflowX: 'auto'}}>
-            {mediaLoading
+            {mediaLoading || mediaResults === null
                 ? <Loading/>
+                : mediaResults === undefined
+                    ? <ErrorMessage>Could not search firmware.</ErrorMessage>
                 : (mediaResults.length === 0
                     ? <p style={{opacity: 0.7}}>
                         No <code>.bin</code> firmware found

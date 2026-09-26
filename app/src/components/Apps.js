@@ -12,6 +12,7 @@ import {
 import {Header, Loading, Panel, Statistic, StatisticGroup} from "./ui";
 import {useStatistics} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
+import {BookmarksPage} from "./Bookmarks";
 
 function StatisticsPage() {
     useTitle('Statistics');
@@ -104,6 +105,7 @@ export function MoreRoute(props) {
         <Routes>
             <Route path='calculators' element={<CalculatorsPage/>}/>
             <Route path='statistics' exact element={<StatisticsPage/>}/>
+            <Route path='bookmarks' element={<BookmarksPage/>}/>
         </Routes>
     </PageContainer>
 }

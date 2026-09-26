@@ -37,6 +37,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.download_cache_config = manager.dict()
     app.shared_ctx.map_pins_config = manager.dict()
     app.shared_ctx.flasher_config = manager.dict()
+    app.shared_ctx.bookmarks_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
@@ -317,3 +318,9 @@ def initialize_configs_contexts(app: Sanic):
         FLASHER_CONFIG.initialize(app.shared_ctx.flasher_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory flasher config: {e}')
+
+    try:
+        from wrolpi.bookmarks import BOOKMARKS_CONFIG
+        BOOKMARKS_CONFIG.initialize(app.shared_ctx.bookmarks_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory bookmarks config: {e}')

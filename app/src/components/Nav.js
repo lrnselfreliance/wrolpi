@@ -21,6 +21,7 @@ import {HELP_VIEWER_URI, NAME, navColorHexMap} from "./Vars";
 import {useOverflowNav} from "../hooks/useOverflowNav";
 import {defaultNavColor, navBarStyle, useNavColors} from "../themes/navColors";
 import _ from "lodash";
+import {BookmarksMenuContents, EDIT_BOOKMARKS_PATH} from "./Bookmarks";
 
 function updateFavicon(colorName) {
     // Fall back to violet if invalid color
@@ -64,12 +65,18 @@ const allLinks = [
     // No `end` on these two: a tab stays current for the pages beneath it, and `end` would
     // drop the mark the moment either grows a sub-page.
     {to: '/more/calculators', text: 'Calculators', key: 'calculators'},
+    // The user's bookmarks, read from BookmarksContext when rendered.  No `to`: it is a
+    // menu, and its items are not sections of the app.
+    {text: 'Bookmarks', key: 'bookmarks', bookmarks: true},
     {text: 'Flasher', to: '/flasher', key: 'flasher'},
     {to: '/more/statistics', text: 'Statistics', key: 'statistics'},
 ];
 
 function MenuLink({link}) {
     // A top-level tab rendered directly in the bar (not inside a dropdown).
+    if (link.bookmarks) {
+        return <BookmarksDropdown link={link}/>
+    }
     if (link.links) {
         return <DropdownLinks link={link}/>
     }
@@ -85,13 +92,31 @@ function MenuLink({link}) {
     </NavLink>
 }
 
-function DropdownMenuItem({link}) {
+function DropdownMenuItem({link, nested = true}) {
     // An item inside a Menu.Dropdown: the mobile hamburger menu, or the desktop
-    // "More" overflow menu.
+    // "More" overflow menu.  `nested` allows flyout submenus, which the hamburger
+    // declines: a flyout opens on hover, and a phone has none.
+    if (link.bookmarks) {
+        if (nested) {
+            return <Menu.Sub>
+                <Menu.Sub.Target>
+                    <Menu.Sub.Item>{link.text}</Menu.Sub.Item>
+                </Menu.Sub.Target>
+                <Menu.Sub.Dropdown>
+                    <BookmarksMenuContents nested/>
+                </Menu.Sub.Dropdown>
+            </Menu.Sub>
+        }
+        return <React.Fragment>
+            <Menu.Divider/>
+            <Menu.Label>{link.text}</Menu.Label>
+            <BookmarksMenuContents nested={false}/>
+            <Menu.Divider/>
+        </React.Fragment>
+    }
     if (link.links) {
-        // Mantine's Menu does not nest submenus without extra plumbing; a labelled,
-        // indented group stands in for one.  No current data uses this path (no
-        // allLinks entry has its own `links`).
+        // A labelled, indented group stands in for a submenu here.  No current data uses
+        // this path (no allLinks entry has its own `links`).
         return <React.Fragment>
             <Menu.Label>{link.text}</Menu.Label>
             {link.links.map(l => <DropdownMenuItem key={l.key} link={l}/>)}
@@ -175,6 +200,24 @@ function DropdownLinks({link}) {
     </Menu>
 }
 
+/**
+ * The Bookmarks tab: a dropdown that opens on hover as well as on click, holding the
+ * user's bookmarks and the link to edit them.  Marked current on the editor page only;
+ * a bookmark pointing at /videos does not make this tab own the Videos section.
+ */
+function BookmarksDropdown({link}) {
+    const {pathname} = useLocation();
+    const holdsCurrent = pathname === EDIT_BOOKMARKS_PATH || pathname.startsWith(`${EDIT_BOOKMARKS_PATH}/`);
+    return <Menu position='bottom-start' withinPortal trigger='click-hover' openDelay={100} closeDelay={200}>
+        <Menu.Target>
+            <NavDropdownTrigger text={link.text} className={holdsCurrent ? 'active' : undefined}/>
+        </Menu.Target>
+        <Menu.Dropdown>
+            <BookmarksMenuContents nested/>
+        </Menu.Dropdown>
+    </Menu>
+}
+
 function MobileMenu({links}) {
     // The mobile hamburger menu: an icon-only trigger holding every link.
     return <Menu position='bottom-end' withinPortal>
@@ -182,7 +225,7 @@ function MobileMenu({links}) {
             <IconButton icon={IconMenu2} label='Menu' variant='subtle'/>
         </Menu.Target>
         <Menu.Dropdown>
-            {links.map(link => <DropdownMenuItem key={link.key} link={link}/>)}
+            {links.map(link => <DropdownMenuItem key={link.key} link={link} nested={false}/>)}
         </Menu.Dropdown>
     </Menu>
 }

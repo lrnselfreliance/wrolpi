@@ -2438,3 +2438,46 @@ export async function setPlaylistTag(playlistId, tagName, directory) {
     toast({type: 'error', title: 'Error', description: message, time: 5000});
     throw Error(message);
 }
+
+// Bookmarks: a tree of nodes, a node with `children` being a directory.
+export async function getBookmarks() {
+    const response = await apiGet(`${API_URI}/bookmarks`);
+    if (response.ok) {
+        return (await response.json())['bookmarks'];
+    }
+    throw new Error('Could not fetch bookmarks');
+}
+
+async function bookmarksModify(request, fallbackMessage) {
+    const response = await request;
+    if (response.ok) {
+        return response.status === 204 ? null : await response.json();
+    }
+    const message = await getErrorMessage(response, fallbackMessage);
+    toast({type: 'error', title: 'Bookmarks Error', description: message, time: 5000});
+    throw new Error(message);
+}
+
+export async function addBookmark({name, url, new_tab = false, parent_id = null, position = null}) {
+    const body = {name, url, new_tab, parent_id, position};
+    return await bookmarksModify(apiPost(`${API_URI}/bookmarks`, body), 'Could not add bookmark');
+}
+
+export async function addBookmarkDirectory({name, parent_id = null, position = null}) {
+    const body = {name, parent_id, position};
+    return await bookmarksModify(apiPost(`${API_URI}/bookmarks/directory`, body), 'Could not add directory');
+}
+
+export async function updateBookmark(nodeId, {name, url, new_tab}) {
+    const body = {name, url, new_tab};
+    return await bookmarksModify(apiPut(`${API_URI}/bookmarks/${nodeId}`, body), 'Could not update bookmark');
+}
+
+export async function moveBookmark(nodeId, parent_id, position = null) {
+    const body = {parent_id, position};
+    return await bookmarksModify(apiPost(`${API_URI}/bookmarks/${nodeId}/move`, body), 'Could not move bookmark');
+}
+
+export async function deleteBookmark(nodeId) {
+    return await bookmarksModify(apiDelete(`${API_URI}/bookmarks/${nodeId}`), 'Could not delete bookmark');
+}

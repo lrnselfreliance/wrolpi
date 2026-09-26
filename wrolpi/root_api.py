@@ -23,6 +23,7 @@ from modules.zim.api import zim_bp
 from wrolpi import flags, schema, dates
 from wrolpi import tags
 from wrolpi.api_utils import json_response, api_app
+from wrolpi.bookmarks_api import bookmarks_bp
 from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
@@ -55,6 +56,7 @@ api_bp = Blueprint('RootAPI', url_prefix='/api')
 # Blueprints order here defines what order they are displayed in OpenAPI Docs.
 api_app.blueprint(api_bp)
 api_app.blueprint(archive_bp)
+api_app.blueprint(bookmarks_bp)
 api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
 api_app.blueprint(docs_bp)

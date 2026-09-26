@@ -149,6 +149,15 @@ async def _acquire_transcode_lock():
     return lock
 
 
+def transcode_tmp_path(video_path: pathlib.Path, container: str) -> pathlib.Path:
+    """Where ffmpeg writes its output before it is renamed over the final path.
+
+    Hidden (dot-prefixed) in the video's own directory: a refresh skips hidden files, so a refresh that
+    overlaps the transcode neither probes the half-written output nor creates a FileGroup for a file
+    that the rename removes moments later; and same-directory keeps the final rename atomic."""
+    return video_path.with_name(f'.{video_path.stem}.transcode.{container}')
+
+
 async def transcode_video_file(video_path: pathlib.Path,
                                target_vcodec: Optional[str] = None,
                                target_acodec: Optional[str] = None,
@@ -363,7 +372,7 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
         mux_args = ()
 
     final_path = video_path.with_suffix(f'.{container}')
-    tmp_path = video_path.with_suffix(f'.transcode.{container}')
+    tmp_path = transcode_tmp_path(video_path, container)
     cmd = (FFMPEG_BIN, '-y',
            '-i', video_path,
            *map_args,

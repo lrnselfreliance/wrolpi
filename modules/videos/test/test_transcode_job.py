@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from modules.videos.models import Video
-from modules.videos.transcode import make_ffmpeg_progress_parser, transcode_video_job
+from modules.videos.transcode import make_ffmpeg_progress_parser, transcode_video_job, transcode_tmp_path
 from wrolpi import jobs
 from wrolpi.cmd import CommandResult
 from wrolpi.files.models import FileGroup
@@ -293,3 +293,28 @@ async def test_video_transcode_api_fragmented(async_client, test_session, video_
     request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
                                                 content=json.dumps({'container': 'mkv', 'fragmented': True}))
     assert response.status == 400
+
+
+@pytest.mark.asyncio
+async def test_transcode_temp_file_is_not_discovered_by_refresh(test_session, test_directory, async_client,
+                                                                 video_factory, refresh_files):
+    """A refresh that runs while ffmpeg is still writing the transcoder's output must not model it.
+
+    The temporary file is renamed over the final path moments later; a FileGroup for it would point
+    at a file that no longer exists, and probing a half-written file logs errors.
+    """
+    video_path = test_directory / 'videos/NO CHANNEL/movie.mp4'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video = video_factory(with_video_file=video_path)
+    test_session.commit()
+
+    tmp_path = transcode_tmp_path(video_path, 'mp4')
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', tmp_path)
+    assert tmp_path.is_file()
+
+    await refresh_files()
+
+    primary_paths = {str(i.primary_path) for i in test_session.query(FileGroup)}
+    assert str(video_path) in primary_paths
+    assert str(tmp_path) not in primary_paths, 'the transcoder temporary file was indexed'
+    assert not any(str(tmp_path) in str(p) for p in primary_paths)

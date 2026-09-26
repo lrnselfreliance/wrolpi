@@ -522,7 +522,7 @@ export async function getConfigBackups(fileName) {
     if (response.ok) {
         return await response.json();
     }
-    return {dates: []};
+    // Undefined, not {dates: []}, so the modal can tell a failed fetch from having no backups.
 }
 
 export async function postConfigBackupPreview(fileName, backupDate, mode) {
@@ -720,7 +720,7 @@ export async function getInventoryBackups(slug) {
     if (response.ok) {
         return (await response.json())['dates'];
     }
-    return [];
+    // Undefined, not [], so the modal can tell a failed fetch from having no backups.
 }
 
 export async function postInventoryRestorePreview(slug, backupDate, mode) {
@@ -1259,12 +1259,15 @@ export async function startDownloads() {
 }
 
 export async function getDownloaders() {
+    // Not toasting because this will happen often.  Undefined on any failure, not an empty list, so
+    // the form can say the downloaders could not be fetched.
     try {
         const response = await apiGet(`${API_URI}/downloaders`);
-        // Not toasting because this will happen often.
-        return await response.json();
+        if (response.ok) {
+            return await response.json();
+        }
     } catch (e) {
-        return {downloaders: []};
+        // The API is down; reported as undefined below.
     }
 }
 
@@ -1351,7 +1354,7 @@ export async function flasherSearch(chip, path) {
     }
     const message = await getErrorMessage(response, 'Cannot search firmware.  See server logs.');
     toast({type: 'error', title: 'Unable to search firmware', description: message, time: 5000});
-    return [null, null];
+    // Undefined, not [null, null], so the picker can tell a failed search from finding nothing.
 }
 
 export async function getFlasherConfigs() {
@@ -1658,7 +1661,8 @@ export async function searchMap(query, limit = 12, offset = 0, lat = null, lon =
     }
     const response = await apiGet(url);
     if (!response.ok) {
-        return {results: [], total: 0};
+        // Undefined, not {results: []}, so a failed search is not shown as finding nothing.
+        return undefined;
     }
     return await response.json();
 }
@@ -1666,7 +1670,8 @@ export async function searchMap(query, limit = 12, offset = 0, lat = null, lon =
 export async function getMapSearchStatus() {
     const response = await apiGet(`${API_URI}/map/search/status`);
     if (!response.ok) {
-        return {indexed: [], missing: []};
+        // Undefined, not {indexed: [], missing: []}, which read as "no maps are installed".
+        return undefined;
     }
     return await response.json();
 }

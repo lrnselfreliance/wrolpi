@@ -2,7 +2,7 @@ import React, {useEffect, useState} from "react";
 import {Link, useNavigate} from "react-router";
 import {getMapSearchStatus, searchMap} from "../api";
 import {Card, CardGroup, Header, Loading, Panel} from "./ui";
-import {Paginator} from "./Common";
+import {ErrorMessage, Paginator} from "./Common";
 import {useLatestRequest, usePages} from "../hooks/customHooks";
 import {QueryContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -68,16 +68,24 @@ export function MapSearchView() {
     const {offset, limit, activePage, setPage, totalPages, setTotal} = usePages(12);
     // useLatestRequest discards stale responses and catches errors, so rapid pagination
     // can't show out-of-order results and a network failure can't leave the spinner stuck.
-    const {data, sendRequest, loading} = useLatestRequest(300);
+    // Loading from the first render: a query of two or more characters always sends a request (below),
+    // so this settles, and the shorter-query branches render before the loading check.
+    const {data, sendRequest, loading} = useLatestRequest(300, true);
+    // null = unknown (pending, or the status could not be fetched), otherwise whether any map is
+    // installed.  Only a real status may claim that no maps are installed.
     const [hasMaps, setHasMaps] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            const status = await getMapSearchStatus();
-            if (!cancelled) {
-                const installed = (status.indexed || []).length + (status.missing || []).length;
-                setHasMaps(installed > 0);
+            try {
+                const status = await getMapSearchStatus();
+                if (!cancelled && status) {
+                    const installed = (status.indexed || []).length + (status.missing || []).length;
+                    setHasMaps(installed > 0);
+                }
+            } catch (e) {
+                console.error(e);
             }
         })();
         return () => {
@@ -106,12 +114,22 @@ export function MapSearchView() {
         </Panel>;
     }
 
+    if (!searchStr) {
+        return <Panel><Header as="h4">Enter a search query to find map locations.</Header></Panel>;
+    }
+
+    if (searchStr.length < 2) {
+        return <Panel><Header as="h4">Enter at least two characters to find map locations.</Header></Panel>;
+    }
+
     if (loading) {
         return <Panel><Loading/></Panel>;
     }
 
-    if (!searchStr) {
-        return <Panel><Header as="h4">Enter a search query to find map locations.</Header></Panel>;
+    // Settled with no data: the request failed (the api helper returns undefined on a non-OK
+    // response, and useLatestRequest leaves null when it throws).
+    if (data == null) {
+        return <Panel><ErrorMessage>Could not search the map.</ErrorMessage></Panel>;
     }
 
     if (results.length === 0) {

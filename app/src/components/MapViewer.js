@@ -421,10 +421,13 @@ function MapSearch({map}) {
             lon = center.lng;
         }
 
+        // A failed search (undefined) shows no dropdown, same as finding nothing: this is an
+        // as-you-type suggestion list, not a results page.
         searchMap(q, 8, 0, lat, lon).then(data => {
-            setResults(data.results || []);
-            setShowResults((data.results || []).length > 0);
-        });
+            const found = data?.results || [];
+            setResults(found);
+            setShowResults(found.length > 0);
+        }).catch(e => console.error(e));
     }, [map]);
 
     const handleInput = useCallback((e) => {

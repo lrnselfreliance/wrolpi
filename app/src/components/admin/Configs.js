@@ -1,4 +1,4 @@
-import {APIButton} from "../Common";
+import {APIButton, ErrorMessage} from "../Common";
 import {Button, Header, Icon, IconButton, Loader, Loading, Modal, Placeholder, Table, Tooltip} from "../ui";
 import React, {useEffect, useState} from "react";
 import {getConfigText, getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
@@ -117,9 +117,11 @@ function BackupDateRow({date, previews, previewsLoaded, onSelect}) {
     </Table.Row>;
 }
 
-function BackupsModal({open, onClose, fileName, fetchConfigs}) {
+export function BackupsModal({open, onClose, fileName, fetchConfigs}) {
     const [dates, setDates] = useState([]);
     const [datesLoading, setDatesLoading] = useState(true);
+    // The backups could not be fetched; distinct from the server confirming there are none.
+    const [datesFailed, setDatesFailed] = useState(false);
     const [previews, setPreviews] = useState({});
     const [previewsLoaded, setPreviewsLoaded] = useState({});
     const [selectedAction, setSelectedAction] = useState(null); // {date, mode, preview}
@@ -130,17 +132,30 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
         if (!open) return;
         let cancelled = false;
         setDatesLoading(true);
+        setDatesFailed(false);
         setDates([]);
         setPreviews({});
         setPreviewsLoaded({});
         setSelectedAction(null);
         setApplying(false);
 
-        getConfigBackups(fileName).then(result => {
-            if (cancelled) return;
-            setDates(result?.dates || []);
-            setDatesLoading(false);
-        });
+        getConfigBackups(fileName)
+            .then(result => {
+                if (cancelled) return;
+                // The api helper returns undefined on a non-OK response.
+                if (result) {
+                    setDates(result.dates || []);
+                } else {
+                    setDatesFailed(true);
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                if (!cancelled) setDatesFailed(true);
+            })
+            .finally(() => {
+                if (!cancelled) setDatesLoading(false);
+            });
 
         return () => { cancelled = true; };
     }, [open, fileName]);
@@ -253,6 +268,8 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
         <Modal.Content>
             {datesLoading
                 ? <Loading>Loading backups...</Loading>
+                : datesFailed
+                    ? <ErrorMessage>Could not fetch backups for this config.</ErrorMessage>
                 : dates.length === 0
                     ? <p>No backups available for this config.</p>
                     : <div style={{maxHeight: '400px', overflowY: 'auto'}}>

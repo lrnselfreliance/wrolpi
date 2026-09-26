@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {
     APIButton,
     ErrorMessage,
@@ -284,11 +284,15 @@ function MapCatalogRow({item, subscribedRegions, fetchData}) {
 
 function ManageMap() {
     const [files, setFiles] = useState(null);
-    const [catalog, setCatalog] = useState([]);
+    // null = pending, undefined = fetch failed, [] = no regions in the catalog.
+    const [catalog, setCatalog] = useState(null);
     const [subscriptions, setSubscriptions] = useState([]);
     const [allRegionsOpen, setAllRegionsOpen] = useState(false);
     const {status} = React.useContext(StatusContext);
     const searchBuilding = status?.flags?.map_search_building;
+    // Only the newest subscriptions request may write state: a subscribe or unsubscribe refetches
+    // while the mount request may still be in flight.
+    const subscriptionsGen = useRef(0);
 
     const fetchFiles = async () => {
         try {
@@ -303,14 +307,24 @@ function ManageMap() {
     };
 
     const fetchSubscriptionData = async () => {
+        const gen = ++subscriptionsGen.current;
         try {
             const data = await fetchMapSubscriptions();
+            if (gen !== subscriptionsGen.current) {
+                return;
+            }
             if (data) {
                 setCatalog(data.catalog || []);
                 setSubscriptions(data.subscriptions || []);
+            } else {
+                // The api helper already toasted the non-OK response.
+                setCatalog(undefined);
             }
         } catch (e) {
             console.error(e);
+            if (gen === subscriptionsGen.current) {
+                setCatalog(undefined);
+            }
         }
     };
 
@@ -397,6 +411,8 @@ function ManageMap() {
         </>;
     }
 
+    const catalogLoaded = Array.isArray(catalog);
+
     /*
      * A fragment, not a `PageContainer`.  `MapRoute` already provides the page chrome -- a
      * `wrolpi-stack` wrapper with its own top margin -- so a second one put this page a further
@@ -419,18 +435,26 @@ function ManageMap() {
 
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5em'}}>
             <Header as='h3'>Map Subscriptions</Header>
-            <Button size='xs' icon='globe' onClick={() => setAllRegionsOpen(true)}>View All Regions</Button>
+            {/* A pending or failed catalog is not "zero regions": the preview waits for one.  The
+                modal is mounted only then, so it receives the state array itself and its map is
+                not rebuilt by a fresh `[]` on every status tick. */}
+            <Button size='xs' icon='globe' disabled={!catalogLoaded} onClick={() => setAllRegionsOpen(true)}>
+                View All Regions
+            </Button>
         </div>
 
-        <AllRegionsPreviewModal catalog={catalog} open={allRegionsOpen} onClose={() => setAllRegionsOpen(false)}/>
+        {catalogLoaded && <AllRegionsPreviewModal catalog={catalog} open={allRegionsOpen}
+                                                  onClose={() => setAllRegionsOpen(false)}/>}
 
-        <SortableTable
-            tableHeaders={catalogHeaders}
-            data={catalog}
-            rowFunc={catalogRowFunc}
-            rowKey='region'
-            defaultSortColumn='name'
-        />
+        {catalog === undefined
+            ? <ErrorMessage>Could not fetch map subscriptions</ErrorMessage>
+            : <SortableTable
+                tableHeaders={catalogHeaders}
+                data={catalog}
+                rowFunc={catalogRowFunc}
+                rowKey='region'
+                defaultSortColumn='name'
+            />}
 
         <InfoMessage storageName='hint_map_subscribe'>
             <div style={{fontWeight: 600, marginBottom: 4}}>How to get map files</div>
@@ -497,17 +521,29 @@ function PinEditRow({pin, onSave, onCancel}) {
 }
 
 function MapPins() {
-    const [pins, setPins] = useState([]);
+    // null = pending, undefined = fetch failed, [] = no pins.  The empty row invites the user to
+    // add one, so it may only appear for a confirmed empty list.
+    const [pins, setPins] = useState(null);
     const [filter, setFilter] = useState('');
     const [editingId, setEditingId] = useState(null);
     const navigate = useNavigate();
+    // Only the newest pins request may write state: an edit or delete refetches while the mount
+    // request may still be in flight.
+    const pinsGen = useRef(0);
 
     const fetchPins = async () => {
+        const gen = ++pinsGen.current;
         try {
             const data = await getMapPins();
-            if (data) setPins(data.pins || []);
+            if (gen === pinsGen.current) {
+                // The api helper returns undefined on a non-OK response.
+                setPins(data ? data.pins || [] : undefined);
+            }
         } catch (e) {
             console.error(e);
+            if (gen === pinsGen.current) {
+                setPins(undefined);
+            }
         }
     };
 
@@ -627,8 +663,13 @@ function MapPins() {
         <Table.Cell colSpan={5}>No pins. Right-click on the map to add one.</Table.Cell>
     </Table.Row>;
 
+    if (pins === undefined) {
+        return <ErrorMessage>Could not fetch map pins</ErrorMessage>;
+    }
+
     const lowerFilter = filter.toLowerCase();
-    const filteredPins = lowerFilter
+    // Pending (null) passes through so SortableTable shows its placeholder.
+    const filteredPins = lowerFilter && pins
         ? pins.filter(p =>
             (p.label || '').toLowerCase().includes(lowerFilter) ||
             `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`.includes(lowerFilter)

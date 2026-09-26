@@ -231,3 +231,91 @@ describe('NavBar current tab', () => {
         expect(ruleBody('\\.mantine-Menu-item\\.active')).toMatch(/background:|font-weight:/);
     });
 });
+
+describe('NavBar bookmarks', () => {
+    const {BookmarksContext} = require('../contexts/BookmarksContext');
+    const bookmarks = [
+        {id: 1, name: 'Channels', url: '/videos/channel', new_tab: false},
+        {id: 2, name: 'Services', children: [{id: 3, name: 'Jellyfin', url: ':8096/', new_tab: true}]},
+    ];
+    const renderWithBookmarks = (route, nodes) => render(<NavBar/>, {
+        route,
+        withMedia: true,
+        contexts: [
+            [FileWorkerStatusContext, fileWorkerStatus],
+            [BookmarksContext, {bookmarks: nodes, error: null, refresh: jest.fn()}],
+        ],
+    });
+
+    it('sits between Calculators and Flasher', () => {
+        renderNav('/');
+        const texts = [...document.querySelectorAll('#global_navbar .wrolpi-navbar-link')]
+            .map(el => el.textContent.trim());
+        const at = texts.indexOf('Bookmarks');
+        expect(at).toBeGreaterThan(0);
+        expect(texts[at - 1]).toBe('Calculators');
+        expect(texts[at + 1]).toBe('Flasher');
+    });
+
+    it('opens on click with the bookmarks, a directory flyout, and the edit link', async () => {
+        useRealRects();
+        renderWithBookmarks('/', bookmarks);
+
+        await userEvent.click(screen.getByRole('button', {name: /Bookmarks/}));
+
+        const channels = await screen.findByRole('menuitem', {name: 'Channels'});
+        expect(channels).toHaveAttribute('href', '/videos/channel');
+        expect(channels).not.toHaveAttribute('target');
+        // A directory is a submenu; its bookmarks appear once it is hovered.
+        expect(screen.queryByRole('menuitem', {name: 'Jellyfin'})).not.toBeInTheDocument();
+        await userEvent.hover(screen.getByRole('menuitem', {name: 'Services'}));
+        // `hidden`: the flyout is placed by floating-ui, which jsdom cannot lay out, so it
+        // stays hidden to accessibility queries even though it has rendered.
+        const jellyfin = await screen.findByRole('menuitem', {name: 'Jellyfin', hidden: true});
+        expect(jellyfin).toHaveAttribute('href', `${window.location.protocol}//${window.location.hostname}:8096/`);
+        expect(jellyfin).toHaveAttribute('target', '_blank');
+        expect(screen.getByRole('menuitem', {name: 'Edit bookmarks', hidden: true})).toHaveAttribute('href', '/more/bookmarks');
+    });
+
+    it('offers the edit link even with no bookmarks, so the feature can be found', async () => {
+        useRealRects();
+        renderWithBookmarks('/', []);
+
+        await userEvent.click(screen.getByRole('button', {name: /Bookmarks/}));
+
+        expect(await screen.findByRole('menuitem', {name: 'Edit bookmarks'})).toBeInTheDocument();
+        expect(screen.getAllByRole('menuitem')).toHaveLength(1);
+    });
+
+    it('is marked current on the editor page, and never for a bookmark pointing at a section', () => {
+        renderWithBookmarks('/more/bookmarks', bookmarks);
+        expect(screen.getByRole('button', {name: /Bookmarks/})).toHaveClass('active');
+        expect(currentTab()).toEqual([]);
+    });
+
+    it('marks More when the editor page is folded inside it', () => {
+        useBarWidth(200);
+        renderWithBookmarks('/more/bookmarks', bookmarks);
+        expect(screen.getByRole('button', {name: /More/})).toHaveClass('active');
+    });
+
+    it('does not own the section a bookmark points at', () => {
+        renderWithBookmarks('/videos/channel', bookmarks);
+        expect(screen.getByRole('button', {name: /Bookmarks/})).not.toHaveClass('active');
+        expect(currentTab()).toEqual(['Videos']);
+    });
+
+    it('lists bookmarks as a labelled group in the mobile menu', async () => {
+        useViewport('mobile');
+        useRealRects();
+        renderWithBookmarks('/', bookmarks);
+
+        await userEvent.click(screen.getByRole('button', {name: 'Menu'}));
+
+        expect(await screen.findByRole('menuitem', {name: 'Channels'})).toBeInTheDocument();
+        // No flyout on a phone: the directory's bookmarks are listed directly.
+        expect(screen.getByRole('menuitem', {name: 'Jellyfin'})).toBeInTheDocument();
+        expect(screen.getByText('Services')).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', {name: 'Edit bookmarks'})).toBeInTheDocument();
+    });
+});

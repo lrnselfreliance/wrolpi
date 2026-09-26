@@ -48,6 +48,7 @@ import {paletteColorNames} from '../themes/mantine';
 import {contrastingColor} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
+import {BookmarkAddForms, BookmarkMenuItems, BookmarkTable} from './Bookmarks';
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -155,6 +156,19 @@ export const NavBarSample = ({color}) => {
 // Numbers the stacked toasts so it is obvious which press produced which, and that a second
 // press adds a toast rather than replacing the first.  Module scope, so it survives re-renders.
 let toastCounter = 0;
+
+// Sample data for the bookmarks section; the editor's actions do nothing here.
+const sampleBookmarks = [
+    {id: 1, name: 'Channels', url: '/videos/channel', new_tab: false},
+    {id: 2, name: 'Services', children: [
+        {id: 3, name: 'Jellyfin', url: ':8096/', new_tab: true},
+        {id: 4, name: 'Radio', children: [
+            {id: 5, name: 'OpenWebRX', url: 'http://:8073/', new_tab: true},
+        ]},
+    ]},
+    {id: 6, name: 'WROLPi.org', url: 'https://wrolpi.org', new_tab: true},
+];
+const noBookmarkActions = {edit: () => null, move: () => null, remove: () => null};
 
 export function ThemeSamplePage() {
     const {theme, mediaFilterEnabled} = useContext(ThemeContext);
@@ -1075,6 +1089,41 @@ export function ThemeSamplePage() {
                         <Button role='save' icon='check' onClick={() => setModalOpen(false)}>Apply</Button>
                     </Modal.Actions>
                 </Modal>
+            </Panel>
+        </Section>
+
+        <Section label='Bookmarks'>
+            <Panel>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 0}}>
+                    The Bookmarks menu in the navigation bar, and the editor under More.  A
+                    directory is a flyout that opens beside the menu.  In the mobile menu it is a
+                    labelled, indented run of items instead.
+                </p>
+                <Row>
+                    <Menu position='bottom-start' withinPortal trigger='click-hover'>
+                        <Menu.Target>
+                            <Button iconAfter='dropdown'>Bookmarks</Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                            <BookmarkMenuItems nodes={sampleBookmarks}/>
+                            <Menu.Divider/>
+                            <Menu.Item leftSection={<Icon name='edit' size='small'/>}>Edit bookmarks</Menu.Item>
+                        </Menu.Dropdown>
+                    </Menu>
+                    <Menu position='bottom-start' withinPortal>
+                        <Menu.Target>
+                            <Button iconAfter='dropdown'>As the mobile menu shows it</Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                            <Menu.Label>Bookmarks</Menu.Label>
+                            <BookmarkMenuItems nodes={sampleBookmarks} nested={false}/>
+                        </Menu.Dropdown>
+                    </Menu>
+                </Row>
+                <div style={{marginTop: 12}}>
+                    <BookmarkTable nodes={sampleBookmarks} actions={noBookmarkActions}/>
+                    <BookmarkAddForms nodes={sampleBookmarks} onAddBookmark={() => null} onAddDirectory={() => null}/>
+                </div>
             </Panel>
         </Section>
 

@@ -17,6 +17,7 @@ import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
+import {BookmarksProvider} from "./contexts/BookmarksContext";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./components/Channels";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext} from "./contexts/contexts";
@@ -69,13 +70,15 @@ function Root() {
             <TagsProvider>
                 <KeyboardShortcutsProvider>
                     <FilePreviewProvider>
-                        <header>
-                            <NavBar/>
-                        </header>
-                        <ErrorBoundary>
-                            <Outlet/>
-                        </ErrorBoundary>
-                        <Footer/>
+                        <BookmarksProvider>
+                            <header>
+                                <NavBar/>
+                            </header>
+                            <ErrorBoundary>
+                                <Outlet/>
+                            </ErrorBoundary>
+                            <Footer/>
+                        </BookmarksProvider>
                     </FilePreviewProvider>
                 </KeyboardShortcutsProvider>
             </TagsProvider>

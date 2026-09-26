@@ -1169,6 +1169,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if flasher_config := get_flasher_config():
         all_configs[flasher_config.file_name] = flasher_config
 
+    from wrolpi.bookmarks import get_bookmarks_config
+    if bookmarks_config := get_bookmarks_config():
+        all_configs[bookmarks_config.file_name] = bookmarks_config
+
     from wrolpi.collections.config import get_playlists_config
     if playlists_config := get_playlists_config():
         all_configs[playlists_config.file_name] = playlists_config
@@ -1268,6 +1272,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import map pins config: {e}')
         results['map_pins'] = False
+
+    # Bookmarks (YAML-only, no DB)
+    try:
+        from wrolpi.bookmarks import get_bookmarks_config
+        await asyncio.to_thread(get_bookmarks_config().import_config)
+        results['bookmarks'] = True
+        logger.debug('bookmarks config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import bookmarks config: {e}')
+        results['bookmarks'] = False
 
     # Flasher saved firmware configurations (YAML-only, no DB)
     try:

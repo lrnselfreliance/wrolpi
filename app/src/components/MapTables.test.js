@@ -120,4 +120,29 @@ describe('the Manage tab subscriptions table', () => {
         });
         expect(screen.getByText(NO_RESULTS)).toBeInTheDocument();
     });
+
+    // The "View All Regions" preview draws the catalog; a pending or failed catalog must not be
+    // previewed as zero regions.
+    test('pending: the regions preview is disabled', async () => {
+        api.fetchMapSubscriptions.mockReturnValue(pending());
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByRole('button', {name: 'View All Regions'})).toBeDisabled();
+    });
+
+    test('failed: the regions preview is disabled', async () => {
+        api.fetchMapSubscriptions.mockResolvedValue(undefined);
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByRole('button', {name: 'View All Regions'})).toBeDisabled();
+    });
+
+    test('loaded: the regions preview is enabled', async () => {
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByRole('button', {name: 'View All Regions'})).toBeEnabled();
+    });
 });

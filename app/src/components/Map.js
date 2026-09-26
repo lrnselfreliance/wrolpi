@@ -411,6 +411,8 @@ function ManageMap() {
         </>;
     }
 
+    const catalogLoaded = Array.isArray(catalog);
+
     /*
      * A fragment, not a `PageContainer`.  `MapRoute` already provides the page chrome -- a
      * `wrolpi-stack` wrapper with its own top margin -- so a second one put this page a further
@@ -433,11 +435,16 @@ function ManageMap() {
 
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5em'}}>
             <Header as='h3'>Map Subscriptions</Header>
-            <Button size='xs' icon='globe' onClick={() => setAllRegionsOpen(true)}>View All Regions</Button>
+            {/* A pending or failed catalog is not "zero regions": the preview waits for one.  The
+                modal is mounted only then, so it receives the state array itself and its map is
+                not rebuilt by a fresh `[]` on every status tick. */}
+            <Button size='xs' icon='globe' disabled={!catalogLoaded} onClick={() => setAllRegionsOpen(true)}>
+                View All Regions
+            </Button>
         </div>
 
-        <AllRegionsPreviewModal catalog={catalog || []} open={allRegionsOpen}
-                                onClose={() => setAllRegionsOpen(false)}/>
+        {catalogLoaded && <AllRegionsPreviewModal catalog={catalog} open={allRegionsOpen}
+                                                  onClose={() => setAllRegionsOpen(false)}/>}
 
         {catalog === undefined
             ? <ErrorMessage>Could not fetch map subscriptions</ErrorMessage>

@@ -767,34 +767,58 @@ export const useVideo = (fileGroupId) => {
 export const useVideoExtras = (fileGroupId) => {
     // Fetches extra data to display on a Video's page.  These are served separately from the
     // Video itself so list responses stay small and never read files from disk.
+    //
+    // Each value is null while pending, undefined when the fetch failed, and empty ([] or '') when
+    // the server confirmed there is nothing.  The API serializes a missing info_json field as null,
+    // so a null response is normalized to empty here; consumers must never see null for "none".
     const [comments, setComments] = useState(null);
     const [description, setDescription] = useState(null);
+    // Every fetch takes the next generation number; only the newest generation may write state.
+    // Matching on the video id is not enough: leaving and returning to the same video, or a save
+    // that refetches the description, must both beat an older request still in flight.
+    const commentsGen = useRef(0);
+    const descriptionGen = useRef(0);
 
     const fetchComments = async () => {
+        const gen = ++commentsGen.current;
         try {
             const result = await getVideoComments(fileGroupId);
-            setComments(result.comments);
+            if (gen === commentsGen.current) {
+                setComments(result.comments || []);
+            }
         } catch (e) {
             console.error(e);
+            if (gen === commentsGen.current) {
+                setComments(undefined);
+            }
         }
     }
 
     const fetchDescription = async () => {
+        const gen = ++descriptionGen.current;
         try {
             const result = await getVideoDescription(fileGroupId);
-            setDescription(result.description);
+            if (gen === descriptionGen.current) {
+                setDescription(result.description || '');
+            }
         } catch (e) {
             console.error(e);
+            if (gen === descriptionGen.current) {
+                setDescription(undefined);
+            }
         }
     }
 
     useEffect(() => {
+        // Whether switching to a new video or to none, the previous video's data must not linger,
+        // and any request still in flight for it must not land.
+        commentsGen.current++;
+        descriptionGen.current++;
+        setComments(null);
+        setDescription(null);
         if (fileGroupId) {
             fetchComments();
             fetchDescription();
-        } else {
-            setComments(null);
-            setDescription(null);
         }
     }, [fileGroupId]);
 

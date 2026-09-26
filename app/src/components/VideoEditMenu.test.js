@@ -269,6 +269,26 @@ describe('EditVideoModal', () => {
         await waitFor(() => expect(updateVideo).toHaveBeenCalledWith(7, {description: ''}));
     });
 
+    test('a draft typed while the description was still loading survives its arrival', () => {
+        // The page passes null while the description is pending, then '' when the server has none.
+        const {rerender} = renderWithProviders(
+            <EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile} description={null}/>,
+        );
+        fireEvent.change(screen.getByLabelText('Description'), {target: {value: 'my new words'}});
+        rerender(<EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile} description=''/>);
+        expect(screen.getByLabelText('Description')).toHaveValue('my new words');
+    });
+
+    test('a description that arrives while the field is untouched is adopted', () => {
+        const {rerender} = renderWithProviders(
+            <EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile} description={null}/>,
+        );
+        expect(screen.getByLabelText('Description')).toHaveValue('');
+        rerender(<EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile}
+                                 description='From the server'/>);
+        expect(screen.getByLabelText('Description')).toHaveValue('From the server');
+    });
+
     test('WROL Mode disables saving', async () => {
         renderWithProviders(
             <EditVideoModal open={true} onClose={jest.fn()} fileGroupId={7} videoFile={videoFile}/>,

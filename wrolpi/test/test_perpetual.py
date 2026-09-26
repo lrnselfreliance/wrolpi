@@ -314,8 +314,14 @@ async def test_reconcile_after_predecessor(async_client, test_session, monkeypat
                                            created_at='', started_at='', finished_at=None, error=None)
     file_worker._set_job_status('fj', 'running')
     file_worker.update_status(status='refreshing')
-    flags.file_worker_counting.set()
-    flags.global_refresh_active.set()
+    flags.file_worker_counting.set()          # perpetual-only: cleared whoever held it
+    flags.global_refresh_active.set()         # perpetual-only, set() not entered: cleared
+    flags.file_worker_modeling.set()          # shared, holder dead: cleared
+    api_app.shared_ctx.flag_holders['file_worker_modeling'] = 2 ** 31 - 1
+    flags.map_search_building.set()           # shared, holder is a live API worker: kept
+    api_app.shared_ctx.flag_holders['map_search_building'] = os.getppid()
+    flags.file_worker_indexing.set()          # shared, no holder recorded: kept (cannot tell)
+    flags.file_worker_busy.set()              # not a reconciled flag (a live move may hold it): kept
     flags.db_up.set()  # not an in-progress flag; must survive
     assert api_app.shared_ctx.jobs_lock.acquire(timeout=1)
     monkeypatch.setattr(perpetual, 'SHARED_LOCK_HEAL_TIMEOUT', 0.1)
@@ -335,11 +341,31 @@ async def test_reconcile_after_predecessor(async_client, test_session, monkeypat
            {'https://example.com/a': 'new', 'https://example.com/b': 'new'}
     assert report['file_worker_jobs'] == 1 and file_worker._jobs['fj']['status'] == 'failed'
     assert file_worker.status['status'] == 'idle' and report['file_worker_status'] is True
-    assert report['flags'] == ['file_worker_counting', 'global_refresh_active']
+    assert report['flags'] == ['file_worker_counting', 'global_refresh_active', 'file_worker_modeling']
     assert not flags.file_worker_counting.is_set() and not flags.global_refresh_active.is_set()
+    assert not flags.file_worker_modeling.is_set() and 'file_worker_modeling' not in api_app.shared_ctx.flag_holders
+    assert flags.map_search_building.is_set(), 'a flag held by a live process is not touched'
+    assert flags.file_worker_indexing.is_set(), 'a shared flag with no recorded holder is not touched'
+    assert flags.file_worker_busy.is_set(), 'file_worker_busy is not reconciled'
     assert flags.db_up.is_set(), 'only in-progress flags are cleared'
     with flags.file_worker_counting:  # usable again; this raised "flag is already set" before
         pass
+    for name in ('map_search_building', 'file_worker_indexing', 'file_worker_busy'):
+        getattr(flags, name).clear()
+    api_app.shared_ctx.flag_holders.clear()
 
     # Idempotent: a clean state reports nothing.
     assert not any(reconcile_after_predecessor(api_app).values())
+
+
+def test_flag_context_manager_records_its_holder(async_client, flags_lock):
+    """`with flag:` records this pid so a later reconcile can tell an orphaned flag from a live holder."""
+    from wrolpi import flags
+    from wrolpi.api_utils import api_app
+
+    assert flags.file_worker_modeling.holder_pid() is None
+    with flags.file_worker_modeling:
+        assert flags.file_worker_modeling.holder_pid() == os.getpid()
+        assert api_app.shared_ctx.flag_holders['file_worker_modeling'] == os.getpid()
+    assert flags.file_worker_modeling.holder_pid() is None
+    assert not flags.file_worker_modeling.is_set()

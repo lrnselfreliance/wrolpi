@@ -47,12 +47,17 @@ PERPETUAL_CANCEL_TIMEOUT = 15
 SHARED_LOCK_NAMES = ('jobs_lock', 'switches_lock', 'config_save_lock', 'config_update_lock', 'events_lock',
                      'secure_cookies_lock', 'transcode_lock')
 SHARED_LOCK_HEAL_TIMEOUT = 10
-# Shared flags that mean "the perpetual process is in the middle of this".  They are set and cleared by context
-# managers in this process only; a SIGKILL inside one leaves it set, and the next attempt raises "flag is already
-# set" forever (every file refresh, for instance).
-PERPETUAL_PROGRESS_FLAGS = ('file_worker_busy', 'file_worker_counting', 'file_worker_discovery',
-                            'file_worker_modeling', 'file_worker_indexing', 'file_worker_cleanup',
-                            'global_refresh_active')
+# In-progress flags.  A SIGKILL inside `with flag:` leaves it set and the next enter raises "flag is already set"
+# forever (every file refresh, or every map search-index build).  Two kinds:
+#  * entered or set only by the perpetual process (FileWorker.process_queue, handle_refresh): at this process's
+#    startup any of them still set is orphaned, whoever the recorded holder is;
+#  * also entered by API workers (refresh_sync from the delete endpoints, the map rebuild endpoints): cleared only
+#    when the recorded holder pid is dead, because a live worker may be inside the block right now.
+# file_worker_busy is deliberately absent: the collection-move path in an API worker holds it as a mutex, and
+# process_queue already drops a stale set on its next idle tick.
+PERPETUAL_ONLY_FLAGS = ('file_worker_counting', 'file_worker_discovery', 'global_refresh_active')
+SHARED_PROGRESS_FLAGS = ('file_worker_modeling', 'file_worker_indexing', 'file_worker_cleanup',
+                         'map_search_building')
 
 # True only inside the process started by `run_perpetual_process`.
 IN_PERPETUAL_PROCESS = False
@@ -160,6 +165,37 @@ def heal_shared_locks(app, timeout: float = SHARED_LOCK_HEAL_TIMEOUT) -> list[st
     return healed
 
 
+def clear_orphaned_flags() -> list[str]:
+    """Clear in-progress flags whose holder is gone; returns the names cleared.  See PERPETUAL_ONLY_FLAGS."""
+    from wrolpi import flags
+    from wrolpi.cmd import pid_is_running
+
+    cleared = []
+    for name in PERPETUAL_ONLY_FLAGS + SHARED_PROGRESS_FLAGS:
+        try:
+            flag = getattr(flags, name)
+            if not flag.is_set():
+                continue
+            holder = flag.holder_pid()
+            if name in PERPETUAL_ONLY_FLAGS:
+                reason = f'holder pid={holder}' if holder else 'no live holder possible'
+            elif holder is None:
+                logger.warning(f'reconcile: flag {name} is set with no recorded holder; leaving it')
+                continue
+            elif pid_is_running(holder) and holder != os.getpid():
+                logger.info(f'reconcile: flag {name} is held by live pid={holder}; leaving it')
+                continue
+            else:
+                reason = f'holder pid={holder} is dead'
+            logger.warning(f'reconcile: clearing in-progress flag {name} ({reason})')
+            flag.clear()
+            flag._record_holder(None)
+            cleared.append(name)
+        except Exception as e:
+            logger.error(f'reconcile: failed to check flag {name}', exc_info=e)
+    return cleared
+
+
 def reconcile_after_predecessor(app) -> dict:
     """Undo what a perpetual process that died mid-work left in shared state and the DB.
 
@@ -178,15 +214,7 @@ def reconcile_after_predecessor(app) -> dict:
 
     report['locks'] = heal_shared_locks(app)
 
-    for name in PERPETUAL_PROGRESS_FLAGS:
-        try:
-            flag = getattr(flags, name)
-            if flag.is_set():
-                logger.warning(f'reconcile: clearing in-progress flag {name} left set by a dead process')
-                flag.clear()
-                report['flags'].append(name)
-        except Exception as e:
-            logger.error(f'reconcile: failed to clear flag {name}', exc_info=e)
+    report['flags'] = clear_orphaned_flags()
 
     try:
         from wrolpi.jobs import fail_orphaned_jobs

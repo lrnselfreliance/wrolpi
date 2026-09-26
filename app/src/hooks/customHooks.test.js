@@ -2,9 +2,13 @@ import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
 import {
-    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useStatistics, useVideoExtras,
+    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSettings, useStatistics, useStatus,
+    useVideoExtras,
 } from './customHooks';
-import {getStatistics, getVideoComments, getVideoDescription, searchChannels} from '../api';
+import {
+    ApiDownError, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription, searchChannels,
+} from '../api';
+import {getControllerStats} from '../api/controller';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -42,6 +46,13 @@ jest.mock('../api', () => ({
     getVideoDescription: jest.fn(),
     searchChannels: jest.fn(),
     getStatistics: jest.fn(),
+    getStatus: jest.fn(),
+    getSettings: jest.fn(),
+}));
+
+jest.mock('../api/controller', () => ({
+    ...jest.requireActual('../api/controller'),
+    getControllerStats: jest.fn(),
 }));
 
 // Mock Media so Paginator renders both mobile + tablet variants synchronously.
@@ -578,5 +589,83 @@ describe('useStatistics', () => {
         } finally {
             spy.mockRestore();
         }
+    });
+});
+
+describe('useStatus loaded', () => {
+    // `loaded` is false until the first poll returns a real status, so consumers can tell "not
+    // polled yet" from "the server reported nothing".
+    beforeEach(() => {
+        getStatus.mockReset();
+        getControllerStats.mockReset();
+        getControllerStats.mockResolvedValue({});
+    });
+
+    test('is false before any poll', () => {
+        const {result} = renderHook(() => useStatus());
+        expect(result.current.loaded).toBe(false);
+        expect(result.current.status).toEqual({});
+    });
+
+    test('is true once a poll returned a status', async () => {
+        getStatus.mockResolvedValue({version: '1.0'});
+        const {result} = renderHook(() => useStatus());
+        await act(async () => {
+            await result.current.fetchStatus();
+        });
+        expect(result.current.loaded).toBe(true);
+        expect(result.current.status.version).toBe('1.0');
+    });
+
+    test('stays false while the API is down', async () => {
+        getStatus.mockRejectedValue(new ApiDownError('down'));
+        const {result} = renderHook(() => useStatus());
+        await act(async () => {
+            await result.current.fetchStatus();
+        });
+        expect(result.current.loaded).toBe(false);
+    });
+});
+
+describe('useSettings loaded', () => {
+    beforeEach(() => {
+        getSettings.mockReset();
+        window.apiDown = false;
+    });
+
+    test('is false before the fetch returns, then true', async () => {
+        let resolve;
+        getSettings.mockReturnValue(new Promise(res => resolve = res));
+        const {result} = renderHook(() => useSettings());
+        expect(result.current.loaded).toBe(false);
+        expect(result.current.failed).toBe(false);
+        await act(async () => {
+            resolve({media_directory: '/media/wrolpi'});
+        });
+        expect(result.current.loaded).toBe(true);
+        expect(result.current.settings.media_directory).toBe('/media/wrolpi');
+    });
+
+    test('a fetch that returns nothing before anything loaded marks failed', async () => {
+        getSettings.mockResolvedValue(undefined);
+        const {result} = renderHook(() => useSettings());
+        await act(async () => {
+        });
+        expect(result.current.loaded).toBe(false);
+        expect(result.current.failed).toBe(true);
+    });
+
+    test('a failed refresh after a successful load keeps loaded and the last settings', async () => {
+        getSettings.mockResolvedValueOnce({media_directory: '/media/wrolpi'});
+        const {result} = renderHook(() => useSettings());
+        await act(async () => {
+        });
+        getSettings.mockRejectedValue(new Error('boom'));
+        await act(async () => {
+            await result.current.fetchSettings();
+        });
+        expect(result.current.loaded).toBe(true);
+        expect(result.current.failed).toBe(false);
+        expect(result.current.settings.media_directory).toBe('/media/wrolpi');
     });
 });

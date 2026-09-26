@@ -188,9 +188,11 @@ export const themeContextFixture = (overrides = {}) => ({
     ...overrides,
 });
 
+// `loaded` says the first poll has landed; the fixtures carry real values, so they are loaded.
 export const statusContextFixture = (overrides = {}) => ({
     status: statusFixture(),
     fetchStatus: () => Promise.resolve(),
+    loaded: true,
     ...overrides,
 });
 
@@ -199,6 +201,8 @@ export const settingsContextFixture = (overrides = {}) => ({
     fetchSettings: () => Promise.resolve(),
     saveSettings: () => Promise.resolve(),
     pending: false,
+    loaded: true,
+    failed: false,
     ...overrides,
 });
 

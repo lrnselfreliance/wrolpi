@@ -928,7 +928,10 @@ export function HelpHeader({
 // why it cannot be used.  `confirmStop` asks before switching off.
 function SubsystemToggle({label, on, onChange, unsupportedMessage, info = null, disabled = null, confirmStop = null}) {
     const [confirmOpen, setConfirmOpen] = React.useState(false);
+    // null = the status has loaded without this subsystem; undefined = the status has not loaded
+    // yet (or a call is in flight).  Both disable the toggle; only the first claims unsupported.
     const unsupported = on === null;
+    const unknown = on === undefined;
 
     const handleChange = (checked) => {
         if (!checked && confirmStop) {
@@ -961,11 +964,11 @@ function SubsystemToggle({label, on, onChange, unsupportedMessage, info = null, 
         </Confirm>}
         <Toggle
             label={label}
-            disabled={disabled === null ? unsupported : disabled}
+            disabled={disabled === null ? (unsupported || unknown) : disabled}
             checked={on === true}
             onChange={handleChange}
         />
-        {popup && <InfoPopup content={popup}/>}
+        {popup && <span data-testid='subsystem-popup'><InfoPopup content={popup}/></span>}
     </div>;
 }
 
@@ -1065,9 +1068,10 @@ export function Toggle({label, checked, disabled, onChange, icon, popupContent =
 
 export function DisableDownloadsToggle() {
     const [pending, setPending] = React.useState(false);
-    const {status, fetchStatus} = React.useContext(StatusContext);
+    const {status, fetchStatus, loaded} = React.useContext(StatusContext);
 
-    const {downloads} = status ? status : {downloads: null};
+    // Until the first status poll lands there is no downloads state to show, only a disabled toggle.
+    const downloads = loaded ? status?.downloads : null;
     const wrolModeEnabled = useWROLMode();
 
     const setDownloads = async (enable) => {
@@ -1082,8 +1086,9 @@ export function DisableDownloadsToggle() {
     }
 
     const on = downloads && downloads['disabled'] === false && downloads['stopped'] === false;
+    const label = downloads === null ? 'Downloading' : on === true ? 'Downloading Enabled' : 'Downloading Disabled';
     return <Toggle
-        label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
+        label={label}
         disabled={wrolModeEnabled || pending || downloads === null}
         checked={on === true}
         onChange={setDownloads}

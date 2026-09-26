@@ -23,7 +23,7 @@ const controllerApi = require('../api/controller');
 const fetchStatus = jest.fn();
 
 const makeWrapper = (status) => ({children}) => (
-    <StatusContext.Provider value={{status, fetchStatus}}>{children}</StatusContext.Provider>
+    <StatusContext.Provider value={{status, fetchStatus, loaded: true}}>{children}</StatusContext.Provider>
 );
 
 beforeEach(() => {

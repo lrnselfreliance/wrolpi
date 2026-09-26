@@ -293,6 +293,12 @@ describe('NavBar bookmarks', () => {
         expect(currentTab()).toEqual([]);
     });
 
+    it('marks More when the editor page is folded inside it', () => {
+        useBarWidth(200);
+        renderWithBookmarks('/more/bookmarks', bookmarks);
+        expect(screen.getByRole('button', {name: /More/})).toHaveClass('active');
+    });
+
     it('does not own the section a bookmark points at', () => {
         renderWithBookmarks('/videos/channel', bookmarks);
         expect(screen.getByRole('button', {name: /Bookmarks/})).not.toHaveClass('active');

@@ -166,6 +166,11 @@ NavDropdownTrigger.displayName = 'NavDropdownTrigger';
  * the hooks that would answer it cannot be called in a loop.
  */
 export const isLinkActive = (pathname, link) => {
+    // The Bookmarks menu owns only its editor page: a bookmark pointing at /videos does
+    // not make the menu own the Videos section.
+    if (link.bookmarks) {
+        return pathname === EDIT_BOOKMARKS_PATH || pathname.startsWith(`${EDIT_BOOKMARKS_PATH}/`);
+    }
     // An off-site link (Help) is never the current section.
     if (!link.to || /^[a-z]+:\/\//i.test(link.to)) return false;
     const to = link.to.length > 1 ? link.to.replace(/\/+$/, '') : link.to;
@@ -202,12 +207,12 @@ function DropdownLinks({link}) {
 
 /**
  * The Bookmarks tab: a dropdown that opens on hover as well as on click, holding the
- * user's bookmarks and the link to edit them.  Marked current on the editor page only;
- * a bookmark pointing at /videos does not make this tab own the Videos section.
+ * user's bookmarks and the link to edit them.  Marked current on the editor page only
+ * (see isLinkActive).
  */
 function BookmarksDropdown({link}) {
     const {pathname} = useLocation();
-    const holdsCurrent = pathname === EDIT_BOOKMARKS_PATH || pathname.startsWith(`${EDIT_BOOKMARKS_PATH}/`);
+    const holdsCurrent = isLinkActive(pathname, link);
     return <Menu position='bottom-start' withinPortal trigger='click-hover' openDelay={100} closeDelay={200}>
         <Menu.Target>
             <NavDropdownTrigger text={link.text} className={holdsCurrent ? 'active' : undefined}/>

@@ -26,7 +26,9 @@ function bookmarkItemProps(node) {
  *
  * `nested` draws a directory as a flyout (Menu.Sub), which opens beside the menu on hover.
  * Without it a directory is a labelled, indented run of items instead: the mobile
- * hamburger is the one place bookmarks are shown where a flyout cannot be hovered.
+ * hamburger is the one place bookmarks are shown where a flyout cannot be hovered.  The
+ * indent is in rem: a label is set smaller than an item, so an em indent would put a
+ * directory's label a few pixels left of the items beside it.
  */
 export function BookmarkMenuItems({nodes, nested = true, depth = 0}) {
     if (!nodes || nodes.length === 0) {
@@ -47,14 +49,14 @@ export function BookmarkMenuItems({nodes, nested = true, depth = 0}) {
                 </Menu.Sub>;
             }
             return <React.Fragment key={node.id}>
-                <Menu.Label style={{paddingLeft: `${0.75 + depth}em`}}>{node.name}</Menu.Label>
+                <Menu.Label style={{paddingLeft: `${0.75 + depth}rem`}}>{node.name}</Menu.Label>
                 <BookmarkMenuItems nodes={node.children} nested={false} depth={depth + 1}/>
             </React.Fragment>;
         }
         return <Menu.Item
             key={node.id}
             {...bookmarkItemProps(node)}
-            style={nested ? undefined : {paddingLeft: `${0.75 + depth}em`}}
+            style={nested ? undefined : {paddingLeft: `${0.75 + depth}rem`}}
             rightSection={node.new_tab ? <Icon name='external' size='small'/> : undefined}
         >
             {node.name}

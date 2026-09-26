@@ -1,4 +1,5 @@
-"""Audio-only transcodes: removing the video stream from a video, and transcoding audio files."""
+"""Audio-only transcodes: removing the video stream from a video, and transcoding audio files.
+Also the mirror: removing the audio stream from a video (`REMOVE_AUDIO`)."""
 import json
 import pathlib
 import shutil
@@ -7,7 +8,7 @@ from unittest import mock
 import pytest
 
 from modules.videos.transcode import transcode_video_file, validate_transcode_request, verify_transcode_output, \
-    REMOVE_VIDEO, TRANSCODE_AUDIO_CONTAINERS, default_audio_container, transcode_video_job
+    REMOVE_VIDEO, REMOVE_AUDIO, TRANSCODE_AUDIO_CONTAINERS, default_audio_container, transcode_video_job
 from wrolpi import jobs
 from wrolpi.cmd import CommandResult
 from wrolpi.vars import PROJECT_DIR
@@ -263,3 +264,160 @@ async def test_transcode_api_remove_video_needs_audio_container(async_client, te
                                                                     'container': 'm4a'}))
     assert response.status == 200, response.json
     jobs.cancel_job(response.json['job_id'])
+
+
+# ------------------------------------------------------------------ remove audio
+
+def test_validate_remove_audio():
+    """Removing the audio needs a video container; both streams cannot be removed."""
+    validate_transcode_request(None, REMOVE_AUDIO, 'mp4')
+    validate_transcode_request('h264', REMOVE_AUDIO, 'mkv')
+    validate_transcode_request(None, REMOVE_AUDIO, 'mp4', fragmented=True)
+    with pytest.raises(ValueError, match='video container'):
+        validate_transcode_request(None, REMOVE_AUDIO, 'm4a')
+    with pytest.raises(ValueError, match='video container'):
+        validate_transcode_request(None, REMOVE_AUDIO, 'mp3')
+    with pytest.raises(ValueError, match='both'):
+        validate_transcode_request(REMOVE_VIDEO, REMOVE_AUDIO, 'mp4')
+    with pytest.raises(ValueError, match='both'):
+        validate_transcode_request(REMOVE_VIDEO, REMOVE_AUDIO, 'm4a')
+
+
+def test_verify_remove_audio_output():
+    """The output must have the video stream and must not have an audio stream."""
+    source = make_probe('vp9', 'opus', 100.0)
+    verify_transcode_output(source, make_probe('h264', None, 100.0), 'h264', REMOVE_AUDIO, 'mp4')
+    verify_transcode_output(source, make_probe('vp9', None, 100.0), None, REMOVE_AUDIO, 'mp4')
+    with pytest.raises(RuntimeError, match='still has an audio stream'):
+        verify_transcode_output(source, make_probe('vp9', 'opus', 100.0), None, REMOVE_AUDIO, 'mp4')
+    with pytest.raises(RuntimeError, match='no video stream'):
+        verify_transcode_output(source, make_probe(None, None, 100.0), None, REMOVE_AUDIO, 'mp4')
+    # A silent source can have its (absent) audio removed; the result is unchanged.
+    verify_transcode_output(make_probe('vp9', None, 100.0), make_probe('vp9', None, 100.0), None, REMOVE_AUDIO, 'mp4')
+
+
+@pytest.mark.asyncio
+async def test_remove_audio(test_directory, async_client):
+    """Removing the audio: the video is mapped, `-an` drops the audio, no `-c:a`, the output keeps a
+    video container and the video stream is copied unless a target is given."""
+    video_path = test_directory / 'movie.webm'
+    video_path.write_bytes(b'fake video data')
+    probes = FakeProbes(make_probe('vp9', 'opus', 10.0, 'matroska,webm'), make_probe('vp9', None, 10.0, 'matroska,webm'))
+
+    with mock.patch('modules.videos.transcode.probe_for_verify', side_effect=probes), \
+            mock.patch('modules.videos.transcode.run_command', side_effect=async_fake_ffmpeg) as mock_run:
+        result = await transcode_video_file(video_path, target_vcodec=None, target_acodec=REMOVE_AUDIO,
+                                            container='mkv')
+
+    assert result == test_directory / 'movie.mkv' and result.is_file()
+    assert not video_path.exists()
+    cmd = mock_run.call_args_list[0][0][0]
+    assert '-an' in cmd
+    assert '-vn' not in cmd
+    assert '0:a:0?' not in cmd and '0:a:0' not in cmd
+    assert cmd[cmd.index('-map') + 1] == '0:V:0'
+    assert '-c:a' not in cmd
+    assert cmd[cmd.index('-c:v') + 1] == 'copy'
+    assert str(cmd[-1]).endswith('movie.transcode.mkv')
+
+
+@pytest.mark.asyncio
+async def test_remove_audio_with_video_target(test_directory, async_client):
+    video_path = test_directory / 'movie.webm'
+    video_path.write_bytes(b'fake video data')
+    probes = FakeProbes(make_probe('vp9', 'opus', 10.0, 'matroska,webm'), make_probe('h264', None, 10.0))
+
+    with mock.patch('modules.videos.transcode.probe_for_verify', side_effect=probes), \
+            mock.patch('modules.videos.transcode.run_command', side_effect=async_fake_ffmpeg) as mock_run:
+        result = await transcode_video_file(video_path, target_vcodec='h264', target_acodec=REMOVE_AUDIO,
+                                            container='mp4')
+
+    assert result == test_directory / 'movie.mp4'
+    cmd = mock_run.call_args_list[0][0][0]
+    assert '-an' in cmd
+    assert cmd[cmd.index('-c:v') + 1] == 'libx264'
+    assert '-c:a' not in cmd
+    assert '+faststart' in cmd
+
+
+@pytest.mark.asyncio
+async def test_remove_audio_from_audio_source_is_refused(test_directory, async_client):
+    """An audio file with its audio removed is nothing; ffmpeg is never run."""
+    audio_path = test_directory / 'song.mp3'
+    audio_path.write_bytes(b'fake audio data')
+    probes = FakeProbes(make_probe(None, 'mp3', 10.0, 'mp3'), make_probe(None, 'mp3', 10.0, 'mp3'))
+
+    with mock.patch('modules.videos.transcode.probe_for_verify', side_effect=probes), \
+            mock.patch('modules.videos.transcode.run_command', side_effect=async_fake_ffmpeg) as mock_run:
+        with pytest.raises(RuntimeError, match='no video stream'):
+            await transcode_video_file(audio_path, target_acodec=REMOVE_AUDIO, container='mp4')
+    mock_run.assert_not_called()
+    assert audio_path.is_file()
+
+
+def test_resolve_output_refuses_removing_both():
+    """Even without `validate_transcode_request`, ffmpeg is never asked for nothing."""
+    from modules.videos.transcode import resolve_output
+    with pytest.raises(RuntimeError, match='both'):
+        resolve_output(make_probe('h264', 'aac'), REMOVE_VIDEO, REMOVE_AUDIO, 'mp4')
+    with pytest.raises(RuntimeError, match='both'):
+        resolve_output(make_probe(None, 'aac'), REMOVE_VIDEO, REMOVE_AUDIO, 'mp3')
+
+
+@pytest.mark.asyncio
+async def test_remove_audio_job(test_session, test_directory, async_client, video_factory):
+    """The Job removes the audio in place: same FileGroup, still a video."""
+    from modules.videos.models import Video
+    from wrolpi.files.models import FileGroup
+
+    video = video_factory()
+    video.file_group.length = 5
+    test_session.commit()
+    file_group_id = video.file_group_id
+    video_path = video.video_path
+    probes = FakeProbes(make_probe('h264', 'aac', 5.3), make_probe('h264', None, 5.3))
+
+    async def fake_run_command(cmd, stdout_callback=None, **kwargs):
+        if cmd[-1] != '-':
+            shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('modules.videos.transcode.probe_for_verify', side_effect=probes), \
+            mock.patch('wrolpi.cmd.run_command', side_effect=fake_run_command):
+        job_id = transcode_video_job.enqueue(file_group_id=file_group_id, video_codec=None,
+                                             audio_codec=REMOVE_AUDIO, container='mp4')
+        record = await jobs.wait_for_job(job_id)
+
+    assert record['status'] == jobs.COMPLETE, record
+    assert video_path.with_suffix('.mp4').is_file()
+
+    test_session.expire_all()
+    video = Video.find_by_file_group_id(test_session, file_group_id)
+    assert video.file_group.mimetype.startswith('video/')
+    assert test_session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_transcode_api_remove_audio(async_client, test_session, video_factory, audio_factory):
+    """Remove-audio is queued for a video with a video container; refused on an audio file, with an
+    audio container, and together with remove-video."""
+    video = video_factory()
+    audio = audio_factory()
+    test_session.commit()
+
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'audio_codec': REMOVE_AUDIO, 'container': 'mp4'}))
+    assert response.status == 200, response.json
+    assert 'Remove audio' in jobs.get_job(response.json['job_id'])['description']
+    jobs.cancel_job(response.json['job_id'])
+
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'audio_codec': REMOVE_AUDIO, 'container': 'm4a'}))
+    assert response.status == 400, response.json
+    request, response = await async_client.post(f'/api/videos/{video.file_group_id}/transcode',
+                                                content=json.dumps({'video_codec': REMOVE_VIDEO,
+                                                                    'audio_codec': REMOVE_AUDIO, 'container': 'mp4'}))
+    assert response.status == 400, response.json
+    request, response = await async_client.post(f'/api/videos/{audio.file_group_id}/transcode',
+                                                content=json.dumps({'audio_codec': REMOVE_AUDIO, 'container': 'mp4'}))
+    assert response.status == 400, response.json

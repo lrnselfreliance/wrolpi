@@ -168,11 +168,14 @@ export const transcodeVideoCodecOptions = [
     {value: 'h264', label: 'h264 (avc1)'},
     {value: TRANSCODE_REMOVE_VIDEO, label: 'Remove video (audio only)'},
 ];
+// REMOVE_AUDIO in modules/videos/transcode.py: drop the audio stream, the result is a silent video.
+export const TRANSCODE_REMOVE_AUDIO = 'none';
 export const transcodeAudioCodecOptions = [
     {value: TRANSCODE_COPY, label: 'Keep (copy)'},
     {value: 'aac', label: 'aac'},
     {value: 'opus', label: 'opus'},
     {value: 'mp3', label: 'mp3'},
+    {value: TRANSCODE_REMOVE_AUDIO, label: 'Remove audio (silent video)'},
 ];
 // Containers for output with a video stream ...
 export const transcodeContainerOptions = [

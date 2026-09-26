@@ -2,11 +2,11 @@ import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
 import {
-    containerFor, currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget, TranscodeModal,
-    useJob, VideoEditMenu,
+    audioCodecOptionsFor, chooseCodecs, containerFor, currentCodecs, currentContainer, EditVideoModal, JobProgress, preferredTarget,
+    TranscodeModal, useJob, VideoEditMenu, videoCodecOptionsFor,
 } from './VideoEditMenu';
 import {
-    audioContainerForCodec, TRANSCODE_COPY, TRANSCODE_REMOVE_VIDEO, transcodeAudioCodecOptions,
+    audioContainerForCodec, TRANSCODE_COPY, TRANSCODE_REMOVE_AUDIO, TRANSCODE_REMOVE_VIDEO, transcodeAudioCodecOptions,
     transcodeVideoCodecOptions,
 } from './Vars';
 
@@ -219,6 +219,35 @@ describe('TranscodeModal', () => {
         await waitFor(() => expect(selectInput('Video codec')).toHaveValue('h264 (avc1)'));
         expect(transcodeVideoCodecOptions.some(i => i.value === TRANSCODE_REMOVE_VIDEO)).toBe(true);
         // Selecting it is exercised through containerFor (Mantine's dropdown is not driveable in jsdom).
+    });
+
+    test('the Remove audio option is offered for videos, not audio files, and never with Remove video', () => {
+        expect(transcodeAudioCodecOptions.some(i => i.value === TRANSCODE_REMOVE_AUDIO)).toBe(true);
+        const has = (options, value) => options.some(i => i.value === value);
+        expect(has(audioCodecOptionsFor({audioOnly: false, removeVideo: false}), TRANSCODE_REMOVE_AUDIO)).toBe(true);
+        expect(has(audioCodecOptionsFor({audioOnly: true, removeVideo: false}), TRANSCODE_REMOVE_AUDIO)).toBe(false);
+        expect(has(audioCodecOptionsFor({audioOnly: false, removeVideo: true}), TRANSCODE_REMOVE_AUDIO)).toBe(false);
+        // The real codecs and Keep are never withdrawn.
+        expect(audioCodecOptionsFor({audioOnly: true, removeVideo: false}).map(i => i.value))
+            .toEqual([TRANSCODE_COPY, 'aac', 'opus', 'mp3']);
+        expect(has(videoCodecOptionsFor({removeAudio: false}), TRANSCODE_REMOVE_VIDEO)).toBe(true);
+        expect(has(videoCodecOptionsFor({removeAudio: true}), TRANSCODE_REMOVE_VIDEO)).toBe(false);
+        expect(has(videoCodecOptionsFor({removeAudio: true}), 'h264')).toBe(true);
+    });
+
+    test('Remove video and Remove audio can never be chosen together', () => {
+        const keepBoth = {videoCodec: TRANSCODE_COPY, audioCodec: TRANSCODE_COPY};
+        // Removing one stream after the other was chosen puts the other back to Keep.
+        expect(chooseCodecs({videoCodec: TRANSCODE_REMOVE_VIDEO, audioCodec: 'aac'}, {audio: TRANSCODE_REMOVE_AUDIO}))
+            .toEqual({videoCodec: TRANSCODE_COPY, audioCodec: TRANSCODE_REMOVE_AUDIO});
+        expect(chooseCodecs({videoCodec: 'h264', audioCodec: TRANSCODE_REMOVE_AUDIO}, {video: TRANSCODE_REMOVE_VIDEO}))
+            .toEqual({videoCodec: TRANSCODE_REMOVE_VIDEO, audioCodec: TRANSCODE_COPY});
+        // Ordinary choices are untouched; a cleared select means Keep.
+        expect(chooseCodecs(keepBoth, {video: 'h264'})).toEqual({videoCodec: 'h264', audioCodec: TRANSCODE_COPY});
+        expect(chooseCodecs({videoCodec: 'h264', audioCodec: 'aac'}, {audio: null}))
+            .toEqual({videoCodec: 'h264', audioCodec: TRANSCODE_COPY});
+        expect(chooseCodecs(keepBoth, {audio: TRANSCODE_REMOVE_AUDIO}))
+            .toEqual({videoCodec: TRANSCODE_COPY, audioCodec: TRANSCODE_REMOVE_AUDIO});
     });
 
     test('WROL Mode disables starting a transcode', async () => {

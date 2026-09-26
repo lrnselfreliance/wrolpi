@@ -8,6 +8,7 @@ import {
 import {
     audioContainerForCodec,
     TRANSCODE_COPY,
+    TRANSCODE_REMOVE_AUDIO,
     TRANSCODE_REMOVE_VIDEO,
     transcodeAudioCodecOptions,
     transcodeAudioContainerOptions,
@@ -66,6 +67,41 @@ export function containerFor({audioOutput, audioCodec, video}) {
     }
     const current = currentContainer(video);
     return transcodeContainerOptions.some(i => i.value === current) ? current : 'mp4';
+}
+
+/**
+ * The video codec choices: Remove video is withdrawn once the audio is being removed (nothing
+ * would remain).
+ */
+export function videoCodecOptionsFor({removeAudio}) {
+    return removeAudio ? transcodeVideoCodecOptions.filter(i => i.value !== TRANSCODE_REMOVE_VIDEO)
+        : transcodeVideoCodecOptions;
+}
+
+/**
+ * The audio codec choices: Remove audio is only for a video whose video stream is kept; an audio
+ * file has nothing else, and removing the video already chose the audio as the result.
+ */
+export function audioCodecOptionsFor({audioOnly, removeVideo}) {
+    return (audioOnly || removeVideo) ? transcodeAudioCodecOptions.filter(i => i.value !== TRANSCODE_REMOVE_AUDIO)
+        : transcodeAudioCodecOptions;
+}
+
+/**
+ * The codec pair after one select changes.  Both streams can never be removed (nothing would
+ * remain): choosing Remove for one stream puts the other back to Keep.
+ */
+export function chooseCodecs({videoCodec, audioCodec}, {video, audio}) {
+    let nextVideo = video !== undefined ? (video || TRANSCODE_COPY) : videoCodec;
+    let nextAudio = audio !== undefined ? (audio || TRANSCODE_COPY) : audioCodec;
+    if (nextVideo === TRANSCODE_REMOVE_VIDEO && nextAudio === TRANSCODE_REMOVE_AUDIO) {
+        if (video !== undefined) {
+            nextAudio = TRANSCODE_COPY;
+        } else {
+            nextVideo = TRANSCODE_COPY;
+        }
+    }
+    return {videoCodec: nextVideo, audioCodec: nextAudio};
 }
 
 const statusKind = (status) => {
@@ -214,6 +250,7 @@ export function TranscodeModal({
 
     const current = currentCodecs(video);
     const removeVideo = videoCodec === TRANSCODE_REMOVE_VIDEO;
+    const removeAudio = !audioOnly && !removeVideo && audioCodec === TRANSCODE_REMOVE_AUDIO;
     // An audio file has no video stream to keep or remove; removing the video makes an audio file.
     const audioOutput = audioOnly || removeVideo;
 
@@ -250,18 +287,20 @@ export function TranscodeModal({
         };
     }, [open]);
 
-    const changeVideoCodec = (value) => {
-        const next = value || TRANSCODE_COPY;
-        setVideoCodec(next);
-        setContainer(containerFor({audioOutput: audioOnly || next === TRANSCODE_REMOVE_VIDEO, audioCodec, video}));
+    // `chooseCodecs` keeps Remove video and Remove audio from ever being chosen together; the
+    // other select also withdraws its Remove option (see `videoCodecOptionsFor`/`audioCodecOptionsFor`).
+    const applyCodecs = (change) => {
+        const next = chooseCodecs({videoCodec, audioCodec}, change);
+        setVideoCodec(next.videoCodec);
+        setAudioCodec(next.audioCodec);
+        setContainer(containerFor({
+            audioOutput: audioOnly || next.videoCodec === TRANSCODE_REMOVE_VIDEO, audioCodec: next.audioCodec, video,
+        }));
     };
-    const changeAudioCodec = (value) => {
-        const next = value || TRANSCODE_COPY;
-        setAudioCodec(next);
-        setContainer(containerFor({audioOutput, audioCodec: next, video}));
-    };
+    const changeVideoCodec = (value) => applyCodecs({video: value});
+    const changeAudioCodec = (value) => applyCodecs({audio: value});
 
-    const remuxOnly = !removeVideo && videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
+    const remuxOnly = !removeVideo && !removeAudio && videoCodec === TRANSCODE_COPY && audioCodec === TRANSCODE_COPY;
     const sameContainer = container === currentContainer(video);
     const containerOptions = audioOutput ? transcodeAudioContainerOptions : transcodeContainerOptions;
     // Fragments are an mp4 concept (m4a is an mp4).
@@ -272,7 +311,8 @@ export function TranscodeModal({
         try {
             const id = await transcodeVideo(fileGroupId, {
                 video_codec: videoCodec === TRANSCODE_COPY ? null : videoCodec,
-                audio_codec: audioCodec === TRANSCODE_COPY ? null : audioCodec,
+                audio_codec: audioCodec === TRANSCODE_COPY || (removeVideo && audioCodec === TRANSCODE_REMOVE_AUDIO)
+                    ? null : audioCodec,
                 container,
                 fragmented: canFragment && fragmented,
             });
@@ -292,6 +332,9 @@ export function TranscodeModal({
     if (defaultsLoaded && removeVideo) {
         hint = `The video stream is removed; the result is an audio file (.${container}).  `
             + (audioCodec === TRANSCODE_COPY ? 'The audio is copied without re-encoding.' : `The audio is converted to ${audioCodec}.`);
+    } else if (defaultsLoaded && removeAudio) {
+        hint = `The audio stream is removed; the result is a silent video (.${container}).  `
+            + (videoCodec === TRANSCODE_COPY ? 'The video is copied without re-encoding.' : `The video is converted to ${videoCodec}.`);
     } else if (defaultsLoaded && remuxOnly) {
         const kept = audioOnly ? 'The audio is kept' : 'Both streams are kept';
         if (sameContainer && canFragment && fragmented) {
@@ -303,7 +346,7 @@ export function TranscodeModal({
             hint = `${kept}: only the container changes to ${container} (a quick remux, no quality loss).`;
         }
     }
-    const buttonLabel = removeVideo ? 'Extract Audio' : remuxOnly ? 'Remux' : 'Transcode';
+    const buttonLabel = removeVideo ? 'Extract Audio' : removeAudio ? 'Remove Audio' : remuxOnly ? 'Remux' : 'Transcode';
 
     return <Modal open={open} onClose={onClose} size='small'>
         <Modal.Header>{audioOnly ? 'Transcode Audio' : 'Transcode Video'}</Modal.Header>
@@ -319,7 +362,7 @@ export function TranscodeModal({
                 {!showJob && <>
                     {!audioOnly && <Select
                         label='Video codec'
-                        data={transcodeVideoCodecOptions}
+                        data={videoCodecOptionsFor({removeAudio})}
                         value={videoCodec}
                         onChange={changeVideoCodec}
                         disabled={!defaultsLoaded}
@@ -327,7 +370,7 @@ export function TranscodeModal({
                     />}
                     <Select
                         label='Audio codec'
-                        data={transcodeAudioCodecOptions}
+                        data={audioCodecOptionsFor({audioOnly, removeVideo})}
                         value={audioCodec}
                         onChange={changeAudioCodec}
                         disabled={!defaultsLoaded}

@@ -12,7 +12,7 @@ from wrolpi.errors import InvalidOrderBy, InvalidJob
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
-from ..transcode import transcode_video_job, validate_transcode_request, REMOVE_VIDEO
+from ..transcode import transcode_video_job, validate_transcode_request, REMOVE_VIDEO, REMOVE_AUDIO
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -88,8 +88,12 @@ async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTran
     is_audio = (video.file_group.mimetype or '').startswith('audio/')
     if is_audio and body.video_codec and body.video_codec != REMOVE_VIDEO:
         raise InvalidJob(f'This is an audio file; it has no video stream to transcode to {body.video_codec}')
+    if is_audio and body.audio_codec == REMOVE_AUDIO:
+        raise InvalidJob('This is an audio file; removing its audio would leave nothing')
     if body.video_codec == REMOVE_VIDEO and not is_audio:
         action = 'Extract audio from'
+    elif body.audio_codec == REMOVE_AUDIO:
+        action = 'Remove audio from'
     elif not body.video_codec and not body.audio_codec:
         action = 'Remux'
     else:

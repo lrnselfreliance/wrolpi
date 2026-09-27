@@ -725,3 +725,35 @@ tr.drag-deselecting td {
         display: block;
     }
 }
+
+/* Map popups (POI details and pins) follow the active theme's tokens. */
+/* Scoped under .maplibregl-popup to outrank maplibre-gl.css, which loads after this file. */
+.maplibregl-popup .maplibregl-popup-content {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+}
+.maplibregl-popup .maplibregl-popup-close-button {
+    color: var(--muted);
+}
+.maplibregl-popup .maplibregl-popup-close-button:hover {
+    background: var(--head);
+    color: var(--text);
+}
+.maplibregl-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+    border-bottom-color: var(--panel);
+}
+.maplibregl-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+    border-top-color: var(--panel);
+}
+.maplibregl-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+    border-right-color: var(--panel);
+}
+.maplibregl-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+    border-left-color: var(--panel);
+}

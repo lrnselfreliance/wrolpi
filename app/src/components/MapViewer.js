@@ -10,6 +10,7 @@ import {MAP_VIEWER_URI} from "./Vars";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
+import {poiPopupHtml} from "./mapPoiPopup";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -674,6 +675,29 @@ export default function MapViewer() {
                 });
                 map.on("click", () => setContextMenu(null));
                 map.on("movestart", () => setContextMenu(null));
+
+                // Click a POI to see the details the pmtiles file already has (kind, detail, elevation).
+                const poiLayerIds = () => (map.getStyle()?.layers || [])
+                    .map(l => l.id)
+                    .filter(id => id === "pois" || id.endsWith(":pois"))
+                    .filter(id => map.getLayer(id));
+                map.on("click", (e) => {
+                    if (destroyed) return;
+                    const layers = poiLayerIds();
+                    if (!layers.length) return;
+                    const html = poiPopupHtml(map.queryRenderedFeatures(e.point, {layers}), e.lngLat);
+                    if (!html) return;
+                    new maplibregl.Popup({offset: 8, maxWidth: "260px", className: "wrolpi-map-popup"})
+                        .setLngLat(e.lngLat)
+                        .setHTML(html)
+                        .addTo(map);
+                });
+                map.on("mousemove", (e) => {
+                    if (destroyed) return;
+                    const layers = poiLayerIds();
+                    const hit = layers.length && map.queryRenderedFeatures(e.point, {layers}).length;
+                    map.getCanvas().style.cursor = hit ? "pointer" : "";
+                });
 
                 // Long-press context menu (mobile).
                 let longPressTimer = null;

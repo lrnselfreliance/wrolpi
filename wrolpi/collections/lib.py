@@ -8,7 +8,7 @@ import pathlib
 from typing import List, Optional, Dict
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, selectinload, noload
 
 from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
@@ -73,9 +73,11 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     # Local imports to avoid circular import: collections -> videos -> collections
     from modules.videos.models import Channel
 
-    # Serializing a Collection reads its tag and downloads; load them in two batch queries rather
-    # than one lazy query per Collection (thousands of Collections on a large library).
-    query = session.query(Collection).options(selectinload(Collection.tag), selectinload(Collection.downloads))
+    # Serializing a Collection reads its tag; load them in one batch query rather than one lazy
+    # query per Collection (thousands of Collections on a large library).  Downloads are NOT
+    # loaded: download rows are wide (yt-dlp info_json) and the listing only needs the minimum
+    # frequency, which comes from a covering index below.
+    query = session.query(Collection).options(selectinload(Collection.tag), noload(Collection.downloads))
 
     if kind:
         query = query.filter(Collection.kind == kind)
@@ -84,6 +86,18 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
 
     if not collections:
         return []
+
+    # Batch query: minimum recurring download frequency per collection.  Answered entirely by
+    # `download_collection_frequency_idx` (a covering index), so no download row is read.
+    from wrolpi.downloader import Download
+    collection_ids = [c.id for c in collections]
+    min_frequency_map = dict(session.query(
+        Download.collection_id,
+        func.min(Download.frequency),
+    ).filter(
+        Download.collection_id.in_(collection_ids),
+        Download.frequency > 0,
+    ).group_by(Download.collection_id).all())
 
     # Separate collections by kind for batch processing
     channel_ids = [c.id for c in collections if c.kind == 'channel']
@@ -123,14 +137,9 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     result = []
     for collection in collections:
         data = collection.__json__()
-
-        # Compute minimum download frequency from all downloads
-        if collection.downloads:
-            # Filter to recurring downloads (frequency > 0) and get minimum
-            recurring_frequencies = [d.frequency for d in collection.downloads if d.frequency and d.frequency > 0]
-            data['min_download_frequency'] = min(recurring_frequencies) if recurring_frequencies else None
-        else:
-            data['min_download_frequency'] = None
+        # The listing does not carry each Collection's Downloads (see above); the detail endpoint does.
+        data.pop('downloads', None)
+        data['min_download_frequency'] = min_frequency_map.get(collection.id)
 
         # Add type-specific statistics from batch query results
         if collection.kind == 'domain':

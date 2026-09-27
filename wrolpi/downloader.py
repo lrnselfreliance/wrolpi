@@ -245,6 +245,8 @@ class Download(ModelHelper, Base):  # noqa
     __tablename__ = 'download'  # noqa
     __table_args__ = (
         Index('idx_download_collection_id', 'collection_id'),
+        # Covers the Collection listing's min-frequency query; download rows are wide (info_json).
+        Index('download_collection_frequency_idx', 'collection_id', 'frequency'),
         Index('idx_download_last_download_attempt', 'last_download_attempt'),
     )
     id = Column(Integer, primary_key=True)

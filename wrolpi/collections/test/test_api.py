@@ -577,3 +577,53 @@ class TestCollectionTagging:
         # No conflict checking needed without a directory
         assert data['conflict'] is False
         assert data['conflict_message'] is None
+
+
+@pytest.mark.asyncio
+async def test_get_channel_collections_uses_summary_columns_and_batches_queries(
+        async_client, test_session, test_directory, channel_factory, video_factory, tag_factory):
+    """Listing channel collections reads the trigger-maintained channel summary columns and
+    loads downloads and tags in batches, so the query count does not grow with the channel count.
+
+    A production DB was measured at 143 s cold for this listing: summing FileGroup sizes touched a
+    random page of the 2 GB file_group table per video, and each collection lazy-loaded its
+    downloads and tag one query at a time.
+    """
+    from sqlalchemy import event
+    from wrolpi.collections import lib
+    from wrolpi.downloader import DownloadFrequency
+
+    await tag_factory('one')
+    await tag_factory('two')
+    channels = []
+    for i in range(6):
+        tag_name = ('one', 'two', None)[i % 3]
+        channel = channel_factory(name=f'Channel {i}', download_frequency=DownloadFrequency.weekly, tag_name=tag_name)
+        video_factory(channel_id=channel.id, with_video_file=True)
+        video_factory(channel_id=channel.id, with_video_file=True)
+        channels.append(channel)
+    test_session.commit()
+    test_session.expire_all()
+
+    statements = []
+    engine = test_session.get_bind()
+
+    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, 'before_cursor_execute', before_cursor_execute)
+    try:
+        collections = lib.get_collections(test_session, kind='channel')
+    finally:
+        event.remove(engine, 'before_cursor_execute', before_cursor_execute)
+
+    assert len(collections) == 6
+    for channel, data in zip(channels, sorted(collections, key=lambda i: i['name'])):
+        assert data['channel_id'] == channel.id
+        assert data['video_count'] == channel.video_count == 2
+        assert data['total_size'] == channel.total_size > 0
+        assert data['min_download_frequency'] == DownloadFrequency.weekly
+        assert data['tag_name'] == channel.tag_name
+    # BEGIN, collections, channel summaries, tags, downloads: fixed count regardless of channel count.
+    assert len(statements) <= 5, '\n'.join(statements)
+    assert not any('file_group' in s for s in statements), 'Channel sizes must come from channel.total_size'

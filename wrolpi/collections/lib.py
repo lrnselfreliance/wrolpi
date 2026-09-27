@@ -8,7 +8,7 @@ import pathlib
 from typing import List, Optional, Dict
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
@@ -72,10 +72,12 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     """
     # Local imports to avoid circular import: collections -> archive/videos -> collections
     from modules.archive import Archive
-    from modules.videos.models import Video, Channel
+    from modules.videos.models import Channel
     from wrolpi.files.models import FileGroup
 
-    query = session.query(Collection)
+    # Serializing a Collection reads its tag and downloads; load them in two batch queries rather
+    # than one lazy query per Collection (thousands of Collections on a large library).
+    query = session.query(Collection).options(selectinload(Collection.tag), selectinload(Collection.downloads))
 
     if kind:
         query = query.filter(Collection.kind == kind)
@@ -105,21 +107,20 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
 
         domain_stats_map = {s.collection_id: s for s in domain_stats}
 
-    # Batch query: Get channel info and video stats for all channel collections at once
+    # Batch query: Get channel info and video stats for all channel collections at once.
+    # `channel.video_count` and `channel.total_size` are maintained by triggers (see
+    # wrolpi/schema_ddl.py); summing FileGroup sizes here instead read a random page of the
+    # file_group table per video, which took minutes from a cold disk cache on a large library.
     channel_stats_map = {}
     if channel_ids:
         channel_stats = session.query(
             Channel.collection_id,
             Channel.id.label('channel_id'),
-            func.count(Video.id).label('video_count'),
-            func.coalesce(func.sum(FileGroup.size), 0).label('size')
-        ).outerjoin(
-            Video, Video.channel_id == Channel.id
-        ).outerjoin(
-            FileGroup, FileGroup.id == Video.file_group_id
+            Channel.video_count,
+            Channel.total_size.label('size'),
         ).filter(
             Channel.collection_id.in_(channel_ids)
-        ).group_by(Channel.collection_id, Channel.id).all()
+        ).all()
 
         channel_stats_map = {s.collection_id: s for s in channel_stats}
 

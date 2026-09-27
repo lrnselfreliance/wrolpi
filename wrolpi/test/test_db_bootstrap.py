@@ -211,6 +211,42 @@ def test_domain_collection_summary_migration_backfills(test_directory):
         assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 1').fetchone() == (1, 100)
 
 
+def test_migrations_match_models(test_directory):
+    """`alembic check`: a database migrated to head matches the SQLAlchemy models (tables, columns,
+    indexes).  Fails when a model gains an index or column without a migration, or vice versa."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.config import Config
+    from alembic import command
+    from alembic.migration import MigrationContext
+    from wrolpi.common import Base
+    from wrolpi.db import get_db_uri, create_wrolpi_engine
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, 'head')
+
+    # Compare with alembic/env.py's own exclusions (FTS tables), plus any table a test module
+    # registered on the shared metadata (wrolpi/test/test_dates.py defines one).
+    env_source = (PROJECT_DIR / 'alembic' / 'env.py').read_text()
+    namespace = {}
+    exec(env_source[env_source.index('def include_object'):env_source.index('def process_revision_directives')],
+         namespace)
+    model_tables = {name for name in Base.metadata.tables if not name.startswith('test_')}
+
+    def include_object(object_, name, type_, reflected, compare_to):
+        if type_ == 'table' and name not in model_tables and not reflected:
+            return False
+        return namespace['include_object'](object_, name, type_, reflected, compare_to)
+
+    engine = create_wrolpi_engine(get_db_uri())
+    with engine.connect() as conn:
+        context = MigrationContext.configure(conn, opts={'include_object': include_object, 'render_as_batch': True})
+        diffs = compare_metadata(context, Base.metadata)
+    assert not diffs, diffs
+
+
 def test_bootstrap_lock(test_directory):
     """Only one process can hold the bootstrap lock."""
     with db_bootstrap.bootstrap_lock() as acquired:

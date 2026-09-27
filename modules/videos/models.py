@@ -593,6 +593,8 @@ class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     __table_args__ = (
         Index('channel_minimum_frequency_idx', 'minimum_frequency'),
+        # Covers the Collection listing's summary query; channel rows are wide (info_json).
+        Index('channel_collection_summary_idx', 'collection_id', 'video_count', 'total_size'),
         Index('channel_source_id', 'source_id'),
         Index('channel_total_size_idx', 'total_size'),
         Index('channel_video_count_idx', 'video_count'),

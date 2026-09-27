@@ -625,9 +625,19 @@ async def test_get_channel_collections_uses_summary_columns_and_batches_queries(
         assert data['total_size'] == channel.total_size > 0
         assert data['min_download_frequency'] == DownloadFrequency.weekly
         assert data['tag_name'] == channel.tag_name
-    # BEGIN, collections, channel summaries, tags, downloads: fixed count regardless of channel count.
+        # The listing does not carry Downloads; the detail endpoint does.
+        assert 'downloads' not in data
+    # BEGIN, collections, min frequencies, channel summaries, tags: fixed count regardless of channel count.
     assert len(statements) <= 5, '\n'.join(statements)
     assert not any('file_group' in s for s in statements), 'Channel sizes must come from channel.total_size'
+    # channel and download rows are wide (info_json); the listing must be answered by covering indexes.
+    assert not any('info_json' in s for s in statements), 'No channel or download row may be loaded'
+    engine_plan = lambda sql: ' '.join(r[3] for r in test_session.execute(sa_text(f'EXPLAIN QUERY PLAN {sql}')))  # noqa
+    assert 'COVERING INDEX channel_collection_summary_idx' in engine_plan(
+        'SELECT collection_id, id, video_count, total_size FROM channel WHERE collection_id IN (1, 2)')
+    assert 'COVERING INDEX download_collection_frequency_idx' in engine_plan(
+        'SELECT collection_id, MIN(frequency) FROM download WHERE collection_id IN (1, 2) AND frequency > 0'
+        ' GROUP BY collection_id')
 
 
 @pytest.mark.asyncio

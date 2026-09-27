@@ -2,6 +2,7 @@
 from http import HTTPStatus
 
 import pytest
+from sqlalchemy import text as sa_text
 
 from wrolpi.collections.models import Collection
 
@@ -627,3 +628,67 @@ async def test_get_channel_collections_uses_summary_columns_and_batches_queries(
     # BEGIN, collections, channel summaries, tags, downloads: fixed count regardless of channel count.
     assert len(statements) <= 5, '\n'.join(statements)
     assert not any('file_group' in s for s in statements), 'Channel sizes must come from channel.total_size'
+
+
+@pytest.mark.asyncio
+async def test_domain_collection_summary_columns_follow_archives(
+        async_client, test_session, test_directory, archive_factory):
+    """`collection.item_count` and `collection.total_size` of a Domain Collection are kept current
+    by triggers as Archives are added, resized, re-assigned and deleted, and the listing reads
+    them without joining file_group."""
+    from sqlalchemy import event
+    from wrolpi.collections import lib
+    from wrolpi.files.models import FileGroup
+
+    archive1 = archive_factory(domain='example.com', title='One', url='https://example.com/1')
+    archive2 = archive_factory(domain='example.com', title='Two', url='https://example.com/2')
+    archive3 = archive_factory(domain='other.org', title='Three', url='https://other.org/3')
+    test_session.commit()
+
+    def summaries() -> dict:
+        test_session.expire_all()
+        return {c.name: (c.item_count, c.total_size) for c in
+                test_session.query(Collection).filter_by(kind='domain')}
+
+    sizes = {i.file_group.id: i.file_group.size for i in (archive1, archive2, archive3)}
+    assert all(sizes.values()), 'archives must have a size for this test to mean anything'
+    assert summaries() == {
+        'example.com': (2, sizes[archive1.file_group.id] + sizes[archive2.file_group.id]),
+        'other.org': (1, sizes[archive3.file_group.id]),
+    }
+
+    # A FileGroup's size changes (refresh found the files grew).
+    test_session.query(FileGroup).filter_by(id=archive1.file_group.id).update({'size': 1_000_000})
+    test_session.commit()
+    assert summaries()['example.com'] == (2, 1_000_000 + sizes[archive2.file_group.id])
+
+    # An Archive moves to another Domain.
+    other = test_session.query(Collection).filter_by(name='other.org').one()
+    test_session.execute(
+        sa_text('UPDATE archive SET collection_id = :cid WHERE id = :aid'),
+        {'cid': other.id, 'aid': archive2.id})
+    test_session.commit()
+    assert summaries() == {
+        'example.com': (1, 1_000_000),
+        'other.org': (2, sizes[archive3.file_group.id] + sizes[archive2.file_group.id]),
+    }
+
+    # An Archive is deleted.
+    test_session.execute(sa_text('DELETE FROM archive WHERE id = :aid'), {'aid': archive1.id})
+    test_session.commit()
+    assert summaries()['example.com'] == (0, 0)
+
+    # The listing reads the columns: no file_group in any statement.
+    statements = []
+    engine = test_session.get_bind()
+    listener = lambda conn, cursor, statement, *_: statements.append(statement)  # noqa: E731
+    event.listen(engine, 'before_cursor_execute', listener)
+    try:
+        collections = lib.get_collections(test_session, kind='domain')
+    finally:
+        event.remove(engine, 'before_cursor_execute', listener)
+    by_name = {c['name']: c for c in collections}
+    assert (by_name['example.com']['archive_count'], by_name['example.com']['size']) == (0, 0)
+    assert (by_name['other.org']['archive_count'], by_name['other.org']['size']) == \
+           (2, sizes[archive3.file_group.id] + sizes[archive2.file_group.id])
+    assert not any('file_group' in s for s in statements), '\n'.join(statements)

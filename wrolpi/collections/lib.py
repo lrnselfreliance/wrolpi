@@ -70,10 +70,8 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     Returns:
         List of collection dicts with statistics for each collection type
     """
-    # Local imports to avoid circular import: collections -> archive/videos -> collections
-    from modules.archive import Archive
+    # Local imports to avoid circular import: collections -> videos -> collections
     from modules.videos.models import Channel
-    from wrolpi.files.models import FileGroup
 
     # Serializing a Collection reads its tag and downloads; load them in two batch queries rather
     # than one lazy query per Collection (thousands of Collections on a large library).
@@ -88,24 +86,8 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
         return []
 
     # Separate collections by kind for batch processing
-    domain_ids = [c.id for c in collections if c.kind == 'domain']
     channel_ids = [c.id for c in collections if c.kind == 'channel']
     generic_ids = [c.id for c in collections if c.kind not in ('domain', 'channel')]
-
-    # Batch query: Get archive stats for all domain collections at once
-    domain_stats_map = {}
-    if domain_ids:
-        domain_stats = session.query(
-            Archive.collection_id,
-            func.count(Archive.id).label('archive_count'),
-            func.coalesce(func.sum(FileGroup.size), 0).label('size')
-        ).outerjoin(
-            FileGroup, FileGroup.id == Archive.file_group_id
-        ).filter(
-            Archive.collection_id.in_(domain_ids)
-        ).group_by(Archive.collection_id).all()
-
-        domain_stats_map = {s.collection_id: s for s in domain_stats}
 
     # Batch query: Get channel info and video stats for all channel collections at once.
     # `channel.video_count` and `channel.total_size` are maintained by triggers (see
@@ -152,9 +134,10 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
 
         # Add type-specific statistics from batch query results
         if collection.kind == 'domain':
-            stats = domain_stats_map.get(collection.id)
-            data['archive_count'] = stats.archive_count if stats else 0
-            data['size'] = int(stats.size) if stats else 0
+            # `collection.item_count` and `collection.total_size` are maintained by the archive
+            # triggers (see wrolpi/schema_ddl.py); no join through file_group needed.
+            data['archive_count'] = collection.item_count
+            data['size'] = collection.total_size
             data['domain'] = data['name']  # Alias for backward compatibility
 
         elif collection.kind == 'channel':

@@ -158,6 +158,59 @@ def test_drop_file_group_idempotency_preserves_fts(test_directory):
         assert len(hits) == 1
 
 
+def test_domain_collection_summary_migration_backfills(test_directory):
+    """The domain-summary migration installs the archive triggers and backfills the summary
+    columns of existing Domain Collections from their Archives."""
+    import sqlite3
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri, get_db_file
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_09_20_1200')
+
+    db_file = get_db_file()
+    directory = str(test_directory)
+    triggers = {'archive_insert_collection_summary', 'archive_delete_collection_summary',
+                'archive_update_collection_summary', 'file_group_size_collection_summary'}
+    with sqlite3.connect(db_file) as conn:
+        conn.execute('PRAGMA foreign_keys=ON')
+        # The baseline installs the current trigger DDL, so a fresh DB already has the archive
+        # triggers.  A production DB created before them does not; emulate that.
+        for name in triggers:
+            conn.execute(f'DROP TRIGGER {name}')
+        for id_, name, kind in ((1, 'example.com', 'domain'), (2, 'empty.org', 'domain'), (3, 'chan', 'channel')):
+            conn.execute('INSERT INTO collection (id, name, kind, item_count, total_size) VALUES (?, ?, ?, 0, 0)',
+                         (id_, name, kind))
+        for fg_id, stem, size in ((10, 'one', 100), (11, 'two', 250)):
+            conn.execute(
+                'INSERT INTO file_group (id, directory, primary_path, files, stem, size, indexed)'
+                ' VALUES (?,?,?,?,?,?,0)',
+                (fg_id, directory, str(test_directory / f'{stem}.html'), '[]', stem, size),
+            )
+            conn.execute('INSERT INTO archive (collection_id, file_group_id) VALUES (1, ?)', (fg_id,))
+        conn.commit()
+        # Nothing maintains the columns before the migration.
+        assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 1').fetchone() == (0, 0)
+
+    command.upgrade(config, 'head')
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 1').fetchone() == (2, 350)
+        assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 2').fetchone() == (0, 0)
+        assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 3').fetchone() == (0, 0)
+        installed = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE '%collection_summary'")}
+        assert installed == triggers
+        # The triggers are live after the migration.
+        conn.execute('DELETE FROM archive WHERE file_group_id = 11')
+        conn.commit()
+        assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 1').fetchone() == (1, 100)
+
+
 def test_bootstrap_lock(test_directory):
     """Only one process can hold the bootstrap lock."""
     with db_bootstrap.bootstrap_lock() as acquired:

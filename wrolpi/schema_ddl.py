@@ -12,7 +12,8 @@ All statements are idempotent (IF NOT EXISTS).
 """
 
 # Triggers maintaining the summary columns `channel.video_count`, `channel.total_size`,
-# `channel.minimum_frequency` and `file_group.effective_datetime`.
+# `channel.minimum_frequency`, `collection.item_count`/`collection.total_size` (domains) and
+# `file_group.effective_datetime`.
 #
 # These are re-authored from the old PL/pgSQL triggers (see git history of alembic/versions/).
 # The old triggers had known bugs which are fixed here:
@@ -68,6 +69,55 @@ TRIGGER_DDL = [
                           LEFT JOIN file_group fg ON v.file_group_id = fg.id
                           WHERE v.channel_id = channel.id)
         WHERE id = (SELECT channel_id FROM video WHERE file_group_id = new.id);
+    END
+    ''',
+    # collection.item_count + collection.total_size follow the Archives of a Domain Collection.
+    # (Channels keep their summary on the channel table; generic Collections count collection_item.)
+    '''
+    CREATE TRIGGER IF NOT EXISTS archive_insert_collection_summary
+    AFTER INSERT ON archive WHEN new.collection_id IS NOT NULL
+    BEGIN
+        UPDATE collection SET
+            item_count = (SELECT COUNT(*) FROM archive WHERE collection_id = collection.id),
+            total_size = (SELECT COALESCE(SUM(fg.size), 0) FROM archive a
+                          LEFT JOIN file_group fg ON a.file_group_id = fg.id
+                          WHERE a.collection_id = collection.id)
+        WHERE id = new.collection_id;
+    END
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS archive_delete_collection_summary
+    AFTER DELETE ON archive WHEN old.collection_id IS NOT NULL
+    BEGIN
+        UPDATE collection SET
+            item_count = (SELECT COUNT(*) FROM archive WHERE collection_id = collection.id),
+            total_size = (SELECT COALESCE(SUM(fg.size), 0) FROM archive a
+                          LEFT JOIN file_group fg ON a.file_group_id = fg.id
+                          WHERE a.collection_id = collection.id)
+        WHERE id = old.collection_id;
+    END
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS archive_update_collection_summary
+    AFTER UPDATE OF collection_id, file_group_id ON archive
+    BEGIN
+        UPDATE collection SET
+            item_count = (SELECT COUNT(*) FROM archive WHERE collection_id = collection.id),
+            total_size = (SELECT COALESCE(SUM(fg.size), 0) FROM archive a
+                          LEFT JOIN file_group fg ON a.file_group_id = fg.id
+                          WHERE a.collection_id = collection.id)
+        WHERE id IN (old.collection_id, new.collection_id);
+    END
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS file_group_size_collection_summary
+    AFTER UPDATE OF size ON file_group WHEN old.size IS NOT new.size
+    BEGIN
+        UPDATE collection SET
+            total_size = (SELECT COALESCE(SUM(fg.size), 0) FROM archive a
+                          LEFT JOIN file_group fg ON a.file_group_id = fg.id
+                          WHERE a.collection_id = collection.id)
+        WHERE id = (SELECT collection_id FROM archive WHERE file_group_id = new.id);
     END
     ''',
     # channel.minimum_frequency follows the Downloads of the Channel's Collection.

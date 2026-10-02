@@ -130,6 +130,9 @@ services:
       # Set EXTRA_SANS to include the host's LAN IP in the TLS certificate.
       # Example: EXTRA_SANS=IP:10.0.0.5
       - EXTRA_SANS=${EXTRA_SANS:-}
+    # Caddy is PID 1 and reaps nothing; busybox wget's ssl_client helper from the healthcheck is
+    # orphaned to it and stays a zombie (one per check).  init runs tini as PID 1 to reap them.
+    init: true
     healthcheck:
       test: [ 'CMD-SHELL', 'wget --spider --no-check-certificate https://127.0.0.1:443 || exit 1' ]
       interval: 1m
@@ -165,5 +168,5 @@ services:
     volumes:
       - './docker/help/wrolpi-help:/opt/wrolpi-help'
     healthcheck:
-      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8086' ]
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]  # mkdocs serves on 80; 8086 is Caddy's proxy.
       interval: 1m

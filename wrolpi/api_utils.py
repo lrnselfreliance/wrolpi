@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import signal
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
@@ -22,6 +23,18 @@ logger = logger.getChild(__name__)
 # Tell Sanic to use 'fork' and that the start method is already configured.
 Sanic.start_method = "fork"
 Sanic.START_METHOD_SET = True
+
+
+def _reset_inherited_signal_handlers():
+    """A forked worker carries the manager's SIGTERM/SIGINT handlers until Sanic installs the worker's own.  In
+    that window (startup listeners, ~2s with many workers) a signal must do the default thing, exit, rather than
+    run the manager's handler inside the child.  Otherwise a second auto-reload leaves the half-started
+    generation alive, untracked, holding the listening socket."""
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, signal.SIG_DFL)
+
+
+os.register_at_fork(after_in_child=_reset_inherited_signal_handlers)
 
 # The only Sanic App, this is imported all over.
 api_app = Sanic(name='api_app', log_config=LOGGING_CONFIG)

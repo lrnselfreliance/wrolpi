@@ -369,3 +369,38 @@ def test_flag_context_manager_records_its_holder(async_client, flags_lock):
         assert api_app.shared_ctx.flag_holders['file_worker_modeling'] == os.getpid()
     assert flags.file_worker_modeling.holder_pid() is None
     assert not flags.file_worker_modeling.is_set()
+
+
+def _sleep_then_exit_zero():
+    # Stands in for a Sanic worker between fork and `_setup_system_signals`: no handlers of its own yet.
+    time.sleep(3)
+
+
+def _parent_handler_that_returns(signum, frame):
+    # Stands in for `WorkerManager.shutdown_signal`: it returns, it does not exit.
+    pass
+
+
+def test_forked_child_dies_on_sigterm_before_installing_handlers():
+    """A forked worker inherits the manager's Python signal handlers.  Until Sanic installs the worker's own,
+    SIGTERM must kill the child (the default action) rather than run the manager's handler inside it, which lets a
+    half-started worker survive a restart as an untracked orphan."""
+    saved = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        for sig in saved:
+            signal.signal(sig, _parent_handler_that_returns)
+        process = multiprocessing.get_context('fork').Process(target=_sleep_then_exit_zero)
+        process.start()
+        try:
+            time.sleep(0.3)
+            process.terminate()  # What `WorkerProcess._terminate_now` sends on restart.
+            process.join(5)
+            assert process.exitcode == -signal.SIGTERM, \
+                f'child survived SIGTERM (exitcode={process.exitcode}); it ran the inherited handler'
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(5)
+    finally:
+        for sig, handler in saved.items():
+            signal.signal(sig, handler)

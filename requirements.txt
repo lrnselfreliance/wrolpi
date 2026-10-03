@@ -13,7 +13,7 @@ libzim==3.10.0
 mock==5.2.0
 psutil==7.2.2
 pydantic>=2.0.0
-PyMuPDF>=1.27.2.3
+PyMuPDF>=1.28.2
 pytest-asyncio==1.4.0
 # pytest.ini sets `timeout = 30` and asks that it not be removed, but this was never declared
 # here -- so on any machine without it, and in CI, which installs only this file, the option was

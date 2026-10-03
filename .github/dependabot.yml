@@ -7,6 +7,14 @@ updates:
       interval: "monthly"
     target-branch: "master"
     open-pull-requests-limit: 5
+    ignore:
+      # alembic >=1.11 requires SQLAlchemy 2; requirements.txt pins SQLAlchemy 1.3.
+      # Grouped PRs containing it fail to install, so hold alembic until the
+      # SQLAlchemy 2 migration lands.
+      - dependency-name: "alembic"
+        versions: [">=1.11"]
+      - dependency-name: "SQLAlchemy"
+        update-types: ["version-update:semver-major"]
     groups:
       python-dependencies:
         patterns:

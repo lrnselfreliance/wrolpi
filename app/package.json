@@ -65,7 +65,7 @@
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "typescript": "^5.9.3",
-    "webpack-dev-server": "^5.2.6"
+    "webpack-dev-server": "^6.0.0"
   },
   "jest": {
     "transformIgnorePatterns": [

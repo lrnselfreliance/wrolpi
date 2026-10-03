@@ -9,7 +9,6 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi import lang
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger
-from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from . import lib, schema
@@ -65,13 +64,12 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
     body=schema.ZimSearchRequest,
 )
 @validate(schema.ZimSearchRequest)
-async def search_all_zims(_: Request, body: schema.ZimSearchRequest):
-    # libzim searches are synchronous and slow; run off the event loop.  The session is opened in the
-    # worker thread: a SQLAlchemy Session must not be shared across threads.
+async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
+    # libzim searches are synchronous and slow; run off the event loop.  The request's Session is used
+    # in the worker thread; the handler awaits the thread, so the Session has one user at a time.
     def search():
-        with get_db_session() as session:
-            return lib.search_all_zims(session, body.search_str, tag_names=body.tag_names, offset=body.offset,
-                                       limit=body.limit)
+        return lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
+                                   offset=body.offset, limit=body.limit)
 
     results = await asyncio.to_thread(search)
     return json_response({'zims': results})
@@ -84,11 +82,10 @@ async def search_all_zims(_: Request, body: schema.ZimSearchRequest):
     response=schema.ZimSearchResponse,
 )
 @validate(schema.ZimSearchRequest)
-async def search_zim(_: Request, zim_id: int, body: schema.ZimSearchRequest):
+async def search_zim(request: Request, zim_id: int, body: schema.ZimSearchRequest):
     def search():
-        with get_db_session() as session:
-            return lib.headline_zim(session, body.search_str, zim_id, tag_names=body.tag_names, offset=body.offset,
-                                    limit=body.limit)
+        return lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
+                                offset=body.offset, limit=body.limit)
 
     headlines = await asyncio.to_thread(search)
     return json_response({'zim': headlines})
@@ -219,17 +216,14 @@ async def post_search_estimates(request: Request, body: schema.SearchEstimateReq
         return response.empty(HTTPStatus.BAD_REQUEST)
 
     def estimate():
-        zims_estimates = list()
-        with get_db_session() as session:
-            if body.tag_names:
-                # Get actual count of entries tagged with the tag names.
-                counts = Zims.entries_with_tags(session, body.tag_names)
-            else:
-                # Get estimates using libzim.
-                counts = Zims.estimate(session, body.search_str)
-            for zim, count in counts.items():
-                zims_estimates.append(dict(estimate=count, **zim.__json__()))
-        return zims_estimates
+        session = request.ctx.session
+        if body.tag_names:
+            # Get actual count of entries tagged with the tag names.
+            counts = Zims.entries_with_tags(session, body.tag_names)
+        else:
+            # Get estimates using libzim.
+            counts = Zims.estimate(session, body.search_str)
+        return [dict(estimate=count, **zim.__json__()) for zim, count in counts.items()]
 
     zims_estimates = await asyncio.to_thread(estimate)
 

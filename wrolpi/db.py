@@ -174,15 +174,55 @@ def _get_db_session():
     return engine, session
 
 
+def _refuse_non_test_engine(engine: sqlalchemy.engine.Engine):
+    from wrolpi.common import is_tempfile
+    if PYTEST and not is_tempfile(engine.url.database or ''):
+        raise ValueError(f'Running tests, but a test database is not being used!! {engine.url=}')
+
+
 def get_db_context() -> Tuple[sqlalchemy.engine.Engine, Session]:
     """
     Get a DB engine and session.
     """
-    from wrolpi.common import is_tempfile
     local_engine, session = _get_db_session()
-    if PYTEST and not is_tempfile(local_engine.url.database or ''):
-        raise ValueError(f'Running tests, but a test database is not being used!! {local_engine.url=}')
+    _refuse_non_test_engine(local_engine)
     return local_engine, session
+
+
+class RequestSession(Session):
+    """A Session that keeps one connection for its whole life, opened at its first statement.
+
+    An engine-bound Session releases its connection at every commit, and NullPool then closes it, so a
+    request that commits and keeps working would reconnect (a connect plus PRAGMAs each time).  This
+    Session binds itself to a single Connection, created lazily, so transactions after a commit reuse
+    it.  `close()` releases the connection."""
+
+    def __init__(self, engine: sqlalchemy.engine.Engine, **kwargs):
+        super().__init__(**kwargs)
+        self._request_engine = engine
+        self._request_connection = None
+
+    def get_bind(self, mapper=None, clause=None, **kwargs):
+        if self._request_connection is None:
+            self._request_connection = self._request_engine.connect()
+        return self._request_connection
+
+    def close(self):
+        try:
+            super().close()
+        finally:
+            if self._request_connection is not None:
+                self._request_connection.close()
+                self._request_connection = None
+
+
+def _get_request_session() -> Tuple[sqlalchemy.engine.Engine, Session]:
+    """Create the Session for one API request.
+
+    This function allows the database to be wrapped during testing.  See: wrolpi.conftest.test_session
+    """
+    engine = get_engine()
+    return engine, RequestSession(engine)
 
 
 @contextmanager
@@ -275,6 +315,86 @@ def get_db_curs(commit: bool = False) -> Generator[sqlite3.Cursor, Any, None]:
             if connection.in_transaction:
                 connection.rollback()
             connection.close()
+
+
+def _session_has_connection(session: Session) -> bool:
+    """True if the Session's transaction has already connected (and so already emitted BEGIN)."""
+    # SQLAlchemy 1.3 has no public API for this; 2.0 replaces it with `session.in_transaction()`.
+    transaction = session.transaction
+    return transaction is not None and bool(transaction._connections)
+
+
+class RequestDB:
+    """The database handle for one API request: `request.ctx.db`.
+
+    One Session per request, and raw cursors (`curs()`) on that Session's connection, so a request
+    uses at most one SQLite connection.  Creating the handle does no I/O; SQLAlchemy connects at the
+    first statement, so requests that never touch the database never connect.  The response
+    middleware calls `finish()`.
+
+    Reads begin deferred, so they never take the write lock.  A handler that writes does so inside
+    `write()`, which begins the transaction as a writer and commits when the block exits; the write
+    lock is held only for that block, never for the rest of the handler or for background work the
+    handler starts afterwards.  (See `get_db_session` for why a writer must take the lock at BEGIN.)
+
+    Code that runs outside a request (workers, switches, perpetual loops) uses `get_db_session` and
+    `get_db_curs`; they open their own connection.
+    """
+
+    def __init__(self):
+        self.engine, self.session = _get_request_session()
+        _refuse_non_test_engine(self.engine)
+
+    @contextmanager
+    def curs(self) -> Generator[sqlite3.Cursor, Any, None]:
+        """A raw `sqlite3.Cursor` on this request's connection, inside the Session's transaction.
+
+        Pending ORM changes are flushed first, so raw SQL sees them.  Writes through the cursor commit
+        or roll back with the request (or with the enclosing `write()` block).  Rows are `sqlite3.Row`."""
+        self.session.flush()
+        curs = self.session.connection().connection.cursor()
+        curs.row_factory = sqlite3.Row
+        try:
+            yield curs
+        finally:
+            curs.close()
+
+    @contextmanager
+    def write(self) -> Generator[Session, Any, None]:
+        """Begin a write transaction (BEGIN IMMEDIATE) on the request's connection; commit on exit.
+
+        If the request already read, its deferred transaction is committed first: SQLite cannot upgrade
+        a deferred transaction to a writer under `busy_timeout`, and its snapshot is stale for a writer
+        anyway.  Any changes pending in the Session at that point are committed with it."""
+        session = self.session
+        if _session_has_connection(session):
+            session.commit()
+        token = _immediate_txn.set(True)
+        try:
+            session.connection()
+        finally:
+            _immediate_txn.reset(token)
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+
+    def finish(self, ok: bool):
+        """End the request: commit if `ok`, otherwise roll back; then release the connection."""
+        try:
+            if ok:
+                self.session.commit()
+            else:
+                self.session.rollback()
+        except Exception:
+            self.session.rollback()
+            raise
+        finally:
+            # In tests the shared `test_session` fixture owns the Session's lifecycle.
+            if not PYTEST:
+                self.session.close()
 
 
 def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session) -> List[Base]:

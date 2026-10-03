@@ -12,6 +12,7 @@ from pathlib import Path
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
+from wrolpi.db import RequestDB
 from wrolpi.errors import APIError
 from wrolpi.perpetual import PERPETUAL_LOOPS, PER_WORKER_TASKS, PerpetualLoop, run_loop
 from wrolpi.vars import PYTEST
@@ -141,37 +142,26 @@ api_app.error_handler.add(Exception, json_error_handler)
 
 @api_app.middleware('request')
 async def inject_session(request: Request):
-    """Inject a database session into the request context.
+    """Give the request its database handle, `request.ctx.db` (see `wrolpi.db.RequestDB`).
 
-    This session is deliberately *deferred*, even for a POST: it is committed by the response
-    middleware, so a writer would hold the SQLite write lock for the whole handler -- including the
-    slow parts (a chunk being written to disk, a subprocess) and including any background task the
-    handler fires before returning.  A handler that writes should use `get_db_session(commit=True)`,
-    which begins as a writer and commits before the handler returns.
+    `request.ctx.session` is the handle's Session.  It begins *deferred*, even for a POST, because it
+    is committed by the response middleware: a writer would hold the SQLite write lock for the whole
+    handler -- including the slow parts (a chunk being written to disk, a subprocess) and any
+    background task the handler fires before returning.  A handler that writes does so in
+    `request.ctx.db.write()`, which begins as a writer and commits when its block exits.
+
+    Nothing connects until the handler's first statement, so requests that never touch the database
+    cost nothing here.
     """
-    from wrolpi.db import get_db_context
-    engine, session = get_db_context()
-    request.ctx.session = session
-    request.ctx._db_engine = engine
+    request.ctx.db = RequestDB()
+    request.ctx.session = request.ctx.db.session
 
 
 @api_app.middleware('response')
 async def cleanup_session(request: Request, response_: HTTPResponse):
-    """Cleanup session after request completes."""
-    if hasattr(request.ctx, 'session'):
-        session = request.ctx.session
-        try:
-            if response_.status < 400:
-                session.commit()
-            else:
-                session.rollback()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            # Don't close session during tests - the test_session fixture manages it.
-            if not PYTEST:
-                session.close()
+    """Commit (or, for an error response, roll back) the request's transaction and release its connection."""
+    if hasattr(request.ctx, 'db'):
+        request.ctx.db.finish(ok=response_.status < 400)
     return response_
 
 

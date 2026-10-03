@@ -4,6 +4,7 @@ from http import HTTPStatus
 import pytest
 
 from wrolpi.collections.models import Collection
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 
 
 @pytest.mark.asyncio
@@ -157,38 +158,32 @@ async def test_add_file_item(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_item_write_endpoints_use_write_intent_sessions(async_client, test_session):
-    """The item write endpoints (add/remove/reorder) each open their session with
-    `get_db_session(commit=True)` — the deferred `request.ctx.session` reads before its first
-    write, which SQLite fails instantly on concurrent writes (see `get_db_session`)."""
-    from unittest import mock
-    from wrolpi.collections import api as collections_api
-    from wrolpi.db import get_db_session
+async def test_item_write_endpoints_wait_for_a_concurrent_writer(async_client, test_session):
+    """Add, reorder and remove each read before they write, so each must begin as a writer.
 
+    SQLite fails a deferred transaction's read-to-write lock upgrade *instantly* ("database is locked")
+    if another connection wrote meanwhile; a transaction that begins as a writer waits out the lock
+    (busy_timeout) instead.  Here a concurrent writer holds the lock while each request starts."""
     _, response = await async_client.post('/api/collections', json={'name': 'Locks'})
     cid = response.json['collection']['id']
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
 
-    commit_kwargs = list()
-
-    def recording_get_db_session(*args, **kwargs):
-        commit_kwargs.append(kwargs.get('commit', args[0] if args else False))
-        return get_db_session(*args, **kwargs)
-
-    with mock.patch.object(collections_api, 'get_db_session', recording_get_db_session):
-        _, response = await async_client.post(f'/api/collections/{cid}/items',
-                                              json={'item_kind': 'url', 'url': '/u/a', 'title': 'a'})
+    with production_like_sessions(test_session):
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.post(f'/api/collections/{cid}/items',
+                                                  json={'item_kind': 'url', 'url': '/u/a', 'title': 'a'})
         assert response.status_code == HTTPStatus.CREATED, response.json
         item_id = response.json['item']['id']
 
-        _, response = await async_client.put(f'/api/collections/{cid}/items/order',
-                                             json={'item_ids': [item_id]})
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.put(f'/api/collections/{cid}/items/order',
+                                                 json={'item_ids': [item_id]})
         assert response.status_code == HTTPStatus.OK, response.json
 
-        _, response = await async_client.delete(f'/api/collections/{cid}/items/{item_id}')
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.delete(f'/api/collections/{cid}/items/{item_id}')
         assert response.status_code == HTTPStatus.NO_CONTENT
-
-    assert len(commit_kwargs) == 3, 'Each item write endpoint must open its own session'
-    assert all(commit is True for commit in commit_kwargs)
 
 
 @pytest.mark.asyncio

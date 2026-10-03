@@ -80,6 +80,10 @@ updates:
       # @testing-library/react 14+ async act semantics break menu/popover tests.
       - dependency-name: "@testing-library/react"
         update-types: ["version-update:semver-major"]
+      # Cypress component testing resolves the top-level webpack-dev-server and only
+      # accepts major 5; 6 crashes cypress.config.js ("Unexpected major version").
+      - dependency-name: "webpack-dev-server"
+        versions: [">=6"]
     groups:
       npm-dependencies:
         patterns:

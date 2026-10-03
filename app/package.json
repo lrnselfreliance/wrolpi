@@ -10,7 +10,7 @@
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
     "@tabler/icons-react": "^3.48.0",
-    "@testing-library/react": "^13.4.0",
+    "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "cypress": "^15.21.1",
     "esptool-js": "^0.7.0",

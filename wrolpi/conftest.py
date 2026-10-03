@@ -45,7 +45,7 @@ from wrolpi.common import logger, await_background_tasks as await_background_tas
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
-from wrolpi.db import create_wrolpi_engine
+from wrolpi.db import create_wrolpi_engine, RequestSession
 from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
@@ -91,7 +91,8 @@ def test_session(test_directory) -> Generator[Session, Any, None]:
         return test_engine, session
 
     try:
-        with mock.patch('wrolpi.db._get_db_session', fake_get_db_session):
+        with mock.patch('wrolpi.db._get_db_session', fake_get_db_session), \
+                mock.patch('wrolpi.db._get_request_session', fake_get_db_session):
             yield session
     finally:
         session.rollback()
@@ -239,6 +240,11 @@ class AutoAwaitTestClient:
     async def websocket(self, *args, **kwargs):
         """WebSocket connection (pass-through)."""
         return await self._client.websocket(*args, **kwargs)
+
+    @property
+    def unawaited(self) -> SanicASGITestClient:
+        """The underlying client: requests return without awaiting switches or background tasks."""
+        return self._client
 
     @property
     def sanic_app(self):
@@ -460,7 +466,8 @@ def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]
     one `with` block stays attached for the next and exceptions never roll back.  That convenience masks
     detached-object and transaction-rollback bugs that only bite production's per-call sessions.  Use this to
     exercise that behavior: the yielded sessionmaker creates independent Sessions so a test can verify committed
-    DB state the way a separate worker would see it.
+    DB state the way a separate worker would see it.  API requests get a fresh `RequestSession` each, as in
+    production.
 
     A dedicated NullPool engine is used and disposed on exit so its connections are released before the test DB
     is dropped during fixture teardown.
@@ -474,8 +481,14 @@ def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]
         sessions.append(session)
         return engine, session
 
+    def request_factory():
+        session = RequestSession(engine)
+        sessions.append(session)
+        return engine, session
+
     try:
-        with mock.patch('wrolpi.db._get_db_session', factory):
+        with mock.patch('wrolpi.db._get_db_session', factory), \
+                mock.patch('wrolpi.db._get_request_session', request_factory):
             yield maker
     finally:
         for session in sessions:
@@ -486,6 +499,47 @@ def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]
                 # close() is inconsequential.  Log at debug so it surfaces under -vvv without noising CI.
                 logger.debug(f'production_like_sessions: failed to close a session: {e}')
         engine.dispose()
+
+
+@contextlib.contextmanager
+def count_connections(maker: sessionmaker) -> Generator[List[int], Any, None]:
+    """Record every SQLite connection opened on a `production_like_sessions` engine during the block.
+
+    Yields a list that gains one entry per connection, so `len()` is the count.  Each connection
+    costs a connect plus WROLPi's PRAGMAs (about 3 ms on a Raspberry Pi 4), so an API request should
+    open at most one."""
+    engine = maker.kw['bind']
+    opened = list()
+
+    def on_connect(*_):
+        opened.append(1)
+
+    sqlalchemy.event.listen(engine, 'connect', on_connect)
+    try:
+        yield opened
+    finally:
+        sqlalchemy.event.remove(engine, 'connect', on_connect)
+
+
+async def count_request_connections(async_client: 'AutoAwaitTestClient', test_session: Session, method: str,
+                                    path: str, **kwargs) -> Tuple[Any, int]:
+    """Send one request with production's per-call sessions; return its response and how many SQLite
+    connections the request opened.
+
+    The test's data must already be in `test_session` (it is committed here so other connections see
+    it).  Switches and background tasks are awaited only after counting, so the count is the request's
+    own work: in tests, `background_task_listener` would otherwise run switches inside the request,
+    where production runs them in the switch worker."""
+    test_session.commit()
+    with production_like_sessions(test_session) as maker:
+        with count_connections(maker) as opened, \
+                mock.patch(f'{__name__}.await_switches_', mock.AsyncMock()):
+            _, response = await getattr(async_client.unawaited, method.lower())(path, **kwargs)
+        count = len(opened)
+        await await_switches_()
+        await await_background_tasks_()
+    test_session.expire_all()
+    return response, count
 
 
 @pytest.fixture

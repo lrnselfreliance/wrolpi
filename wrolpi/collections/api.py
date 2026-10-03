@@ -10,7 +10,6 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
-from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
@@ -91,8 +90,8 @@ async def create_collection_endpoint(request: Request, body: schema.CollectionCr
 async def add_collection_item_endpoint(request: Request, collection_id: int, body: schema.AddItemRequest):
     """Append (or insert at ``position``) a file/zim/url item into the collection."""
     try:
-        # Read-then-write, so the session must begin as a writer (see `get_db_session`).
-        with get_db_session(commit=True) as session:
+        # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).
+        with request.ctx.db.write() as session:
             item, created = lib.add_collection_item(
                 session, collection_id, item_kind=body.item_kind,
                 file_group_id=body.file_group_id, zim_id=body.zim_id, zim_entry=body.zim_entry,
@@ -114,7 +113,7 @@ async def add_collection_item_endpoint(request: Request, collection_id: int, bod
 async def remove_collection_item_endpoint(request: Request, collection_id: int, item_id: int):
     """Remove a single item by its id and close the ordering gap."""
     try:
-        with get_db_session(commit=True) as session:
+        with request.ctx.db.write() as session:
             removed = lib.remove_collection_item(session, collection_id, item_id)
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
@@ -139,7 +138,7 @@ async def reorder_collection_items_endpoint(request: Request, collection_id: int
                                             body: schema.ReorderItemsRequest):
     """Set the item order from a full list of item ids (used by drag-and-drop)."""
     try:
-        with get_db_session(commit=True) as session:
+        with request.ctx.db.write() as session:
             lib.reorder_collection_items(session, collection_id, body.item_ids)
             data = lib.get_collection_with_stats(session, collection_id)
     except UnknownCollection as e:

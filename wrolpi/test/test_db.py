@@ -3,8 +3,9 @@ import sqlite3
 
 import pytest
 
-from wrolpi.conftest import production_like_sessions, probe_write_lock_is_held
-from wrolpi.db import get_db_session, _configure_sqlite_connection
+from wrolpi.conftest import production_like_sessions, probe_write_lock_is_held, count_connections
+from wrolpi.db import get_db_session, _configure_sqlite_connection, RequestDB, RequestSession
+from wrolpi.tags import Tag
 
 
 class _FakeCursor:
@@ -160,3 +161,98 @@ async def test_background_task_does_not_inherit_write_intent(test_session):
 
     assert held_during_child_read['held'] is False, \
         'a read session in a spawned task took the write lock, inheriting the parent write intent'
+
+
+def test_request_db_does_no_io_until_used(test_session):
+    """Creating the request handle opens no connection; most endpoints never touch the database."""
+    test_session.commit()
+    with production_like_sessions(test_session) as maker, count_connections(maker) as opened:
+        db = RequestDB()
+        db.finish(ok=True)
+    assert len(opened) == 0
+
+
+def test_request_db_cursor_shares_the_session_connection(test_session):
+    """`curs()` runs on the Session's connection and inside its transaction: one connection per request,
+    and raw SQL sees the request's own ORM changes."""
+    test_session.commit()
+    with production_like_sessions(test_session) as maker, count_connections(maker) as opened:
+        db = RequestDB()
+        db.session.add(Tag(name='shared', color='#000000'))
+        with db.curs() as curs:
+            curs.execute("SELECT name FROM tag WHERE name = 'shared'")
+            assert [tuple(row) for row in curs.fetchall()] == [('shared',)]
+        db.finish(ok=False)
+    assert len(opened) == 1
+
+    # finish(ok=False) rolled the uncommitted Tag back.
+    assert test_session.query(Tag).filter_by(name='shared').count() == 0
+
+
+def test_request_db_write_holds_the_write_lock_only_inside_the_block(test_session):
+    """`write()` begins as a writer (BEGIN IMMEDIATE) and commits on exit, so the write lock is not held
+    for the rest of the handler, or by any background work the handler starts afterwards."""
+    db_file = test_session.get_bind().url.database
+    test_session.commit()
+    with production_like_sessions(test_session) as maker, count_connections(maker) as opened:
+        db = RequestDB()
+        # A read first, as most write handlers do (validation, conflict checks).
+        db.session.query(Tag).count()
+        assert not probe_write_lock_is_held(db_file), 'a read must not take the write lock'
+
+        with db.write() as session:
+            assert probe_write_lock_is_held(db_file), 'write() did not take the write lock at BEGIN'
+            session.add(Tag(name='written', color='#000000'))
+
+        assert not probe_write_lock_is_held(db_file), 'write() held the lock after its block'
+        db.finish(ok=True)
+    assert len(opened) == 1, 'the write reused the request connection'
+
+    assert test_session.query(Tag).filter_by(name='written').count() == 1
+
+
+def test_request_db_write_rolls_back_on_error(test_session):
+    """An exception inside `write()` rolls its changes back and releases the write lock."""
+    db_file = test_session.get_bind().url.database
+    test_session.commit()
+    with production_like_sessions(test_session):
+        db = RequestDB()
+        with pytest.raises(ValueError):
+            with db.write() as session:
+                session.add(Tag(name='discarded', color='#000000'))
+                session.flush()
+                raise ValueError('handler failed')
+        assert not probe_write_lock_is_held(db_file)
+        db.finish(ok=False)
+
+    assert test_session.query(Tag).filter_by(name='discarded').count() == 0
+
+
+def test_request_db_finish_commits_reads_and_writes(test_session):
+    """`finish(ok=True)` commits whatever the request's session changed (the existing response-middleware
+    contract for handlers that write through `request.ctx.session`)."""
+    test_session.commit()
+    with production_like_sessions(test_session):
+        db = RequestDB()
+        db.session.add(Tag(name='committed', color='#000000'))
+        db.finish(ok=True)
+
+    assert test_session.query(Tag).filter_by(name='committed').count() == 1
+
+
+def test_request_session_keeps_one_connection_until_closed(test_session):
+    """A RequestSession reuses its connection across commits and releases it on close (production's
+    `RequestDB.finish`); a later statement reconnects."""
+    test_session.commit()
+    with production_like_sessions(test_session) as maker, count_connections(maker) as opened:
+        session = RequestSession(maker.kw['bind'])
+        session.query(Tag).count()
+        session.commit()
+        session.query(Tag).count()
+        assert len(opened) == 1, 'the commit released the connection'
+
+        session.close()
+        assert session._request_connection is None
+        session.query(Tag).count()
+        assert len(opened) == 2, 'a closed RequestSession did not reconnect'
+        session.close()

@@ -6,7 +6,7 @@
     "@acalcutt/maplibre-contour-pmtiles": "^0.1.2",
     "@artsy/fresnel": "^8.5.0",
     "@cypress/react18": "^2.0.1",
-    "@mantine/core": "^8.3.18",
+    "@mantine/core": "^9.6.3",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
     "@tabler/icons-react": "^3.48.0",

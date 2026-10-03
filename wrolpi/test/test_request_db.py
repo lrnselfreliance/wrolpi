@@ -92,7 +92,8 @@ async def test_zim_search_uses_one_connection(async_client, test_session, zim_fa
 @pytest.mark.asyncio
 @pytest.mark.parametrize('path', ['/api/files/search', '/api/videos/search'])
 async def test_search_uses_one_connection(async_client, test_session, simple_channel, video_factory, path):
-    """The search helpers in `wrolpi.files.lib` open a cursor, then a separate session."""
+    """`count_file_groups` opens a cursor for the total (skipped when the total is cached), then
+    `handle_file_group_search_results` opens another cursor and a separate session for the page."""
     video_factory(title='a video', channel_id=simple_channel.id)
     response, count = await count_request_connections(
         async_client, test_session, 'post', path, json={'search_str': 'video'})
@@ -103,7 +104,8 @@ async def test_search_uses_one_connection(async_client, test_session, simple_cha
 @OPENS_OWN_CONNECTION
 @pytest.mark.asyncio
 async def test_channel_uses_one_connection(async_client, test_session, simple_channel):
-    """`get_channel` and the Channel's statistics each open their own session."""
+    """`get_channel` uses the request session, but `Channel.get_statistics` opens a raw cursor of its own
+    (`get_db_curs`)."""
     response, count = await count_request_connections(
         async_client, test_session, 'get', f'/api/videos/channels/{simple_channel.id}')
     assert response.status_code == HTTPStatus.OK, response.body

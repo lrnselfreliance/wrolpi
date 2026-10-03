@@ -411,3 +411,15 @@ def test_get_custom_zims_directory(async_client, test_directory, test_wrolpi_con
     get_wrolpi_config().zims_destination = 'custom/zims'
 
     assert lib.get_zim_directory() == (test_directory / 'custom/zims')
+
+
+def test_get_estimates_is_cached():
+    """Repeated estimates for the same search string do not re-query the Zims."""
+    from unittest import mock
+    from modules.zim import lib
+
+    lib.get_estimates.cache_clear()
+    with mock.patch.object(lib.Zims, 'get_all', return_value=[]) as get_all:
+        assert lib.get_estimates('cached search') == []
+        assert lib.get_estimates('cached search') == []
+    assert get_all.call_count == 1

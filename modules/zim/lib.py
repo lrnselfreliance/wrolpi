@@ -260,7 +260,7 @@ def search_all_zims(session: Session, search_str: str, tag_names: List[str] = No
     return all_results
 
 
-@cachetools.func.mru_cache(maxsize=1_000)
+@cachetools.func.lru_cache(maxsize=1_000)
 def get_estimates(search_str: str) -> List[int]:
     zims = Zims.get_all()
     estimates = [i.estimate(search_str) for i in zims]

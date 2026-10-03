@@ -15,9 +15,6 @@ updates:
         versions: [">=1.4"]
       - dependency-name: "alembic"
         versions: [">=1.11"]
-      # cachetools 6 removed cachetools.func.mru_cache, still used by modules/zim.
-      - dependency-name: "cachetools"
-        update-types: ["version-update:semver-major"]
     groups:
       python-dependencies:
         patterns:

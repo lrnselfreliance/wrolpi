@@ -238,7 +238,7 @@ async def test_handle_reorganize_marks_job_failed_on_exception(
     )
     file_worker._set_job_status(job_id, 'pending')
 
-    with mock.patch('wrolpi.files.worker.shutil.move', side_effect=OSError('disk full')):
+    with mock.patch('wrolpi.files.reorganize_job.shutil.move', side_effect=OSError('disk full')):
         await file_worker.handle_reorganize(task)
 
     assert file_worker.get_job_status(job_id) == 'failed'

@@ -835,6 +835,11 @@ async def test_file_worker_refresh_inserts_new_files(async_client, test_session,
     # Now add a real video file that shares a stem with file1
     # (must be a real video file so get_mimetype returns video/mp4)
     video_file_factory(test_directory / 'docs/file1.mp4')
+    # Under pytest every get_db_session() is this one shared session.  The FileGroups queried
+    # above would otherwise sit stale in its identity map while the refresh upserts by raw
+    # SQL, and the modeler would then write that stale file list back over the upsert.
+    # Production opens a fresh session per block, so only the test needs this.
+    test_session.expire_all()
 
     # Refresh again - should detect the modified FileGroup
     task = FileTask(FileTaskType.refresh, [test_directory], count=4)

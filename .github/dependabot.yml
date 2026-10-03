@@ -71,6 +71,15 @@ updates:
       # Mantine 9: all @mantine packages move together with app code changes.
       - dependency-name: "@mantine/*"
         update-types: ["version-update:semver-major"]
+      # Cypress 16 requires Node >=22; CI and the app image run Node 20.
+      - dependency-name: "cypress"
+        versions: [">=16"]
+      # react-router 8 is a routing migration across ~40 files.
+      - dependency-name: "react-router"
+        update-types: ["version-update:semver-major"]
+      # @testing-library/react 14+ async act semantics break menu/popover tests.
+      - dependency-name: "@testing-library/react"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-dependencies:
         patterns:

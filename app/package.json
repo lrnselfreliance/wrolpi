@@ -7,7 +7,7 @@
     "@artsy/fresnel": "^8.5.0",
     "@cypress/react18": "^2.0.1",
     "@mantine/core": "^8.3.18",
-    "@mantine/hooks": "^8.3.18",
+    "@mantine/hooks": "^9.6.3",
     "@mantine/notifications": "^8.3.18",
     "@tabler/icons-react": "^3.48.0",
     "@testing-library/react": "^13.4.0",

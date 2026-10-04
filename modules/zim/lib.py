@@ -586,8 +586,10 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
         deleted_count += 1
 
     if deleted_count:
-        # Refresh synchronously to clean up DB before returning.
-        await file_worker.refresh_sync(list(outdated))
+        # Refresh synchronously to clean up DB before returning.  Deleting needs no modeling, and the
+        # global modelers would work through the whole unindexed backlog inside this request.
+        await file_worker.refresh_sync(list(outdated), post_processing=False)
+        flag_outdated_zim_files()
 
         # Trigger Kiwix restart so the deleted zim files are no longer served.
         restart_kiwix_handler.activate_switch()

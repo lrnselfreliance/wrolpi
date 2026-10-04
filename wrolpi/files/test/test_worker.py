@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 from sqlalchemy import text
 
+from wrolpi import flags
 from wrolpi.conftest import await_switches
 from wrolpi.dates import from_timestamp
 from wrolpi.vars import IS_MACOS
@@ -635,6 +636,25 @@ async def test_refresh_sync_records_error_status_on_failure(async_client, test_s
 
     assert file_worker.status['status'] == 'error'
     assert 'boom' in (file_worker.status['error'] or '')
+
+
+@pytest.mark.asyncio
+async def test_refresh_sync_resets_status_when_cancelled(async_client, test_session, test_directory,
+                                                         make_files_structure, flags_lock):
+    """A cancelled synchronous refresh must not strand the status at its last phase.
+
+    `refresh_sync` runs inside request handlers, which Sanic cancels on response timeout.  The
+    phase flags clear when their `with` block unwinds, but the shared status does not, so the
+    status endpoint kept reporting 'modeling' while nothing ran.
+    """
+    paths = make_files_structure(['docs/file1.txt'])
+
+    with mock.patch('wrolpi.files.worker.apply_modelers', side_effect=asyncio.CancelledError):
+        with pytest.raises(asyncio.CancelledError):
+            await file_worker.refresh_sync(paths)
+
+    assert file_worker.status['status'] == 'idle'
+    assert not flags.file_worker_modeling.is_set()
 
 
 @pytest.mark.asyncio

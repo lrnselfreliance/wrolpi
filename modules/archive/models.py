@@ -12,6 +12,7 @@ from wrolpi.collections import Collection
 from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory, \
     strip_surrogates
 from wrolpi.dates import now
+from wrolpi.db import serializer
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -35,10 +36,12 @@ class Archive(Base, ModelHelper):
     id = Column(Integer, primary_key=True)
 
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
-    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id')
+    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id',
+                                          lazy='joined')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: FileGroup = relationship('FileGroup', lazy='joined')
 
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
         d['archive'] = dict(

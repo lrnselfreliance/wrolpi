@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, In
 from sqlalchemy.orm import relationship, Session
 
 from wrolpi.common import ModelHelper, Base
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, serializer
 from wrolpi.files.models import FileGroup
 
 EPUB_MIMETYPE = 'application/epub'
@@ -56,7 +56,7 @@ class Doc(ModelHelper, Base):
     description = Column(Text)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False, unique=True)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: FileGroup = relationship('FileGroup', lazy='joined')
     sections = relationship('DocSection', back_populates='doc',
                             cascade='all, delete-orphan',
                             passive_deletes=True)
@@ -65,6 +65,7 @@ class Doc(ModelHelper, Base):
         path = str(self.file_group.primary_path) if self.file_group else 'None'
         return f'<Doc id={self.id} path={repr(path)} file_group_id={self.file_group_id}>'
 
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
         if d.get('data') and d['data'].get('doc_path'):

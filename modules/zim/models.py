@@ -14,7 +14,7 @@ from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
-from wrolpi.db import session_curs
+from wrolpi.db import session_curs, serializer
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -74,12 +74,13 @@ class Zim(Base, ModelHelper):
     path: pathlib.Path = Column(MediaPathType, nullable=False)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: FileGroup = relationship('FileGroup', lazy='joined')
     auto_search = Column(Boolean, default=True)
 
     def __repr__(self):
         return f'<Zim id={self.id} file_group_id={self.file_group_id} path={self.path}>'
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             id=self.id,
@@ -382,7 +383,8 @@ class ZimSubscription(Base):
     name: str = Column(Text, unique=True, nullable=False)
     language: str = Column(Text, nullable=False)
     download_id: int = Column(Integer, ForeignKey('download.id', ondelete='CASCADE'), nullable=False)
-    download: Download = relationship('Download', primaryjoin='ZimSubscription.download_id==Download.id')
+    download: Download = relationship('Download', primaryjoin='ZimSubscription.download_id==Download.id',
+                                      lazy='joined')
 
     def __repr__(self):
         name = self.name
@@ -390,6 +392,7 @@ class ZimSubscription(Base):
         download_id = self.download_id
         return f'<ZimSubscription id={self.id} {name=} {language=} {download_id=}>'
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             id=self.id,

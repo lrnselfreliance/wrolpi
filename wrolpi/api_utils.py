@@ -12,7 +12,7 @@ from pathlib import Path
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
-from wrolpi.db import RequestDB
+from wrolpi.db import RequestDB, no_db_access
 from wrolpi.errors import APIError
 from wrolpi.perpetual import PERPETUAL_LOOPS, PER_WORKER_TASKS, PerpetualLoop, run_loop
 from wrolpi.vars import PYTEST
@@ -46,7 +46,8 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     """
     Handles encoding date/datetime in JSON.
     """
-    resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
+    with no_db_access('json_response'):
+        resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
     return resp
 
 

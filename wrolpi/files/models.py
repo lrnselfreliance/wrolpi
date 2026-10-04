@@ -13,7 +13,7 @@ from sqlalchemy.orm import deferred, relationship, Session
 from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, serializer
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
@@ -121,7 +121,8 @@ class FileGroup(ModelHelper, Base):
     # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
     effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
 
-    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
+    # Eager: `__json__` lists the Tags of every FileGroup it serializes.
+    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all', lazy='selectin')
 
     # Full-text search over these columns is provided by the external-content FTS5 table
     # `file_group_fts` (see `wrolpi.fts`): a=title, b=author-ish, c=description, d=body/captions.
@@ -134,6 +135,7 @@ class FileGroup(ModelHelper, Base):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
         return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
 
+    @serializer
     def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
         _, suffix = split_path_stem_and_suffix(self.primary_path)
@@ -854,6 +856,7 @@ class Directory(ModelHelper, Base):
     name: str = Column(String, nullable=False)
     idempotency = Column(TZDateTime, default=lambda: now())
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             path=self.path,

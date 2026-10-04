@@ -37,6 +37,8 @@ async def test_tags_file_group_json(async_client, test_session, make_files_struc
 async def test_tags_model(async_client, test_session, make_files_structure, tag_factory, example_pdf):
     """Can get Tag using class methods."""
     tag1 = await tag_factory()
+    # Serializers do not query; reload the Tag the factory's commit expired.
+    test_session.refresh(tag1)
     assert tag1.__json__()
 
     assert Tag.find_by_id(test_session, tag1.id)

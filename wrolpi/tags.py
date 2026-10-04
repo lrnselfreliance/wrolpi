@@ -14,7 +14,7 @@ from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
 from wrolpi.dates import TZDateTime
-from wrolpi.db import get_db_session, named_placeholders, session_curs
+from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
 from wrolpi.downloader import save_downloads_config
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile
 from wrolpi.events import Events
@@ -36,7 +36,7 @@ class TagFile(ModelHelper, Base):
     created_at: datetime = Column(TZDateTime, default=dates.now)
 
     tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
-    tag = relationship('Tag', back_populates='tag_files')
+    tag = relationship('Tag', back_populates='tag_files', lazy='joined')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')
 
@@ -86,6 +86,7 @@ class Tag(ModelHelper, Base):
         color = self.color
         return f'<Tag {name=} {color=}>'
 
+    @serializer
     def __json__(self) -> dict:
         return dict(
             id=self.id,

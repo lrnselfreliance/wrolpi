@@ -8,6 +8,7 @@ fresh session per use.  Every connection gets the same PRAGMAs (WAL, busy_timeou
 via `create_wrolpi_engine` — use that factory for any engine touching a WROLPi database.
 """
 import contextvars
+import functools
 import pathlib
 import sqlite3
 import threading
@@ -33,6 +34,57 @@ logger = logger.getChild(__name__)
 # interleaved tasks -- arming it for a reader and disarming it under a writer.  Each asyncio task
 # (and each thread) gets its own copy of a ContextVar, so worker-thread callers behave as before.
 _immediate_txn = contextvars.ContextVar('wrolpi_immediate_txn', default=False)
+
+
+# Set while serializing (`no_db_access`).  A query then is a lazy load or an expired-attribute refresh: hidden
+# per-row SQL today, and a `MissingGreenlet` error under an async Session.  Holds the name of what is serializing.
+_no_db_access = contextvars.ContextVar('wrolpi_no_db_access', default=None)
+# Serializers that have already logged an unexpected query in this process (see `_refuse_query_while_serializing`).
+_warned_serializers = set()
+# Every unexpected query during tests, as (reason, statement).  Recorded as well as raised, so code that catches
+# broad exceptions around a serializer cannot hide one; see the `no_unexpected_queries` fixture.
+UNEXPECTED_QUERIES = list()
+
+
+class UnexpectedQuery(RuntimeError):
+    """SQL ran inside `no_db_access` (while serializing)."""
+
+
+@contextmanager
+def no_db_access(reason: str):
+    """No SQL may run inside this block: the data it reads must already be loaded.
+
+    A query inside raises `UnexpectedQuery` during tests.  In production it is logged once per `reason` and
+    allowed, so a missed eager load costs a query, not a failed request."""
+    token = _no_db_access.set(reason)
+    try:
+        yield
+    finally:
+        _no_db_access.reset(token)
+
+
+def serializer(method):
+    """Run a model's serializer (`__json__`) inside `no_db_access`."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with no_db_access(f'{type(self).__name__}.{method.__name__}'):
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def _refuse_query_while_serializing(conn, cursor, statement, parameters, context, executemany):
+    reason = _no_db_access.get()
+    if reason is None:
+        return
+    if PYTEST:
+        UNEXPECTED_QUERIES.append((reason, statement))
+        raise UnexpectedQuery(f'{reason} ran SQL while serializing: {statement}')
+    if reason not in _warned_serializers:
+        _warned_serializers.add(reason)
+        logger.warning(f'{reason} ran SQL while serializing: a relationship or deferred column it reads was not '
+                       f'loaded, or a commit expired the object: {statement}')
 
 
 def _adapt_datetime(value):
@@ -130,6 +182,8 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
     @event.listens_for(engine, 'connect')
     def _sqlite_on_connect(dbapi_conn, _):
         journal_state['mode'] = _configure_sqlite_connection(dbapi_conn, journal_state['mode'])
+
+    event.listen(engine, 'before_cursor_execute', _refuse_query_while_serializing)
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):

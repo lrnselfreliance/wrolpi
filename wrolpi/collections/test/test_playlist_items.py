@@ -145,16 +145,18 @@ async def test_add_file_item(async_client, test_session, test_directory):
     path.write_bytes(b'%PDF-1.4 test')
     fg = FileGroup.from_paths(test_session, path)
     test_session.commit()
+    # Each request gets its own Session, as in production: requests commit, and in the shared test Session
+    # that would expire the FileGroup the next request serializes.
+    with production_like_sessions(test_session):
+        _, response = await async_client.post(f'/api/collections/{cid}/items', json={
+            'item_kind': 'file', 'file_group_id': fg.id})
+        assert response.status_code == HTTPStatus.CREATED, response.json
+        assert response.json['item']['item_kind'] == 'file'
 
-    _, response = await async_client.post(f'/api/collections/{cid}/items', json={
-        'item_kind': 'file', 'file_group_id': fg.id})
-    assert response.status_code == HTTPStatus.CREATED, response.json
-    assert response.json['item']['item_kind'] == 'file'
-
-    _, response = await async_client.get(f'/api/collections/{cid}')
-    items = response.json['collection']['items']
-    assert len(items) == 1
-    assert items[0]['file_group']['id'] == fg.id
+        _, response = await async_client.get(f'/api/collections/{cid}')
+        items = response.json['collection']['items']
+        assert len(items) == 1
+        assert items[0]['file_group']['id'] == fg.id
 
 
 @pytest.mark.asyncio
@@ -351,34 +353,37 @@ async def test_playlist_directory_sync(async_client, test_session, test_director
     path.write_bytes(b'%PDF-1.4 test')
     fg = FileGroup.from_paths(test_session, path)
     test_session.commit()
-    _, rf = await async_client.post(f'/api/collections/{cid}/items',
-                                    json={'item_kind': 'file', 'file_group_id': fg.id})
-    file_item_id = rf.json['item']['id']
-    # A url item.
-    _, ru = await async_client.post(f'/api/collections/{cid}/items',
-                                    json={'item_kind': 'url', 'url': '/map?lat=1&lon=2&z=3', 'title': 'Map Spot'})
-    url_item_id = ru.json['item']['id']
+    # Each request gets its own Session, as in production: requests commit, and in the shared test Session
+    # that would expire the FileGroup the next request serializes.
+    with production_like_sessions(test_session):
+        _, rf = await async_client.post(f'/api/collections/{cid}/items',
+                                        json={'item_kind': 'file', 'file_group_id': fg.id})
+        file_item_id = rf.json['item']['id']
+        # A url item.
+        _, ru = await async_client.post(f'/api/collections/{cid}/items',
+                                        json={'item_kind': 'url', 'url': '/map?lat=1&lon=2&z=3', 'title': 'Map Spot'})
+        url_item_id = ru.json['item']['id']
 
-    playlist_dir = test_directory / 'playlists' / 'Sync Test'
-    names = sorted(p.name for p in playlist_dir.iterdir())
-    assert any(n.startswith('0001_') and n.endswith('lesson.pdf') for n in names), names
-    assert any(n.startswith('0002_') and n.endswith('.html') for n in names), names
-    # The file is a hard link to the source (same inode).
-    link = next(p for p in playlist_dir.iterdir() if p.name.startswith('0001_'))
-    assert link.stat().st_ino == path.stat().st_ino
+        playlist_dir = test_directory / 'playlists' / 'Sync Test'
+        names = sorted(p.name for p in playlist_dir.iterdir())
+        assert any(n.startswith('0001_') and n.endswith('lesson.pdf') for n in names), names
+        assert any(n.startswith('0002_') and n.endswith('.html') for n in names), names
+        # The file is a hard link to the source (same inode).
+        link = next(p for p in playlist_dir.iterdir() if p.name.startswith('0001_'))
+        assert link.stat().st_ino == path.stat().st_ino
 
-    # Reorder so the url is first; prefixes must follow the new positions.
-    await async_client.put(f'/api/collections/{cid}/items/order',
-                           json={'item_ids': [url_item_id, file_item_id]})
-    names = sorted(p.name for p in playlist_dir.iterdir())
-    assert any(n.startswith('0001_') and n.endswith('.html') for n in names), names
-    assert any(n.startswith('0002_') and n.endswith('lesson.pdf') for n in names), names
+        # Reorder so the url is first; prefixes must follow the new positions.
+        await async_client.put(f'/api/collections/{cid}/items/order',
+                               json={'item_ids': [url_item_id, file_item_id]})
+        names = sorted(p.name for p in playlist_dir.iterdir())
+        assert any(n.startswith('0001_') and n.endswith('.html') for n in names), names
+        assert any(n.startswith('0002_') and n.endswith('lesson.pdf') for n in names), names
 
-    # Removing the url item drops its stub and re-sequences the file to 0001_.
-    await async_client.delete(f'/api/collections/{cid}/items/{url_item_id}')
-    names = sorted(p.name for p in playlist_dir.iterdir())
-    assert not any(n.endswith('.html') for n in names), names
-    assert any(n.startswith('0001_') and n.endswith('lesson.pdf') for n in names), names
+        # Removing the url item drops its stub and re-sequences the file to 0001_.
+        await async_client.delete(f'/api/collections/{cid}/items/{url_item_id}')
+        names = sorted(p.name for p in playlist_dir.iterdir())
+        assert not any(n.endswith('.html') for n in names), names
+        assert any(n.startswith('0001_') and n.endswith('lesson.pdf') for n in names), names
 
 
 @pytest.mark.asyncio

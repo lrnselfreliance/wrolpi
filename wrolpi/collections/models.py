@@ -9,6 +9,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
+from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -89,7 +90,7 @@ class Collection(ModelHelper, Base):
 
     # Optional tag relationship (similar to Channel)
     tag_id = Column(Integer, ForeignKey('tag.id'))
-    tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id')
+    tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id', lazy='joined')
 
     # Stores the file_name_format used when files were last organized
     # Used to detect when reorganization is needed after config changes
@@ -114,7 +115,8 @@ class Collection(ModelHelper, Base):
     downloads: InstrumentedList = relationship(
         'Download',
         primaryjoin='Download.collection_id==Collection.id',
-        back_populates='collection'
+        back_populates='collection',
+        lazy='selectin',
     )
 
     def __repr__(self):
@@ -943,6 +945,7 @@ class Collection(ModelHelper, Base):
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
+    @serializer
     def __json__(self) -> dict:
         """Return JSON-serializable dict for API responses.
 
@@ -1185,8 +1188,9 @@ class CollectionItem(ModelHelper, Base):
 
     # Relationships
     collection = relationship('Collection', back_populates='items')
-    file_group: FileGroup = relationship('FileGroup')
-    zim = relationship('Zim')
+    # Eager: `dict()` serializes the item's FileGroup or Zim for every item of a listing.
+    file_group: FileGroup = relationship('FileGroup', lazy='joined')
+    zim = relationship('Zim', lazy='joined')
 
     # Indexes for performance
     __table_args__ = (

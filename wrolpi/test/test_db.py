@@ -1,10 +1,13 @@
 import asyncio
+import logging
 import sqlite3
+from unittest import mock
 
 import pytest
 
 from wrolpi.conftest import production_like_sessions, probe_write_lock_is_held, count_connections
-from wrolpi.db import get_db_session, _configure_sqlite_connection, RequestDB, RequestSession
+from wrolpi.db import get_db_session, _configure_sqlite_connection, RequestDB, RequestSession, no_db_access, \
+    UnexpectedQuery, serializer
 from wrolpi.tags import Tag
 
 
@@ -256,3 +259,36 @@ def test_request_session_keeps_one_connection_until_closed(test_session):
         session.query(Tag).count()
         assert len(opened) == 2, 'a closed RequestSession did not reconnect'
         session.close()
+
+
+@pytest.mark.allow_unexpected_queries
+def test_no_db_access_refuses_queries_during_tests(test_session):
+    """Serializing must not query: the data must already be loaded."""
+    test_session.query(Tag).count()  # Allowed outside the block.
+    with pytest.raises(UnexpectedQuery, match='a test serializer ran SQL'):
+        with no_db_access('a test serializer'):
+            test_session.query(Tag).count()
+    test_session.rollback()
+    assert test_session.query(Tag).count() == 0, 'queries work again after the block'
+
+
+@pytest.mark.allow_unexpected_queries
+def test_serializer_decorator_guards_the_method(test_session):
+    class Thing:
+        @serializer
+        def __json__(self):
+            return dict(count=test_session.query(Tag).count())
+
+    with pytest.raises(UnexpectedQuery, match=r'Thing\.__json__'):
+        Thing().__json__()
+
+
+def test_no_db_access_logs_once_and_allows_in_production(test_session, caplog):
+    """In production a missed eager load costs a query, not a failed request; it is logged once."""
+    with mock.patch('wrolpi.db.PYTEST', False), mock.patch('wrolpi.db._warned_serializers', set()), \
+            caplog.at_level(logging.WARNING, logger='wrolpi.db'):
+        with no_db_access('a production serializer'):
+            assert test_session.query(Tag).count() == 0
+            assert test_session.query(Tag).count() == 0
+    warnings = [r for r in caplog.records if 'a production serializer ran SQL' in r.getMessage()]
+    assert len(warnings) == 1

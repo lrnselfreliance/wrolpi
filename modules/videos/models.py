@@ -3,14 +3,14 @@ import pathlib
 from typing import Optional, Dict, List
 
 from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text, JSON
-from sqlalchemy.orm import relationship, Session, deferred
+from sqlalchemy.orm import relationship, Session, deferred, undefer
 from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions, read_captions_with_timestamps
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     background_task
-from wrolpi.db import get_db_curs, get_db_session, session_curs
+from wrolpi.db import get_db_curs, get_db_session, session_curs, serializer
 from wrolpi.downloader import Download
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.worker import file_worker
@@ -46,9 +46,10 @@ class Video(ModelHelper, Base):
     comments_failed = Column(Boolean, default=False)  # see `get_missing_videos_comments`
 
     channel_id = Column(Integer, ForeignKey('channel.id'))
-    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
+    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos',
+                           lazy='joined')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: FileGroup = relationship('FileGroup', lazy='joined')
 
     def __repr__(self):
         v = None
@@ -57,6 +58,7 @@ class Video(ModelHelper, Base):
         return f'<Video id={self.id} title={repr(self.file_group.title)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
 
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
 
@@ -393,7 +395,8 @@ class Video(ModelHelper, Base):
     @staticmethod
     def get_by_id(session: Session, id_: int) -> Optional['Video']:
         """Attempt to find a Video with the provided id.  Returns None if it cannot be found."""
-        video = session.query(Video).filter(Video.id == id_).one_or_none()
+        # `__json__` reads the (deferred) ffprobe_json for the codecs.
+        video = session.query(Video).options(undefer(Video.ffprobe_json)).filter(Video.id == id_).one_or_none()
         return video
 
     @staticmethod
@@ -411,7 +414,9 @@ class Video(ModelHelper, Base):
         """Find a Video by its FileGroup ID, raises an exception if it cannot be found.
 
         @raise UnknownVideo: if the Video can not be found"""
-        video = session.query(Video).filter(Video.file_group_id == file_group_id).one_or_none()
+        # `__json__` reads the (deferred) ffprobe_json for the codecs.
+        video = session.query(Video).options(undefer(Video.ffprobe_json)) \
+            .filter(Video.file_group_id == file_group_id).one_or_none()
         if not video:
             raise UnknownVideo(f'Cannot find Video with file_group_id {file_group_id}')
         return video
@@ -620,7 +625,7 @@ class Channel(ModelHelper, Base):
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
-    collection = relationship('Collection', foreign_keys=[collection_id])
+    collection = relationship('Collection', foreign_keys=[collection_id], lazy='joined')
 
     @property
     def downloads(self) -> list:
@@ -938,6 +943,7 @@ class Channel(ModelHelper, Base):
 
         return None
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             directory=self.directory,

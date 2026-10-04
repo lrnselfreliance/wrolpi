@@ -22,7 +22,7 @@ from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
 import cachetools.func
 from sqlalchemy import asc, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
@@ -1330,7 +1330,9 @@ def handle_file_group_search_results(session: Session, statement: str, params: d
 
     from modules.archive.models import Archive
     from modules.videos.models import Video
+    # Video's `__json__` reads its (deferred) ffprobe_json for the codecs.
     results = session.query(FileGroup, Video, Archive) \
+        .options(undefer(Video.ffprobe_json)) \
         .filter(FileGroup.id.in_(ordered_ids)) \
         .outerjoin(Video, Video.file_group_id == FileGroup.id) \
         .outerjoin(Archive, Archive.file_group_id == FileGroup.id)

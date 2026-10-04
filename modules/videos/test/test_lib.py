@@ -167,7 +167,7 @@ def test_validate_video_directory_beats_info_json_channel(test_session, test_dir
 @pytest.mark.asyncio
 async def test_get_statistics(test_session, video_factory, channel_factory):
     # Can get statistics in empty DB.
-    await get_statistics()
+    await get_statistics(test_session)
 
     channel1 = channel_factory()
     channel2 = channel_factory()
@@ -176,7 +176,7 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
     video_factory(channel_id=channel2.id)
     video_factory()
 
-    result = await get_statistics()
+    result = await get_statistics(test_session)
     assert 'statistics' in result
     assert 'videos' in result['statistics']
     assert 'channels' in result['statistics']

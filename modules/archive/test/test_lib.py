@@ -1071,6 +1071,7 @@ def test_search_archives_by_domain(test_directory, test_session, archive_factory
 
     # Search for archives in searchtest.com
     file_groups, total = search_archives(
+        test_session,
         search_str=None,
         domain='searchtest.com',
         limit=10,
@@ -1085,6 +1086,7 @@ def test_search_archives_by_domain(test_directory, test_session, archive_factory
 
     # Search for other.com
     file_groups, total = search_archives(
+        test_session,
         search_str=None,
         domain='other.com',
         limit=10,
@@ -1375,7 +1377,7 @@ async def test_get_statistics(test_session, archive_factory):
     from modules.archive.lib import get_statistics
 
     # Can get statistics in empty DB.
-    result = await get_statistics()
+    result = await get_statistics(test_session)
     assert 'statistics' in result
     assert 'archives' in result['statistics']
     assert 'domains' in result['statistics']
@@ -1393,7 +1395,7 @@ async def test_get_statistics(test_session, archive_factory):
     archive4 = archive_factory()  # No domain
     test_session.commit()
 
-    result = await get_statistics()
+    result = await get_statistics(test_session)
     stats = result['statistics']
 
     # Should count all 4 archives.

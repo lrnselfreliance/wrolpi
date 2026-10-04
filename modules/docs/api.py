@@ -20,8 +20,8 @@ logger = logger.getChild(__name__)
 
 @docs_bp.get('/statistics')
 @openapi.response(HTTPStatus.OK, schema.DocStatisticsResponse)
-async def statistics(_: Request):
-    ret = get_statistics()
+async def statistics(request: Request):
+    ret = get_statistics(request.ctx.session)
     return json_response(ret, HTTPStatus.OK)
 
 
@@ -44,11 +44,12 @@ doc_limit_limiter = api_param_limiter(100)
 )
 @openapi.response(HTTPStatus.OK, schema.DocSearchResponse)
 @validate(schema.DocSearchRequest)
-async def search_docs(_: Request, body: schema.DocSearchRequest):
+async def search_docs(request: Request, body: schema.DocSearchRequest):
     limit = doc_limit_limiter(body.limit)
     offset = body.offset or 0
     file_groups, total = await asyncio.to_thread(
         _search_docs,
+        request.ctx.session,
         search_str=body.search_str,
         author=body.author,
         subject=body.subject,

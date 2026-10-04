@@ -750,19 +750,19 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     assert video_file.mimetype == 'video/mp4' and video_file.indexer == indexers.DefaultIndexer
 
     # File are indexed by their titles and contents.  Contents (d_text) require a deep search.
-    files, total = lib.search_files('file', 10, 0)
+    files, total = lib.search_files(test_session, 'file', 10, 0)
     assert total == 5, 'All files contain "file" in their file name.  The associated video file is hidden.'
-    files, total = lib.search_files('image', 10, 0)
+    files, total = lib.search_files(test_session, 'image', 10, 0)
     assert total == 1 and files[0]['title'] == 'an image file.jpeg', 'The image file title contains "image".'
-    files, total = lib.search_files('contents', 10, 0, deep=True)
+    files, total = lib.search_files(test_session, 'contents', 10, 0, deep=True)
     assert total == 1 and files[0]['title'] == 'a text file.txt', 'The text file contains "contents".'
-    files, total = lib.search_files('contents', 10, 0)
+    files, total = lib.search_files(test_session, 'contents', 10, 0)
     assert total == 0, 'File contents are not searched unless deep=True.'
-    files, total = lib.search_files('video', 10, 0)
+    files, total = lib.search_files(test_session, 'video', 10, 0)
     assert total == 1 and {i['title'] for i in files} == {'a video file'}, 'The video file contains "video".'
-    files, total = lib.search_files('yawn', 10, 0, deep=True)
+    files, total = lib.search_files(test_session, 'yawn', 10, 0, deep=True)
     assert total == 1 and files[0]['title'] == 'a video file', 'The video file captions contain "yawn".'
-    files, total = lib.search_files('bunny', 10, 0, deep=True)
+    files, total = lib.search_files(test_session, 'bunny', 10, 0, deep=True)
     assert total == 1 and {i['title'] for i in files} == {'a zip file.zip'}, \
         'The zip file contains a file with "bunny" in the title.'
 
@@ -774,7 +774,7 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     text_path.write_text('new text contents')
     await refresh_files()
     await await_background_tasks()
-    files, total = lib.search_files('new', 10, 0, deep=True)
+    files, total = lib.search_files(test_session, 'new', 10, 0, deep=True)
     assert total == 1
 
 
@@ -1238,29 +1238,29 @@ async def test_file_search_date_range(async_client, test_session, example_pdf, e
     await refresh_files()
     doc, pdf = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
 
-    files, total = lib.search_files('', 10, 0)
+    files, total = lib.search_files(test_session, '', 10, 0)
     assert total == 2, 'Should only be 2 files.'
 
     # Past the last page still reports the true total (count is a separate query).
-    files, total = lib.search_files('', 10, 10)
+    files, total = lib.search_files(test_session, '', 10, 10)
     assert files == []
     assert total == 2
 
     # PDF was published in December.
-    files, total = lib.search_files('', 10, 0, months=[12, ])
+    files, total = lib.search_files(test_session, '', 10, 0, months=[12, ])
     assert total == 1, 'Only PDF should be from December 2022'
     assert files[0]['id'] == pdf.id
 
     # PDF was published in 2022.
-    files, total = lib.search_files('', 10, 0, from_year=2022, to_year=2022)
+    files, total = lib.search_files(test_session, '', 10, 0, from_year=2022, to_year=2022)
     assert total == 1, 'Only PDF should be from December 2022'
     assert files[0]['id'] == pdf.id
 
     # PDF was NOT published in 2023.
-    files, total = lib.search_files('', 10, 0, from_year=2023)
+    files, total = lib.search_files(test_session, '', 10, 0, from_year=2023)
     assert total == 0, 'No example files are published in 2023'
 
-    files, total = lib.search_files('', 10, 0, to_year=2022)
+    files, total = lib.search_files(test_session, '', 10, 0, to_year=2022)
     assert total == 1
     assert files[0]['id'] == pdf.id
 
@@ -1358,7 +1358,7 @@ async def test_get_bulk_tag_preview_files(async_client, test_session, make_files
     test_session.commit()
 
     # Preview for all three files
-    preview = lib.get_bulk_tag_preview(['foo.txt', 'bar.txt', 'baz.txt'])
+    preview = lib.get_bulk_tag_preview(test_session, ['foo.txt', 'bar.txt', 'baz.txt'])
     assert preview.file_count == 3
     assert 'shared' in preview.shared_tag_names
     assert 'only_foo' not in preview.shared_tag_names  # Not shared by all
@@ -1374,7 +1374,7 @@ async def test_get_bulk_tag_preview_directory(test_session, make_files_structure
     })
 
     # Preview for the directory - should find all files recursively
-    preview = lib.get_bulk_tag_preview(['mydir/'])
+    preview = lib.get_bulk_tag_preview(test_session, ['mydir/'])
     assert preview.file_count == 3
 
 
@@ -1426,7 +1426,7 @@ async def test_get_bulk_tag_preview_many_files(test_session, make_files_structur
     stems exceeded SQLite's expression-tree depth limit ("Expression tree is too large")."""
     make_files_structure({f'mydir/file{i}.txt': str(i) for i in range(1200)})
 
-    preview = lib.get_bulk_tag_preview(['mydir/'])
+    preview = lib.get_bulk_tag_preview(test_session, ['mydir/'])
     assert preview.file_count == 1200
 
 
@@ -1459,14 +1459,14 @@ async def test_get_bulk_tag_preview_multi_file_filegroup(async_client, test_sess
     test_session.commit()
 
     # Preview for the directory should find the FileGroup and its tag
-    preview = lib.get_bulk_tag_preview(['archive/'])
+    preview = lib.get_bulk_tag_preview(test_session, ['archive/'])
     assert preview.file_count == 1, f'Expected 1 FileGroup, got {preview.file_count}'
     assert 'my_tag' in preview.shared_tag_names, f'Expected my_tag in shared tags, got {preview.shared_tag_names}'
 
 
 def test_get_bulk_tag_preview_empty(test_session, test_directory):
     """get_bulk_tag_preview returns 0 for empty or non-existent paths."""
-    preview = lib.get_bulk_tag_preview([])
+    preview = lib.get_bulk_tag_preview(test_session, [])
     assert preview.file_count == 0
     assert preview.shared_tag_names == []
 
@@ -1758,21 +1758,21 @@ async def test_file_search_url(test_session, make_files_structure, refresh_files
     test_session.commit()
 
     # Search by full URL
-    files, total = lib.search_files('', 10, 0, url='https://example.com/foo')
+    files, total = lib.search_files(test_session, '', 10, 0, url='https://example.com/foo')
     assert total == 1
     assert files[0]['id'] == foo_fg.id
 
     # Search by domain (partial match)
-    files, total = lib.search_files('', 10, 0, url='example.com')
+    files, total = lib.search_files(test_session, '', 10, 0, url='example.com')
     assert total == 2
     assert {f['id'] for f in files} == {foo_fg.id, baz_fg.id}
 
     # Case insensitive search
-    files, total = lib.search_files('', 10, 0, url='EXAMPLE.COM')
+    files, total = lib.search_files(test_session, '', 10, 0, url='EXAMPLE.COM')
     assert total == 2
 
     # No results for non-matching URL
-    files, total = lib.search_files('', 10, 0, url='nonexistent.com')
+    files, total = lib.search_files(test_session, '', 10, 0, url='nonexistent.com')
     assert total == 0
 
 
@@ -1790,7 +1790,7 @@ async def test_file_search_url_with_null(test_session, make_files_structure, ref
     # bar_fg.url remains None
     test_session.commit()
 
-    files, total = lib.search_files('', 10, 0, url='example.com')
+    files, total = lib.search_files(test_session, '', 10, 0, url='example.com')
     assert total == 1
     assert files[0]['id'] == foo_fg.id
 

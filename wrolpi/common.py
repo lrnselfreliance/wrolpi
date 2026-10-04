@@ -2825,10 +2825,9 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
     return fts.headline_texts(entries, search_str, tokens=8)
 
 
-async def search_other_estimates(tag_names: List[str]) -> dict:
+async def search_other_estimates(session: Session, tag_names: List[str]) -> dict:
     """Estimate other things that are Tagged."""
     from sqlalchemy import func
-    from wrolpi.db import get_db_session
     from wrolpi.collections.models import Collection
     from wrolpi.tags import Tag
     from modules.videos.models import Channel
@@ -2838,13 +2837,12 @@ async def search_other_estimates(tag_names: List[str]) -> dict:
             channel_count=0,
         )
 
-    with get_db_session() as session:
-        # TODO handle multiple tags
-        channel_count = session.query(func.count(Channel.id)) \
-            .join(Collection, Collection.id == Channel.collection_id) \
-            .join(Tag, Tag.id == Collection.tag_id) \
-            .filter(Tag.name == tag_names[0]) \
-            .scalar()
+    # TODO handle multiple tags
+    channel_count = session.query(func.count(Channel.id)) \
+        .join(Collection, Collection.id == Channel.collection_id) \
+        .join(Tag, Tag.id == Collection.tag_id) \
+        .filter(Tag.name == tag_names[0]) \
+        .scalar()
 
     others = dict(
         channel_count=channel_count,

@@ -1265,7 +1265,8 @@ async def test_retry_downloads_includes_failed(test_session, test_download_manag
     d4.complete()  # completed download should not be retried
     test_session.commit()
 
-    test_download_manager.retry_downloads(reset_attempts=True)
+    test_download_manager.retry_downloads(test_session, reset_attempts=True)
+    test_session.commit()
 
     test_session.refresh(d1)
     test_session.refresh(d2)
@@ -2016,26 +2017,26 @@ async def test_summary_daily_limit_reached(test_session, test_download_manager, 
     name = test_downloader.name
 
     # No limits configured.
-    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is False
 
     config.download_daily_limit_per_domain = 2
     # No due downloads => not reached, even though limits are configured.
     _make_processed_download(test_session, name, 'https://example.com/1')
     _make_processed_download(test_session, name, 'https://example.com/2')
     test_session.commit()
-    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is False
 
     # A due download for the capped domain => reached.
     blocked = Download(url='https://example.com/new', downloader=name, status='new')
     test_session.add(blocked)
     test_session.commit()
-    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is True
 
     # A due download for another domain can still dispatch => not reached.
     allowed = Download(url='https://rumble.com/new', downloader=name, status='new')
     test_session.add(allowed)
     test_session.commit()
-    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is False
 
     # Recurring downloads are never gated by daily limits and must not count as "due".
     test_session.delete(allowed)
@@ -2043,7 +2044,7 @@ async def test_summary_daily_limit_reached(test_session, test_download_manager, 
                          frequency=DownloadFrequency.daily)
     test_session.add(recurring)
     test_session.commit()
-    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is True
 
     # Global limit blocks everything, even a fresh domain.
     config.download_daily_limit_per_domain = None
@@ -2051,7 +2052,7 @@ async def test_summary_daily_limit_reached(test_session, test_download_manager, 
     fresh = Download(url='https://wikipedia.org/new', downloader=name, status='new')
     test_session.add(fresh)
     test_session.commit()
-    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+    assert test_download_manager.get_summary(test_session)['daily_limit_reached'] is True
 
 
 @pytest.mark.asyncio

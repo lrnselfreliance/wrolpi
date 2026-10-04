@@ -25,7 +25,9 @@ logger = logger.getChild(__name__)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 def video_get(request: Request, file_group_id: int):
     skip_viewed = request.args.get('skip_viewed', '').lower() == 'true'
-    video, previous_video, next_video = lib.get_video_for_app(file_group_id, skip_viewed=skip_viewed)
+    # Marking the Video viewed is a write.
+    with request.ctx.db.write() as session:
+        video, previous_video, next_video = lib.get_video_for_app(session, file_group_id, skip_viewed=skip_viewed)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 
@@ -37,9 +39,10 @@ def video_get(request: Request, file_group_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.VideoUpdateRequest)
 @wrol_mode_check
-async def video_update(_: Request, file_group_id: int, body: schema.VideoUpdateRequest):
-    lib.update_video(file_group_id, title=body.title, description=body.description)
-    video, previous_video, next_video = lib.get_video_for_app(file_group_id)
+async def video_update(request: Request, file_group_id: int, body: schema.VideoUpdateRequest):
+    with request.ctx.db.write() as session:
+        lib.update_video(session, file_group_id, title=body.title, description=body.description)
+        video, previous_video, next_video = lib.get_video_for_app(session, file_group_id)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 
@@ -47,8 +50,8 @@ async def video_update(_: Request, file_group_id: int, body: schema.VideoUpdateR
 @openapi.description('Get Video comments')
 @openapi.response(HTTPStatus.OK, schema.VideoCommentsResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get_comments(_: Request, file_group_id: int):
-    video = lib.get_video(file_group_id)
+def video_get_comments(request: Request, file_group_id: int):
+    video = lib.get_video(request.ctx.session, file_group_id)
     return json_response({'comments': video.get_comments()})
 
 
@@ -56,8 +59,8 @@ def video_get_comments(_: Request, file_group_id: int):
 @openapi.description('Get Video description')
 @openapi.response(HTTPStatus.OK, schema.VideoDescriptionResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get_description(_: Request, file_group_id: int):
-    video = lib.get_video(file_group_id)
+def video_get_description(request: Request, file_group_id: int):
+    video = lib.get_video(request.ctx.session, file_group_id)
     return json_response({'description': video.get_description()})
 
 
@@ -65,8 +68,8 @@ def video_get_description(_: Request, file_group_id: int):
 @openapi.description('Get Video captions')
 @openapi.response(HTTPStatus.OK, schema.VideoCaptionsResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get_captions(_: Request, file_group_id: int):
-    video = lib.get_video(file_group_id)
+def video_get_captions(request: Request, file_group_id: int):
+    video = lib.get_video(request.ctx.session, file_group_id)
     return json_response({'captions': video.get_caption_chunks()})
 
 
@@ -78,13 +81,13 @@ def video_get_captions(_: Request, file_group_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.VideoTranscodeRequest)
 @wrol_mode_check
-async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTranscodeRequest):
+async def video_transcode(request: Request, file_group_id: int, body: schema.VideoTranscodeRequest):
     try:
         validate_transcode_request(body.video_codec, body.audio_codec, body.container, body.fragmented)
     except ValueError as e:
         raise InvalidJob(str(e))
     # Raises UnknownVideo (404) before anything is queued.
-    video = lib.get_video(file_group_id)
+    video = lib.get_video(request.ctx.session, file_group_id)
     is_audio = (video.file_group.mimetype or '').startswith('audio/')
     if is_audio and body.video_codec and body.video_codec != REMOVE_VIDEO:
         raise InvalidJob(f'This is an audio file; it has no video stream to transcode to {body.video_codec}')
@@ -117,13 +120,14 @@ async def video_transcode(_: Request, file_group_id: int, body: schema.VideoTran
 @openapi.response(HTTPStatus.OK, schema.VideoSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.VideoSearchRequest)
-async def search_videos(_: Request, body: schema.VideoSearchRequest):
+async def search_videos(request: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
     # Synchronous SQLite query; keep it off the event loop.
     file_groups, videos_total = await asyncio.to_thread(
         lib.search_videos,
+        request.ctx.session,
         body.search_str,
         body.offset,
         body.limit,

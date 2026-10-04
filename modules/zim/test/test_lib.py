@@ -64,7 +64,7 @@ async def test_zim_get_entries_tags(async_client, test_session, test_zim, tag_fa
     test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
 
-    assert lib.get_entries_tags(['one', 'two', 'home'], 1) \
+    assert lib.get_entries_tags(test_session, ['one', 'two', 'home'], 1) \
            == dict(one=['tag1', 'tag2'], two=['tag1'], home=[])
 
 

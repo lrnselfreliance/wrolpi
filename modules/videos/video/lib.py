@@ -11,7 +11,7 @@ from modules.videos.models import Video, Channel
 from wrolpi import fts
 from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.downloader import download_manager
 from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
     search_filter_cache_key, count_file_groups
@@ -24,34 +24,32 @@ from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 logger.getChild(__name__)
 
 
-def get_video_for_app(file_group_id: int, skip_viewed: bool = False) -> Tuple[dict, Optional[dict], Optional[dict]]:
+def get_video_for_app(session: Session, file_group_id: int, skip_viewed: bool = False) \
+        -> Tuple[dict, Optional[dict], Optional[dict]]:
     """
-    Get a Video by its FileGroup ID, with its prev/next videos.  Mark the Video as viewed.
+    Get a Video by its FileGroup ID, with its prev/next videos.  Mark the Video as viewed (a write; the
+    caller commits).
     """
-    with get_db_session(commit=True) as session:
-        video = Video.find_by_file_group_id(session, file_group_id)
-        if not skip_viewed:
-            video.file_group.set_viewed()
-        previous_video, next_video = video.get_surrounding_videos()
+    video = Video.find_by_file_group_id(session, file_group_id)
+    if not skip_viewed:
+        video.file_group.set_viewed()
+    previous_video, next_video = video.get_surrounding_videos()
 
-        video = video.__json__()
-        previous_video = previous_video.__json__() if previous_video and previous_video.file_group else None
-        next_video = next_video.__json__() if next_video and next_video.file_group else None
-
+    video = video.__json__()
+    previous_video = previous_video.__json__() if previous_video and previous_video.file_group else None
+    next_video = next_video.__json__() if next_video and next_video.file_group else None
     return video, previous_video, next_video
 
 
-def get_video(file_group_id: int) -> Video:
+def get_video(session: Session, file_group_id: int) -> Video:
     """
     Get a Video by its FileGroup ID.
     """
-    with get_db_session() as session:
-        video = Video.find_by_file_group_id(session, file_group_id)
-        return video
+    return Video.find_by_file_group_id(session, file_group_id)
 
 
 @wrol_mode_check
-def update_video(file_group_id: int, title: str = None, description: str = None) -> Video:
+def update_video(session: Session, file_group_id: int, title: str = None, description: str = None) -> Video:
     """Edit a Video's details.  The files are the source of truth, so the change is written to the
     Video's .info.json (created if missing) and the Video is validated again from it.  Only the
     fields given (not None) are changed; an empty description clears it.
@@ -59,6 +57,8 @@ def update_video(file_group_id: int, title: str = None, description: str = None)
     Edits go into the info json's `wrolpi` section (`custom_title`, `custom_description`), never
     over yt-dlp's own keys: the original title and description stay in the file, and a metadata
     re-download carries the section over.
+
+    The caller commits.
 
     @raise UnknownVideo: if the Video can not be found
     @raise ValidationError: when nothing is given, or the title is empty
@@ -77,17 +77,16 @@ def update_video(file_group_id: int, title: str = None, description: str = None)
     if description is not None:
         changes['custom_description'] = description
 
-    with get_db_session(commit=True) as session:
-        video = Video.find_by_file_group_id(session, file_group_id)
-        if video.info_json_path is None or not video.info_json_path.is_file():
-            # No info json yet: create one holding only the wrolpi section.
-            video.replace_info_json({'wrolpi': changes}, clean=False)
-        else:
-            video.file_group.update_wrolpi_json(changes)
-        # Re-derive the title (and search text) from the file just written.
-        video.validate(session)
-        video.flush()
-        return video
+    video = Video.find_by_file_group_id(session, file_group_id)
+    if video.info_json_path is None or not video.info_json_path.is_file():
+        # No info json yet: create one holding only the wrolpi section.
+        video.replace_info_json({'wrolpi': changes}, clean=False)
+    else:
+        video.file_group.update_wrolpi_json(changes)
+    # Re-derive the title (and search text) from the file just written.
+    video.validate(session)
+    video.flush()
+    return video
 
 
 VIDEO_ORDERS = {
@@ -132,10 +131,10 @@ INDEXED_DATE_ORDERS = ('published_datetime', '-published_datetime')
 VIDEO_MIMETYPE_PREFIXES = ('video/', 'audio/')
 
 
-def _video_mimetypes() -> List[str]:
+def _video_mimetypes(session: Session) -> List[str]:
     """Every distinct video/* and audio/* mimetype in the library (a handful; served by the mimetype index)."""
     mimetypes = []
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         for prefix in VIDEO_MIMETYPE_PREFIXES:
             # '0' is the character after '/', so this is the half-open range of the prefix.
             curs.execute('SELECT DISTINCT mimetype FROM file_group WHERE mimetype >= ? AND mimetype < ?',
@@ -144,17 +143,17 @@ def _video_mimetypes() -> List[str]:
     return mimetypes
 
 
-def _count_videos() -> int:
+def _count_videos(session: Session) -> int:
     ranges = ' OR '.join(f'(mimetype >= :p{i} AND mimetype < :e{i})' for i in range(len(VIDEO_MIMETYPE_PREFIXES)))
     params = dict()
     for i, prefix in enumerate(VIDEO_MIMETYPE_PREFIXES):
         params[f'p{i}'], params[f'e{i}'] = prefix, prefix[:-1] + '0'
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute(f'SELECT COUNT(*) FROM file_group WHERE {ranges}', params)
         return curs.fetchone()[0]
 
 
-def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[dict], int]:
+def _search_videos_by_date(session: Session, order: str, limit: int, offset: int) -> Tuple[List[dict], int]:
     """The unfiltered Videos page, ordered by date, without visiting every video.
 
     The generic query (`mimetype LIKE 'video/%' OR ...`) plus a windowed COUNT used to visit every
@@ -163,7 +162,7 @@ def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[di
     then merged.  Results must be identical to the generic query's (same ORDER BY, including the
     id tiebreaker and NULL placement).  The total is a separate, cached count."""
     order_by = VIDEO_ORDERS[order]
-    mimetypes = _video_mimetypes()
+    mimetypes = _video_mimetypes(session)
     if not mimetypes:
         return [], 0
 
@@ -183,11 +182,12 @@ def _search_videos_by_date(order: str, limit: int, offset: int) -> Tuple[List[di
     '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    total = cached_search_total(search_filter_cache_key('videos'), _count_videos)
-    return handle_file_group_search_results(stmt, params, total=total)
+    total = cached_search_total(search_filter_cache_key('videos'), lambda: _count_videos(session))
+    return handle_file_group_search_results(session, stmt, params, total=total)
 
 
 def search_videos(
+        session: Session,
         search_str: str = None,
         offset: int = None,
         limit: int = VIDEO_QUERY_LIMIT,
@@ -212,7 +212,7 @@ def search_videos(
     offset = int(offset) if offset else 0
     if not search_str and not tag_names and not channel_id and not censored and order in INDEXED_DATE_ORDERS:
         # The Videos page with no filters, in date order.
-        return _search_videos_by_date(order, limit, offset)
+        return _search_videos_by_date(session, order, limit, offset)
 
     params = dict(search_str=search_str, offset=offset)
     if channel_id:
@@ -280,7 +280,7 @@ def search_videos(
     unfiltered = (not search_str and not tag_names and not channel_id and not censored
                   and not null_filter)
     if unfiltered:
-        total = cached_search_total(search_filter_cache_key('videos'), _count_videos)
+        total = cached_search_total(search_filter_cache_key('videos'), lambda: _count_videos(session))
     else:
         if fts_search:
             fts_count = fts.file_group_search(search_str, deep=deep)
@@ -303,9 +303,9 @@ def search_videos(
             'videos', search_str=search_str, channel_id=channel_id, tag_names=tag_names,
             censored=censored, deep=deep, null_filter=null_filter,
         )
-        total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, count_params))
+        total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, count_params))
 
-    results, total = handle_file_group_search_results(stmt, params, total=total)
+    results, total = handle_file_group_search_results(session, stmt, params, total=total)
     return results, total
 
 

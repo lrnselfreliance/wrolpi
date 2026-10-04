@@ -26,8 +26,8 @@ logger = logger.getChild(__name__)
 @channel_bp.get('/')
 @openapi.description('Get a list of all Channels')
 @openapi.response(HTTPStatus.OK, schema.ChannelsResponse)
-async def get_channels(_: Request):
-    channels = await lib.get_minimal_channels()
+async def get_channels(request: Request):
+    channels = await lib.get_minimal_channels(request.ctx.session)
     return json_response({'channels': channels})
 
 

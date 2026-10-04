@@ -19,7 +19,7 @@ from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config, trim_file_name
 from wrolpi.dates import Seconds, from_timestamp
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session, session_curs
 from wrolpi.downloader import Download, download_manager
 from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
@@ -1029,8 +1029,8 @@ def get_channel_source_id(url: str) -> str:
     return channel_info.get('channel_id') or channel_info['uploader_id']
 
 
-async def get_statistics():
-    with get_db_curs() as curs:
+async def get_statistics(session: Session):
+    with session_curs(session) as curs:
         curs.execute('''
                      SELECT
                          -- total videos

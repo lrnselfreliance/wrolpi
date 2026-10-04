@@ -22,7 +22,7 @@ from wrolpi.common import register_modeler, logger, extract_html_text, extract_h
 from wrolpi.switches import register_switch_handler
 from wrolpi.dates import Seconds
 from wrolpi.events import Events
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import split_file_name_words
 from wrolpi.files.modeler import run_modeler_loop, skip_clause
@@ -112,7 +112,7 @@ async def zim_modeler(progress_callback: Callable[[int], None] = None):
     )
 
 
-def get_all_entries_tags():
+def get_all_entries_tags(session: Session):
     """Returns a dict of dicts which contain the names of all Tags of each Entry's path.
 
     Example:
@@ -130,7 +130,7 @@ def get_all_entries_tags():
                     LEFT JOIN tag_zim tz on t.id = tz.tag_id
            GROUP BY 1, 2 \
            '''
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute(stmt)
         entries = dict()
         for zim_id, zim_entry, tag_names in curs.fetchall():
@@ -144,8 +144,8 @@ def get_all_entries_tags():
     return entries
 
 
-def get_entries_tags(paths: List[str], zim_id: int):
-    all_entries_tags = get_all_entries_tags()
+def get_entries_tags(session: Session, paths: List[str], zim_id: int):
+    all_entries_tags = get_all_entries_tags(session)
     entries = dict()
     for path in paths:
         zim_tag_entries = all_entries_tags.get(zim_id, dict())
@@ -187,7 +187,7 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
     articles = [bytes(i.get_item().content).decode('UTF-8') for i in entries]
     articles = [extract_html_text(i) for i in articles]
 
-    entries_tag_names = get_entries_tags([i.path for i in entries], zim_id)
+    entries_tag_names = get_entries_tags(session, [i.path for i in entries], zim_id)
 
     # Always get headlines even if there is no search_str.  Non-matches get the leading text of each article.
     headlines = extract_headlines(articles, search_str)

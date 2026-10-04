@@ -14,7 +14,7 @@ from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
-from wrolpi.db import get_db_curs
+from wrolpi.db import session_curs
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -249,7 +249,7 @@ class Zim(Base, ModelHelper):
 
     @staticmethod
     def _entries_with_tags_process(limit: int, offset: int, params: dict, session: Session, tags_sub_select: str):
-        with get_db_curs() as curs:
+        with session_curs(session) as curs:
             curs.execute(tags_sub_select, params)
             # sqlite3.Row is not a tuple; convert for the `tuple_(...).in_()` below.
             zim_ids_entries: List[Tuple[int, str]] = [tuple(row) for row in curs.fetchall()]

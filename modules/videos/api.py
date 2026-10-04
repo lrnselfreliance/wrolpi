@@ -27,8 +27,8 @@ logger = logger.getChild(__name__)
 
 @content_bp.get('/statistics')
 @openapi.response(HTTPStatus.OK, schema.VideosStatisticsResponse)
-async def statistics(_: Request):
-    ret = await lib.get_statistics()
+async def statistics(request: Request):
+    ret = await lib.get_statistics(request.ctx.session)
     return json_response(ret, HTTPStatus.OK)
 
 

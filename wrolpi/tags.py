@@ -14,7 +14,7 @@ from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
 from wrolpi.dates import TZDateTime
-from wrolpi.db import get_db_curs, get_db_session, named_placeholders
+from wrolpi.db import get_db_session, named_placeholders, session_curs
 from wrolpi.downloader import save_downloads_config
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile
 from wrolpi.events import Events
@@ -844,8 +844,8 @@ def sync_tags_directory():
             raise
 
 
-def get_tags() -> List[dict]:
-    with get_db_curs() as curs:
+def get_tags(session: Session) -> List[dict]:
+    with session_curs(session) as curs:
         curs.execute('''
                      SELECT t.id,
                             t.name,
@@ -862,8 +862,8 @@ def get_tags() -> List[dict]:
     return tags
 
 
-def get_recent_tags(limit: int = 5) -> List[str]:
-    with get_db_curs() as curs:
+def get_recent_tags(session: Session, limit: int = 5) -> List[str]:
+    with session_curs(session) as curs:
         curs.execute('''
                      SELECT t.name
                      FROM (SELECT tag_id, MAX(created_at) AS latest
@@ -881,7 +881,7 @@ def get_recent_tags(limit: int = 5) -> List[str]:
         return [row['name'] for row in curs.fetchall()]
 
 
-def get_overlapping_tags(tag_names: Union[str, List[str]], limit: int = 5) -> List[str]:
+def get_overlapping_tags(session: Session, tag_names: Union[str, List[str]], limit: int = 5) -> List[str]:
     if isinstance(tag_names, str):
         tag_names = [tag_names]
 
@@ -890,7 +890,7 @@ def get_overlapping_tags(tag_names: Union[str, List[str]], limit: int = 5) -> Li
     params = dict(tag_count=len(tag_names), limit=limit)
     tag_names_placeholders = named_placeholders('tag_name', tag_names, params)
 
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute(f'''
                      WITH target_tags AS (SELECT id FROM tag WHERE name IN ({tag_names_placeholders})),
                      file_matching AS (

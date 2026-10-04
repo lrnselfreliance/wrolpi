@@ -30,7 +30,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     get_wrolpi_config, \
     unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory, strip_surrogates
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
-from wrolpi.db import get_db_session, get_db_curs, values_clause
+from wrolpi.db import get_db_session, get_db_curs, values_clause, session_curs
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError, UnsupportedArchive, InvalidArchiveMember
@@ -1149,15 +1149,15 @@ def search_filter_cache_key(corpus: str, **filters) -> str:
     return json.dumps(payload, sort_keys=True, default=str)
 
 
-def count_file_groups(statement: str, params: dict) -> int:
+def count_file_groups(session: Session, statement: str, params: dict) -> int:
     """Run a `SELECT COUNT(*) AS total ...` statement and return the integer."""
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute(statement, params)
         row = curs.fetchone()
         return int(row['total'])
 
 
-def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
+def search_files(session: Session, search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
                  url: str = None, suffix: str = None, path: str = None, deep: bool = False) -> \
@@ -1294,12 +1294,13 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         any_tag=any_tag, url=url, suffix=suffix, path=path, deep=deep,
         viewed_only=viewed_only,
     )
-    total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, count_params))
-    results, total = handle_file_group_search_results(stmt, params, total=total)
+    total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, count_params))
+    results, total = handle_file_group_search_results(session, stmt, params, total=total)
     return results, total
 
 
-def handle_file_group_search_results(statement: str, params: dict, total: int = None) -> Tuple[List[dict], int]:
+def handle_file_group_search_results(session: Session, statement: str, params: dict, total: int = None) \
+        -> Tuple[List[dict], int]:
     """
     Execute the provided SQL statement and fetch the Files returned.
 
@@ -1310,7 +1311,7 @@ def handle_file_group_search_results(statement: str, params: dict, total: int = 
 
     See: `search`
     """
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute(statement, params)
         results = [dict(i) for i in curs.fetchall()]
         if total is None:
@@ -1327,56 +1328,55 @@ def handle_file_group_search_results(statement: str, params: dict, total: int = 
             d_headline=i.get('d_headline'),
         ) for i in results]
 
-    with get_db_session() as session:
-        from modules.archive.models import Archive
-        from modules.videos.models import Video
-        results = session.query(FileGroup, Video, Archive) \
-            .filter(FileGroup.id.in_(ordered_ids)) \
-            .outerjoin(Video, Video.file_group_id == FileGroup.id) \
-            .outerjoin(Archive, Archive.file_group_id == FileGroup.id)
-        # Order FileGroups by their location in ordered_ids.  Use dict for O(1) lookups instead of O(n) list.index().
-        id_to_order = {id_: idx for idx, id_ in enumerate(ordered_ids)}
-        file_groups = sorted(results, key=lambda i: id_to_order.get(i[0].id, 0))
-        results = list()
-        for extra, (file_group, video, archive) in zip_longest(extras, file_groups):
-            if video:
-                results.append(video.__json__())
-            elif archive:
-                results.append(archive.__json__())
-            else:
-                results.append(file_group.__json__())
-            # Preserve the ts_ranks, if any.
-            if extra:
-                results[-1]['ts_rank'] = extra['ts_rank']
-                results[-1]['title_headline'] = extra['title_headline']
-                results[-1]['b_headline'] = extra['b_headline']
-                results[-1]['c_headline'] = extra['c_headline']
-                results[-1]['d_headline'] = extra['d_headline']
+    from modules.archive.models import Archive
+    from modules.videos.models import Video
+    results = session.query(FileGroup, Video, Archive) \
+        .filter(FileGroup.id.in_(ordered_ids)) \
+        .outerjoin(Video, Video.file_group_id == FileGroup.id) \
+        .outerjoin(Archive, Archive.file_group_id == FileGroup.id)
+    # Order FileGroups by their location in ordered_ids.  Use dict for O(1) lookups instead of O(n) list.index().
+    id_to_order = {id_: idx for idx, id_ in enumerate(ordered_ids)}
+    file_groups = sorted(results, key=lambda i: id_to_order.get(i[0].id, 0))
+    results = list()
+    for extra, (file_group, video, archive) in zip_longest(extras, file_groups):
+        if video:
+            results.append(video.__json__())
+        elif archive:
+            results.append(archive.__json__())
+        else:
+            results.append(file_group.__json__())
+        # Preserve the ts_ranks, if any.
+        if extra:
+            results[-1]['ts_rank'] = extra['ts_rank']
+            results[-1]['title_headline'] = extra['title_headline']
+            results[-1]['b_headline'] = extra['b_headline']
+            results[-1]['c_headline'] = extra['c_headline']
+            results[-1]['d_headline'] = extra['d_headline']
 
-        search_str = params.get('search_str') if isinstance(params, dict) else None
+    search_str = params.get('search_str') if isinstance(params, dict) else None
 
-        # When headlines were requested, compute the title headlines in Python (the FTS5 snippet
-        # function only works on indexed columns; `title` is not one).
-        if search_str and any(extra and extra.get('headlines') for extra in extras):
-            from wrolpi import fts
-            titles = [result.get('title') or '' for result in results]
-            for result, (headline_text, rank) in zip(results, fts.headline_texts(titles, search_str)):
-                if rank > 0:
-                    result['title_headline'] = headline_text
+    # When headlines were requested, compute the title headlines in Python (the FTS5 snippet
+    # function only works on indexed columns; `title` is not one).
+    if search_str and any(extra and extra.get('headlines') for extra in extras):
+        from wrolpi import fts
+        titles = [result.get('title') or '' for result in results]
+        for result, (headline_text, rank) in zip(results, fts.headline_texts(titles, search_str)):
+            if rank > 0:
+                result['title_headline'] = headline_text
 
-        # When searching by text, attach a `section_hint` to any doc-modeled result so
-        # the UI can deep-link into the matching EPUB chapter or PDF page.
-        if search_str:
-            from modules.docs.lib import _fetch_section_hints
-            # `r['id']` is the FileGroup primary key; _fetch_section_hints filters
-            # on `file_group_id`, so this list is file-group ids (not doc.id).
-            fg_ids = [r['id'] for r in results if r.get('model') == 'doc']
-            if fg_ids:
-                hints = _fetch_section_hints(session, fg_ids, search_str)
-                for r in results:
-                    hint = hints.get(r['id'])
-                    if hint:
-                        r['section_hint'] = hint
+    # When searching by text, attach a `section_hint` to any doc-modeled result so
+    # the UI can deep-link into the matching EPUB chapter or PDF page.
+    if search_str:
+        from modules.docs.lib import _fetch_section_hints
+        # `r['id']` is the FileGroup primary key; _fetch_section_hints filters
+        # on `file_group_id`, so this list is file-group ids (not doc.id).
+        fg_ids = [r['id'] for r in results if r.get('model') == 'doc']
+        if fg_ids:
+            hints = _fetch_section_hints(session, fg_ids, search_str)
+            for r in results:
+                hint = hints.get(r['id'])
+                if hint:
+                    r['section_hint'] = hint
 
     return results, total
 
@@ -1458,8 +1458,8 @@ def split_file_name_words(name: str) -> str:
         return name
 
 
-def get_file_statistics():
-    with get_db_curs() as curs:
+def get_file_statistics(session: Session):
+    with session_curs(session) as curs:
         curs.execute('''
                      SELECT
                          -- All items in file_group.files are real individual files.
@@ -1573,7 +1573,7 @@ def mimetypes_to_sql_wheres(wheres: List[str], params: dict, mimetypes: List[str
     return wheres, params
 
 
-async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str],
+async def search_file_suggestion_count(session: Session, search_str: str, tag_names: List[str], mimetypes: List[str],
                                        months: List[int] = None, from_year: int = None, to_year: int = None,
                                        any_tag: bool = False) -> dict:
     """
@@ -1615,7 +1615,7 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     '''
     logger.debug(f'search_file_suggestion_count: {stmt} {params}')
 
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         if deep_match:
             curs.execute(stmt, {**params, 'fts_match': deep_match})
             deep_estimate = int(curs.fetchone()['estimate'])
@@ -2078,7 +2078,7 @@ class BulkTagPreview:
         )
 
 
-def get_bulk_tag_preview(paths: List[str]) -> BulkTagPreview:
+def get_bulk_tag_preview(session: Session, paths: List[str]) -> BulkTagPreview:
     """Get preview information for bulk tagging operation.
 
     Returns the count of files that will be tagged and the tags that are shared by ALL files.
@@ -2113,34 +2113,33 @@ def get_bulk_tag_preview(paths: List[str]) -> BulkTagPreview:
     # First, get all FileGroups and their tags
     # We query by stem prefix because unique_files may contain non-primary files
     # (e.g., .readability.json) but FileGroups are stored with primary_path (e.g., .html)
-    with get_db_session() as session:
-        from sqlalchemy import or_
-        stems = [split_path_stem_and_suffix(f, full=True)[0] for f in unique_files]
-        # Chunk the OR'd LIKEs to stay within SQLite's expression-tree depth limit of 1000.
-        file_groups = []
-        for idx in range(0, len(stems), 500):
-            chunk = stems[idx:idx + 500]
-            file_groups.extend(session.query(FileGroup).filter(
-                or_(*[FileGroup.primary_path.like(f'{stem}%') for stem in chunk])
-            ).all())
+    from sqlalchemy import or_
+    stems = [split_path_stem_and_suffix(f, full=True)[0] for f in unique_files]
+    # Chunk the OR'd LIKEs to stay within SQLite's expression-tree depth limit of 1000.
+    file_groups = []
+    for idx in range(0, len(stems), 500):
+        chunk = stems[idx:idx + 500]
+        file_groups.extend(session.query(FileGroup).filter(
+            or_(*[FileGroup.primary_path.like(f'{stem}%') for stem in chunk])
+        ).all())
 
-        if not file_groups:
-            # No FileGroups exist yet, no shared tags
-            return BulkTagPreview(file_count=file_count, shared_tag_names=[])
+    if not file_groups:
+        # No FileGroups exist yet, no shared tags
+        return BulkTagPreview(file_count=file_count, shared_tag_names=[])
 
-        # Get tag names for each FileGroup
-        tag_sets = []
-        for fg in file_groups:
-            tag_sets.append(set(fg.tag_names))
+    # Get tag names for each FileGroup
+    tag_sets = []
+    for fg in file_groups:
+        tag_sets.append(set(fg.tag_names))
 
-        # Find intersection of all tag sets (tags shared by ALL files)
-        if tag_sets:
-            shared_tags = tag_sets[0]
-            for tag_set in tag_sets[1:]:
-                shared_tags = shared_tags.intersection(tag_set)
-            shared_tag_names = sorted(list(shared_tags))
-        else:
-            shared_tag_names = []
+    # Find intersection of all tag sets (tags shared by ALL files)
+    if tag_sets:
+        shared_tags = tag_sets[0]
+        for tag_set in tag_sets[1:]:
+            shared_tags = shared_tags.intersection(tag_set)
+        shared_tag_names = sorted(list(shared_tags))
+    else:
+        shared_tag_names = []
 
     return BulkTagPreview(file_count=file_count, shared_tag_names=shared_tag_names)
 

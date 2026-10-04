@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from wrolpi import fts
 from wrolpi.collections.models import Collection
 from wrolpi.collections.types import collection_type_registry
-from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype, cached_search_total, \
     search_filter_cache_key
@@ -293,24 +292,23 @@ def discover_calibre_cover(ebook_path: pathlib.Path):
     return cover
 
 
-def get_statistics() -> dict:
+def get_statistics(session: Session) -> dict:
     """Get doc statistics."""
     from .models import Doc
     from wrolpi.files.models import FileGroup
 
-    with get_db_session() as session:
-        total = session.query(func.count(Doc.id)).scalar() or 0
-        total_size = session.query(func.sum(Doc.size)).scalar() or 0
+    total = session.query(func.count(Doc.id)).scalar() or 0
+    total_size = session.query(func.sum(Doc.size)).scalar() or 0
 
-        epub_count = session.query(func.count(Doc.id)).join(FileGroup).filter(
-            FileGroup.mimetype.startswith('application/epub')).scalar() or 0
-        pdf_count = session.query(func.count(Doc.id)).join(FileGroup).filter(
-            FileGroup.mimetype == 'application/pdf').scalar() or 0
+    epub_count = session.query(func.count(Doc.id)).join(FileGroup).filter(
+        FileGroup.mimetype.startswith('application/epub')).scalar() or 0
+    pdf_count = session.query(func.count(Doc.id)).join(FileGroup).filter(
+        FileGroup.mimetype == 'application/pdf').scalar() or 0
 
-        author_count = session.query(func.count(Collection.id)).filter(
-            Collection.kind == 'author').scalar() or 0
-        subject_count = session.query(func.count(Collection.id)).filter(
-            Collection.kind == 'subject').scalar() or 0
+    author_count = session.query(func.count(Collection.id)).filter(
+        Collection.kind == 'author').scalar() or 0
+    subject_count = session.query(func.count(Collection.id)).filter(
+        Collection.kind == 'subject').scalar() or 0
 
     return dict(statistics=dict(
         doc_count=total,
@@ -368,7 +366,7 @@ def _doc_browse_sql(order_by: str) -> Optional[str]:
         ORDER BY {order} LIMIT :limit OFFSET :offset'''
 
 
-def _search_docs(search_str=None, author=None, subject=None, language=None, mimetype=None,
+def _search_docs(session: Session, search_str=None, author=None, subject=None, language=None, mimetype=None,
                  limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False):
     from .models import Doc
     from wrolpi.files.models import FileGroup
@@ -377,86 +375,85 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
     # the much smaller a/b/c columns.
     match = fts.translate_websearch(search_str, None if deep else fts.ABC_COLUMNS) if search_str else None
 
-    with get_db_session() as session:
-        query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
+    query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
 
-        fts_sq = None
-        if match is not None:
-            fts_sq = text('SELECT rowid AS id, -rank AS ts_rank'
-                          ' FROM file_group_fts WHERE file_group_fts MATCH :fts_match') \
-                .bindparams(fts_match=match) \
-                .columns(column('id', Integer), column('ts_rank', Float)) \
-                .alias('fts')
-            query = query.join(fts_sq, fts_sq.c.id == FileGroup.id)
+    fts_sq = None
+    if match is not None:
+        fts_sq = text('SELECT rowid AS id, -rank AS ts_rank'
+                      ' FROM file_group_fts WHERE file_group_fts MATCH :fts_match') \
+            .bindparams(fts_match=match) \
+            .columns(column('id', Integer), column('ts_rank', Float)) \
+            .alias('fts')
+        query = query.join(fts_sq, fts_sq.c.id == FileGroup.id)
 
-        if author:
-            query = query.filter(FileGroup.b_text.ilike(f'%{author}%'))
+    if author:
+        query = query.filter(FileGroup.b_text.ilike(f'%{author}%'))
 
-        if subject:
-            query = query.filter(Doc.subject.ilike(f'%{subject}%'))
+    if subject:
+        query = query.filter(Doc.subject.ilike(f'%{subject}%'))
 
-        if language:
-            query = query.filter(Doc.language == language)
+    if language:
+        query = query.filter(Doc.language == language)
 
-        if mimetype:
-            query = query.filter(FileGroup.mimetype.startswith(mimetype))
+    if mimetype:
+        query = query.filter(FileGroup.mimetype.startswith(mimetype))
 
-        if tag_names:
-            from wrolpi.tags import Tag, TagFile
-            tagged_fg_ids = session.query(TagFile.file_group_id) \
-                .join(Tag, Tag.id == TagFile.tag_id) \
-                .filter(Tag.name.in_(tag_names)) \
-                .subquery()
-            query = query.filter(FileGroup.id.in_(tagged_fg_ids))
+    if tag_names:
+        from wrolpi.tags import Tag, TagFile
+        tagged_fg_ids = session.query(TagFile.file_group_id) \
+            .join(Tag, Tag.id == TagFile.tag_id) \
+            .filter(Tag.name.in_(tag_names)) \
+            .subquery()
+        query = query.filter(FileGroup.id.in_(tagged_fg_ids))
 
-        unfiltered = not (search_str or author or subject or language or mimetype or tag_names)
-        if unfiltered:
-            total = cached_search_total(
-                search_filter_cache_key('docs'),
-                lambda: session.query(func.count(Doc.id)).scalar() or 0,
-            )
-        else:
-            cache_key = search_filter_cache_key(
-                'docs', search_str=search_str, author=author, subject=subject,
-                language=language, mimetype=mimetype, tag_names=tag_names, deep=deep,
-            )
-            # Count before ORDER BY / LIMIT; cache by filters not page.
-            total = cached_search_total(cache_key, lambda q=query: q.count())
+    unfiltered = not (search_str or author or subject or language or mimetype or tag_names)
+    if unfiltered:
+        total = cached_search_total(
+            search_filter_cache_key('docs'),
+            lambda: session.query(func.count(Doc.id)).scalar() or 0,
+        )
+    else:
+        cache_key = search_filter_cache_key(
+            'docs', search_str=search_str, author=author, subject=subject,
+            language=language, mimetype=mimetype, tag_names=tag_names, deep=deep,
+        )
+        # Count before ORDER BY / LIMIT; cache by filters not page.
+        total = cached_search_total(cache_key, lambda q=query: q.count())
 
-        # Ordering.
-        if order_by == 'rank' and fts_sq is not None:
-            query = query.order_by(
-                desc(fts_sq.c.ts_rank),
-                desc(FileGroup.id),
-            )
-        elif order_by == 'published_datetime':
-            query = query.order_by(nullslast(desc(FileGroup.published_datetime)), desc(FileGroup.id))
-        elif order_by == 'size':
-            query = query.order_by(nullslast(desc(Doc.size)))
-        elif order_by == 'title':
-            query = query.order_by(nullslast(asc(FileGroup.a_text)))
-        else:
-            query = query.order_by(desc(FileGroup.id))
+    # Ordering.
+    if order_by == 'rank' and fts_sq is not None:
+        query = query.order_by(
+            desc(fts_sq.c.ts_rank),
+            desc(FileGroup.id),
+        )
+    elif order_by == 'published_datetime':
+        query = query.order_by(nullslast(desc(FileGroup.published_datetime)), desc(FileGroup.id))
+    elif order_by == 'size':
+        query = query.order_by(nullslast(desc(Doc.size)))
+    elif order_by == 'title':
+        query = query.order_by(nullslast(asc(FileGroup.a_text)))
+    else:
+        query = query.order_by(desc(FileGroup.id))
 
-        # `size` sorts on a doc column and `title` has no file_group index, so neither may fall back to `id`.
-        browse_sql = None
-        if unfiltered and order_by not in ('size', 'title'):
-            browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
-        if browse_sql:
-            fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
-            by_id = {fg.id: fg for fg in session.query(FileGroup).filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
-            file_groups = [by_id[i] for i in fg_ids]
-        else:
-            file_groups = query.offset(offset).limit(limit).all()
-        fg_ids = [fg.id for fg in file_groups]
-        results = [fg.__json__() for fg in file_groups]
+    # `size` sorts on a doc column and `title` has no file_group index, so neither may fall back to `id`.
+    browse_sql = None
+    if unfiltered and order_by not in ('size', 'title'):
+        browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
+    if browse_sql:
+        fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
+        by_id = {fg.id: fg for fg in session.query(FileGroup).filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
+        file_groups = [by_id[i] for i in fg_ids]
+    else:
+        file_groups = query.offset(offset).limit(limit).all()
+    fg_ids = [fg.id for fg in file_groups]
+    results = [fg.__json__() for fg in file_groups]
 
-        if search_str and fg_ids:
-            hints = _fetch_section_hints(session, fg_ids, search_str)
-            for r in results:
-                hint = hints.get(r['id'])
-                if hint:
-                    r['section_hint'] = hint
+    if search_str and fg_ids:
+        hints = _fetch_section_hints(session, fg_ids, search_str)
+        for r in results:
+            hint = hints.get(r['id'])
+            if hint:
+                r['section_hint'] = hint
 
     return results, total
 

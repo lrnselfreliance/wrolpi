@@ -19,10 +19,10 @@ flasher_bp = Blueprint('Flasher', '/api/flasher')
     body=schema.FlasherSearchRequest,
 )
 @validate(schema.FlasherSearchRequest)
-async def post_flasher_search(_: Request, body: schema.FlasherSearchRequest):
+async def post_flasher_search(request: Request, body: schema.FlasherSearchRequest):
     # Reading many firmware headers touches the disk; run off the event loop.
     file_groups, total = await asyncio.to_thread(
-        lib.search_esp_firmware, body.chip, body.path, body.limit)
+        lib.search_esp_firmware, request.ctx.session, body.chip, body.path, body.limit)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)), HTTPStatus.OK)
 
 

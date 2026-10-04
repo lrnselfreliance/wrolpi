@@ -27,8 +27,8 @@ logger = logger.getChild(__name__)
 
 @archive_bp.get('/statistics')
 @openapi.response(HTTPStatus.OK, schema.ArchiveStatisticsResponse)
-async def statistics(_: Request):
-    ret = await lib.get_statistics()
+async def statistics(request: Request):
+    ret = await lib.get_statistics(request.ctx.session)
     return json_response(ret, HTTPStatus.OK)
 
 
@@ -55,14 +55,14 @@ archive_limit_limiter = api_param_limiter(100)
 @openapi.response(HTTPStatus.OK, schema.ArchiveSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.ArchiveSearchRequest)
-async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
+async def search_archives(request: Request, body: schema.ArchiveSearchRequest):
     search_str = body.search_str
     domain = body.domain
     limit = archive_limit_limiter(body.limit)
     offset = body.offset or 0
 
     file_groups, total = await asyncio.to_thread(
-        lib.search_archives, search_str, domain, limit, offset, body.order_by, body.tag_names,
+        lib.search_archives, request.ctx.session, search_str, domain, limit, offset, body.order_by, body.tag_names,
         body.headline, body.deep)
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)

@@ -35,7 +35,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
     ValidationError, DownloadError
 from wrolpi.events import Events
@@ -1307,16 +1307,15 @@ class DownloadManager:
                 raise TimeoutError('Downloads never finished!')
 
     @staticmethod
-    def retry_downloads(reset_attempts: bool = False):
-        """Set any incomplete Downloads to `new` so they will be retried.
+    def retry_downloads(session: Session, reset_attempts: bool = False):
+        """Set any incomplete Downloads to `new` so they will be retried.  The caller commits.
 
         @param reset_attempts: Will set `download.attempts` to 0 if True.
         """
         values = dict(status=DownloadStatus.new, attempts=0) if reset_attempts else dict(status=DownloadStatus.new)
-        with get_db_session(commit=True) as session:
-            session.query(Download) \
-                .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
-                .update(values, synchronize_session=False)
+        session.query(Download) \
+            .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
+            .update(values, synchronize_session=False)
 
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """
@@ -1450,17 +1449,16 @@ class DownloadManager:
 
         return download
 
-    def kill_download(self, download_id: int):
-        """Fail a Download. If it is pending, kill the Downloader so the download stops."""
+    def kill_download(self, session: Session, download_id: int):
+        """Fail a Download. If it is pending, kill the Downloader so the download stops.  The caller commits."""
         logger.info(f'Killing Download: {download_id}')
         download_manager_data = api_app.shared_ctx.download_manager_data.copy()
         download_manager_data['killed_downloads'] = download_manager_data['killed_downloads'] + [download_id, ]
         api_app.shared_ctx.download_manager_data.update(download_manager_data)
 
-        with get_db_session(commit=True) as session:
-            if download := Download.get_by_id(session, download_id):
-                download.error = 'User stopped this download'
-                download.fail()
+        if download := Download.get_by_id(session, download_id):
+            download.error = 'User stopped this download'
+            download.fail()
 
     @staticmethod
     def unkill_download(download_id: int):
@@ -1518,10 +1516,10 @@ class DownloadManager:
                 download[key] = parse_db_datetime(download[key])
         return download
 
-    def get_fe_downloads(self):
+    def get_fe_downloads(self, session: Session):
         """Get downloads for the Frontend.  Uses raw SQL for faster result."""
         # Use custom SQL because SQLAlchemy is slow.
-        with get_db_curs() as curs:
+        with session_curs(session) as curs:
             stmt = f'''
                 SELECT
                     collection_id,
@@ -1598,18 +1596,17 @@ class DownloadManager:
         )
         return data
 
-    def get_summary(self) -> dict:
+    def get_summary(self, session: Session) -> dict:
         """
         Get a summary of what Downloads are happening as well as the status of the DownloadManager.
         """
         from sqlalchemy import func
 
-        with get_db_session() as session:
-            pending_downloads, recurring_downloads = session.query(
-                func.count(Download.id).filter(Download.status == DownloadStatus.pending),
-                func.count(Download.id).filter(Download.frequency != None),  # noqa
-            ).one()
-            daily_limit_reached = self.daily_limit_reached(session)
+        pending_downloads, recurring_downloads = session.query(
+            func.count(Download.id).filter(Download.status == DownloadStatus.pending),
+            func.count(Download.id).filter(Download.frequency != None),  # noqa
+        ).one()
+        daily_limit_reached = self.daily_limit_reached(session)
         summary = dict(
             pending=pending_downloads,
             recurring=recurring_downloads,

@@ -203,7 +203,7 @@ async def test_downloads_summary_fixture_matches_the_download_manager(async_clie
     """
     from wrolpi.downloader import download_manager
 
-    declared = set(download_manager.get_summary())
+    declared = set(download_manager.get_summary(test_session))
 
     source = TEST_FIXTURES_JS.read_text()
     block = re.search(r'^    downloads: \{(.*?)\n    },', source, re.S | re.M)

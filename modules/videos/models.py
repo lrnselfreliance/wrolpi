@@ -10,7 +10,7 @@ from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions, read_captions_with_timestamps
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     background_task
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session, session_curs
 from wrolpi.downloader import Download
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.worker import file_worker
@@ -177,7 +177,7 @@ class Video(ModelHelper, Base):
         """
         session = Session.object_session(self)
 
-        with get_db_curs() as curs:
+        with session_curs(session) as curs:
             if self.file_group.published_datetime:
                 # Get videos next to this Video's upload date.
                 stmt = '''
@@ -964,9 +964,14 @@ class Channel(ModelHelper, Base):
             d['downloads'] = self.downloads
         return d
 
-    def get_statistics(self):
-        """Get statistics about this channel."""
-        with get_db_curs() as curs:
+    def get_statistics(self) -> dict:
+        """Get statistics about this channel.
+
+        Read on the Channel's own Session, so during a request this uses the request's connection."""
+        session = Session.object_session(self)
+        if session is None:
+            raise RuntimeError(f'{self} is not in a session!')
+        with session_curs(session) as curs:
             stmt = '''
                    SELECT SUM(size)        AS "size",
                           MAX(size)        AS "largest_video",

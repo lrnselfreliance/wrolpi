@@ -293,10 +293,10 @@ async def test_search_docs_attaches_section_hint_epub(test_session, test_directo
                                     ])
 
     # "mullen" is only in the document body (d_text), so a deep search is required to match it.
-    results, total = _search_docs(search_str='mullen', mimetype='application/epub')
+    results, total = _search_docs(test_session, search_str='mullen', mimetype='application/epub')
     assert total == 0, 'Document contents are not searched unless deep=True'
 
-    results, total = _search_docs(search_str='mullen', mimetype='application/epub', deep=True)
+    results, total = _search_docs(test_session, search_str='mullen', mimetype='application/epub', deep=True)
     assert total == 1
     assert results[0]['id'] == fg.id
     hint = results[0]['section_hint']
@@ -318,7 +318,7 @@ async def test_search_docs_attaches_section_hint_pdf(test_session, test_director
                                         (3, 'Page 3', 'here is where mullen shows up'),
                                     ])
 
-    results, total = _search_docs(search_str='mullen', mimetype='application/pdf', deep=True)
+    results, total = _search_docs(test_session, search_str='mullen', mimetype='application/pdf', deep=True)
     assert total == 1
     assert results[0]['id'] == fg.id
     hint = results[0]['section_hint']
@@ -334,7 +334,7 @@ async def test_search_docs_no_hint_when_no_query(test_session, test_directory):
                                     'gamma.pdf', 'application/pdf', [
                                         (1, 'Page 1', 'whatever'),
                                     ])
-    results, _ = _search_docs(mimetype='application/pdf')
+    results, _ = _search_docs(test_session, mimetype='application/pdf')
     assert results and results[0]['id'] == fg.id
     assert 'section_hint' not in results[0]
 
@@ -360,15 +360,15 @@ async def test_search_docs_browse_walks_file_group_date_index(test_session, test
     assert 'TEMP B-TREE' not in plan, plan
 
     # Newest first, NULL published dates last, same as the filtered ORM path.
-    results, total = _search_docs()
+    results, total = _search_docs(test_session, )
     assert total == 3
     assert [i['id'] for i in results] == [docs[2].file_group_id, docs[1].file_group_id, docs[0].file_group_id]
 
     # Paging still works on the fast path.
-    results, total = _search_docs(limit=1, offset=1)
+    results, total = _search_docs(test_session, limit=1, offset=1)
     assert total == 3
     assert [i['id'] for i in results] == [docs[1].file_group_id]
 
     # Filtered searches are unaffected.
-    results, total = _search_docs(mimetype='application/pdf')
+    results, total = _search_docs(test_session, mimetype='application/pdf')
     assert total == 3

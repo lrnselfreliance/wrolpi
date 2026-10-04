@@ -59,20 +59,20 @@ async def test_search_esp_firmware_filters_by_chip(async_client, test_session, m
         return sorted(pathlib.Path(r['primary_path']).name for r in results)
 
     # Filter to ESP32-S3: only the two S3 images, never the non-ESP file.
-    s3, total = search_esp_firmware(chip='ESP32-S3')
+    s3, total = search_esp_firmware(test_session, chip='ESP32-S3')
     assert total == 2
     assert names(s3) == ['s3-app.bin', 's3-factory.bin']
     assert {r['esp_chip'] for r in s3} == {'ESP32-S3'}
     assert {r['esp_kind'] for r in s3} == {'app', 'factory'}
 
     # Filter to ESP32-S2: just the one.
-    s2, total = search_esp_firmware(chip='ESP32-S2')
+    s2, total = search_esp_firmware(test_session, chip='ESP32-S2')
     assert total == 1
     assert names(s2) == ['s2-app.bin']
 
     # No chip: every .bin, including non-ESP parts (partition tables, littlefs, boot_app0) annotated with a null
     # chip so a full flash set can still be assembled from the picker.
-    all_bin, total = search_esp_firmware()
+    all_bin, total = search_esp_firmware(test_session)
     assert total == 5
     assert 'littlefs.bin' in names(all_bin)
     littlefs = next(r for r in all_bin if pathlib.Path(r['primary_path']).name == 'littlefs.bin')
@@ -80,7 +80,7 @@ async def test_search_esp_firmware_filters_by_chip(async_client, test_session, m
     assert littlefs['esp_kind'] == 'not_esp_image'
 
     # Filtering to a specific chip still returns only that chip's ESP images (non-ESP parts are shown unfiltered).
-    _, total = search_esp_firmware(chip='ESP32-H2')
+    _, total = search_esp_firmware(test_session, chip='ESP32-H2')
     assert total == 0
 
 

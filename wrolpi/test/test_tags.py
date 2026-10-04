@@ -730,11 +730,11 @@ async def test_get_recent_tags(test_session, make_files_structure, tag_factory, 
     tf3.created_at = base
     test_session.commit()
 
-    result = tags.get_recent_tags(limit=5)
+    result = tags.get_recent_tags(test_session, limit=5)
     assert result == ['gamma', 'beta', 'alpha']
 
     # Limit is respected.
-    result = tags.get_recent_tags(limit=2)
+    result = tags.get_recent_tags(test_session, limit=2)
     assert result == ['gamma', 'beta']
 
 
@@ -757,7 +757,7 @@ async def test_get_overlapping_tags(test_session, make_files_structure, tag_fact
     file_groups[1].add_tag(test_session, tag2.id)
     test_session.commit()
 
-    result = tags.get_overlapping_tags('alpha')
+    result = tags.get_overlapping_tags(test_session, 'alpha')
     # beta overlaps with alpha twice, gamma once.
     assert result == ['beta', 'gamma']
 
@@ -766,7 +766,7 @@ async def test_get_overlapping_tags(test_session, make_files_structure, tag_fact
 async def test_get_overlapping_tags_empty(test_session, tag_factory):
     """No overlaps returns an empty list."""
     await tag_factory('lonely')
-    result = tags.get_overlapping_tags('lonely')
+    result = tags.get_overlapping_tags(test_session, 'lonely')
     assert result == []
 
 
@@ -814,11 +814,11 @@ async def test_get_overlapping_tags_multiple(test_session, make_files_structure,
     test_session.commit()
 
     # Overlapping with both alpha AND beta: gamma (file a), delta (file b).
-    result = tags.get_overlapping_tags(['alpha', 'beta'])
+    result = tags.get_overlapping_tags(test_session, ['alpha', 'beta'])
     assert set(result) == {'gamma', 'delta'}
 
     # Overlapping with both alpha AND gamma: beta (file a only, since file c has no beta).
-    result = tags.get_overlapping_tags(['alpha', 'gamma'])
+    result = tags.get_overlapping_tags(test_session, ['alpha', 'gamma'])
     assert 'beta' in result
 
 
@@ -842,11 +842,11 @@ async def test_get_overlapping_tags_no_limit(test_session, make_files_structure,
     test_session.commit()
 
     # Default limit of 5 returns only 5.
-    result = tags.get_overlapping_tags('alpha')
+    result = tags.get_overlapping_tags(test_session, 'alpha')
     assert len(result) == 5
 
     # No limit returns all 10.
-    result = tags.get_overlapping_tags('alpha', limit=None)
+    result = tags.get_overlapping_tags(test_session, 'alpha', limit=None)
     assert len(result) == 10
 
 

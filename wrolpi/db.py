@@ -13,7 +13,7 @@ import sqlite3
 import threading
 import types
 from contextlib import contextmanager
-from typing import Tuple, List, Union, Type, Generator, Any
+from typing import Tuple, List, Union, Type, Generator, Any, ContextManager
 
 import sqlalchemy
 import sqlalchemy.exc
@@ -317,6 +317,23 @@ def get_db_curs(commit: bool = False) -> Generator[sqlite3.Cursor, Any, None]:
             connection.close()
 
 
+@contextmanager
+def session_curs(session: Session) -> Generator[sqlite3.Cursor, Any, None]:
+    """A raw `sqlite3.Cursor` on `session`'s connection, inside the Session's transaction.
+
+    Use it for raw SQL in code that is handed a Session, so the SQL shares that Session's connection
+    instead of opening another (as `get_db_curs` does).  Pending ORM changes are flushed first, so raw
+    SQL sees them.  Writes through the cursor commit or roll back with the Session.  Rows are
+    `sqlite3.Row`."""
+    session.flush()
+    curs = session.connection().connection.cursor()
+    curs.row_factory = sqlite3.Row
+    try:
+        yield curs
+    finally:
+        curs.close()
+
+
 def _session_has_connection(session: Session) -> bool:
     """True if the Session's transaction has already connected (and so already emitted BEGIN)."""
     # SQLAlchemy 1.3 has no public API for this; 2.0 replaces it with `session.in_transaction()`.
@@ -345,19 +362,10 @@ class RequestDB:
         self.engine, self.session = _get_request_session()
         _refuse_non_test_engine(self.engine)
 
-    @contextmanager
-    def curs(self) -> Generator[sqlite3.Cursor, Any, None]:
-        """A raw `sqlite3.Cursor` on this request's connection, inside the Session's transaction.
-
-        Pending ORM changes are flushed first, so raw SQL sees them.  Writes through the cursor commit
-        or roll back with the request (or with the enclosing `write()` block).  Rows are `sqlite3.Row`."""
-        self.session.flush()
-        curs = self.session.connection().connection.cursor()
-        curs.row_factory = sqlite3.Row
-        try:
-            yield curs
-        finally:
-            curs.close()
+    def curs(self) -> ContextManager[sqlite3.Cursor]:
+        """A raw `sqlite3.Cursor` on this request's connection (see `session_curs`).  Its writes commit or
+        roll back with the request, or with the enclosing `write()` block."""
+        return session_curs(self.session)
 
     @contextmanager
     def write(self) -> Generator[Session, Any, None]:

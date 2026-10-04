@@ -439,8 +439,8 @@ async def restart_download(request: Request, download_id: int):
 
 @api_bp.get('/download')
 @openapi.description('Get all Downloads so they can be displayed to the User.')
-async def get_downloads(_: Request):
-    data = download_manager.get_fe_downloads()
+async def get_downloads(request: Request):
+    data = download_manager.get_fe_downloads(request.ctx.session)
 
     # Convert `destination` to relative.
     for download in data['once_downloads']:
@@ -455,8 +455,9 @@ async def get_downloads(_: Request):
 
 @api_bp.post('/download/<download_id:int>/kill')
 @openapi.description('Kill a download.  It will be stopped if it is pending.')
-async def kill_download(_: Request, download_id: int):
-    download_manager.kill_download(download_id)
+async def kill_download(request: Request, download_id: int):
+    with request.ctx.db.write() as session:
+        download_manager.kill_download(session, download_id)
     return response.empty()
 
 
@@ -493,8 +494,9 @@ async def clear_failed(request: Request):
 
 @api_bp.post('/download/retry_once')
 @openapi.description('Retry failed once-downloads')
-async def retry_once(_: Request):
-    download_manager.retry_downloads(reset_attempts=True)
+async def retry_once(request: Request):
+    with request.ctx.db.write() as session:
+        download_manager.retry_downloads(session, reset_attempts=True)
     return response.empty()
 
 
@@ -563,7 +565,7 @@ async def get_status(request: Request):
     downloads = dict()
     if flags.db_up.is_set():
         try:
-            downloads = download_manager.get_summary()
+            downloads = download_manager.get_summary(request.ctx.session)
         except Exception as e:
             logger.debug('Unable to get download status', exc_info=e)
 
@@ -605,9 +607,9 @@ async def get_status(request: Request):
 @openapi.definition(
     description='Get summary statistics of all files',
 )
-async def get_statistics(_):
+async def get_statistics(request: Request):
     # Full-table aggregates take many seconds cold on a large library; keep them off the event loop.
-    file_statistics = await asyncio.to_thread(get_file_statistics)
+    file_statistics = await asyncio.to_thread(get_file_statistics, request.ctx.session)
     global_statistics = await asyncio.to_thread(get_global_statistics)
     return json_response({
         'file_statistics': file_statistics,
@@ -634,13 +636,13 @@ async def feed(request: Request, query: schema.EventsRequest):
     description='Get a list of all Tags',
 )
 async def get_tags_request(request: Request):
-    tags_ = tags.get_tags()
+    tags_ = tags.get_tags(request.ctx.session)
     tag_names = request.args.getlist('tag_names')
     result = dict(tags=tags_)
     if tag_names:
         limit = request.args.get('limit')
         limit = int(limit) if limit is not None else None
-        result['overlapping_tag_names'] = tags.get_overlapping_tags(tag_names, limit=limit)
+        result['overlapping_tag_names'] = tags.get_overlapping_tags(request.ctx.session, tag_names, limit=limit)
     return json_response(result)
 
 
@@ -648,8 +650,8 @@ async def get_tags_request(request: Request):
 @openapi.definition(
     description='Get the most recently used tags',
 )
-async def get_recent_tags_request(_: Request):
-    tag_names = tags.get_recent_tags()
+async def get_recent_tags_request(request: Request):
+    tag_names = tags.get_recent_tags(request.ctx.session)
     return json_response(dict(tag_names=tag_names))
 
 
@@ -801,9 +803,10 @@ async def post_search_suggestions(request: Request, body: schema.SearchSuggestio
     body=schema.SearchFileEstimateRequest,
     validate=True,
 )
-async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimateRequest):
+async def post_search_file_estimates(request: Request, body: schema.SearchFileEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
     counts = await search_file_suggestion_count(
+        request.ctx.session,
         body.search_str,
         body.tag_names,
         body.mimetypes,
@@ -826,9 +829,9 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
     body=schema.SearchOtherEstimateRequest,
     validate=True,
 )
-async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstimateRequest):
+async def post_search_other_estimates(request: Request, body: schema.SearchOtherEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
-    others = await search_other_estimates(body.tag_names)
+    others = await search_other_estimates(request.ctx.session, body.tag_names)
     ret = dict(others=others)
     return json_response(ret)
 

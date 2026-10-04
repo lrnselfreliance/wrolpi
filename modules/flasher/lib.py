@@ -8,6 +8,8 @@ import functools
 import pathlib
 from typing import List, Optional, Tuple
 
+from sqlalchemy.orm import Session
+
 from wrolpi.common import get_media_directory, logger
 
 logger = logger.getChild(__name__)
@@ -100,7 +102,7 @@ def _resolve_media_path(primary_path) -> pathlib.Path:
     return path if path.is_absolute() else get_media_directory() / path
 
 
-def search_esp_firmware(chip: Optional[str] = None, path: Optional[str] = None,
+def search_esp_firmware(session: Session, chip: Optional[str] = None, path: Optional[str] = None,
                         limit: int = 1000) -> Tuple[List[dict], int]:
     """Search for ``.bin`` firmware, annotated with each file's detected chip/kind.
 
@@ -114,7 +116,7 @@ def search_esp_firmware(chip: Optional[str] = None, path: Optional[str] = None,
     """
     from wrolpi.files.lib import search_files
 
-    file_groups, _ = search_files(None, limit, 0, suffix='.bin', path=path)
+    file_groups, _ = search_files(session, None, limit, 0, suffix='.bin', path=path)
 
     results = []
     for file_group in file_groups:

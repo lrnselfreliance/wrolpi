@@ -680,7 +680,7 @@ async def test_search_videos_default_page_pagination(test_session, video_factory
     # The fast path must return exactly what the generic query returns for the same request:
     # same rows, same order (NULL placement, id tiebreaker, interleaved mimetypes), same paging.
     def ids(order, limit, offset):
-        results, total = lib.search_videos(order=order, limit=limit, offset=offset)
+        results, total = lib.search_videos(test_session, order=order, limit=limit, offset=offset)
         return [i['id'] for i in results], total
 
     for order in lib.INDEXED_DATE_ORDERS:

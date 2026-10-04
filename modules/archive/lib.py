@@ -27,7 +27,7 @@ from wrolpi.common import get_media_directory, get_relative_to_media_directory, 
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
     get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name
 from wrolpi.dates import now, Seconds
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
 from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
@@ -1390,8 +1390,8 @@ NO_NULL_ORDERS = {
 }
 
 
-def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str],
-                    headline: bool = False, deep: bool = False) \
+def search_archives(session: Session, search_str: str, domain: str, limit: int, offset: int, order: str,
+                    tag_names: List[str], headline: bool = False, deep: bool = False) \
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
@@ -1479,7 +1479,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     if unfiltered:
         total = cached_search_total(
             search_filter_cache_key('archives'),
-            lambda: count_file_groups('SELECT COUNT(*) AS total FROM archive', dict()),
+            lambda: count_file_groups(session, 'SELECT COUNT(*) AS total FROM archive', dict()),
         )
     else:
         if file_group_search:
@@ -1499,9 +1499,9 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
             'archives', search_str=search_str, domain=domain, tag_names=tag_names,
             deep=deep, null_filter=null_filter,
         )
-        total = cached_search_total(cache_key, lambda: count_file_groups(count_stmt, params))
+        total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, params))
 
-    results, total = handle_file_group_search_results(stmt, params, total=total)
+    results, total = handle_file_group_search_results(session, stmt, params, total=total)
 
     if file_group_search and headline and results:
         # Highlight the plain titles like the FTS snippets above (Postgres used ts_headline).
@@ -1657,9 +1657,9 @@ async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = N
     return archive
 
 
-async def get_statistics():
+async def get_statistics(session: Session):
     """Get statistics about Archives and Domain Collections."""
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         curs.execute('''
                      SELECT
                          -- total archives

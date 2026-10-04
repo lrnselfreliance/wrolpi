@@ -20,7 +20,8 @@ def test_update_video_title(test_session, test_directory, video_factory):
     test_session.commit()
     assert video.file_group.title == 'Old Title'
 
-    update_video(video.file_group_id, '  New Title  ')
+    update_video(test_session, video.file_group_id, '  New Title  ')
+    test_session.commit()
 
     test_session.expire_all()
     video = Video.find_by_file_group_id(test_session, video.file_group_id)
@@ -39,7 +40,8 @@ def test_update_video_title_creates_info_json(test_session, test_directory, vide
     test_session.commit()
     assert video.info_json_path is None
 
-    update_video(video.file_group_id, 'Brand New')
+    update_video(test_session, video.file_group_id, 'Brand New')
+    test_session.commit()
 
     test_session.expire_all()
     video = Video.find_by_file_group_id(test_session, video.file_group_id)
@@ -57,7 +59,8 @@ def test_update_video_description(test_session, test_directory, video_factory):
     test_session.commit()
     assert video.file_group.c_text == 'old words'
 
-    update_video(video.file_group_id, description='new words\nsecond line')
+    update_video(test_session, video.file_group_id, description='new words\nsecond line')
+    test_session.commit()
 
     test_session.expire_all()
     video = Video.find_by_file_group_id(test_session, video.file_group_id)
@@ -68,7 +71,8 @@ def test_update_video_description(test_session, test_directory, video_factory):
     assert info_json['description'] == 'old words', 'The original is kept'
     assert info_json['wrolpi']['custom_description'] == 'new words\nsecond line'
 
-    update_video(video.file_group_id, description='')
+    update_video(test_session, video.file_group_id, description='')
+    test_session.commit()
     test_session.expire_all()
     video = Video.find_by_file_group_id(test_session, video.file_group_id)
     assert video.get_description() is None
@@ -80,14 +84,14 @@ def test_update_video_nothing(test_session, video_factory):
     video = video_factory(with_info_json={'title': 'Old'})
     test_session.commit()
     with pytest.raises(ValidationError):
-        update_video(video.file_group_id)
+        update_video(test_session, video.file_group_id)
 
 
 def test_update_video_title_empty(test_session, video_factory):
     video = video_factory(with_info_json={'title': 'Old'})
     test_session.commit()
     with pytest.raises(ValidationError):
-        update_video(video.file_group_id, '   ')
+        update_video(test_session, video.file_group_id, '   ')
     test_session.expire_all()
     assert Video.find_by_file_group_id(test_session, video.file_group_id).file_group.title == 'Old'
 
@@ -108,7 +112,8 @@ async def test_custom_title_survives_refresh(test_session, test_directory, async
 
     video = video_factory(with_info_json={'title': 'Original'})
     test_session.commit()
-    update_video(video.file_group_id, title='Custom', description='custom words')
+    update_video(test_session, video.file_group_id, title='Custom', description='custom words')
+    test_session.commit()
     video_path = video.video_path
     file_group_id = video.file_group_id
 
@@ -174,7 +179,7 @@ async def test_update_video_wrol_mode(test_session, video_factory, wrol_mode_fix
     await wrol_mode_fixture(True)
     try:
         with pytest.raises(WROLModeEnabled):
-            update_video(video.file_group_id, title='Nope')
+            update_video(test_session, video.file_group_id, title='Nope')
     finally:
         await wrol_mode_fixture(False)
 
@@ -194,7 +199,8 @@ async def test_edit_creates_info_json_that_survives_refresh(test_session, test_d
     video_path = video.video_path
     file_group_id = video.file_group_id
 
-    update_video(file_group_id, title='Custom', description='my words')
+    update_video(test_session, file_group_id, title='Custom', description='my words')
+    test_session.commit()
     test_session.expire_all()
     video = Video.find_by_file_group_id(test_session, file_group_id)
     assert video.info_json_path and video.info_json_path.is_file()

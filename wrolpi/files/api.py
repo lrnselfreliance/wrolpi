@@ -151,10 +151,11 @@ async def worker_status(request: Request):
     body=schema.FilesSearchRequest,
 )
 @validate(schema.FilesSearchRequest)
-async def post_search_files(_: Request, body: schema.FilesSearchRequest):
+async def post_search_files(request: Request, body: schema.FilesSearchRequest):
     with timer('Searching all files', 'info', logger__=logger):
+        # The handler awaits the thread, so the request's Session has one user at a time.
         file_groups, total = await asyncio.to_thread(
-            lib.search_files, body.search_str, body.limit, body.offset, body.mimetypes, body.model,
+            lib.search_files, request.ctx.session, body.search_str, body.limit, body.offset, body.mimetypes, body.model,
             body.tag_names, body.headline, body.months, body.from_year, body.to_year,
             body.any_tag, body.order, body.url, body.suffix, body.path, body.deep)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
@@ -524,8 +525,8 @@ async def post_unignore_directory(request: Request, body: schema.Directory):
     body=schema.BulkTagPreviewRequest,
 )
 @validate(schema.BulkTagPreviewRequest)
-async def post_bulk_tag_preview(_: Request, body: schema.BulkTagPreviewRequest):
-    preview = lib.get_bulk_tag_preview(body.paths)
+async def post_bulk_tag_preview(request: Request, body: schema.BulkTagPreviewRequest):
+    preview = lib.get_bulk_tag_preview(request.ctx.session, body.paths)
     return json_response(preview.__json__())
 
 

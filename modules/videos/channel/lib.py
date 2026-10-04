@@ -9,7 +9,7 @@ from wrolpi import flags
 from wrolpi.collections import Collection
 from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, FileWorkerConflict
 from wrolpi.events import Events
@@ -23,11 +23,11 @@ from ..models import Channel, Video
 logger = logger.getChild(__name__)
 
 
-async def get_minimal_channels() -> List[dict]:
+async def get_minimal_channels(session: Session) -> List[dict]:
     """
     Get the minimum amount of information necessary about all channels.
     """
-    with get_db_curs() as curs:
+    with session_curs(session) as curs:
         # Get all channels, even if they don't have videos.  Also get the minimum frequency download because this is the
         # one that will consume the most resources.
         stmt = '''

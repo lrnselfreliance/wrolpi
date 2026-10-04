@@ -640,7 +640,7 @@ async def test_refresh_sync_records_error_status_on_failure(async_client, test_s
 
 @pytest.mark.asyncio
 async def test_refresh_sync_resets_status_when_cancelled(async_client, test_session, test_directory,
-                                                         make_files_structure):
+                                                         make_files_structure, flags_lock):
     """A cancelled synchronous refresh must not strand the status at its last phase.
 
     `refresh_sync` runs inside request handlers, which Sanic cancels on response timeout.  The

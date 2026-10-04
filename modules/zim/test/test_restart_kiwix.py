@@ -7,6 +7,7 @@ from modules.zim import lib
 from modules.zim.models import Zim
 from wrolpi.api_utils import api_app
 from wrolpi.files.models import FileGroup
+from wrolpi.files.worker import file_worker
 
 
 @pytest.mark.asyncio
@@ -145,3 +146,28 @@ async def test_remove_outdated_zim_files_no_restart_when_nothing_deleted(async_c
     assert deleted_count == 0
     switches = dict(api_app.shared_ctx.switches) if api_app.shared_ctx.switches else {}
     assert 'restart_kiwix' not in switches
+
+
+@pytest.mark.asyncio
+async def test_remove_outdated_zim_files_skips_post_processing(async_client, test_session, test_directory,
+                                                               zim_path_factory):
+    """Deleting outdated Zims must not run the global modelers inside the request.
+
+    `DELETE /api/zim/outdated` awaits this; modeling the whole unindexed backlog there exceeded the
+    response timeout and the cancelled request stranded the file worker status."""
+    zim_dir = test_directory / 'zims'
+    zim_dir.mkdir(exist_ok=True)
+    test_zim_bytes = zim_path_factory().read_bytes()
+    paths = [zim_dir / 'wikipedia_en_all_maxi_2020-01.zim', zim_dir / 'wikipedia_en_all_maxi_2020-02.zim']
+    for path in paths:
+        path.write_bytes(test_zim_bytes)
+    await file_worker.refresh_sync(paths)
+    assert test_session.query(FileGroup).count() == 2
+
+    with mock.patch('wrolpi.files.worker.apply_modelers') as apply_modelers:
+        deleted_count = await lib.remove_outdated_zim_files(zim_dir)
+
+    assert deleted_count == 1
+    apply_modelers.assert_not_called()
+    # The deleted Zim is still removed from the DB.
+    assert test_session.query(FileGroup).count() == 1

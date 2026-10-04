@@ -15,6 +15,7 @@ import {
     Statistic,
     StatisticGroup,
     Table,
+    Tabs,
     TextInput,
     Toggle,
 } from "../ui";
@@ -36,6 +37,7 @@ import {
     TRACKING,
 } from "./solar";
 import {CLIMATOLOGY_SOURCE, lookupClimatology, useClimatology} from "./solarData";
+import {SolarOffGrid} from "./SolarOffGrid";
 
 // Every input lives in the URL query so the Share button (which shares window.location.href) shares
 // the whole configuration.  Values equal to their default are left out to keep the URL, and its QR
@@ -526,6 +528,12 @@ export function SolarCalculator() {
         () => (ready ? estimateProduction(modelInputs(s, sunlight)) : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [s, sunlight, ready]);
+    // Off-grid sizing works from DC production per kW of panels, whatever the inverter setting.
+    const worstPerKwp = React.useMemo(
+        () => (ready ? estimateProduction({...modelInputs(s, sunlight), kwp: 1, inverter: null}).worst : null),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [s, sunlight, ready]);
+    const tab = get('tab') === 'offgrid' ? 'offgrid' : 'estimate';
 
     const angleTitle = s.tracking === 'fixed'
         ? `Panel angle: ${s.tilt}° tilt, facing ${compassLabel(s.azimuth)}`
@@ -544,10 +552,23 @@ export function SolarCalculator() {
         <LocationSection get={get} set={set} s={s} climatology={climatology}/>
         <PanelsSection setNumber={setNumber} s={s}/>
 
-        {ready && <Results result={result} s={s}/>}
-        {!ready && !waitingForData && <div style={{marginTop: '1em'}}>
-            <Message kind='info' title='Almost there'>Enter {missing.join(', ')} to see an estimate.</Message>
-        </div>}
+        <Tabs value={tab} onChange={v => set({tab: v === 'offgrid' ? v : null})} keepMounted={false}
+              style={{marginTop: '1.5em'}}>
+            <Tabs.List>
+                <Tabs.Tab value='estimate'>Estimate</Tabs.Tab>
+                <Tabs.Tab value='offgrid'>Off-grid sizing</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value='estimate'>
+                {ready && <Results result={result} s={s}/>}
+                {!ready && !waitingForData && <div style={{marginTop: '1em'}}>
+                    <Message kind='info' title='Almost there'>Enter {missing.join(', ')} to see an estimate.</Message>
+                </div>}
+            </Tabs.Panel>
+            <Tabs.Panel value='offgrid'>
+                <SolarOffGrid get={get} set={set} setNumber={setNumber} s={s} worst={worstPerKwp}
+                              temperatures={sunlight?.temperature}/>
+            </Tabs.Panel>
+        </Tabs>
 
         <Header as='h3' style={{marginTop: '1.5em'}}>Fine-tune (optional)</Header>
         <Accordion multiple>

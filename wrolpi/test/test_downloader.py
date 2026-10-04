@@ -1283,6 +1283,23 @@ async def test_retry_downloads_includes_failed(test_session, test_download_manag
 
 
 @pytest.mark.asyncio
+async def test_retry_downloads_on_startup(test_session, test_download_manager, test_downloader):
+    """Startup is not a request; it retries incomplete Downloads in a write transaction it commits itself."""
+    failed = test_download_manager.create_download(test_session, 'https://example.com/failed', test_downloader.name)
+    failed.fail()
+    complete = test_download_manager.create_download(test_session, 'https://example.com/done', test_downloader.name)
+    complete.complete()
+    test_session.commit()
+
+    with production_like_sessions(test_session):
+        test_download_manager.retry_downloads_on_startup()
+
+    test_session.expire_all()
+    assert failed.status == 'new'
+    assert complete.status == 'complete'
+
+
+@pytest.mark.asyncio
 async def test_batch_retry_downloads(test_session, test_download_manager, test_downloader):
     """Test retrying specific downloads by their IDs."""
     d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)

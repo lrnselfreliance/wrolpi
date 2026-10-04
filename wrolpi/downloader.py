@@ -1317,6 +1317,11 @@ class DownloadManager:
             .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
             .update(values, synchronize_session=False)
 
+    def retry_downloads_on_startup(self):
+        """Startup is not a request: retry incomplete Downloads in a short write transaction of its own."""
+        with get_db_session(commit=True) as session:
+            self.retry_downloads(session)
+
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """
         Get all "new" downloads.  This method fetches the first download each iteration, so it will fetch downloads

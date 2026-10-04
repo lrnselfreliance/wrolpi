@@ -20,6 +20,7 @@ import {
     parseCoordinate,
     parseMonthly,
     poaIrradiance,
+    solarCalculatorPath,
     sunPosition,
     sunsetHourAngle,
     totalHourlyRatio,
@@ -306,5 +307,18 @@ describe('input parsing', () => {
         expect(parseMonthly('1,2,,4')).toEqual([1, 2, null, 4, null, null, null, null, null, null, null, null]);
         expect(parseMonthly(null)).toHaveLength(12);
         expect(parseMonthly(formatMonthly(GHI_40N))).toEqual(GHI_40N);
+    });
+});
+
+describe('solarCalculatorPath', () => {
+    test('links to the calculator with the location rounded to 4 decimals', () => {
+        expect(solarCalculatorPath(40.0153812, -105.2705456))
+            .toBe('/more/calculators?calc=solar&lat=40.0154&lon=-105.2705');
+    });
+
+    test('wraps a longitude from a map that has been panned around the world', () => {
+        expect(solarCalculatorPath(10, 190)).toBe('/more/calculators?calc=solar&lat=10&lon=-170');
+        expect(solarCalculatorPath(10, -540.5)).toBe('/more/calculators?calc=solar&lat=10&lon=179.5');
+        expect(solarCalculatorPath(10, 180)).toBe('/more/calculators?calc=solar&lat=10&lon=180');
     });
 });

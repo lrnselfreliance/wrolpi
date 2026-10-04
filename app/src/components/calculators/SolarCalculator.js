@@ -6,6 +6,7 @@ import {
     Grid,
     Group,
     Header,
+    IconButton,
     Loader,
     Message,
     NumberInput,
@@ -191,9 +192,39 @@ const ESTIMATE_INFO = 'A typical-year estimate from monthly averages. Real years
     + 'over a year and more in any single month. Shading from trees and buildings is not modeled beyond the '
     + 'Shading loss.';
 
+// Browsers only offer geolocation to pages served over HTTPS.
+export const geolocationAvailable = () => Boolean(window.isSecureContext && navigator.geolocation);
+
+const GEOLOCATION_ERRORS = {
+    1: 'Location permission was denied. Allow it in your browser\'s settings for this site.',
+    2: 'Your device could not find its location. Phones with GPS work offline; most computers need the Internet '
+        + 'for this.',
+    3: 'Finding your location took too long. Phones with GPS work offline; most computers need the Internet for '
+        + 'this.',
+};
+
 function LocationSection({get, set, s, climatology}) {
+    const [locating, setLocating] = React.useState(false);
+    const [geoError, setGeoError] = React.useState(null);
     const latError = get('lat') && s.latitude === null ? 'Latitude must be between -90 and 90' : null;
     const lonError = get('lon') && s.longitude === null ? 'Longitude must be between -180 and 180' : null;
+
+    const locate = () => {
+        setLocating(true);
+        setGeoError(null);
+        navigator.geolocation.getCurrentPosition(
+            ({coords}) => {
+                setLocating(false);
+                // 4 decimals (about 11 m) is far finer than the 1° data and keeps the shared URL short.
+                set({lat: Number(coords.latitude.toFixed(4)), lon: Number(coords.longitude.toFixed(4))});
+            },
+            error => {
+                setLocating(false);
+                setGeoError(GEOLOCATION_ERRORS[error.code] || error.message);
+            },
+            {enableHighAccuracy: false, timeout: 20000, maximumAge: 10 * 60 * 1000},
+        );
+    };
 
     let source;
     if (s.ownData) {
@@ -210,18 +241,23 @@ function LocationSection({get, set, s, climatology}) {
 
     return <>
         <Header as='h3'>1. Location</Header>
-        <Grid>
-            <Grid.Col span={{base: 12, xs: 6}}>
+        <Grid align='flex-end'>
+            <Grid.Col span='content'>
+                <IconButton icon='current location' label='Use my current location' size='input-sm'
+                            loading={locating} disabled={!geolocationAvailable()} onClick={locate}/>
+            </Grid.Col>
+            <Grid.Col span='auto'>
                 <TextInput label='Latitude' placeholder='40.015 or 40°0′54″N' name='lat'
                            value={get('lat') || ''} error={latError}
                            onChange={e => set({lat: e.target.value})}/>
             </Grid.Col>
-            <Grid.Col span={{base: 12, xs: 6}}>
+            <Grid.Col span={{base: 12, xs: 'auto'}}>
                 <TextInput label='Longitude' placeholder='-105.27 or 105°16′12″W' name='lon'
                            value={get('lon') || ''} error={lonError}
                            onChange={e => set({lon: e.target.value})}/>
             </Grid.Col>
         </Grid>
+        {geoError && <Message kind='warning' title='Could not get your location'>{geoError}</Message>}
         <div style={{fontSize: '0.85em', opacity: 0.75, marginTop: '0.5em'}}>{source}</div>
     </>;
 }
@@ -509,8 +545,9 @@ export function SolarCalculator() {
         <PanelsSection setNumber={setNumber} s={s}/>
 
         {ready && <Results result={result} s={s}/>}
-        {!ready && !waitingForData &&
-            <Message kind='info' title='Almost there'>Enter {missing.join(', ')} to see an estimate.</Message>}
+        {!ready && !waitingForData && <div style={{marginTop: '1em'}}>
+            <Message kind='info' title='Almost there'>Enter {missing.join(', ')} to see an estimate.</Message>
+        </div>}
 
         <Header as='h3' style={{marginTop: '1.5em'}}>Fine-tune (optional)</Header>
         <Accordion multiple>

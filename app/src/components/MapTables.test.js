@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, screen} from '@testing-library/react';
+import {act, fireEvent, screen} from '@testing-library/react';
 import {Route, Routes} from 'react-router';
 import {renderWithProviders as render} from '../test-utils';
 import {MapRoute} from './Map';
@@ -91,6 +91,16 @@ describe('the Pins tab', () => {
         });
         expect(screen.getAllByText('Camp').length).toBeGreaterThan(0);
         expect(screen.queryAllByText(NO_PINS)).toHaveLength(0);
+    });
+
+    test('a pin opens the Solar calculator at its location', async () => {
+        api.getMapPins.mockResolvedValue({pins: [{id: 1, lat: 40.12346, lon: -111.2, label: 'Camp', color: '#f00'}]});
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        fireEvent.click(screen.getAllByRole('button', {name: 'Solar estimate for Camp'})[0]);
+        expect(window.location.pathname).toBe('/more/calculators');
+        expect(window.location.search).toBe('?calc=solar&lat=40.1235&lon=-111.2');
     });
 });
 

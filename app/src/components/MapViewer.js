@@ -1,5 +1,5 @@
 import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
-import {useSearchParams} from "react-router";
+import {useNavigate, useSearchParams} from "react-router";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {Protocol} from "pmtiles";
@@ -11,6 +11,7 @@ import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
 import {poiPopupHtml} from "./mapPoiPopup";
+import {solarCalculatorPath} from "./calculators/solar";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -531,6 +532,7 @@ export default function MapViewer() {
     const [mapReady, setMapReady] = useState(false);
     const [error, setError] = useState(null);
     const [contextMenu, setContextMenu] = useState(null);
+    const navigate = useNavigate();
     const [addingPin, setAddingPin] = useState(null); // {lat, lon} when pin dialog is open
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
@@ -772,12 +774,16 @@ export default function MapViewer() {
             }
             mapRef.current = null;
             setMapReady(false);
-            // Clean up map params from URL so they don't leak to other pages.
+            // Clean up map params from URL so they don't leak to other pages.  Only while the URL is
+            // still a map page: after navigating away, lat/lon belong to the new page (the Solar
+            // calculator, for one).
             const url = new URL(window.location);
-            url.searchParams.delete("lat");
-            url.searchParams.delete("lon");
-            url.searchParams.delete("z");
-            window.history.replaceState(null, '', url.pathname + url.search);
+            if (url.pathname.startsWith("/map")) {
+                url.searchParams.delete("lat");
+                url.searchParams.delete("lon");
+                url.searchParams.delete("z");
+                window.history.replaceState(null, '', url.pathname + url.search);
+            }
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -923,6 +929,12 @@ export default function MapViewer() {
         setContextMenu(null);
     }, [contextMenu]);
 
+    const handleSolar = useCallback(() => {
+        if (!contextMenu) return;
+        setContextMenu(null);
+        navigate(solarCalculatorPath(contextMenu.lat, contextMenu.lon));
+    }, [contextMenu, navigate]);
+
     const handleSetDefaultLocation = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
@@ -998,6 +1010,14 @@ export default function MapViewer() {
                 onClick={handleAddPin}
             >
                 Add Pin Here
+            </div>
+            <div
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
+                onClick={handleSolar}
+            >
+                Calculate Solar Performance
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}

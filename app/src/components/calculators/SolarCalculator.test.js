@@ -134,6 +134,43 @@ describe('SolarCalculator', () => {
         expect(currentParams().has('pn')).toBe(false);
     });
 
+    describe('use my current location', () => {
+        const withGeolocation = getCurrentPosition => {
+            Object.defineProperty(window, 'isSecureContext', {value: true, configurable: true});
+            Object.defineProperty(navigator, 'geolocation', {value: {getCurrentPosition}, configurable: true});
+        };
+
+        afterEach(() => {
+            delete window.isSecureContext;
+            delete navigator.geolocation;
+        });
+
+        test('fills in the location, rounded to 4 decimals', async () => {
+            withGeolocation(success => success({coords: {latitude: 39.7392358, longitude: -104.990251}}));
+            renderWithProviders(<SolarCalculator/>, {route: BASE});
+            fireEvent.click(screen.getByRole('button', {name: 'Use my current location'}));
+            expect(currentParams().get('lat')).toBe('39.7392');
+            expect(currentParams().get('lon')).toBe('-104.9903');
+            expect(screen.getByLabelText('Latitude')).toHaveValue('39.7392');
+            expect(await findEstimate()).toBeInTheDocument();
+        });
+
+        test('explains a denied permission', () => {
+            withGeolocation((success, failure) => failure({code: 1, message: 'User denied Geolocation'}));
+            renderWithProviders(<SolarCalculator/>, {route: BASE});
+            fireEvent.click(screen.getByRole('button', {name: 'Use my current location'}));
+            expect(screen.getByText('Could not get your location')).toBeInTheDocument();
+            expect(screen.getByText(/Location permission was denied/)).toBeInTheDocument();
+            expect(currentParams().has('lat')).toBe(false);
+        });
+
+        test('is disabled without HTTPS', () => {
+            Object.defineProperty(window, 'isSecureContext', {value: false, configurable: true});
+            renderWithProviders(<SolarCalculator/>, {route: BASE});
+            expect(screen.getByRole('button', {name: 'Use my current location'})).toBeDisabled();
+        });
+    });
+
     test('an invalid latitude is flagged', () => {
         renderWithProviders(<SolarCalculator/>, {route: `${BASE}&lat=95`});
         expect(screen.getByText('Latitude must be between -90 and 90')).toBeInTheDocument();

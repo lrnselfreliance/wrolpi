@@ -470,3 +470,12 @@ export function parseMonthly(text) {
 export function formatMonthly(values) {
     return values.map(v => (v === null || v === undefined || v === '' ? '' : `${v}`)).join(',');
 }
+
+// Link to the Solar calculator for a location, e.g. from the map.  4 decimals (about 11 m) is far finer
+// than the 1° data and keeps the shared URL short.  MapLibre reports longitudes past ±180° once the map
+// has been panned around the world, so those are wrapped back.
+export function solarCalculatorPath(latitude, longitude) {
+    const lon = longitude >= -180 && longitude <= 180 ? longitude : ((longitude + 180) % 360 + 360) % 360 - 180;
+    const round = value => Number(value.toFixed(4));
+    return `/more/calculators?calc=solar&lat=${round(latitude)}&lon=${round(lon)}`;
+}

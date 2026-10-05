@@ -785,6 +785,59 @@ async def test_reorganize_preserves_tag_association(async_client, test_directory
 
 
 @pytest.mark.asyncio
+async def test_reorganize_updates_playlists_config(async_client, test_directory, video_factory, await_switches):
+    """Reorganizing a playlist's file must write the new path to playlists.yaml, otherwise the next
+    re-import cannot find the file and drops the item."""
+    from copy import deepcopy
+    from wrolpi.collections.config import get_playlists_config
+    from wrolpi.files.worker import file_worker, FileTask, FileTaskType
+
+    playlists_config = get_playlists_config()
+    playlists_config._config = deepcopy(playlists_config.default_config)
+
+    channel_dir = test_directory / 'videos' / 'test_channel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+    with get_db_session(commit=True) as session:
+        collection = Collection(name='Test Channel', kind='channel', directory=channel_dir,
+                                file_format='%(title)s.%(ext)s')
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='Test Channel', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+
+    video = video_factory(channel_id=channel_id, title='test_video', with_video_file=True)
+
+    with get_db_session(commit=True) as session:
+        file_group = session.query(Video).get(video.id).file_group
+        old_primary_path = file_group.primary_path
+        playlist = Collection(name='Watch', kind='playlist')
+        session.add(playlist)
+        session.flush([playlist])
+        playlist.add_file_group(file_group, session=session)
+    playlists_config.dump_config()
+
+    new_primary_path = channel_dir / 'renamed_video.mp4'
+    task = FileTask(
+        task_type=FileTaskType.reorganize,
+        paths=[],
+        move_mappings=[(old_primary_path, new_primary_path)],
+        job_id='test-reorganize-playlist',
+    )
+    await file_worker.handle_reorganize(task)
+    await await_switches()
+
+    file_refs = [i['file'] for p in playlists_config.playlists for i in p['items'] if 'file' in i]
+    assert file_refs == ['videos/test_channel/renamed_video.mp4']
+
+    playlists_config.import_config()
+    with get_db_session() as session:
+        playlist = session.query(Collection).filter_by(name='Watch', kind='playlist').one()
+        assert [i.file_group.primary_path for i in playlist.items] == [new_primary_path]
+
+
+@pytest.mark.asyncio
 async def test_reorganize_then_refresh_preserves_filegroup_id_and_tags(
         async_client, test_directory, video_factory, tag_factory, test_tags_config, refresh_files):
     """A refresh after reorganize must keep the FileGroup id (and therefore tags).

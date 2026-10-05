@@ -1697,6 +1697,10 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
     '''
     session.execute(sa_text(sql), dict(updates=updates))
 
+    from wrolpi.collections.config import file_groups_moved
+    new_paths = [str(new_path) for new_path in chunk_plan.values()]
+    file_groups_moved(session, session.query(FileGroup.id).filter(FileGroup.primary_path.in_(new_paths)))
+
 
 def _json_serial(obj):
     """JSON serializer for objects not serializable by default json code."""
@@ -1745,6 +1749,8 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
     # during tests, but SQLAlchemy's identity map doesn't know about raw SQL updates.
     with get_db_session() as session:
         session.expire_all()
+        from wrolpi.collections.config import file_groups_moved
+        file_groups_moved(session, [update['id'] for update in updates])
 
 
 def delete_directory(directory: pathlib.Path, recursive: bool = False, force: bool = False):
@@ -1796,6 +1802,9 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
             fg.move(new_primary_path)
         else:
             fg.move(new_path)
+
+        from wrolpi.collections.config import file_groups_moved
+        file_groups_moved(session, [fg.id])
 
     return new_path
 

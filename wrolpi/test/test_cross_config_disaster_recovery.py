@@ -608,27 +608,31 @@ async def test_import_all_db_configs_does_not_block_event_loop(test_session, tes
         'modules.flasher.config.FlasherConfig.import_config',
     ]
 
-    ticks = 0
     tick_seconds = 0.05
+    tick_times = list()
 
     async def ticker():
-        nonlocal ticks
         while True:
             await asyncio.sleep(tick_seconds)
-            ticks += 1
+            tick_times.append(time.monotonic())
 
+    start = time.monotonic()
     ticker_task = asyncio.create_task(ticker())
     try:
         with contextlib.ExitStack() as stack:
             for target in patched:
                 stack.enter_context(mock.patch(target, slow_import))
             await import_all_db_configs()
+        finished = time.monotonic()
     finally:
         ticker_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await ticker_task
 
-    # A responsive loop ticks through the whole sleep budget; require most of it so that any one
-    # import moving back onto the loop (losing its share of ticks) fails.
-    expected = len(patched) * sleep_seconds / tick_seconds
-    assert ticks >= expected * 0.9, f'event loop was blocked during import ({ticks=}, {expected=})'
+    # An import on the loop freezes it for that import's whole sleep, so no tick fires for at least that long.
+    # Timer jitter on a busy machine delays a tick by milliseconds; it does not add up to a sleep, as a count of
+    # ticks over the whole run would.  The final gap catches a blocking import after the last tick.
+    assert tick_times, 'the event loop never ran the ticker'
+    times = [start, *tick_times, finished]
+    longest_gap = max(later - earlier for earlier, later in zip(times, times[1:]))
+    assert longest_gap < sleep_seconds, f'event loop was blocked for {longest_gap:.3f} s during the import'

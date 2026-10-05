@@ -60,6 +60,7 @@ const iconNameAliases: Record<string, keyof typeof Tabler> = {
     'comments': 'IconMessages',
     'copy': 'IconCopy',
     'cube': 'IconCube',
+    'current location': 'IconCurrentLocation',
     'directory': 'IconFolder',
     'disk': 'IconDatabase',
     'dot circle': 'IconCircleDot',

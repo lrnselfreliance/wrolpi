@@ -14,6 +14,7 @@ import {FoodStorageCalculator} from "./calculators/FoodStorageCalculator";
 import {OneTimePadCalculator} from "./calculators/OneTimePadCalculator";
 import {VinDecoderCalculator} from "./calculators/VinDecoderCalculator";
 import {SpeedTestCalculator} from "./calculators/SpeedTestCalculator";
+import {SolarCalculator} from "./calculators/SolarCalculator";
 
 // Calculators are shown in these titled groups, in this order.  Each calculator carries a
 // `group` matching one of these names; any calculator whose group is missing/unknown falls
@@ -35,6 +36,7 @@ export const useCalculators = () => {
         {key: 'ratio', icon: 'th large', button: 'Ratio', group: 'Engineering', contents: <RatioCalculators/>},
         {key: 'electrical', icon: 'lightning', button: 'Electrical', group: 'Engineering', contents: <ElectricalCalculators/>},
         {key: 'drive', icon: 'cogs', button: 'Drive Ratio', group: 'Engineering', contents: <DriveCalculator/>},
+        {key: 'solar', icon: 'sun', button: 'Solar', group: 'Engineering', contents: <SolarCalculator/>},
         {key: 'water', icon: 'tint', button: 'Water Storage', group: 'Preparedness & Storage', contents: <WaterCalculator/>},
         {key: 'ration', icon: 'food', button: 'Food Storage', group: 'Preparedness & Storage', contents: <FoodStorageCalculator/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', group: 'Radio & Communications', contents: <DipoleAntennaCalculator/>},

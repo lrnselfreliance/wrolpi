@@ -150,3 +150,6 @@ app/cypress/videos
 release/latest.json
 perf_results/
 scripts/api_perf_hosts.json
+
+# Tile cache for scripts/build_solar_climatology.py
+/scripts/.solar_climatology_cache/

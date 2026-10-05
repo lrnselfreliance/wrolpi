@@ -20,6 +20,7 @@ import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
 import MapViewer from "./MapViewer";
 import {AddToPlaylistButton} from "./AddToPlaylist";
+import {solarCalculatorPath} from "./calculators/solar";
 import maplibregl from "maplibre-gl";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
@@ -567,6 +568,9 @@ function MapPins() {
         navigate(`/map?lat=${pin.lat}&lon=${pin.lon}&z=14`);
     };
 
+    const solarButton = (pin) => <Button size='xs' icon='sun' aria-label={`Solar estimate for ${pin.label}`}
+                                         onClick={() => navigate(solarCalculatorPath(pin.lat, pin.lon))}/>;
+
     // --- Desktop headers and row ---
     const fullHeaders = [
         {key: 'color', text: '', sortBy: i => i.color},
@@ -600,10 +604,11 @@ function MapPins() {
             </Table.Cell>
             <Table.Cell>{pin.created}</Table.Cell>
             <Table.Cell>
-                {/* See PinEditRow: a Group so the three controls line up and are spaced. */}
+                {/* See PinEditRow: a Group so the controls line up and are spaced. */}
                 <Group gap='xs' wrap='nowrap'>
                     <Button size='xs' icon='edit' aria-label={`Edit ${pin.label}`}
                             onClick={() => setEditingId(pin.id)}/>
+                    {solarButton(pin)}
                     <AddToPlaylistButton
                         size='xs'
                         icon='list'
@@ -646,15 +651,18 @@ function MapPins() {
                 <div style={{fontSize: '0.6875rem', color: 'var(--muted)'}}>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</div>
             </Table.Cell>
             <Table.Cell>
-                <APIButton
-                    size='xs'
-                    role='danger'
-                    icon='trash'
-                    aria-label={`Delete ${pin.label}`}
-                    confirmContent='Delete this pin?'
-                    confirmButton='Delete'
-                    onClick={() => handleDelete(pin.id)}
-                />
+                <Group gap='xs' wrap='nowrap'>
+                    {solarButton(pin)}
+                    <APIButton
+                        size='xs'
+                        role='danger'
+                        icon='trash'
+                        aria-label={`Delete ${pin.label}`}
+                        confirmContent='Delete this pin?'
+                        confirmButton='Delete'
+                        onClick={() => handleDelete(pin.id)}
+                    />
+                </Group>
             </Table.Cell>
         </Table.Row>;
     };

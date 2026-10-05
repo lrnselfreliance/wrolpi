@@ -2,6 +2,7 @@ import React from "react";
 import {useSearchParams} from "react-router";
 import {
     Accordion,
+    Anchor,
     Button,
     Grid,
     Group,
@@ -36,7 +37,15 @@ import {
     totalLoss,
     TRACKING,
 } from "./solar";
-import {CLIMATOLOGY_SOURCE, lookupClimatology, useClimatology} from "./solarData";
+import {
+    CLIMATOLOGY_ACKNOWLEDGMENT,
+    CLIMATOLOGY_CHANGES,
+    CLIMATOLOGY_DATA_REFERENCE,
+    CLIMATOLOGY_LICENSE,
+    CLIMATOLOGY_SOURCE,
+    lookupClimatology,
+    useClimatology,
+} from "./solarData";
 import {SolarOffGrid} from "./SolarOffGrid";
 
 // Every input lives in the URL query so the Share button (which shares window.location.href) shares
@@ -207,6 +216,7 @@ const GEOLOCATION_ERRORS = {
 
 function LocationSection({get, set, s, climatology}) {
     const [locating, setLocating] = React.useState(false);
+    const [showAttribution, setShowAttribution] = React.useState(false);
     const [geoError, setGeoError] = React.useState(null);
     const latError = get('lat') && s.latitude === null ? 'Latitude must be between -90 and 90' : null;
     const lonError = get('lon') && s.longitude === null ? 'Longitude must be between -180 and 180' : null;
@@ -238,7 +248,17 @@ function LocationSection({get, set, s, climatology}) {
             Enter your own monthly sunlight under "Use my own sunlight data" below.
         </Message>;
     } else {
-        source = `Sunlight and temperature: ${CLIMATOLOGY_SOURCE}.`;
+        source = <>
+            Sunlight and temperature: {CLIMATOLOGY_SOURCE}.{' '}
+            <Anchor component='button' type='button' size='sm' onClick={() => setShowAttribution(!showAttribution)}>
+                Data attribution
+            </Anchor>
+            {showAttribution && <div style={{marginTop: '0.5em'}}>
+                <p>{CLIMATOLOGY_ACKNOWLEDGMENT} {CLIMATOLOGY_DATA_REFERENCE}</p>
+                <p>License: {CLIMATOLOGY_LICENSE}</p>
+                <p>{CLIMATOLOGY_CHANGES}</p>
+            </div>}
+        </>;
     }
 
     return <>

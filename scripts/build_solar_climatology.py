@@ -11,7 +11,9 @@ when NASA publishes a new climatology period, so regenerating it should be rare.
 
 Downloaded tiles are cached (see --cache), so an interrupted run resumes where it stopped.
 
-NASA POWER data is licensed CC BY 4.0; the calculator credits it.  https://power.larc.nasa.gov/
+NASA POWER data is licensed CC BY 4.0.  The build also writes solar-climatology.LICENSE.txt beside the
+data, crediting NASA as it asks (https://power.larc.nasa.gov/docs/referencing/), with the API version,
+the date the data was downloaded, and how WROLPi changed it.
 
 File format (all integers little-endian), decoded by app/src/components/calculators/solarData.js:
 
@@ -26,6 +28,7 @@ bands centered on -179.5 ... 179.5 (west to east).  255 means no data.  Each par
 round((value + offset) / step); see PARAMETERS.
 """
 import argparse
+import datetime
 import json
 import math
 import pathlib
@@ -49,6 +52,16 @@ ROWS, COLUMNS = 180, 360
 MISSING = 255
 VERSION = 1
 
+# NASA's requested acknowledgment.  Must match CLIMATOLOGY_ACKNOWLEDGMENT in solarData.js.
+ACKNOWLEDGMENT = ('The data was obtained from National Aeronautics and Space Administration (NASA) Langley '
+                  'Research Center\'s Prediction Of Worldwide Energy Resources (POWER) project funded through the '
+                  'NASA Earth Science Division.')
+LICENSE = 'Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/'
+# CC BY 4.0 requires saying what was changed.  Must match CLIMATOLOGY_CHANGES in solarData.js.
+CHANGES = ('WROLPi modified the data: values are rounded to fit one byte each (0.04 kWh/m²/day for irradiance, '
+           '0.004 for albedo, 0.5 °C for temperature), temperatures are averaged from NASA\'s 0.5° x 0.625° grid '
+           'into 1° cells, and the calculator interpolates between cells.')
+
 # (NASA parameter, offset, step).  Must match PARAMETERS in solarData.js, in the same order.
 PARAMETERS = [
     ('ALLSKY_SFC_SW_DWN', 0, 0.04),  # global horizontal, kWh/m²/day, 0-10.16
@@ -71,13 +84,17 @@ def tile_url(parameter, lat_min, lon_min):
     return f'{API}?{query}'
 
 
+def tile_path(cache, parameter, lat_min, lon_min):
+    return cache / f'{parameter}_{lat_min}_{lon_min}.json'
+
+
 def fetch_tile(parameter, lat_min, lon_min, cache, pause, retries=8):
     """Return the tile's GeoJSON, from the cache when possible.
 
     NASA rate limits the API (HTTP 429); back off for up to 10 minutes rather than give up, since a
     full build is about 2,600 requests.
     """
-    path = cache / f'{parameter}_{lat_min}_{lon_min}.json'
+    path = tile_path(cache, parameter, lat_min, lon_min)
     if path.is_file():
         return json.loads(path.read_text())
 
@@ -117,6 +134,24 @@ def bin_points(points):
     return {cell: [s / n if n else None for s, n in months] for cell, months in sums.items()}
 
 
+def notice(api, accessed):
+    """The attribution written beside the data.  `api` is like "POWER Climatology API v2.10.0"."""
+    parameters = ', '.join(p for p, _, _ in PARAMETERS)
+    return (
+        'Solar climatology for the WROLPi Solar calculator\n'
+        '\n'
+        'Source: NASA POWER, https://power.larc.nasa.gov/\n'
+        f'Data: 2001-2020 monthly climatology of {parameters}, on a 1° grid.\n'
+        f'The data was obtained from the POWER Project\'s {api} version on {accessed:%Y/%m/%d}.\n'
+        '\n'
+        f'{ACKNOWLEDGMENT}\n'
+        '\n'
+        f'License: {LICENSE}\n'
+        '\n'
+        f'Changes: {CHANGES}\n'
+    )
+
+
 def quantize(value, offset, step):
     if value is None:
         return MISSING
@@ -134,6 +169,7 @@ def main():
 
     tiles = [(lat, lon) for lat in range(-90, 90, TILE) for lon in range(-180, 180, TILE)]
     out = bytearray(b'WSOL' + struct.pack('<BBH', VERSION, len(PARAMETERS), 0))
+    apis = set()
 
     for parameter, offset, step in PARAMETERS:
         print(f'{parameter}: {len(tiles)} tiles', flush=True)
@@ -144,6 +180,8 @@ def main():
                 data = future.result()
                 header = data.get('header')
                 fill = header.get('fill_value', -999) if isinstance(header, dict) else -999
+                if isinstance(header, dict) and 'api' in header:
+                    apis.add(f'{header["api"]["name"]} {header["api"]["version"]}')
                 for feature in data['features']:
                     lon, lat = feature['geometry']['coordinates'][:2]
                     monthly = feature['properties']['parameter'][parameter]
@@ -164,6 +202,14 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(out)
     print(f'Wrote {args.output} ({len(out):,} bytes)')
+
+    # The access date is when the newest tile was downloaded, which a resumed build keeps honest.
+    newest = max(tile_path(args.cache, p, lat, lon).stat().st_mtime
+                 for p, _, _ in PARAMETERS for lat, lon in tiles)
+    accessed = datetime.date.fromtimestamp(newest)
+    license_path = args.output.with_name(args.output.stem + '.LICENSE.txt')
+    license_path.write_text(notice(' / '.join(sorted(apis)), accessed), encoding='utf-8')
+    print(f'Wrote {license_path}')
 
 
 if __name__ == '__main__':

@@ -1,0 +1,11 @@
+Solar climatology for the WROLPi Solar calculator
+
+Source: NASA POWER, https://power.larc.nasa.gov/
+Data: 2001-2020 monthly climatology of ALLSKY_SFC_SW_DWN, ALLSKY_SFC_SW_DIFF, ALLSKY_SRF_ALB, T2M, on a 1° grid.
+The data was obtained from the POWER Project's POWER Climatology API v2.10.0 version on 2026/10/04.
+
+The data was obtained from National Aeronautics and Space Administration (NASA) Langley Research Center's Prediction Of Worldwide Energy Resources (POWER) project funded through the NASA Earth Science Division.
+
+License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+
+Changes: WROLPi modified the data: values are rounded to fit one byte each (0.04 kWh/m²/day for irradiance, 0.004 for albedo, 0.5 °C for temperature), temperatures are averaged from NASA's 0.5° x 0.625° grid into 1° cells, and the calculator interpolates between cells.

@@ -7,6 +7,20 @@ import React from "react";
 export const CLIMATOLOGY_URL = `${process.env.PUBLIC_URL || ''}/data/solar-climatology.bin`;
 export const CLIMATOLOGY_SOURCE = 'NASA POWER 2001–2020 monthly averages (CC BY 4.0)';
 
+// Attribution, as NASA asks (https://power.larc.nasa.gov/docs/referencing/) and CC BY 4.0 requires.  The
+// build script writes the same text, with the API version and download date, to
+// public/data/solar-climatology.LICENSE.txt; a test keeps the two in step.
+export const CLIMATOLOGY_ACKNOWLEDGMENT = 'The data was obtained from National Aeronautics and Space '
+    + 'Administration (NASA) Langley Research Center\'s Prediction Of Worldwide Energy Resources (POWER) project '
+    + 'funded through the NASA Earth Science Division.';
+export const CLIMATOLOGY_DATA_REFERENCE = 'The data was obtained from the POWER Project\'s POWER Climatology API '
+    + 'v2.10.0 version on 2026/10/04.';
+export const CLIMATOLOGY_LICENSE = 'Creative Commons Attribution 4.0 International (CC BY 4.0), '
+    + 'https://creativecommons.org/licenses/by/4.0/';
+export const CLIMATOLOGY_CHANGES = 'WROLPi modified the data: values are rounded to fit one byte each '
+    + '(0.04 kWh/m²/day for irradiance, 0.004 for albedo, 0.5 °C for temperature), temperatures are averaged from '
+    + 'NASA\'s 0.5° x 0.625° grid into 1° cells, and the calculator interpolates between cells.';
+
 const MAGIC = 'WSOL';
 const VERSION = 1;
 const HEADER_BYTES = 8;

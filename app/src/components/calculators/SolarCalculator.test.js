@@ -122,6 +122,16 @@ describe('SolarCalculator', () => {
         expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/data\/solar-climatology\.bin$/));
     });
 
+    test('the data attribution expands', async () => {
+        renderWithProviders(<SolarCalculator/>, {route: DENVER});
+        await findEstimate();
+        expect(screen.queryByText(/Prediction Of Worldwide Energy Resources/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', {name: 'Data attribution'}));
+        expect(screen.getByText(/Prediction Of Worldwide Energy Resources/)).toBeInTheDocument();
+        expect(screen.getByText(/WROLPi modified the data/)).toBeInTheDocument();
+        expect(screen.getByText(/CC BY 4\.0/, {selector: 'p'})).toBeInTheDocument();
+    });
+
     test('typing writes the URL and leaves defaults out', async () => {
         renderWithProviders(<SolarCalculator/>, {route: BASE});
         fireEvent.change(screen.getByLabelText('Latitude'), {target: {value: '40°0\'54"N'}});

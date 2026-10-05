@@ -1,6 +1,13 @@
 import fs from "fs";
 import path from "path";
-import {decodeClimatology, lookupClimatology} from "./solarData";
+import {
+    CLIMATOLOGY_ACKNOWLEDGMENT,
+    CLIMATOLOGY_CHANGES,
+    CLIMATOLOGY_DATA_REFERENCE,
+    CLIMATOLOGY_LICENSE,
+    decodeClimatology,
+    lookupClimatology,
+} from "./solarData";
 import {estimateProduction} from "./solar";
 import {encodeClimatology, uniformClimatology} from "./solarData.fixtures";
 
@@ -137,5 +144,24 @@ describeReal('the built climatology file', () => {
 
     test('has polar night', () => {
         expect(lookupClimatology(grid, 80, 15).ghi[11]).toBeLessThan(0.05);
+    });
+});
+
+describe('attribution', () => {
+    // The build script writes this notice beside the data; the page shows the same text.
+    const notice = fs.readFileSync(path.join(__dirname, '../../../public/data/solar-climatology.LICENSE.txt'), 'utf8');
+
+    test('the notice and the page credit NASA identically', () => {
+        expect(notice).toContain(CLIMATOLOGY_ACKNOWLEDGMENT);
+        expect(notice).toContain(CLIMATOLOGY_DATA_REFERENCE);
+        expect(notice).toContain(CLIMATOLOGY_LICENSE);
+        expect(notice).toContain(CLIMATOLOGY_CHANGES);
+    });
+
+    test('the acknowledgment is NASA POWER\'s requested wording', () => {
+        // https://power.larc.nasa.gov/docs/referencing/
+        expect(CLIMATOLOGY_ACKNOWLEDGMENT).toBe('The data was obtained from National Aeronautics and Space '
+            + 'Administration (NASA) Langley Research Center\'s Prediction Of Worldwide Energy Resources (POWER) '
+            + 'project funded through the NASA Earth Science Division.');
     });
 });

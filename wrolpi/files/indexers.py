@@ -93,7 +93,7 @@ class ZipIndexer(Indexer, ABC):
                 raise
 
 
-@register_indexer('text/plain')
+@register_indexer('text/plain', 'text/markdown')
 class TextIndexer(Indexer, ABC):
     """Handles plain text files.
 

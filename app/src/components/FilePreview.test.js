@@ -101,6 +101,26 @@ describe('preview gate remounting (source contract)', () => {
     });
 });
 
+describe('markdown preview routing (source contract)', () => {
+    /*
+     * Markdown is text/*, so the generic text branch would also accept it and show it raw in an
+     * iframe.  The markdown branch has to be tested first for the formatted view to be reachable.
+     */
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, 'FilePreview.js'), 'utf8');
+
+    test('markdown is routed to MarkdownPreview before the generic text preview', () => {
+        const markdownBranch = source.indexOf('} else if (isMarkdownFile(mimetype, lowerPath)) {');
+        const textBranch = source.indexOf("} else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {");
+
+        expect(markdownBranch).toBeGreaterThan(-1);
+        expect(textBranch).toBeGreaterThan(-1);
+        expect(markdownBranch).toBeLessThan(textBranch);
+        expect(source.slice(markdownBranch, textBranch)).toContain('<MarkdownPreview url={url}/>');
+    });
+});
+
 describe('IframePreview color scheme', () => {
     /*
      * The previewed file is a bare document with no styles of its own, so it renders with the

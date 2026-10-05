@@ -14,6 +14,7 @@ import {pathDirectory} from "./FileBrowser";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {useLocation} from "react-router";
 import {ThemeContext} from "../contexts/contexts";
+import {isMarkdownFile, MarkdownPreview} from "./MarkdownPreview";
 
 // Routes where file views should not be tracked
 const EXCLUDED_TRACKING_ROUTES = [
@@ -607,6 +608,9 @@ export function FilePreviewProvider({children}) {
             if (mimetype.startsWith('text/') && size > MAXIMUM_TEXT_SIZE) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
+            } else if (isMarkdownFile(mimetype, lowerPath)) {
+                setModalContent(<Modal.Content><MarkdownPreview url={url}/></Modal.Content>, url, downloadURL, path,
+                    taggable);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
                 setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('video/')) {

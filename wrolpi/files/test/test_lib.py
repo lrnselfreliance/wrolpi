@@ -476,6 +476,7 @@ def test_find_indexer_longest_prefix():
     try:
         assert indexers.find_indexer('text/html') is indexers.HTMLIndexer
         assert indexers.find_indexer('text/plain') is indexers.TextIndexer
+        assert indexers.find_indexer('text/markdown') is indexers.TextIndexer
         assert indexers.find_indexer('text/csv') is indexers.DefaultIndexer
         assert indexers.find_indexer('application/zip') is indexers.ZipIndexer
     finally:
@@ -778,6 +779,19 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     assert total == 1
 
 
+@pytest.mark.asyncio
+async def test_markdown_indexed(test_session, make_files_structure, refresh_files):
+    """Markdown files are text/markdown FileGroups whose contents are deep-searchable."""
+    make_files_structure({'notes.md': '# Water storage\n\nRotate the barrels every sixmonths.\n'})
+    await refresh_files()
+
+    markdown, = test_session.query(FileGroup).all()
+    assert markdown.mimetype == 'text/markdown'
+    assert markdown.indexer == indexers.TextIndexer
+    files, total = lib.search_files(test_session, 'sixmonths', 10, 0, deep=True)
+    assert total == 1 and files[0]['id'] == markdown.id
+
+
 @pytest.mark.parametrize('name,expected', [
     ('this.txt', 'this txt'),
     ('name', 'name'),
@@ -891,6 +905,21 @@ def test_get_mimetype_stl(test_directory):
     )
     lib.get_mimetype.cache_clear()
     assert lib.get_mimetype(stl_path) == 'model/stl'
+
+
+@pytest.mark.parametrize('name,contents', [
+    ('notes.md', '# Title\n\nSome *text* and a [link](https://example.com).\n\n- a\n- b\n'),
+    ('plain.md', 'Only a paragraph.\nNo markdown syntax at all.\n'),
+    # libmagic sniffs fenced code and may report a programming language instead of text/plain.
+    ('code.markdown', '#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n'),
+    ('UPPER.MD', '# Upper case suffix\n'),
+])
+def test_get_mimetype_markdown(test_directory, name, contents):
+    """Markdown files resolve to text/markdown however libmagic sniffs their text."""
+    path = test_directory / name
+    path.write_text(contents)
+    lib.get_mimetype.cache_clear()
+    assert lib.get_mimetype(path) == 'text/markdown'
 
 
 def test_get_mimetype_3mf(test_directory):

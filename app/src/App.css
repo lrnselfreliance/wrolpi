@@ -316,6 +316,83 @@ pre.wrap-text {
     height: 100%;
 }
 
+/* A markdown file preview, formatted or raw.  Scrolls rather than fitting like .preview-fit, because
+   it is a document to read, not media to frame.  Colors come from the theme tokens. */
+.markdown-preview {
+    height: calc(100dvh - 21rem);
+    min-height: 15rem;
+    overflow: auto;
+    margin-top: 0.5em;
+    padding: 0 0.25em;
+}
+
+.markdown-raw {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.markdown-body {
+    max-width: 50rem;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+}
+
+.markdown-body > :first-child {
+    margin-top: 0;
+}
+
+.markdown-body h1, .markdown-body h2 {
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid var(--table-line);
+}
+
+.markdown-body img {
+    max-width: 100%;
+}
+
+.markdown-body blockquote {
+    margin: 0 0 1em;
+    padding: 0 1em;
+    color: var(--muted);
+    border-left: 0.25em solid var(--border);
+}
+
+.markdown-body code {
+    padding: 0.1em 0.3em;
+    border-radius: 0.25em;
+    background-color: var(--head);
+}
+
+.markdown-body pre {
+    padding: 0.75em 1em;
+    overflow-x: auto;
+    border-radius: 0.25em;
+    background-color: var(--head);
+}
+
+.markdown-body pre code {
+    padding: 0;
+    background-color: transparent;
+}
+
+.markdown-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+}
+
+.markdown-body th, .markdown-body td {
+    padding: 0.3em 0.75em;
+    border: 1px solid var(--table-line);
+}
+
+.markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+}
+
 td.file-path {
     cursor: pointer;
 }

@@ -1165,7 +1165,7 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'file code';
         } else if (mimetype.startsWith('application/pdf')) {
             return 'file pdf';
-        } else if (mimetype.startsWith('text/plain')) {
+        } else if (mimetype.startsWith('text/plain') || mimetype.startsWith('text/markdown')) {
             return 'file text';
         } else if (mimetype.startsWith('image/')) {
             return 'image';

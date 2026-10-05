@@ -74,6 +74,47 @@ describe('renderMarkdown', () => {
         expect(div.querySelector('img').hasAttribute('src')).toBe(false);
     });
 
+    test.each([
+        ['https://tracker.example/pixel.gif'],
+        ['http://tracker.example/pixel.gif'],
+        // Protocol-relative: starts with a slash, but loads from another host.
+        ['//tracker.example/pixel.gif'],
+    ])('an image from another site (%s) is not loaded, it becomes a link', (src) => {
+        const div = renderToDOM(`![pixel](${src})`);
+
+        expect(div.querySelector('img')).toBeNull();
+        const a = div.querySelector('a');
+        expect(a.getAttribute('href')).toBe(src);
+        expect(a.textContent).toBe('pixel');
+        expect(a.getAttribute('target')).toBe('_blank');
+        expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    test('an image from another site with no alt text is labeled by its URL', () => {
+        const a = renderToDOM('![](https://example.com/a.png)').querySelector('a');
+
+        expect(a.textContent).toBe('https://example.com/a.png');
+    });
+
+    test('an image from another site inside a link becomes the link text, not a nested link', () => {
+        // The badge pattern common in READMEs.
+        const div = renderToDOM('[![build status](https://ci.example/badge.svg)](https://ci.example/project)');
+
+        expect(div.querySelector('img')).toBeNull();
+        const links = div.querySelectorAll('a');
+        expect(links).toHaveLength(1);
+        expect(links[0].getAttribute('href')).toBe('https://ci.example/project');
+        expect(links[0].textContent).toBe('build status');
+    });
+
+    test('media and embedded data images still load', () => {
+        const [media, data] = renderToDOM('![a](/media/x/a.png)\n\n![b](data:image/png;base64,AAAA)')
+            .querySelectorAll('img');
+
+        expect(media.getAttribute('src')).toBe('/media/x/a.png');
+        expect(data.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    });
+
     test('external links open in a new tab without an opener', () => {
         const a = renderToDOM('<https://example.com/page>').querySelector('a');
 

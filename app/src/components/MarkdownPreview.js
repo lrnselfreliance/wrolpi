@@ -45,22 +45,59 @@ function rewriteURL(token, attr, fileURL) {
     }
 }
 
+function openInNewTab(token) {
+    const href = token.attrGet('href');
+    // Following a link would close the preview; a fragment stays within the document.
+    if (href && !href.startsWith('#')) {
+        token.attrSet('target', '_blank');
+        token.attrSet('rel', 'noopener noreferrer');
+    }
+}
+
+/** An image the preview may load: one served by this WROLPi, or embedded in the file. */
+function isLocalImage(src) {
+    return !src || src.startsWith('data:') || (src.startsWith('/') && !src.startsWith('//'));
+}
+
+/**
+ * Replace an image from another site with a link to it.  Loading it would tell that site who is
+ * reading the file and when (a tracking pixel), so the reader chooses whether to follow it.
+ *
+ * Inside a link (a README badge) the image becomes the outer link's text; links cannot nest.
+ */
+function replaceRemoteImage(state, image, insideLink) {
+    const src = image.attrGet('src');
+    const text = new state.Token('text', '', 0);
+    text.content = image.content || src;
+    if (insideLink) {
+        return [text];
+    }
+    const linkOpen = new state.Token('link_open', 'a', 1);
+    linkOpen.attrSet('href', src);
+    openInNewTab(linkOpen);
+    return [linkOpen, text, new state.Token('link_close', 'a', -1)];
+}
+
 markdown.core.ruler.push('wrolpi_media_urls', (state) => {
     const {fileURL} = state.env;
     for (const token of state.tokens) {
-        for (const child of token.children || []) {
+        if (!token.children) {
+            continue;
+        }
+        let insideLink = false;
+        token.children = token.children.flatMap(child => {
             if (child.type === 'image') {
                 rewriteURL(child, 'src', fileURL);
+                return isLocalImage(child.attrGet('src')) ? [child] : replaceRemoteImage(state, child, insideLink);
             } else if (child.type === 'link_open') {
+                insideLink = true;
                 rewriteURL(child, 'href', fileURL);
-                const href = child.attrGet('href');
-                // Following a link would close the preview; a fragment stays within the document.
-                if (href && !href.startsWith('#')) {
-                    child.attrSet('target', '_blank');
-                    child.attrSet('rel', 'noopener noreferrer');
-                }
+                openInNewTab(child);
+            } else if (child.type === 'link_close') {
+                insideLink = false;
             }
-        }
+            return [child];
+        });
     }
 });
 

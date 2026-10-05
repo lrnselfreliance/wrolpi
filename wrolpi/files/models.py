@@ -8,7 +8,7 @@ from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON, or_
 from sqlalchemy import types
-from sqlalchemy.orm import deferred, relationship, Session
+from sqlalchemy.orm import deferred, relationship, Session, selectinload
 
 from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
@@ -121,8 +121,7 @@ class FileGroup(ModelHelper, Base):
     # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
     effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
 
-    # Eager: `__json__` lists the Tags of every FileGroup it serializes.
-    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all', lazy='selectin')
+    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
     # Full-text search over these columns is provided by the external-content FTS5 table
     # `file_group_fts` (see `wrolpi.fts`): a=title, b=author-ish, c=description, d=body/captions.
@@ -134,6 +133,11 @@ class FileGroup(ModelHelper, Base):
     def __repr__(self):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
         return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
+
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose FileGroups will be serialized: `__json__` reads their Tags."""
+        return selectinload(FileGroup.tag_files),
 
     @serializer
     def __json__(self) -> dict:

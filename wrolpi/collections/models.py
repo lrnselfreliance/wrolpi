@@ -3,7 +3,7 @@ from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
     or_, CheckConstraint
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload, selectinload
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import flags
@@ -90,6 +90,7 @@ class Collection(ModelHelper, Base):
 
     # Optional tag relationship (similar to Channel)
     tag_id = Column(Integer, ForeignKey('tag.id'))
+    # Joined: one narrow row, read by the Collection's (and its Channel's) `tag_name`.
     tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id', lazy='joined')
 
     # Stores the file_name_format used when files were last organized
@@ -116,7 +117,6 @@ class Collection(ModelHelper, Base):
         'Download',
         primaryjoin='Download.collection_id==Collection.id',
         back_populates='collection',
-        lazy='selectin',
     )
 
     def __repr__(self):
@@ -945,6 +945,12 @@ class Collection(ModelHelper, Base):
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Collections will be serialized: `__json__` lists the Downloads
+        (without their yt-dlp info_json, which is not serialized)."""
+        return selectinload(Collection.downloads).defer(Download.info_json),
+
     @serializer
     def __json__(self) -> dict:
         """Return JSON-serializable dict for API responses.
@@ -1188,9 +1194,8 @@ class CollectionItem(ModelHelper, Base):
 
     # Relationships
     collection = relationship('Collection', back_populates='items')
-    # Eager: `dict()` serializes the item's FileGroup or Zim for every item of a listing.
-    file_group: FileGroup = relationship('FileGroup', lazy='joined')
-    zim = relationship('Zim', lazy='joined')
+    file_group: FileGroup = relationship('FileGroup')
+    zim = relationship('Zim')
 
     # Indexes for performance
     __table_args__ = (
@@ -1216,6 +1221,12 @@ class CollectionItem(ModelHelper, Base):
     def __repr__(self):
         return (f'<CollectionItem collection={self.collection_id} kind={self.item_kind} '
                 f'position={self.position}>')
+
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose items will be serialized (`dict()`): each reads its FileGroup and the
+        FileGroup's Tags, or its Zim."""
+        return joinedload(CollectionItem.file_group).selectinload(FileGroup.tag_files), joinedload(CollectionItem.zim)
 
     def dict(self) -> dict:
         """Return dictionary representation."""

@@ -127,8 +127,9 @@ async def test_video_channel_refresh(async_client, test_session, test_directory,
     video2: Video = Video.get_by_path(test_session, video2_path)
     assert video1.channel == channel
     assert not video2.channel
-    # Serializers do not query: load the deferred ffprobe_json first, as the queries that serialize Videos do.
-    test_session.refresh(video1, ['ffprobe_json'])
+    # Serializers do not query: load what Video's `__json__` reads, as the queries that serialize Videos do.
+    video1 = test_session.query(Video).options(*Video.json_options()).populate_existing() \
+        .filter(Video.id == video1.id).one()
     assert video1.__json__()['video']['channel']
     video_channel = video1.__json__()['video']['channel']
     assert video_channel['id'] == channel.id

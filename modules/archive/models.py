@@ -5,7 +5,7 @@ from typing import Iterable, List, Optional
 
 import pytz
 from sqlalchemy import Column, Integer, ForeignKey, BigInteger, Index
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload
 
 from wrolpi import dates
 from wrolpi.collections import Collection
@@ -36,10 +36,15 @@ class Archive(Base, ModelHelper):
     id = Column(Integer, primary_key=True)
 
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
-    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id',
-                                          lazy='joined')
+    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
-    file_group: FileGroup = relationship('FileGroup', lazy='joined')
+    file_group: FileGroup = relationship('FileGroup')
+
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Archives will be serialized: `__json__` reads the FileGroup and its Tags,
+        and the domain (the Collection's name)."""
+        return joinedload(Archive.file_group).selectinload(FileGroup.tag_files), joinedload(Archive.collection)
 
     @serializer
     def __json__(self) -> dict:

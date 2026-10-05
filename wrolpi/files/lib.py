@@ -22,7 +22,7 @@ from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
 import cachetools.func
 from sqlalchemy import asc, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, undefer
+from sqlalchemy.orm import Session, undefer, joinedload
 
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
@@ -234,6 +234,7 @@ def get_tagged_file_groups_by_ids(session: Session, file_group_ids: List[int]) -
     if not file_group_ids:
         return []
     rows = session.query(FileGroup) \
+        .options(*FileGroup.json_options()) \
         .join(TagFile, TagFile.file_group_id == FileGroup.id) \
         .filter(FileGroup.id.in_(file_group_ids)) \
         .distinct() \
@@ -255,6 +256,7 @@ def get_tagged_file_groups_by_paths(session: Session, paths: Iterable[pathlib.Pa
     seen_ids = set()
     for path in paths:
         query = session.query(FileGroup) \
+            .options(*FileGroup.json_options()) \
             .join(TagFile, TagFile.file_group_id == FileGroup.id)
         if path.is_file():
             # Could be deleting a file in a FileGroup that has been tagged.
@@ -1330,9 +1332,10 @@ def handle_file_group_search_results(session: Session, statement: str, params: d
 
     from modules.archive.models import Archive
     from modules.videos.models import Video
-    # Video's `__json__` reads its (deferred) ffprobe_json for the codecs.
+    # Serialized below: what Video's and Archive's `__json__` read beyond the FileGroup (see their `json_options`).
     results = session.query(FileGroup, Video, Archive) \
-        .options(undefer(Video.ffprobe_json)) \
+        .options(*FileGroup.json_options(), undefer(Video.ffprobe_json), joinedload(Video.channel),
+                 joinedload(Archive.collection)) \
         .filter(FileGroup.id.in_(ordered_ids)) \
         .outerjoin(Video, Video.file_group_id == FileGroup.id) \
         .outerjoin(Archive, Archive.file_group_id == FileGroup.id)

@@ -340,7 +340,7 @@ def _doc_response(doc) -> dict:
 
 def _get_doc(session, file_group_id: int):
     from .models import Doc
-    doc = session.query(Doc).filter_by(file_group_id=file_group_id).one_or_none()
+    doc = session.query(Doc).options(*Doc.json_options()).filter_by(file_group_id=file_group_id).one_or_none()
     if not doc:
         raise ValidationError(f'Doc with file_group_id {file_group_id} not found')
     return doc
@@ -375,7 +375,7 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
     # the much smaller a/b/c columns.
     match = fts.translate_websearch(search_str, None if deep else fts.ABC_COLUMNS) if search_str else None
 
-    query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
+    query = session.query(FileGroup).options(*FileGroup.json_options()).join(Doc, Doc.file_group_id == FileGroup.id)
 
     fts_sq = None
     if match is not None:
@@ -441,7 +441,8 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
         browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
     if browse_sql:
         fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
-        by_id = {fg.id: fg for fg in session.query(FileGroup).filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
+        by_id = {fg.id: fg for fg in session.query(FileGroup).options(*FileGroup.json_options())
+                 .filter(FileGroup.id.in_(fg_ids))} if fg_ids else {}
         file_groups = [by_id[i] for i in fg_ids]
     else:
         file_groups = query.offset(offset).limit(limit).all()

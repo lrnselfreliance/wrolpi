@@ -292,3 +292,32 @@ def test_no_db_access_logs_once_and_allows_in_production(test_session, caplog):
             assert test_session.query(Tag).count() == 0
     warnings = [r for r in caplog.records if 'a production serializer ran SQL' in r.getMessage()]
     assert len(warnings) == 1
+
+
+@pytest.mark.allow_unexpected_queries
+def test_no_db_access_reports_the_query_not_the_begin(test_session):
+    """On a Session with no open transaction the engine emits BEGIN first; the guard names the real query."""
+    from wrolpi import db
+    test_session.commit()
+    with production_like_sessions(test_session) as maker:
+        session = maker()
+        with pytest.raises(UnexpectedQuery, match='SELECT'):
+            with no_db_access('a serializer on a fresh session'):
+                session.query(Tag).count()
+        session.close()
+    assert [statement.split()[0] for _, statement in db.UNEXPECTED_QUERIES] == ['SELECT']
+    db.UNEXPECTED_QUERIES.clear()
+
+
+def test_no_db_access_logs_the_query_in_production(test_session, caplog):
+    """The single production warning per serializer names the query that ran, not the transaction's BEGIN."""
+    test_session.commit()
+    with production_like_sessions(test_session) as maker, mock.patch('wrolpi.db.PYTEST', False), \
+            mock.patch('wrolpi.db._warned_serializers', set()), caplog.at_level(logging.WARNING, logger='wrolpi.db'):
+        session = maker()
+        with no_db_access('a production serializer'):
+            session.query(Tag).count()
+        session.close()
+    warnings = [r.getMessage() for r in caplog.records if 'a production serializer ran SQL' in r.getMessage()]
+    assert len(warnings) == 1
+    assert 'SELECT' in warnings[0] and 'BEGIN' not in warnings[0]

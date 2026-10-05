@@ -36,8 +36,7 @@ logger = logger.getChild(__name__)
 _immediate_txn = contextvars.ContextVar('wrolpi_immediate_txn', default=False)
 
 
-# Set while serializing (`no_db_access`).  A query then is a lazy load or an expired-attribute refresh: hidden
-# per-row SQL today, and a `MissingGreenlet` error under an async Session.  Holds the name of what is serializing.
+# The name of the serializer that is running (see `no_db_access`), or None.
 _no_db_access = contextvars.ContextVar('wrolpi_no_db_access', default=None)
 # Serializers that have already logged an unexpected query in this process (see `_refuse_query_while_serializing`).
 _warned_serializers = set()
@@ -74,9 +73,14 @@ def serializer(method):
     return wrapper
 
 
+# Transaction control is not a query.  The engine's `begin` listener emits BEGIN through this same event, as the
+# first statement on a Session with no open transaction; the query that follows is the one to report.
+_TRANSACTION_CONTROL = ('BEGIN', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'RELEASE')
+
+
 def _refuse_query_while_serializing(conn, cursor, statement, parameters, context, executemany):
     reason = _no_db_access.get()
-    if reason is None:
+    if reason is None or statement.lstrip().upper().startswith(_TRANSACTION_CONTROL):
         return
     if PYTEST:
         UNEXPECTED_QUERIES.append((reason, statement))

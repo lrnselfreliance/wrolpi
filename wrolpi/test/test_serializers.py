@@ -1,10 +1,9 @@
 """Serializers read only data that is already loaded (see `wrolpi.db.no_db_access`).
 
-A lazy load while serializing is a hidden query per row, and a `MissingGreenlet` error under an async Session.
-The relationships each serializer reads are loaded with their parent (`lazy='joined'` / `'selectin'`).
+A lazy load while serializing is a hidden query per row.  Narrow many-to-one relationships load with their parent
+(`lazy='joined'`); a query whose results are serialized adds the model's `json_options()` for the rest.
 """
 import pytest
-from sqlalchemy.orm import undefer
 
 from modules.archive.models import Archive
 from modules.docs.models import Doc
@@ -47,17 +46,17 @@ async def test_models_serialize_without_queries(async_client, test_session, tag_
     with production_like_sessions(test_session) as maker:
         session = maker()
         for model in (FileGroup, Video, Archive, Doc, Zim, ZimSubscription, Collection, Channel, Tag, Download):
+            # Each serializing query loads what the model's serializer reads (`json_options`).
             query = session.query(model)
-            if model is Video:
-                # Like the queries that serialize Videos: the codecs come from the deferred ffprobe_json.
-                query = query.options(undefer(Video.ffprobe_json))
+            if hasattr(model, 'json_options'):
+                query = query.options(*model.json_options())
             objects = query.all()
             assert objects, f'no {model.__name__} to serialize'
             with no_db_access(f'serializing {model.__name__}'):
                 for obj in objects:
                     obj.__json__()
 
-        items = session.query(CollectionItem).all()
+        items = session.query(CollectionItem).options(*CollectionItem.json_options()).all()
         assert len(items) == 2
         with no_db_access('serializing CollectionItem'):
             serialized = [item.dict() for item in items]

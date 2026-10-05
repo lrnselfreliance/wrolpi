@@ -2,7 +2,7 @@ import pathlib
 from typing import Optional
 
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload
 
 from wrolpi.common import ModelHelper, Base
 from wrolpi.db import get_db_session, serializer
@@ -56,7 +56,7 @@ class Doc(ModelHelper, Base):
     description = Column(Text)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False, unique=True)
-    file_group: FileGroup = relationship('FileGroup', lazy='joined')
+    file_group: FileGroup = relationship('FileGroup')
     sections = relationship('DocSection', back_populates='doc',
                             cascade='all, delete-orphan',
                             passive_deletes=True)
@@ -64,6 +64,11 @@ class Doc(ModelHelper, Base):
     def __repr__(self):
         path = str(self.file_group.primary_path) if self.file_group else 'None'
         return f'<Doc id={self.id} path={repr(path)} file_group_id={self.file_group_id}>'
+
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Docs will be serialized: `__json__` reads the FileGroup and its Tags."""
+        return joinedload(Doc.file_group).selectinload(FileGroup.tag_files),
 
     @serializer
     def __json__(self) -> dict:

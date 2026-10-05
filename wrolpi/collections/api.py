@@ -14,6 +14,7 @@ from wrolpi.errors import ValidationError
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
 from .errors import UnknownCollection
+from .models import CollectionItem
 
 # Create blueprint
 collection_bp = Blueprint('Collection', url_prefix='/api/collections')
@@ -98,6 +99,9 @@ async def add_collection_item_endpoint(request: Request, collection_id: int, bod
                 url=body.url, title=body.title, position=body.position)
             # 201 when a new item was created; 200 when the item already existed (idempotent add).
             status = HTTPStatus.CREATED if created else HTTPStatus.OK
+            # Load what `dict()` serializes (the FileGroup's Tags) before serializing.
+            item = session.query(CollectionItem).options(*CollectionItem.json_options()).populate_existing() \
+                .filter(CollectionItem.id == item.id).one()
             return json_response({'item': item.dict()}, status=status)
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)

@@ -36,6 +36,7 @@ class TagFile(ModelHelper, Base):
     created_at: datetime = Column(TZDateTime, default=dates.now)
 
     tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
+    # Joined: a TagFile is loaded for its Tag's name (serializers, the tags config).
     tag = relationship('Tag', back_populates='tag_files', lazy='joined')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')

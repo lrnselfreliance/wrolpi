@@ -227,6 +227,21 @@ describe('SolarCalculator', () => {
         expect(currentParams().has('temp')).toBe(false);
     });
 
+    test('switching to Fahrenheit converts your temperatures instead of relabeling them', async () => {
+        const temps = '0,10,,,,,,,,,,';
+        renderWithProviders(<SolarCalculator/>,
+            {route: `${DENVER}&ghi=${SUNNY_GHI.join(',')}&temp=${temps}`});
+        await findEstimate();
+        fireEvent.click(screen.getByText('Use my own sunlight data: on'));
+        fireEvent.click(screen.getByLabelText('Fahrenheit'));
+        expect(currentParams().get('tu')).toBe('f');
+        expect(currentParams().get('temp')).toBe('32,50,,,,,,,,,,');
+        expect(screen.getByLabelText('Jan temperature')).toHaveValue('32');
+        fireEvent.click(screen.getByLabelText('Fahrenheit'));
+        expect(currentParams().has('tu')).toBe(false);
+        expect(currentParams().get('temp')).toBe(temps);
+    });
+
     test('a failed download explains how to continue', async () => {
         forgetClimatology();
         global.fetch = jest.fn(() => Promise.resolve({ok: false, status: 404}));

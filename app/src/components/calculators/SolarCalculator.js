@@ -487,6 +487,13 @@ function OwnDataSection({set, s, nasa}) {
         set({ghi: formatMonthly(ghi), temp: nasa ? formatMonthly(temp) : null});
     };
 
+    // Convert the temperatures with the unit, so they stay the same physical temperatures.
+    const switchUnits = toFahrenheit => {
+        const temps = s.temperatureInput.map(v => (v === null ? null
+            : roundDigits(toFahrenheit ? cToF(v) : fToC(v), 1)));
+        set({tu: toFahrenheit ? 'f' : null, temp: temps.some(v => v !== null) ? formatMonthly(temps) : null});
+    };
+
     const setMonth = (key, values, index, value) => {
         const next = [...values];
         next[index] = value === '' ? null : value;
@@ -516,7 +523,7 @@ function OwnDataSection({set, s, nasa}) {
             <Toggle label='Use my own sunlight data' checked={s.ownData}
                     onChange={e => enable(e.currentTarget.checked)}/>
             {s.ownData && <Toggle label='Fahrenheit' checked={s.fahrenheit}
-                                  onChange={e => set({tu: e.currentTarget.checked ? 'f' : null})}/>}
+                                  onChange={e => switchUnits(e.currentTarget.checked)}/>}
         </Group>
         {s.ownData && <Table style={{marginTop: '0.5em'}}>
             <Table.Header>
@@ -586,7 +593,7 @@ export function SolarCalculator() {
             </Tabs.Panel>
             <Tabs.Panel value='offgrid'>
                 <SolarOffGrid get={get} set={set} setNumber={setNumber} s={s} worst={worstPerKwp}
-                              temperatures={sunlight?.temperature}/>
+                              temperatures={sunlight?.temperature} loading={waitingForData}/>
             </Tabs.Panel>
         </Tabs>
 

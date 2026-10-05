@@ -114,18 +114,31 @@ export const CONTROLLERS = {
     pwm: {label: 'PWM'},
 };
 
-// A PWM controller connects the panels straight to the battery, holding them near the battery's voltage
-// instead of their best voltage (Vmp), so only this share of their power is used.
-export function pwmUsableFraction(vmp, systemVoltage) {
-    if (!(vmp > 0)) {
+// A PWM controller connects a string of `series` panels straight to the battery, holding it at the battery's
+// charging voltage instead of its best voltage (Vmp), so only this share of its power is used:
+//  - charging voltage at or above the string's Voc: no current flows, nothing is delivered;
+//  - between Vmp and Voc: the current falls from its maximum toward zero at Voc (taken as linear);
+//  - below Vmp: full current at the lower voltage, charging voltage / Vmp of the power.
+export function pwmUsableFraction(vmp, voc, series, systemVoltage) {
+    const stringVmp = vmp * series, stringVoc = voc * series;
+    if (!(stringVmp > 0) || !(stringVoc > 0)) {
         return 1;
     }
-    return Math.min(1, chargeVoltage(systemVoltage) / vmp);
+    const charge = chargeVoltage(systemVoltage);
+    if (charge >= stringVoc) {
+        return 0;
+    }
+    if (charge > stringVmp) {
+        return (charge / stringVmp) * (stringVoc - charge) / (stringVoc - stringVmp);
+    }
+    return charge / stringVmp;
 }
 
-// Panel open-circuit voltage rises as it gets colder.  `betaVoc` is its temperature coefficient, %/°C.
+// Panel open-circuit voltage rises as it gets colder.  `betaVoc` is its temperature coefficient, %/°C, which is
+// negative for every silicon panel; a coefficient typed without its minus sign is treated as negative, because
+// a positive one would hide the cold-weather rise that destroys controllers.
 export function coldVoc(voc, betaVoc, temperature) {
-    return voc * (1 + (betaVoc / 100) * (temperature - 25));
+    return voc * (1 - (Math.abs(betaVoc) / 100) * (temperature - 25));
 }
 
 /**
@@ -154,11 +167,14 @@ export function controllerSizing({
         maxSeries,
         current,
         overVoltage: stringColdVoc > controllerMaxVoltage,
-        // An MPPT controller needs the string's voltage, which sags about 15% in summer heat, to stay
-        // above the battery's charging voltage with some headroom.
-        lowVoltage: controller === 'mppt' && vmp * series * 0.85 < chargeVoltage(systemVoltage) + 5,
+        // An MPPT controller needs the string's voltage, which sags about 15% in summer heat, to stay above the
+        // battery's charging voltage with some headroom.  A PWM controller loses power as soon as the string's
+        // Vmp is below the charging voltage, and all of it once its Voc is.
+        lowVoltage: controller === 'mppt'
+            ? vmp * series * 0.85 < chargeVoltage(systemVoltage) + 5
+            : vmp * series < chargeVoltage(systemVoltage),
         unevenStrings: series > 0 && panelCount % series !== 0,
-        pwmFraction: controller === 'pwm' ? pwmUsableFraction(vmp, systemVoltage) : 1,
+        pwmFraction: controller === 'pwm' ? pwmUsableFraction(vmp, voc, series, systemVoltage) : 1,
     };
 }
 

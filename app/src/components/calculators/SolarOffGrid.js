@@ -1,6 +1,6 @@
 import React from "react";
-import {Button, Grid, Group, Header, IconButton, Message, NumberInput, Panel, Select, Statistic, StatisticGroup,
-    Table, TextInput, Toggle} from "../ui";
+import {Button, Grid, Group, Header, IconButton, Loader, Message, NumberInput, Panel, Select, Statistic,
+    StatisticGroup, Table, TextInput, Toggle} from "../ui";
 import {roundDigits} from "../Common";
 import {
     BATTERIES,
@@ -59,7 +59,8 @@ export function offGridFromParams(get, monthlyTemperatures) {
         voc: numberOr(get('voc'), PANEL_DEFAULTS.voc),
         vmp: numberOr(get('vmp'), PANEL_DEFAULTS.vmp),
         isc: numberOr(get('isc'), PANEL_DEFAULTS.isc),
-        betaVoc: numberOr(get('bvoc'), PANEL_DEFAULTS.bvoc),
+        // Always negative for silicon panels; a missing minus sign must not hide the cold-weather rise.
+        betaVoc: -Math.abs(numberOr(get('bvoc'), PANEL_DEFAULTS.bvoc)),
         series: Math.max(1, Math.round(numberOr(get('ns'), 1))),
         controllerMaxVoltage: numberOr(get('cmax'), DEFAULT_CONTROLLER_MAX_VOLTAGE),
         coldestMonthly,
@@ -219,8 +220,10 @@ function NeedsSection({o, r, worst, s, setNumber}) {
         <p>
             Sized for {worst.month}, your darkest month, when each kW of panels makes about{' '}
             {fmt(worst.energyDaily, 1)} kWh a day at the angle chosen under Fine-tune.
-            {o.controller === 'pwm' && ` The PWM controller uses only ${fmt(r.sizing.pwmFraction * 100)}% of the `
-                + 'panels\' power, so more panels are needed.'}
+            {o.controller === 'pwm' && r.sizing.pwmFraction > 0 && ` The PWM controller uses only `
+                + `${fmt(r.sizing.pwmFraction * 100)}% of the panels' power, so more panels are needed.`}
+            {o.controller === 'pwm' && r.sizing.pwmFraction === 0 && ' These panels cannot charge this battery '
+                + 'through a PWM controller; see the warning below.'}
         </p>
         {coverage !== null && <p>
             Your {s.panelCount} panel{s.panelCount === 1 ? '' : 's'} would supply about{' '}
@@ -234,10 +237,10 @@ function NeedsSection({o, r, worst, s, setNumber}) {
     </Panel>;
 }
 
-function ControllerSection({o, r, set, setNumber}) {
+function ControllerSection({o, r, set, setNumber, temperaturesKnown}) {
     const z = r.sizing;
-    const panelField = (key, label, value, fallback, step) => <Grid.Col span={{base: 6, sm: 3}}>
-        <NumberInput label={label} name={key} value={value} step={step} decimalScale={3}
+    const panelField = (key, label, value, fallback, step, max) => <Grid.Col span={{base: 6, sm: 3}}>
+        <NumberInput label={label} name={key} value={value} step={step} decimalScale={3} max={max}
                      onChange={v => setNumber(key, v, fallback)}/>
     </Grid.Col>;
 
@@ -253,7 +256,7 @@ function ControllerSection({o, r, set, setNumber}) {
             {panelField('voc', 'Open-circuit voltage, Voc (V)', o.voc, PANEL_DEFAULTS.voc, 0.1)}
             {panelField('vmp', 'Max-power voltage, Vmp (V)', o.vmp, PANEL_DEFAULTS.vmp, 0.1)}
             {panelField('isc', 'Short-circuit current, Isc (A)', o.isc, PANEL_DEFAULTS.isc, 0.1)}
-            {panelField('bvoc', 'Voc temperature coefficient (%/°C)', o.betaVoc, PANEL_DEFAULTS.bvoc, 0.01)}
+            {panelField('bvoc', 'Voc temperature coefficient (%/°C)', o.betaVoc, PANEL_DEFAULTS.bvoc, 0.01, 0)}
             <Grid.Col span={{base: 6, sm: 3}}>
                 <Select label='Controller type'
                         data={Object.entries(CONTROLLERS).map(([value, c]) => ({value, label: c.label}))}
@@ -273,40 +276,48 @@ function ControllerSection({o, r, set, setNumber}) {
                              onChange={v => setNumber('tmin', v, o.defaultTmin)}/>
             </Grid.Col>
         </Grid>
-        <Table style={{marginTop: '1em'}}>
-            <Table.Body>
-                <Table.Row>
-                    <Table.Cell>Strings</Table.Cell>
-                    <Table.Cell>{z.strings} of {o.series} panel{o.series === 1 ? '' : 's'} in series</Table.Cell>
-                </Table.Row>
-                <Table.Row>
-                    <Table.Cell>String voltage on the coldest morning</Table.Cell>
-                    <Table.Cell>{fmt(z.stringColdVoc, 1)} V (most panels in series: {z.maxSeries})</Table.Cell>
-                </Table.Row>
-                <Table.Row>
-                    <Table.Cell>Controller current rating, at least</Table.Cell>
-                    <Table.Cell>{fmt(z.current)} A</Table.Cell>
-                </Table.Row>
-            </Table.Body>
-        </Table>
-        {z.overVoltage && <Message kind='error' title='Too much voltage for the controller'>
-            {o.series} panels in series reach {fmt(z.stringColdVoc, 1)} V on a {o.coldest} °C morning, over the
-            controller's {o.controllerMaxVoltage} V limit. Use at most {z.maxSeries} in series, or a controller rated
-            for more voltage.
-        </Message>}
-        {z.lowVoltage && <Message kind='warning' title='Too little voltage to charge'>
-            On a hot day {o.series} panel{o.series === 1 ? '' : 's'} in series may not stay far enough above the
-            battery's charging voltage for an MPPT controller. Put more panels in series.
-        </Message>}
-        {z.unevenStrings && <Message kind='warning' title='Uneven strings'>
-            Your panel count does not divide evenly into strings of {o.series}. Every string should have the same
-            number of panels.
-        </Message>}
-        {o.controller === 'mppt' && z.current > HIGH_CURRENT && o.systemVoltage < 48 &&
-            <Message kind='info' title='High current'>
-                {fmt(z.current)} A needs a large controller and thick wire. A higher system voltage would cut the
-                current.
+        {/* The cold-morning limit depends on the site's temperatures; do not show a placeholder's verdict. */}
+        {!temperaturesKnown && <div style={{marginTop: '1em'}}><Loader size='xs' label='Loading temperatures'/></div>}
+        {temperaturesKnown && <>
+            <Table style={{marginTop: '1em'}}>
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell>Strings</Table.Cell>
+                        <Table.Cell>{z.strings} of {o.series} panel{o.series === 1 ? '' : 's'} in series</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>String voltage on the coldest morning</Table.Cell>
+                        <Table.Cell>{fmt(z.stringColdVoc, 1)} V (most panels in series: {z.maxSeries})</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell>Controller current rating, at least</Table.Cell>
+                        <Table.Cell>{fmt(z.current)} A</Table.Cell>
+                    </Table.Row>
+                </Table.Body>
+            </Table>
+            {z.overVoltage && <Message kind='error' title='Too much voltage for the controller'>
+                {o.series} panels in series reach {fmt(z.stringColdVoc, 1)} V on a {o.coldest} °C morning,
+                over the controller's {o.controllerMaxVoltage} V limit. Use at most {z.maxSeries} in series, or a
+                controller rated for more voltage.
             </Message>}
+            {z.lowVoltage && <Message kind='warning' title='Too little voltage to charge'>
+                {o.controller === 'pwm' && z.pwmFraction === 0
+                    ? `${o.series} panel${o.series === 1 ? '' : 's'} in series cannot reach the ${o.systemVoltage} V `
+                    + 'battery\'s charging voltage, so a PWM controller cannot charge it at all.'
+                    : `On a hot day ${o.series} panel${o.series === 1 ? '' : 's'} in series may not stay far enough `
+                    + 'above the battery\'s charging voltage for the controller to charge well.'}
+                {' '}Put more panels in series, or use a lower system voltage.
+            </Message>}
+            {z.unevenStrings && <Message kind='warning' title='Uneven strings'>
+                Your panel count does not divide evenly into strings of {o.series}. Every string should have the same
+                number of panels.
+            </Message>}
+            {o.controller === 'mppt' && z.current > HIGH_CURRENT && o.systemVoltage < 48 &&
+                <Message kind='info' title='High current'>
+                    {fmt(z.current)} A needs a large controller and thick wire. A higher system voltage would cut the
+                    current.
+                </Message>}
+        </>}
     </>;
 }
 
@@ -315,8 +326,9 @@ function ControllerSection({o, r, set, setNumber}) {
  *
  * @param {Object} worst   the worst month for a 1 kW DC array, or null when there is no estimate
  * @param {number[]} temperatures  monthly average temperatures at the site, °C
+ * @param {boolean} loading       the built-in sunlight and temperature data is still downloading
  */
-export function SolarOffGrid({get, set, setNumber, s, worst, temperatures}) {
+export function SolarOffGrid({get, set, setNumber, s, worst, temperatures, loading}) {
     const o = offGridFromParams(get, temperatures);
     const r = offGridResults(o, worst, s.panelWatts, s.panelCount);
 
@@ -327,11 +339,12 @@ export function SolarOffGrid({get, set, setNumber, s, worst, temperatures}) {
         </Hint>
         <LoadsSection o={o} r={r} set={set} setNumber={setNumber}/>
         <BatterySection o={o} set={set} setNumber={setNumber}/>
-        {worst
-            ? <NeedsSection o={o} r={r} worst={worst} s={s} setNumber={setNumber}/>
-            : <div style={{marginTop: '1em'}}>
-                <Message kind='info' title='Almost there'>Enter a location above to size the system.</Message>
-            </div>}
-        <ControllerSection o={o} r={r} set={set} setNumber={setNumber}/>
+        {worst && <NeedsSection o={o} r={r} worst={worst} s={s} setNumber={setNumber}/>}
+        {!worst && loading && <div style={{marginTop: '1em'}}><Loader size='xs' label='Loading sunlight data'/></div>}
+        {!worst && !loading && <div style={{marginTop: '1em'}}>
+            <Message kind='info' title='Almost there'>Enter a location above to size the system.</Message>
+        </div>}
+        <ControllerSection o={o} r={r} set={set} setNumber={setNumber}
+                           temperaturesKnown={!loading || get('tmin') !== null}/>
     </div>;
 }

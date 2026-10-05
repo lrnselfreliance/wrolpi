@@ -34,6 +34,11 @@ describe('offGridFromParams', () => {
         expect(offGridFromParams(params('bat=lead&dod=60'), TEMPS).dod).toBe(60);
     });
 
+    test('a Voc coefficient without its minus sign is read as negative, even from a shared link', () => {
+        expect(offGridFromParams(params('bvoc=0.27'), TEMPS).betaVoc).toBe(-0.27);
+        expect(offGridFromParams(params('bvoc=-0.3'), TEMPS).betaVoc).toBe(-0.3);
+    });
+
     test('invalid values fall back', () => {
         const o = offGridFromParams(params('bat=x&sv=13&ctl=y&ns=0&aut=-1'), null);
         expect(o.battery).toBe('lfp');
@@ -129,6 +134,33 @@ describe('the off-grid tab', () => {
         renderWithProviders(<SolarCalculator/>, {route: `${OFFGRID}&load=Fridge~50~24&ns=3&pn=3`});
         await findNeeds();
         expect(screen.getByText('Too much voltage for the controller')).toBeInTheDocument();
+    });
+
+    test('PWM panels that cannot reach a 48 V battery say so instead of sizing a system', async () => {
+        renderWithProviders(<SolarCalculator/>, {route: `${OFFGRID}&load=Fridge~50~24&ctl=pwm&sv=48`});
+        await findNeeds();
+        expect(screen.getByText('Too little voltage to charge')).toBeInTheDocument();
+        expect(screen.getByText(/a PWM controller cannot charge it at all/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: /^Use \d+ panels$/})).not.toBeInTheDocument();
+    });
+
+    test('while the data downloads, it shows a loader and no cold-morning verdict', async () => {
+        forgetClimatology();
+        global.fetch = jest.fn(() => new Promise(() => {
+        }));
+        renderWithProviders(<SolarCalculator/>, {route: `${OFFGRID}&load=Fridge~50~24`});
+        // One beside the location, one in place of the sizing.
+        expect(screen.getAllByLabelText('Loading sunlight data')).toHaveLength(2);
+        expect(screen.queryByText('Almost there')).not.toBeInTheDocument();
+        expect(screen.queryByText('String voltage on the coldest morning')).not.toBeInTheDocument();
+    });
+
+    test('a coldest morning the user typed is checked even while the data downloads', async () => {
+        forgetClimatology();
+        global.fetch = jest.fn(() => new Promise(() => {
+        }));
+        renderWithProviders(<SolarCalculator/>, {route: `${OFFGRID}&load=Fridge~50~24&tmin=-30`});
+        expect(screen.getByText('String voltage on the coldest morning')).toBeInTheDocument();
     });
 
     test('the tab is remembered in the URL', async () => {

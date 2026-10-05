@@ -78,16 +78,38 @@ describe('charge controller', () => {
     test('a PWM controller wastes most of a high-voltage panel on a 12 V battery', () => {
         expect(chargeVoltage(12)).toBeCloseTo(14.4, 6);
         // 14.4 V / 31 V: under half the panel's power.
-        expect(pwmUsableFraction(31, 12)).toBeCloseTo(0.4645, 3);
+        expect(pwmUsableFraction(31, 37, 1, 12)).toBeCloseTo(0.4645, 3);
         // A "12 V" panel (Vmp ~18 V) suits PWM much better.
-        expect(pwmUsableFraction(18, 12)).toBeCloseTo(0.8, 6);
-        expect(pwmUsableFraction(10, 12)).toBe(1);
+        expect(pwmUsableFraction(18, 22, 1, 12)).toBeCloseTo(0.8, 6);
+    });
+
+    test('PWM uses the string voltage, so panels in series waste even more', () => {
+        // Two 31 V panels make a 62 V string: 14.4 / 62.
+        expect(pwmUsableFraction(31, 37, 2, 12)).toBeCloseTo(0.2323, 3);
+    });
+
+    test('PWM delivers nothing when the string cannot reach the charging voltage', () => {
+        // One 37 Voc panel against a 48 V bank's 57.6 V.
+        expect(pwmUsableFraction(31, 37, 1, 48)).toBe(0);
+        expect(pwmUsableFraction(10, 12, 1, 12)).toBe(0);
+    });
+
+    test('PWM between Vmp and Voc delivers part of the power as current falls toward Voc', () => {
+        // 14.4 V sits just above a 14 V Vmp: (14.4 / 14) x (21 - 14.4) / (21 - 14).
+        expect(pwmUsableFraction(14, 21, 1, 12)).toBeCloseTo(0.9698, 3);
     });
 
     test('open-circuit voltage rises in the cold', () => {
         // -0.27 %/°C at -25 °C (50 °C below the 25 °C rating): +13.5%.
         expect(coldVoc(37, -0.27, -25)).toBeCloseTo(41.995, 3);
         expect(coldVoc(37, -0.27, 25)).toBe(37);
+    });
+
+    test('a Voc coefficient typed without its minus sign still errs safe', () => {
+        expect(coldVoc(37, 0.27, -25)).toBeCloseTo(coldVoc(37, -0.27, -25), 9);
+        const sizing = controllerSizing({...typical, series: 3, betaVoc: 0.27});
+        expect(sizing.overVoltage).toBe(true);
+        expect(sizing.maxSeries).toBe(2);
     });
 
     const typical = {
@@ -122,6 +144,12 @@ describe('charge controller', () => {
         expect(result.current).toBeCloseTo(13.8 * 4 * 1.25, 6);
         expect(result.pwmFraction).toBeCloseTo(0.4645, 3);
         expect(result.lowVoltage).toBe(false);
+    });
+
+    test('PWM on a battery above the string\'s voltage warns and delivers nothing', () => {
+        const result = controllerSizing({...typical, controller: 'pwm', series: 1, systemVoltage: 48});
+        expect(result.pwmFraction).toBe(0);
+        expect(result.lowVoltage).toBe(true);
     });
 });
 

@@ -118,7 +118,8 @@ describe('SolarCalculator', () => {
         renderWithProviders(<SolarCalculator/>, {route: DENVER});
         expect(await findEstimate()).toBeInTheDocument();
         expect(screen.getByText(`${roundDigits(expectedAnnual(), 0)}`)).toBeInTheDocument();
-        expect(screen.getByText(/Sunlight and temperature: NASA POWER/)).toBeInTheDocument();
+        // The attribution is only at the bottom of the page.
+        expect(screen.queryByText(/Sunlight and temperature/)).not.toBeInTheDocument();
         expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/data\/solar-climatology\.bin$/));
     });
 
@@ -133,7 +134,6 @@ describe('SolarCalculator', () => {
         // After everything else, including the last Fine-tune section.
         const lastControl = screen.getByText('Use my own sunlight data: off');
         expect(lastControl.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(screen.getByText(/see Data attribution at the bottom of the page/)).toBeInTheDocument();
     });
 
     test('typing writes the URL and leaves defaults out', async () => {

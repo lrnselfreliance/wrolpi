@@ -41,7 +41,6 @@ import {
     CLIMATOLOGY_CHANGES,
     CLIMATOLOGY_DATA_REFERENCE,
     CLIMATOLOGY_LICENSE,
-    CLIMATOLOGY_SOURCE,
     lookupClimatology,
     useClimatology,
 } from "./solarData";
@@ -247,7 +246,8 @@ function LocationSection({get, set, s, climatology}) {
         );
     };
 
-    let source;
+    // The data's attribution is at the bottom of the page; this line only reports the data's state.
+    let source = null;
     if (s.ownData) {
         source = 'Using your own sunlight data.';
     } else if (climatology.loading) {
@@ -256,8 +256,6 @@ function LocationSection({get, set, s, climatology}) {
         source = <Message kind='warning' title='Sunlight data could not be loaded'>
             Enter your own monthly sunlight under "Use my own sunlight data" below.
         </Message>;
-    } else {
-        source = `Sunlight and temperature: ${CLIMATOLOGY_SOURCE}; see Data attribution at the bottom of the page.`;
     }
 
     return <>
@@ -279,7 +277,7 @@ function LocationSection({get, set, s, climatology}) {
             </Grid.Col>
         </Grid>
         {geoError && <Message kind='warning' title='Could not get your location'>{geoError}</Message>}
-        <div style={{fontSize: '0.85em', opacity: 0.75, marginTop: '0.5em'}}>{source}</div>
+        {source && <div style={{fontSize: '0.85em', opacity: 0.75, marginTop: '0.5em'}}>{source}</div>}
     </>;
 }
 

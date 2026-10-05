@@ -5,7 +5,6 @@ import React from "react";
 // must match PARAMETERS below.  The file is only fetched when the calculator opens.
 
 export const CLIMATOLOGY_URL = `${process.env.PUBLIC_URL || ''}/data/solar-climatology.bin`;
-export const CLIMATOLOGY_SOURCE = 'NASA POWER 2001–2020 monthly averages (CC BY 4.0)';
 
 // Attribution, as NASA asks (https://power.larc.nasa.gov/docs/referencing/) and CC BY 4.0 requires.  The
 // build script writes the same text, with the API version and download date, to

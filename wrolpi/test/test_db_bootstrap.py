@@ -211,6 +211,56 @@ def test_domain_collection_summary_migration_backfills(test_directory):
         assert conn.execute('SELECT item_count, total_size FROM collection WHERE id = 1').fetchone() == (1, 100)
 
 
+def test_markdown_mimetype_migration_retags_existing_rows(test_directory):
+    """Markdown indexed before text/markdown existed is retagged and re-indexed.  A refresh skips a
+    group whose files have not changed, so it would otherwise keep its old mimetype and indexer."""
+    import sqlite3
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri, get_db_file
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_09_28_1200')
+
+    rows = (
+        (1, 'notes.md', 'text/plain'),
+        # libmagic reports a programming language when a markdown file holds code.
+        (2, 'code.markdown', 'text/x-c'),
+        (3, 'UPPER.MD', 'text/html'),
+        (4, 'already.md', 'text/markdown'),
+        (5, 'readme.txt', 'text/plain'),
+        # Not text, so not markdown, whatever its name.
+        (6, 'binary.md', 'application/octet-stream'),
+    )
+    db_file = get_db_file()
+    with sqlite3.connect(db_file) as conn:
+        for id_, name, mimetype in rows:
+            stem = name.rsplit('.', 1)[0]
+            conn.execute(
+                'INSERT INTO file_group (id, directory, primary_path, files, stem, mimetype, indexed)'
+                ' VALUES (?,?,?,?,?,?,1)',
+                (id_, str(test_directory), str(test_directory / name), '[]', stem, mimetype),
+            )
+        conn.commit()
+
+    command.upgrade(config, 'head')
+
+    with sqlite3.connect(db_file) as conn:
+        result = {r[0]: (r[1], r[2]) for r in conn.execute('SELECT id, mimetype, indexed FROM file_group')}
+    assert result == {
+        1: ('text/markdown', 0),
+        2: ('text/markdown', 0),
+        3: ('text/markdown', 0),
+        # Already correct, so not re-indexed.
+        4: ('text/markdown', 1),
+        5: ('text/plain', 1),
+        6: ('application/octet-stream', 1),
+    }
+
+
 def test_migrations_match_models(test_directory):
     """`alembic check`: a database migrated to head matches the SQLAlchemy models (tables, columns,
     indexes).  Fails when a model gains an index or column without a migration, or vice versa."""

@@ -402,6 +402,9 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/html'
     if suffix.endswith('.hgt'):
         return 'application/octet-stream'
+    if mimetype.startswith('text/') and suffix in ('.md', '.markdown'):
+        # libmagic reports markdown as text/plain, or as a programming language when it sniffs code.
+        return 'text/markdown'
     if mimetype == 'text/plain':
         if suffix.endswith('.json'):
             return 'application/json'

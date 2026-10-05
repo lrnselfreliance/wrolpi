@@ -122,14 +122,18 @@ describe('SolarCalculator', () => {
         expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/\/data\/solar-climatology\.bin$/));
     });
 
-    test('the data attribution expands', async () => {
+    test('the data attribution is at the bottom of the page', async () => {
         renderWithProviders(<SolarCalculator/>, {route: DENVER});
         await findEstimate();
-        expect(screen.queryByText(/Prediction Of Worldwide Energy Resources/)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: 'Data attribution'}));
-        expect(screen.getByText(/Prediction Of Worldwide Energy Resources/)).toBeInTheDocument();
-        expect(screen.getByText(/WROLPi modified the data/)).toBeInTheDocument();
-        expect(screen.getByText(/CC BY 4\.0/, {selector: 'p'})).toBeInTheDocument();
+        const heading = screen.getByRole('heading', {name: 'Data attribution'});
+        const section = screen.getByRole('region', {name: 'Data attribution'});
+        expect(within(section).getByText(/Prediction Of Worldwide Energy Resources/)).toBeInTheDocument();
+        expect(within(section).getByText(/WROLPi modified the data/)).toBeInTheDocument();
+        expect(within(section).getByText(/CC BY 4\.0/)).toBeInTheDocument();
+        // After everything else, including the last Fine-tune section.
+        const lastControl = screen.getByText('Use my own sunlight data: off');
+        expect(lastControl.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByText(/see Data attribution at the bottom of the page/)).toBeInTheDocument();
     });
 
     test('typing writes the URL and leaves defaults out', async () => {

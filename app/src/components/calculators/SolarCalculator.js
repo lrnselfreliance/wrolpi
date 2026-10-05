@@ -2,7 +2,6 @@ import React from "react";
 import {useSearchParams} from "react-router";
 import {
     Accordion,
-    Anchor,
     Button,
     Grid,
     Group,
@@ -199,6 +198,17 @@ const compassLabel = azimuth => {
 // Small explanatory text at the top of a collapsed section.
 const Hint = ({children}) => <p style={{fontSize: '0.9em', opacity: 0.75, marginTop: 0}}>{children}</p>;
 
+// NASA POWER's requested acknowledgment, the license, and how WROLPi changed the data (CC BY 4.0).
+function DataAttribution() {
+    return <section aria-labelledby='solar-data-attribution'
+                    style={{marginTop: '2em', fontSize: '0.85em', opacity: 0.75}}>
+        <Header as='h4' id='solar-data-attribution'>Data attribution</Header>
+        <p>{CLIMATOLOGY_ACKNOWLEDGMENT} {CLIMATOLOGY_DATA_REFERENCE}</p>
+        <p>License: {CLIMATOLOGY_LICENSE}</p>
+        <p>{CLIMATOLOGY_CHANGES}</p>
+    </section>;
+}
+
 const ESTIMATE_INFO = 'A typical-year estimate from monthly averages. Real years vary; expect roughly ±10–15% '
     + 'over a year and more in any single month. Shading from trees and buildings is not modeled beyond the '
     + 'Shading loss.';
@@ -216,7 +226,6 @@ const GEOLOCATION_ERRORS = {
 
 function LocationSection({get, set, s, climatology}) {
     const [locating, setLocating] = React.useState(false);
-    const [showAttribution, setShowAttribution] = React.useState(false);
     const [geoError, setGeoError] = React.useState(null);
     const latError = get('lat') && s.latitude === null ? 'Latitude must be between -90 and 90' : null;
     const lonError = get('lon') && s.longitude === null ? 'Longitude must be between -180 and 180' : null;
@@ -248,17 +257,7 @@ function LocationSection({get, set, s, climatology}) {
             Enter your own monthly sunlight under "Use my own sunlight data" below.
         </Message>;
     } else {
-        source = <>
-            Sunlight and temperature: {CLIMATOLOGY_SOURCE}.{' '}
-            <Anchor component='button' type='button' size='sm' onClick={() => setShowAttribution(!showAttribution)}>
-                Data attribution
-            </Anchor>
-            {showAttribution && <div style={{marginTop: '0.5em'}}>
-                <p>{CLIMATOLOGY_ACKNOWLEDGMENT} {CLIMATOLOGY_DATA_REFERENCE}</p>
-                <p>License: {CLIMATOLOGY_LICENSE}</p>
-                <p>{CLIMATOLOGY_CHANGES}</p>
-            </div>}
-        </>;
+        source = `Sunlight and temperature: ${CLIMATOLOGY_SOURCE}; see Data attribution at the bottom of the page.`;
     }
 
     return <>
@@ -622,5 +621,7 @@ export function SolarCalculator() {
                 <Accordion.Panel><OwnDataSection set={set} s={s} nasa={nasa}/></Accordion.Panel>
             </Accordion.Item>
         </Accordion>
+
+        <DataAttribution/>
     </div>;
 }

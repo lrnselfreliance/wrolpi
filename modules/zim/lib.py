@@ -323,7 +323,7 @@ def get_kiwix_catalog():
 
 
 def get_kiwix_subscriptions(session: Session) -> Dict[str, ZimSubscription]:
-    subscriptions = session.query(ZimSubscription)
+    subscriptions = session.query(ZimSubscription).options(*ZimSubscription.json_options())
     subscriptions_by_name = {i.name: i for i in subscriptions}
     return subscriptions_by_name
 

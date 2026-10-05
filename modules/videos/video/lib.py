@@ -30,7 +30,7 @@ def get_video_for_app(session: Session, file_group_id: int, skip_viewed: bool = 
     Get a Video by its FileGroup ID, with its prev/next videos.  Mark the Video as viewed (a write; the
     caller commits).
     """
-    video = Video.find_by_file_group_id(session, file_group_id)
+    video = Video.find_by_file_group_id(session, file_group_id, Video.json_options())
     if not skip_viewed:
         video.file_group.set_viewed()
     previous_video, next_video = video.get_surrounding_videos()

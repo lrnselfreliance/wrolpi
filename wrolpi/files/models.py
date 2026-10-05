@@ -8,12 +8,12 @@ from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON, or_
 from sqlalchemy import types
-from sqlalchemy.orm import deferred, relationship, Session
+from sqlalchemy.orm import deferred, relationship, Session, selectinload
 
 from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, serializer
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
@@ -134,6 +134,12 @@ class FileGroup(ModelHelper, Base):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
         return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose FileGroups will be serialized: `__json__` reads their Tags."""
+        return selectinload(FileGroup.tag_files),
+
+    @serializer
     def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
         _, suffix = split_path_stem_and_suffix(self.primary_path)
@@ -854,6 +860,7 @@ class Directory(ModelHelper, Base):
     name: str = Column(String, nullable=False)
     idempotency = Column(TZDateTime, default=lambda: now())
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             path=self.path,

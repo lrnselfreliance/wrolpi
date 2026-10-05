@@ -101,6 +101,20 @@ def test_session(test_directory) -> Generator[Session, Any, None]:
 
 
 @pytest.fixture(autouse=True)
+def no_unexpected_queries(request):
+    """Fail any test during which a serializer ran SQL, even if the code under test caught the error."""
+    from wrolpi import db
+    db.UNEXPECTED_QUERIES.clear()
+    yield
+    if request.node.get_closest_marker('allow_unexpected_queries'):
+        return
+    queries = list(db.UNEXPECTED_QUERIES)
+    db.UNEXPECTED_QUERIES.clear()
+    assert not queries, 'A serializer ran SQL (a relationship or deferred column was not loaded):\n' + \
+                        '\n'.join(f'{reason}: {" ".join(statement.split())[:300]}' for reason, statement in queries)
+
+
+@pytest.fixture(autouse=True)
 def test_debug_logger(request):
     """Tests default to DEBUG logging. Use pytest -vvv for TRACE level."""
     level = logging.DEBUG

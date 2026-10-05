@@ -3,14 +3,15 @@ import pathlib
 from typing import Optional, Dict, List
 
 from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text, JSON
-from sqlalchemy.orm import relationship, Session, deferred
+from sqlalchemy.orm import relationship, Session, deferred, undefer, joinedload, selectinload
 from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions, read_captions_with_timestamps
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     background_task
-from wrolpi.db import get_db_curs, get_db_session, session_curs
+from wrolpi.db import get_db_curs, get_db_session, session_curs, serializer
+from wrolpi.collections.models import Collection
 from wrolpi.downloader import Download
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.worker import file_worker
@@ -57,6 +58,14 @@ class Video(ModelHelper, Base):
         return f'<Video id={self.id} title={repr(self.file_group.title)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Videos will be serialized: `__json__` reads the codecs in the deferred
+        ffprobe_json, the FileGroup and its Tags, and the Channel (its Collection loads with it)."""
+        return undefer(Video.ffprobe_json), joinedload(Video.file_group).selectinload(FileGroup.tag_files), \
+            joinedload(Video.channel)
+
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
 
@@ -233,8 +242,9 @@ class Video(ModelHelper, Base):
                 break
 
         # Fetch the videos by id, if they exist.
-        previous_video = Video.find_by_id(session, previous_id) if previous_id else None
-        next_video = Video.find_by_id(session, next_id) if next_id else None
+        # The neighbors are serialized next to this Video.
+        previous_video = Video.find_by_id(session, previous_id, Video.json_options()) if previous_id else None
+        next_video = Video.find_by_id(session, next_id, Video.json_options()) if next_id else None
 
         return previous_video, next_video
 
@@ -391,27 +401,27 @@ class Video(ModelHelper, Base):
         return video
 
     @staticmethod
-    def get_by_id(session: Session, id_: int) -> Optional['Video']:
+    def get_by_id(session: Session, id_: int, options: tuple = ()) -> Optional['Video']:
         """Attempt to find a Video with the provided id.  Returns None if it cannot be found."""
-        video = session.query(Video).filter(Video.id == id_).one_or_none()
+        video = session.query(Video).options(*options).filter(Video.id == id_).one_or_none()
         return video
 
     @staticmethod
-    def find_by_id(session: Session, id_: int) -> 'Video':
+    def find_by_id(session: Session, id_: int, options: tuple = ()) -> 'Video':
         """Find a Video with the provided id, raises an exception if it cannot be found.
 
         @raise UnknownVideo: if the Video can not be found"""
-        video = Video.get_by_id(session, id_)
+        video = Video.get_by_id(session, id_, options)
         if not video:
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
     @staticmethod
-    def find_by_file_group_id(session: Session, file_group_id: int) -> 'Video':
+    def find_by_file_group_id(session: Session, file_group_id: int, options: tuple = ()) -> 'Video':
         """Find a Video by its FileGroup ID, raises an exception if it cannot be found.
 
         @raise UnknownVideo: if the Video can not be found"""
-        video = session.query(Video).filter(Video.file_group_id == file_group_id).one_or_none()
+        video = session.query(Video).options(*options).filter(Video.file_group_id == file_group_id).one_or_none()
         if not video:
             raise UnknownVideo(f'Cannot find Video with file_group_id {file_group_id}')
         return video
@@ -620,7 +630,8 @@ class Channel(ModelHelper, Base):
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
-    collection = relationship('Collection', foreign_keys=[collection_id])
+    # Joined: a Channel's name, directory and Tag live on its Collection.
+    collection = relationship('Collection', foreign_keys=[collection_id], lazy='joined')
 
     @property
     def downloads(self) -> list:
@@ -938,6 +949,13 @@ class Channel(ModelHelper, Base):
 
         return None
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Channels will be serialized: `__json__` lists the Collection's
+        Downloads (without their yt-dlp info_json, which is not serialized)."""
+        return joinedload(Channel.collection).selectinload(Collection.downloads).defer(Download.info_json),
+
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             directory=self.directory,

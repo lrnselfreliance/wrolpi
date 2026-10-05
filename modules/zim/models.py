@@ -7,14 +7,14 @@ from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional, 
 
 from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean, UniqueConstraint
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
-from wrolpi.db import session_curs
+from wrolpi.db import session_curs, serializer
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -80,6 +80,12 @@ class Zim(Base, ModelHelper):
     def __repr__(self):
         return f'<Zim id={self.id} file_group_id={self.file_group_id} path={self.path}>'
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Zims will be serialized: `__json__` reads the FileGroup's size."""
+        return joinedload(Zim.file_group),
+
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             id=self.id,
@@ -319,7 +325,7 @@ class Zims:
     def get_all(session: Session) -> List[Zim]:
         """Returns all Zim records."""
         zims = list()
-        for zim in session.query(Zim).order_by(Zim.path):
+        for zim in session.query(Zim).options(*Zim.json_options()).order_by(Zim.path):
             try:
                 # It may not be possible to read the Zim file (drive not mounted), report and ignore.
                 zim.get_zim()
@@ -390,6 +396,12 @@ class ZimSubscription(Base):
         download_id = self.download_id
         return f'<ZimSubscription id={self.id} {name=} {language=} {download_id=}>'
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose subscriptions will be serialized: `__json__` reads the Download's URL."""
+        return joinedload(ZimSubscription.download).defer(Download.info_json),
+
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             id=self.id,

@@ -2,10 +2,10 @@ import pathlib
 from typing import Optional
 
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload
 
 from wrolpi.common import ModelHelper, Base
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, serializer
 from wrolpi.files.models import FileGroup
 
 EPUB_MIMETYPE = 'application/epub'
@@ -65,6 +65,12 @@ class Doc(ModelHelper, Base):
         path = str(self.file_group.primary_path) if self.file_group else 'None'
         return f'<Doc id={self.id} path={repr(path)} file_group_id={self.file_group_id}>'
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Docs will be serialized: `__json__` reads the FileGroup and its Tags."""
+        return joinedload(Doc.file_group).selectinload(FileGroup.tag_files),
+
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
         if d.get('data') and d['data'].get('doc_path'):

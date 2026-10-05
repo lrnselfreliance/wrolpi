@@ -5,13 +5,14 @@ from typing import Iterable, List, Optional
 
 import pytz
 from sqlalchemy import Column, Integer, ForeignKey, BigInteger, Index
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload
 
 from wrolpi import dates
 from wrolpi.collections import Collection
 from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory, \
     strip_surrogates
 from wrolpi.dates import now
+from wrolpi.db import serializer
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -39,6 +40,13 @@ class Archive(Base, ModelHelper):
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
     file_group: FileGroup = relationship('FileGroup')
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Archives will be serialized: `__json__` reads the FileGroup and its Tags,
+        and the domain (the Collection's name)."""
+        return joinedload(Archive.file_group).selectinload(FileGroup.tag_files), joinedload(Archive.collection)
+
+    @serializer
     def __json__(self) -> dict:
         d = self.file_group.__json__()
         d['archive'] = dict(

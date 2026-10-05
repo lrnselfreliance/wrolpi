@@ -35,7 +35,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
-from wrolpi.db import get_db_session, session_curs
+from wrolpi.db import get_db_session, session_curs, serializer
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
     ValidationError, DownloadError
 from wrolpi.events import Events
@@ -280,6 +280,7 @@ class Download(ModelHelper, Base):  # noqa
         return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts} ' \
                f'error={bool(self.error)}>'
 
+    @serializer
     def __json__(self) -> dict:
         d = dict(
             attempts=self.attempts,

@@ -3,12 +3,13 @@ from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
     or_, CheckConstraint
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, joinedload, selectinload
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
+from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -89,7 +90,8 @@ class Collection(ModelHelper, Base):
 
     # Optional tag relationship (similar to Channel)
     tag_id = Column(Integer, ForeignKey('tag.id'))
-    tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id')
+    # Joined: one narrow row, read by the Collection's (and its Channel's) `tag_name`.
+    tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id', lazy='joined')
 
     # Stores the file_name_format used when files were last organized
     # Used to detect when reorganization is needed after config changes
@@ -114,7 +116,7 @@ class Collection(ModelHelper, Base):
     downloads: InstrumentedList = relationship(
         'Download',
         primaryjoin='Download.collection_id==Collection.id',
-        back_populates='collection'
+        back_populates='collection',
     )
 
     def __repr__(self):
@@ -943,6 +945,13 @@ class Collection(ModelHelper, Base):
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose Collections will be serialized: `__json__` lists the Downloads
+        (without their yt-dlp info_json, which is not serialized)."""
+        return selectinload(Collection.downloads).defer(Download.info_json),
+
+    @serializer
     def __json__(self) -> dict:
         """Return JSON-serializable dict for API responses.
 
@@ -1212,6 +1221,12 @@ class CollectionItem(ModelHelper, Base):
     def __repr__(self):
         return (f'<CollectionItem collection={self.collection_id} kind={self.item_kind} '
                 f'position={self.position}>')
+
+    @staticmethod
+    def json_options() -> tuple:
+        """Loader options for a query whose items will be serialized (`dict()`): each reads its FileGroup and the
+        FileGroup's Tags, or its Zim."""
+        return joinedload(CollectionItem.file_group).selectinload(FileGroup.tag_files), joinedload(CollectionItem.zim)
 
     def dict(self) -> dict:
         """Return dictionary representation."""

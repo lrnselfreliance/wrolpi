@@ -208,6 +208,7 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
     name_order = (func.lower(func.replace(Collection.name, ' ', '')).asc(), Collection.name.desc())
     if order_by_video_count:
         stmt = session.query(Channel, func.count(Video.id).label('video_count')) \
+            .options(*Channel.json_options()) \
             .join(Collection) \
             .filter(or_(
             Collection.name.ilike(f'%{name}%'),
@@ -220,6 +221,7 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
         channels = [i[0] for i in stmt]
     else:
         stmt = session.query(Channel) \
+            .options(*Channel.json_options()) \
             .join(Collection) \
             .filter(or_(
             Collection.name.ilike(f'%{name}%'),
@@ -319,5 +321,6 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
 
 async def search_channels(session: Session, tag_names: List[str]) -> List[Channel]:
     """Search Tagged Channels."""
-    channels = session.query(Channel).join(Collection).join(Tag).filter(Tag.name.in_(tag_names)).all()
+    channels = session.query(Channel).options(*Channel.json_options()) \
+        .join(Collection).join(Tag).filter(Tag.name.in_(tag_names)).all()
     return channels

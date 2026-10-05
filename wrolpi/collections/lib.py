@@ -14,7 +14,7 @@ from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
 from wrolpi.db import get_db_session
 from wrolpi.errors import FileWorkerConflict
-from wrolpi.errors import ValidationError
+from wrolpi.errors import UnknownCollection, ValidationError
 from wrolpi.events import Events
 from wrolpi.tags import Tag
 from .models import Collection, validate_collection_directory
@@ -183,7 +183,9 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
     Raises:
         UnknownCollection: If collection not found
     """
-    collection = Collection.find_by_id(session, collection_id)
+    collection = session.query(Collection).options(*Collection.json_options()).filter_by(id=collection_id).one_or_none()
+    if not collection:
+        raise UnknownCollection(f'Cannot find Collection with id {collection_id}')
 
     # Get base collection data
     data = collection.__json__()
@@ -236,7 +238,9 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
 
         # Playlists are manually curated and ordered, so return the full ordered item list.
         if collection.kind == 'playlist':
-            data['items'] = [item.dict() for item in collection.items]
+            items = session.query(CollectionItem).options(*CollectionItem.json_options()) \
+                .filter(CollectionItem.collection_id == collection_id).order_by(CollectionItem.position)
+            data['items'] = [item.dict() for item in items]
 
     return data
 

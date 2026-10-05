@@ -15,7 +15,7 @@ from modules.zim import kiwix
 from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
-from wrolpi import flags
+from wrolpi import flags, tags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
     register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate, aiohttp_post
@@ -576,9 +576,46 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
     return sorted(outdated_files), sorted(current_files)
 
 
+def migrate_outdated_zim_tags(outdated: List[pathlib.Path], current: List[pathlib.Path]) -> int:
+    """Move the entry tags of each outdated Zim to the current Zim of the same name.
+
+    Must run before the outdated Zims are deleted; deleting a Zim cascade-deletes its TagZimEntry rows.
+
+    Returns the count of TagZimEntry rows moved."""
+    current_by_name = {parse_name(i)[0]: i for i in current}
+    moved = 0
+    with get_db_session(commit=True) as session:
+        for outdated_path in outdated:
+            current_path = current_by_name.get(parse_name(outdated_path)[0])
+            outdated_zim = Zim.get_by_path(session, outdated_path)
+            current_zim = Zim.get_by_path(session, current_path) if current_path else None
+            if not outdated_zim or not current_zim:
+                continue
+
+            for tag_zim_entry in session.query(TagZimEntry).filter_by(zim_id=outdated_zim.id).all():
+                if TagZimEntry.get_by_primary_keys(tag_zim_entry.tag_id, current_zim.id, tag_zim_entry.zim_entry,
+                                                   session):
+                    # The current Zim already has this tag on this entry.
+                    session.delete(tag_zim_entry)
+                else:
+                    tag_zim_entry.zim_id = current_zim.id
+                    moved += 1
+                # A later outdated Zim may have the same tagged entry.
+                session.flush()
+
+    if moved:
+        logger.info(f'Migrated {moved} Zim entry tags from outdated Zims')
+    return moved
+
+
 async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
-    """Deletes all old Zim files."""
-    outdated, _ = find_outdated_zim_files(path)
+    """Deletes all old Zim files.  Their entry tags are moved to the current Zim of the same name."""
+    outdated, current = find_outdated_zim_files(path)
+    if outdated:
+        migrate_outdated_zim_tags(outdated, current)
+        # Save the migrated tags; the config is the source of truth.
+        tags.save_tags_config.activate_switch()
+
     logger.info(f'Deleting {len(outdated)} outdated Zim files: {outdated}')
     deleted_count = 0
     for file in outdated:

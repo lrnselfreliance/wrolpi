@@ -293,6 +293,46 @@ async def test_zim_tag_migration(await_switches, test_session, test_directory, z
     ]
 
 
+
+@pytest.mark.asyncio
+async def test_remove_outdated_zim_files_migrates_tags(await_switches, test_session, test_directory, zim_factory,
+                                                       tag_factory, test_tags_config):
+    """Deleting outdated Zims moves their entry tags to the newest Zim of the same name.
+
+    Deleting the Zim cascade-deletes its TagZimEntry rows, and the next tags save writes them out of the config,
+    so the tags must be moved before the files are deleted."""
+    zim1 = zim_factory('wikipedia_en_all_maxi_2020-01.zim')  # Outdated.
+    zim2 = zim_factory('wikipedia_en_all_maxi_2020-02.zim')  # Outdated.
+    zim3 = zim_factory('wikipedia_en_all_maxi_2020-03.zim')  # The latest Zim.
+    other = zim_factory('wikibooks_en_all_maxi_2020-01.zim')  # A different Zim, not outdated.
+    tag1, tag2 = await tag_factory('tag1'), await tag_factory('tag2')
+    zim1.tag_entry(test_session, tag1.name, 'home')
+    zim1.tag_entry(test_session, tag2.name, 'one')
+    zim2.tag_entry(test_session, tag2.name, 'two')
+    zim3.tag_entry(test_session, tag2.name, 'one')  # Already on the latest Zim; must not be duplicated.
+    other.tag_entry(test_session, tag1.name, 'home')
+    test_session.commit()
+    zim3_path, other_path = zim3.path, other.path
+    await await_switches()
+
+    assert await lib.remove_outdated_zim_files(test_directory) == 2
+    await await_switches()
+
+    test_session.expire_all()
+    tag_zim_entries = sorted((i.tag.name, i.zim.path, i.zim_entry) for i in test_session.query(TagZimEntry))
+    assert tag_zim_entries == [
+        ('tag1', other_path, 'home'),
+        ('tag1', zim3_path, 'home'),
+        ('tag2', zim3_path, 'one'),
+        ('tag2', zim3_path, 'two'),
+    ]
+
+    # The tags config was saved with the migrated tags, so a later import keeps them.
+    config_text = tags.get_tags_config().get_file().read_text()
+    assert 'wikipedia_en_all_maxi_2020-01.zim' not in config_text
+    assert 'wikipedia_en_all_maxi_2020-02.zim' not in config_text
+    assert 'wikipedia_en_all_maxi_2020-03.zim' in config_text
+
 @pytest.mark.parametrize(
     'url,expected',
     [

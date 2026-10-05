@@ -380,12 +380,17 @@ class TestDownloadManagerConfigEdgeCases:
 
 @pytest.mark.asyncio
 async def test_import_config_preserves_completed_once_downloads(test_session, test_directory, async_client,
-                                                                test_download_manager, test_download_manager_config):
+                                                                test_download_manager, test_download_manager_config,
+                                                                fake_now):
     """A completed once-download is never written to the config, so importing the config (which happens on every
     startup) must not delete it: its `last_download_attempt` is what the daily download limits count."""
     from datetime import timedelta
 
     from wrolpi.dates import now
+
+    # The daily limits count from local midnight, so "5 minutes ago" must fall on the same local day.  Pin the
+    # clock to local noon (as the download manager reckons local time), or this fails just after midnight.
+    fake_now(test_download_manager._get_local_now().replace(hour=12, minute=0, second=0, microsecond=0))
 
     config = get_download_manager_config()
     config_path = config.get_file()

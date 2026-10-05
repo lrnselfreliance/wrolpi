@@ -1,6 +1,7 @@
 """Tests for PlaylistsConfig disaster recovery: a missing or empty playlists.yaml must never
 delete playlists from the database (mirroring ChannelsConfig's guards)."""
 from copy import deepcopy
+from http import HTTPStatus
 
 import pytest
 
@@ -262,3 +263,66 @@ async def test_custom_directory_round_trips(test_session, test_directory, playli
     test_session.expire_all()
     collection = test_session.query(Collection).filter_by(name='Custom Dir').one()
     assert str(collection.directory) == str(custom)
+
+
+async def _assert_playlist_survives_reimport(test_session, playlists_config, new_path):
+    """playlists.yaml must hold the FileGroup's new path, so a re-import keeps the item."""
+    test_session.expire_all()
+    file_refs = [i['file'] for p in playlists_config.playlists for i in p['items'] if 'file' in i]
+    assert file_refs == [new_path]
+
+    # Re-import (startup / end of a global refresh) rebuilds items from the config file.
+    playlists_config.import_config()
+    test_session.expire_all()
+    collection = test_session.query(Collection).filter_by(name='Moved', kind='playlist').one()
+    assert [i.item_kind for i in collection.items] == ['file', 'url']
+    assert str(collection.items[0].file_group.primary_path).endswith(new_path)
+
+
+def _make_file_playlist(test_session, playlists_config, pdf):
+    from wrolpi.files.models import FileGroup
+
+    file_group = FileGroup.from_paths(test_session, pdf)
+    collection = Collection(name='Moved', kind='playlist')
+    test_session.add(collection)
+    test_session.flush([collection])
+    collection.add_file_group(file_group, session=test_session)
+    collection.add_url(test_session, '/map?x=1', title='Spot')
+    test_session.commit()
+    playlists_config.dump_config()
+
+
+@pytest.mark.asyncio
+async def test_rename_file_updates_playlists_config(
+        test_session, test_directory, playlists_config, async_client, await_switches):
+    """Renaming a playlist's file must write the new path to playlists.yaml, otherwise the next
+    re-import cannot find the file and drops the item."""
+    pdf = test_directory / 'guide.pdf'
+    pdf.write_bytes(b'%PDF-1.4 x')
+    _make_file_playlist(test_session, playlists_config, pdf)
+
+    request, response = await async_client.post(
+        '/api/files/rename', json=dict(path='guide.pdf', new_name='manual.pdf'))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_switches()
+
+    await _assert_playlist_survives_reimport(test_session, playlists_config, 'manual.pdf')
+
+
+@pytest.mark.asyncio
+async def test_move_file_updates_playlists_config(
+        test_session, test_directory, playlists_config, async_client, await_switches,
+        await_background_tasks):
+    """Moving a playlist's file must write the new path to playlists.yaml."""
+    pdf = test_directory / 'guide.pdf'
+    pdf.write_bytes(b'%PDF-1.4 x')
+    (test_directory / 'docs').mkdir()
+    _make_file_playlist(test_session, playlists_config, pdf)
+
+    request, response = await async_client.post(
+        '/api/files/move', json=dict(paths=['guide.pdf'], destination='docs'))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_background_tasks()
+    await await_switches()
+
+    await _assert_playlist_survives_reimport(test_session, playlists_config, 'docs/guide.pdf')

@@ -274,6 +274,25 @@ def get_playlists_config() -> PlaylistsConfig:
     return playlists_config
 
 
+def file_groups_moved(session, file_group_ids):
+    """Call after FileGroups change path (rename/move/reorganize).
+
+    playlists.yaml references file items by path, so it must be re-saved (and the playlist
+    directories re-synced) or the next import will not find the file and will drop the item.
+
+    `file_group_ids` may be an iterable of ids or a select of ids."""
+    from .models import Collection, CollectionItem
+
+    in_playlist = session.query(CollectionItem.id) \
+        .join(Collection, Collection.id == CollectionItem.collection_id) \
+        .filter(Collection.kind == 'playlist', CollectionItem.file_group_id.in_(file_group_ids)) \
+        .first()
+    if in_playlist:
+        save_playlists_config.activate_switch()
+        from .sync import sync_playlists_directory
+        sync_playlists_directory.activate_switch()
+
+
 @register_switch_handler('import_playlists_config')
 def import_playlists_config():
     """Re-import playlists.yaml into the database.

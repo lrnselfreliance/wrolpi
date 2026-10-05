@@ -108,7 +108,8 @@ export function renderMarkdown(text, fileURL) {
 }
 
 export function isMarkdownFile(mimetype, lowerPath) {
-    // Files indexed before text/markdown existed stay text/plain until their next refresh.
+    // By suffix too, so a markdown file whose stored type is still text/plain (or a language libmagic
+    // guessed) is not shown raw; the 2026_10_05_1200 migration retags those rows, a refresh does not.
     return mimetype.startsWith('text/markdown')
         || (mimetype.startsWith('text/') && (lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown')));
 }

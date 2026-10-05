@@ -186,7 +186,7 @@ describe('MarkdownPreview', () => {
 describe('isMarkdownFile', () => {
     test.each([
         ['text/markdown', 'notes/a.md', true],
-        // Files indexed before text/markdown existed are text/plain until their next refresh.
+        // A stored type from before text/markdown existed; refresh does not retag unchanged files.
         ['text/plain', 'notes/a.md', true],
         ['text/plain', 'notes/a.markdown', true],
         ['text/plain', 'notes/a.txt', false],

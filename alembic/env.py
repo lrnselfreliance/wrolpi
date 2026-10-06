@@ -6,9 +6,10 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# Configure logging only for the alembic command line.  WROLPi also migrates in-process at startup
+# (db_bootstrap), where fileConfig would replace the API's handlers and disable its existing loggers.
+if config.cmd_opts is not None:
+    fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

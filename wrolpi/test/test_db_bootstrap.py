@@ -17,6 +17,21 @@ def permissive_sqlite_floor():
         yield
 
 
+def test_migration_keeps_logging(test_directory):
+    """WROLPi migrates in-process at startup; alembic must not reconfigure the API's logging."""
+    import logging
+
+    existing = logging.getLogger('wrolpi.test.existing_logger')
+    root_handlers = list(logging.getLogger().handlers)
+    root_level = logging.getLogger().level
+
+    assert db_bootstrap.ensure_db() is True
+
+    assert existing.disabled is False
+    assert logging.getLogger().handlers == root_handlers
+    assert logging.getLogger().level == root_level
+
+
 def test_ensure_db_creates_and_migrates(test_directory):
     """With no database file, ensure_db creates it and migrates to head."""
     db_file = get_db_file()

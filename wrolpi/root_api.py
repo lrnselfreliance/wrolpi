@@ -18,6 +18,7 @@ from modules.docs.api import docs_bp
 from modules.flasher.api import flasher_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
+from modules.repos.api import repos_bp
 from modules.videos.api import videos_bp
 from modules.zim.api import zim_bp
 from wrolpi import flags, schema, dates
@@ -64,6 +65,7 @@ api_app.blueprint(flasher_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(jobs_bp)
 api_app.blueprint(map_bp)
+api_app.blueprint(repos_bp)
 api_app.blueprint(speedtest_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
@@ -192,6 +194,7 @@ def get_settings(_: Request):
         'nav_color': wrolpi_config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'playlists_destination': wrolpi_config.playlists_destination,
+        'repos_destination': wrolpi_config.repos_destination,
         'tags_directory': wrolpi_config.tags_directory,
         'throttle_on_startup': wrolpi_config.throttle_on_startup,
         'version': __version__,
@@ -277,6 +280,14 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
     else:
         new_config['playlists_destination'] = wrolpi_config.default_config['playlists_destination']
 
+    # The Settings page may not send `repos_destination`; only validate it when it is provided.
+    if body.repos_destination is not None:
+        from modules.repos.lib import validate_repos_destination
+        if not body.repos_destination:
+            new_config['repos_destination'] = wrolpi_config.default_config['repos_destination']
+        elif error := validate_repos_destination(body.repos_destination):
+            raise InvalidConfig(error)
+
     # Validate timezone if provided; empty string clears it.
     if body.timezone is not None:
         if body.timezone == '':
@@ -312,6 +323,12 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
 
     # Save config settings (hotspot control is now through Controller endpoints)
     wrolpi_config.update(new_config)
+
+    if body.repos_destination is not None:
+        # Repo files are never indexed, wherever repos are saved.
+        from modules.repos.lib import repos_destination_root
+        from wrolpi.files.lib import add_ignore_directory
+        add_ignore_directory(repos_destination_root(wrolpi_config.repos_destination))
 
     # If the Zim directory changed, restart Kiwix so it serves the new directory
     # without waiting for a reboot.  Local import avoids a circular import
@@ -777,6 +794,7 @@ async def post_search_suggestions(request: Request, body: schema.SearchSuggestio
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
     from modules.docs.lib import search_authors_by_name, search_subjects_by_name
+    from modules.repos.lib import search_repos_by_name
 
     session = request.ctx.session
     # Run sequentially: a SQLAlchemy Session is not safe for concurrent use, and
@@ -787,12 +805,14 @@ async def post_search_suggestions(request: Request, body: schema.SearchSuggestio
     domains = await search_domains_by_name(session, body.search_str)
     authors = await search_authors_by_name(session, body.search_str)
     subjects = await search_subjects_by_name(session, body.search_str)
+    repos = await search_repos_by_name(session, body.search_str)
 
     ret = dict(
         channels=channels,
         domains=domains,
         authors=authors,
         subjects=subjects,
+        repos=repos,
     )
     return json_response(ret)
 
@@ -831,7 +851,7 @@ async def post_search_file_estimates(request: Request, body: schema.SearchFileEs
 )
 async def post_search_other_estimates(request: Request, body: schema.SearchOtherEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
-    others = await search_other_estimates(request.ctx.session, body.tag_names)
+    others = await search_other_estimates(request.ctx.session, body.tag_names, body.search_str)
     ret = dict(others=others)
     return json_response(ret)
 

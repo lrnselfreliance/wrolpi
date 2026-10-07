@@ -3,6 +3,7 @@ export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const COLLECTIONS_API = `${API_URI}/collections`;
 export const ZIM_API = `${API_URI}/zim`;
+export const REPOS_API = `${API_URI}/repos`;
 export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 

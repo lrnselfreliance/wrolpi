@@ -186,3 +186,12 @@ def install_raw_ddl(conn):
 
     for statement in [*TRIGGER_DDL, *fts.FTS_DDL]:
         conn.execute(statement)
+
+    # DDL for tables created after the baseline migration (which also calls this function).
+    if _table_exists(conn, 'repository'):
+        for statement in fts.REPOSITORY_FTS_DDL:
+            conn.execute(statement)
+
+
+def _table_exists(conn, name: str) -> bool:
+    return conn.execute(f"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '{name}'").fetchone() is not None

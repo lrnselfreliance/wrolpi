@@ -499,7 +499,7 @@ class Downloader:
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
                              timeout: int = None, debug: bool = True,
                              stdout_callback: callable = None, env: dict = None,
-                             start_new_session: bool = False,
+                             start_new_session: bool = False, merge_stderr: bool = False,
                              ctx: 'DownloadContext' = None) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
@@ -522,7 +522,7 @@ class Downloader:
             timeout = self.timeout
         coro = ctx.run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug,
                                stdout_callback=stdout_callback, env=env,
-                               start_new_session=start_new_session)
+                               start_new_session=start_new_session, merge_stderr=merge_stderr)
         result = await self.cancel_wrapper(coro, download, ctx=ctx)
 
         if __debug__ and logger.isEnabledFor(TRACE_LEVEL):

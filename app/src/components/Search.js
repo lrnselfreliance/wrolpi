@@ -1,7 +1,15 @@
 import React, {useState} from "react";
 import {Link, Route, Routes, useLocation, useNavigate} from "react-router";
 import {FilesSearchView, SearchViewButton} from "./Files";
-import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchDeep, useSearchFilter} from "../hooks/customHooks";
+import {
+    useLatestRequest,
+    usePages,
+    useSearchChannels,
+    useSearchDate,
+    useSearchDeep,
+    useSearchFilter,
+    useSearchRepos,
+} from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
 import {MapSearchView} from "./MapSearchView";
@@ -12,6 +20,7 @@ import {TagsContext} from "../Tags";
 import {Accordion, Header, Icon, Label, Loading, Panel, Stack} from "./ui";
 import {QueryContext} from "../contexts/contexts";
 import {KeyboardShortcutsContext} from "../contexts/KeyboardShortcutsContext";
+import {HeadlineText} from "./Headline";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -139,6 +148,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
         domains: null,
         authors: null,
         subjects: null,
+        repos: null,
         zimsEstimates: [],
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
@@ -163,7 +173,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             // The files estimate always uses deep search server-side, so users know results are possible.
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
-            sendOtherRequest(async () => await searchEstimateOthers(tagNames));
+            sendOtherRequest(async () => await searchEstimateOthers(tagNames, searchStr));
         }
     }, [
         searchStr,
@@ -185,6 +195,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
                     domains: generalData.domains,
                     authors: generalData.authors,
                     subjects: generalData.subjects,
+                    repos: generalData.repos,
                 }
             });
         }
@@ -312,6 +323,13 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
                 })
             }
         }
+        if (newSuggestions.repos && newSuggestions.repos.length > 0) {
+            results.repos = {
+                name: 'Repos', results: newSuggestions.repos.map(i => {
+                    return {type: 'repo', title: i.name, id: i.id, location: `/repos/${i.id}`}
+                })
+            }
+        }
         if (newSuggestions.authors && newSuggestions.authors.length > 0) {
             results.authors = {
                 name: 'Authors', results: newSuggestions.authors.map(i => {
@@ -407,6 +425,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             domains: newSuggestions.domains?.length,
             authors: newSuggestions.authors?.length,
             subjects: newSuggestions.subjects?.length,
+            repos: newSuggestions.repos?.length,
             tags: matchingTags?.length,
             apps: matchingApps?.length,
         });
@@ -543,12 +562,47 @@ function SearchChannelPreview({channel}) {
     </div>
 }
 
-// `channels` follows useSearchChannels: null = pending, undefined = fetch failed, [] = none.
+function SearchRepoPreview({repo}) {
+    const {SingleTag} = React.useContext(TagsContext);
+    return <div>
+        <span style={{display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+            <Link to={`/repos/${repo.id}`}>{repo.name}</Link>
+            {repo.tag_name && <SingleTag name={repo.tag_name}/>}
+        </span>
+        {/* The server escapes the README; only its <b> highlights are markup. */}
+        {repo.readme_headline && <div><small><HeadlineText headline={repo.readme_headline}/></small></div>}
+    </div>
+}
+
+function OtherSearchSection({value, title, items, preview, emptyText, errorText}) {
+    let body;
+    if (items === null) {
+        body = <Loading/>;
+    } else if (items === undefined) {
+        body = <ErrorMessage>{errorText}</ErrorMessage>;
+    } else {
+        body = <Stack gap='xs'>{!_.isEmpty(items) ? items.map(preview) : emptyText}</Stack>;
+    }
+    return <Accordion.Item value={value}>
+        <Accordion.Control>
+            <span style={{display: 'inline-flex', alignItems: 'center', gap: 8}}>
+                <Header as='h3' style={{margin: 0}}>{title}</Header>
+                {Array.isArray(items) && <Label>{normalizeEstimate(items.length)}</Label>}
+            </span>
+        </Accordion.Control>
+        <Accordion.Panel>{body}</Accordion.Panel>
+    </Accordion.Item>
+}
+
+// `channels` follows useSearchChannels and `repos` follows useSearchRepos: null = pending,
+// undefined = fetch failed, [] = none.
 export function OtherSearchView({loading}) {
     const {searchParams} = React.useContext(QueryContext);
-    const [activeValue, setActiveValue] = React.useState('channels');
+    const [activeValues, setActiveValues] = React.useState(['channels', 'repos']);
     const activeTags = searchParams.getAll('tag');
+    const searchStr = searchParams.get('q') || '';
     const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
+    const {repos} = useSearchRepos(searchStr, activeTags);
 
     if (loading || channelsLoading || channels === null) {
         return <Panel><Loading/></Panel>
@@ -556,21 +610,22 @@ export function OtherSearchView({loading}) {
         return <Panel><ErrorMessage>Could not fetch the channels.</ErrorMessage></Panel>
     }
 
-    return <Accordion value={activeValue} onChange={setActiveValue}>
-        <Accordion.Item value='channels'>
-            <Accordion.Control>
-                <span style={{display: 'inline-flex', alignItems: 'center', gap: 8}}>
-                    <Header as='h3' style={{margin: 0}}>Channels</Header>
-                    <Label>{normalizeEstimate(channels.length)}</Label>
-                </span>
-            </Accordion.Control>
-            <Accordion.Panel>
-                <Stack gap='xs'>
-                    {!_.isEmpty(channels) ?
-                        channels.map(i => <SearchChannelPreview key={i.id} channel={i}/>)
-                        : 'No Channels'}
-                </Stack>
-            </Accordion.Panel>
-        </Accordion.Item>
+    return <Accordion multiple value={activeValues} onChange={setActiveValues}>
+        <OtherSearchSection
+            value='channels'
+            title='Channels'
+            items={channels}
+            preview={i => <SearchChannelPreview key={i.id} channel={i}/>}
+            emptyText='No Channels'
+            errorText='Could not fetch the channels.'
+        />
+        <OtherSearchSection
+            value='repos'
+            title='Repos'
+            items={repos}
+            preview={i => <SearchRepoPreview key={i.id} repo={i}/>}
+            emptyText='No Repos'
+            errorText='Could not fetch the repos.'
+        />
     </Accordion>
 }

@@ -71,6 +71,7 @@ export const settingsFixture = (overrides = {}) => ({
     media_directory: '/media/wrolpi',
     nav_color: 'violet',
     playlists_destination: 'playlists',
+    repos_destination: 'repos/%(repo_tag)s/%(repo_name)s',
     require_cookies_unlocked: false,
     require_media_mounted: false,
     save_ffprobe_json: true,

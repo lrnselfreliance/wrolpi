@@ -488,3 +488,45 @@ async def test_tag_domain_comprehensive(
 
     # Download was not changed
     assert download.destination == original_directory, f'{download} should not have moved'
+
+
+@pytest.mark.asyncio
+async def test_failed_tag_move_reverts_tag(test_session: Session, test_directory: pathlib.Path, archive_factory,
+                                           async_client, tag_factory, await_background_tasks, monkeypatch):
+    """When the move fails, the Collection keeps its old tag (as it keeps its old directory), and the directory made
+    for the move is removed."""
+    from wrolpi.files import move
+    src_dir = test_directory / 'archive/Old/example.com'
+    src_dir.mkdir(parents=True)
+    old_tag = await tag_factory('Old')
+    await tag_factory('News')
+    collection = Collection(name='example.com', kind='domain', directory=src_dir, tag_id=old_tag.id)
+    test_session.add(collection)
+    test_session.flush([collection])
+    (src_dir / 'page.html').write_text('<html></html>')
+    test_session.commit()
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError('planning failed')
+
+    monkeypatch.setattr(move, 'build_move_plan_bulk', fail)
+    body = {'tag_name': 'News', 'directory': 'archive/News/example.com'}
+    request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
+    assert response.status_code == HTTPStatus.OK, response.content.decode()
+    await await_background_tasks()
+    test_session.expire_all()
+
+    assert collection.directory == src_dir
+    assert collection.tag_name == 'Old'
+    assert (src_dir / 'page.html').is_file()
+    assert not (test_directory / 'archive/News/example.com').exists()
+
+
+@pytest.mark.parametrize('directory', ['../escape', 'archive/../../escape', '{media}/../escape'])
+def test_validate_collection_directory_refuses_parent_parts(test_directory: pathlib.Path, directory):
+    """A Collection's directory cannot leave the media directory with `..`."""
+    from wrolpi.collections.models import validate_collection_directory
+    from wrolpi.errors import ValidationError
+    with pytest.raises(ValidationError):
+        validate_collection_directory(directory.format(media=test_directory))
+    assert validate_collection_directory('archive/example.com') == test_directory / 'archive/example.com'

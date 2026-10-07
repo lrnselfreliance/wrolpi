@@ -499,6 +499,7 @@ export function SettingsPage() {
             videos_destination: settings.videos_destination,
             zims_destination: settings.zims_destination,
             playlists_destination: settings.playlists_destination,
+            repos_destination: settings.repos_destination,
             save_ffprobe_json: settings.save_ffprobe_json,
         });
     }, [JSON.stringify(settings), settingsLoaded, settingsFailed]);
@@ -847,6 +848,32 @@ export function SettingsPage() {
                             value={state.playlists_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('playlists_destination', e.currentTarget.value)}
+                        />
+                    </Grid.Col>
+                    <Grid.Col span={{base: 12, sm: 6}}>
+                        <PathInput
+                            label={<>
+                                Repos Directory
+                                <InfoPopup
+                                    content={<>
+                                        <p>Variables:</p>
+                                        <ul>
+                                            <li><code>%(repo_name)s</code> - Repo name</li>
+                                            <li><code>%(repo_tag)s</code> - Tag name for the repo (empty if no tag)
+                                            </li>
+                                            <li><code>%(repo_owner)s</code> - Owner from the repo URL</li>
+                                            <li><code>%(repo_host)s</code> - Host from the repo URL</li>
+                                        </ul>
+                                        <p>Must start with a fixed directory (like <code>repos/</code>), which
+                                            is never indexed, and contain <code>%(repo_name)s</code>.</p>
+                                    </>}
+                                    position='top'
+                                />
+                            </>}
+                            prefix={mediaDirectoryLabel}
+                            value={state.repos_destination}
+                            disabled={!editSpecialDirectories}
+                            onChange={e => handleInputChange('repos_destination', e.currentTarget.value)}
                         />
                     </Grid.Col>
                     <Grid.Col span={12}>

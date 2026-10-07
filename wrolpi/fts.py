@@ -97,8 +97,47 @@ FTS_DDL = [
     ''',
 ]
 
+# A Repo's name outranks a mention in its README.
+REPOSITORY_BM25_WEIGHTS = 'bm25(10.0, 1.0)'
+
+# Installed only once the `repository` table exists (see `schema_ddl.install_raw_ddl`); the baseline migration
+# runs before that table is created.
+REPOSITORY_FTS_DDL = [
+    f'''
+    CREATE VIRTUAL TABLE IF NOT EXISTS repository_fts USING fts5(
+        search_name, readme_text,
+        content='repository',
+        content_rowid='id',
+        tokenize='{TOKENIZER}'
+    )
+    ''',
+    f'''
+    INSERT INTO repository_fts(repository_fts, rank) VALUES('rank', '{REPOSITORY_BM25_WEIGHTS}')
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS repository_fts_ai AFTER INSERT ON repository BEGIN
+        INSERT INTO repository_fts(rowid, search_name, readme_text)
+        VALUES (new.id, new.search_name, new.readme_text);
+    END
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS repository_fts_ad AFTER DELETE ON repository BEGIN
+        INSERT INTO repository_fts(repository_fts, rowid, search_name, readme_text)
+        VALUES ('delete', old.id, old.search_name, old.readme_text);
+    END
+    ''',
+    '''
+    CREATE TRIGGER IF NOT EXISTS repository_fts_au AFTER UPDATE OF search_name, readme_text ON repository BEGIN
+        INSERT INTO repository_fts(repository_fts, rowid, search_name, readme_text)
+        VALUES ('delete', old.id, old.search_name, old.readme_text);
+        INSERT INTO repository_fts(rowid, search_name, readme_text)
+        VALUES (new.id, new.search_name, new.readme_text);
+    END
+    ''',
+]
+
 # FTS5 shadow tables (and the virtual tables themselves); excluded from alembic autogenerate.
-FTS_TABLE_PREFIXES = ('file_group_fts', 'doc_section_fts')
+FTS_TABLE_PREFIXES = ('file_group_fts', 'doc_section_fts', 'repository_fts')
 
 
 _ITEM_RE = re.compile(r'-?"[^"]*"?|\S+')
@@ -233,6 +272,20 @@ def file_group_search_join(search_str: str, deep: bool = False, headlines: bool 
             f'WHERE file_group_fts MATCH :{param_name}) fts ON fts.rowid = {fg_alias}.id')
     return FileGroupSearch(join=join, where='', rank_select='fts.ts_rank AS ts_rank',
                            params={param_name: match})
+
+
+def repository_search_join(search_str: str, alias: str = 'r', param_name: str = 'repo_match',
+                           start: str = '<b>', stop: str = '</b>', tokens: int = 16) -> Optional[FileGroupSearch]:
+    """Join `repository` (aliased `alias`) to its FTS5 matches.  Provides `fts.ts_rank` and `fts.readme_headline`.
+
+    Returns None when there is nothing usable to search."""
+    match = translate_websearch(search_str)
+    if match is None:
+        return None
+    join = (f"JOIN (SELECT rowid, -rank AS ts_rank, "
+            f"snippet(repository_fts, 1, '{start}', '{stop}', '…', {tokens}) AS readme_headline "
+            f"FROM repository_fts WHERE repository_fts MATCH :{param_name}) fts ON fts.rowid = {alias}.id")
+    return FileGroupSearch(join=join, where='', rank_select='fts.ts_rank AS ts_rank', params={param_name: match})
 
 
 def file_group_headline_selects(start: str = '<b>', stop: str = '</b>', tokens: int = 16) -> str:

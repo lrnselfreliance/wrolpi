@@ -30,6 +30,7 @@ import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
 import {PlaylistsRoute} from "./components/Playlists";
+import {ReposRoute} from "./components/Repos";
 import {DocsRoute} from "./components/Docs";
 import {FlasherRoute} from "./components/Flasher";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -117,6 +118,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path='map/*' element={<ErrorBoundary><MapRoute/></ErrorBoundary>}/>
     <Route path='zim/*' element={<ErrorBoundary><ZimRoute/></ErrorBoundary>}/>
     <Route path='playlists/*' element={<ErrorBoundary><PlaylistsRoute/></ErrorBoundary>}/>
+    <Route path='repos/*' element={<ErrorBoundary><ReposRoute/></ErrorBoundary>}/>
     <Route path='files/*' element={<ErrorBoundary><FilesRoute/></ErrorBoundary>}/>
     <Route path='flasher/*' element={<ErrorBoundary><FlasherRoute/></ErrorBoundary>}/>
 </Route>));

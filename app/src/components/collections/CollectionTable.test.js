@@ -68,6 +68,27 @@ const DOMAIN_ROUTES = {
 describe('CollectionTable', () => {
     const mockCollections = createMockDomains(3);
 
+    describe('Column render', () => {
+        it('displays what a column renders, in the desktop and mobile rows', () => {
+            const columns = [
+                {key: 'name', label: 'Name', render: (c) => <em data-testid='rendered-name'>{c.name}!</em>},
+                {key: 'branch', label: 'Branch', render: (c) => c.branch || c.default_branch},
+            ];
+            render(<CollectionTable
+                collections={[{id: 1, name: 'kiwix-tools', branch: null, default_branch: 'main'}]}
+                columns={columns}
+                routes={{search: '/repos/:id', id_field: 'id'}}
+            />);
+
+            // Desktop: the rendered name is still the link to the collection.
+            expect(screen.getByTestId('rendered-name')).toHaveTextContent('kiwix-tools!');
+            expect(screen.getByTestId('rendered-name').closest('a')).toHaveAttribute('href', '/repos/1');
+            expect(screen.getByText('main')).toBeInTheDocument();
+            // Mobile lists the other columns by label.
+            expect(screen.getByText('Branch: main')).toBeInTheDocument();
+        });
+    });
+
     describe('Loading and Error States', () => {
         it('renders loading placeholder when collections is null', () => {
             const {container} = render(

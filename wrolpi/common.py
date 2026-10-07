@@ -43,7 +43,7 @@ from wrolpi.dates import now, from_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, ConfigNotImported, \
     ValidationError
 from wrolpi.log_levels import TRACE_LEVEL
-from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, REPOS_DIRECTORY
 
 
 def add_logging_level(level_name: str, level_int: int, methodName=None):
@@ -445,7 +445,7 @@ def get_media_directory() -> Path:
 
 
 DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml',
-                        'playlists.yaml'}
+                        'playlists.yaml', 'repos.yaml'}
 
 
 class ConfigFile:
@@ -1117,6 +1117,7 @@ class WROLPiConfigValidator:
     map_destination: str = None
     nav_color: str = None
     playlists_destination: str = None
+    repos_destination: str = None
     require_cookies_unlocked: bool = None
     require_media_mounted: bool = None
     save_ffprobe_json: bool = None
@@ -1184,6 +1185,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     from wrolpi.collections.config import get_playlists_config
     if playlists_config := get_playlists_config():
         all_configs[playlists_config.file_name] = playlists_config
+
+    from modules.repos.lib import get_repos_config
+    if repos_config := get_repos_config():
+        all_configs[repos_config.file_name] = repos_config
 
     return all_configs
 
@@ -1271,6 +1276,16 @@ async def import_all_db_configs() -> dict[str, bool]:
         logger.warning(f'Failed to import playlists config: {e}')
         results['playlists'] = False
 
+    # Repos (kind='repo' collections; uses tags, links to downloads)
+    try:
+        from modules.repos.lib import import_repos_config
+        await asyncio.to_thread(import_repos_config)
+        results['repos'] = True
+        logger.debug('repos config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import repos config: {e}')
+        results['repos'] = False
+
     # Map pins (YAML-only, no DB)
     try:
         from modules.map.pins import get_map_pins_config
@@ -1329,12 +1344,13 @@ class WROLPiConfig(ConfigFile):
         hotspot_ssid='WROLPi',
         check_for_upgrades=True,
         ignore_outdated_zims=False,
-        ignored_directories=['config', 'tags'],
+        ignored_directories=['config', 'tags', REPOS_DIRECTORY],
         log_level='info',
         map_default_location=None,
         map_destination='map',
         nav_color='violet',
         playlists_destination='playlists',
+        repos_destination='repos/%(repo_tag)s/%(repo_name)s',
         require_cookies_unlocked=True,
         require_media_mounted=True,
         save_ffprobe_json=True,
@@ -1381,11 +1397,23 @@ class WROLPiConfig(ConfigFile):
             self._config['zims_destination'] = self.zims_destination or self.default_config['zims_destination']
             self._config['playlists_destination'] = \
                 self.playlists_destination or self.default_config['playlists_destination']
+            self._config['repos_destination'] = self.repos_destination or self.default_config['repos_destination']
 
             # The playlists directory holds WROLPi-managed hardlinks/stubs; never index it.
             ignored = list(self._config.get('ignored_directories') or [])
             if self._config['playlists_destination'] not in ignored:
                 ignored.append(self._config['playlists_destination'])
+                self._config['ignored_directories'] = ignored
+            # Git repositories are browsed through the Repos module; their files are never indexed.  Every repo is
+            # under the fixed directory at the start of the repos destination.
+            from modules.repos.lib import validate_repos_destination, repos_destination_root
+            if error := validate_repos_destination(self._config['repos_destination'], self):
+                logger.warning(f'Using the default repos destination: {error}')
+                self._config['repos_destination'] = self.default_config['repos_destination']
+            repos_root = repos_destination_root(self._config['repos_destination'])
+            ignored = list(self._config.get('ignored_directories') or [])
+            if repos_root not in ignored:
+                ignored.append(repos_root)
                 self._config['ignored_directories'] = ignored
 
             self.successful_import = True
@@ -1593,6 +1621,14 @@ class WROLPiConfig(ConfigFile):
     @playlists_destination.setter
     def playlists_destination(self, value: str):
         self.update({'playlists_destination': value})
+
+    @property
+    def repos_destination(self) -> str:
+        return self._config['repos_destination']
+
+    @repos_destination.setter
+    def repos_destination(self, value: str):
+        self.update({'repos_destination': value})
 
     @property
     def map_default_location(self) -> dict:
@@ -2833,16 +2869,20 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
     return fts.headline_texts(entries, search_str, tokens=8)
 
 
-async def search_other_estimates(session: Session, tag_names: List[str]) -> dict:
-    """Estimate other things that are Tagged."""
+async def search_other_estimates(session: Session, tag_names: List[str], search_str: str = None) -> dict:
+    """Estimate other things that are Tagged, or match the search (Repos by their name and README)."""
     from sqlalchemy import func
     from wrolpi.collections.models import Collection
     from wrolpi.tags import Tag
     from modules.videos.models import Channel
+    from modules.repos.lib import count_repos
+
+    repo_count = count_repos(session, search_str, tag_names)
 
     if not tag_names:
         return dict(
             channel_count=0,
+            repo_count=repo_count,
         )
 
     # TODO handle multiple tags
@@ -2854,6 +2894,7 @@ async def search_other_estimates(session: Session, tag_names: List[str]) -> dict
 
     others = dict(
         channel_count=channel_count,
+        repo_count=repo_count,
     )
     return others
 

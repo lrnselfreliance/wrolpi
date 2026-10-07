@@ -141,3 +141,9 @@ collection_type_registry.register(
     validate_channel_name,  # Permissive: any non-empty name.
     'Playlist name must be a non-empty string'
 )
+
+collection_type_registry.register(
+    'repo',
+    validate_channel_name,  # Permissive: any non-empty name.
+    'Repo name must be a non-empty string'
+)

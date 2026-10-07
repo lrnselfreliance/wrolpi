@@ -24,6 +24,7 @@ from wrolpi.collections.models import Collection, CollectionItem  # noqa: F401
 from modules.videos.models import Video, Channel  # noqa: F401
 from modules.archive.models import Archive  # noqa: F401
 from modules.zim.models import Zim, TagZimEntry, ZimSubscription  # noqa: F401
+from modules.repos.models import Repository  # noqa: F401
 
 target_metadata = Base.metadata
 

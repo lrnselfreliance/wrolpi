@@ -45,6 +45,10 @@ def check_config_imported(kind: str):
     if kind == 'playlist':
         from .config import get_playlists_config
         get_playlists_config().check_imported()
+    elif kind == 'domain':
+        # Local import to avoid circular import: collections -> archive -> collections
+        from modules.archive.lib import get_domains_config
+        get_domains_config().check_imported()
 
 
 def _activate_config_save(kind: str):

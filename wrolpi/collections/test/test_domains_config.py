@@ -1,6 +1,9 @@
 """Tests for DomainsConfig functionality."""
+import json
 import pathlib
+from http import HTTPStatus
 
+import pytest
 import yaml
 from sqlalchemy.orm import Session
 
@@ -256,3 +259,40 @@ class TestDomainsConfig:
         assert not config['directory'].startswith('/'), \
             f"Expected relative path but got absolute: {config['directory']}"
         assert config['directory'] == 'archive/example.com'
+
+
+@pytest.mark.asyncio
+async def test_domain_changes_wait_for_config_import(test_session: Session, test_directory: pathlib.Path,
+                                                     async_client):
+    """Until domains.yaml is imported (e.g. while WROLPi starts), domains cannot be changed through the API; the
+    import would undo the change (or delete a new domain)."""
+    domain = Collection.from_config(test_session, {'name': 'kept.com', 'kind': 'domain'})
+    test_session.commit()
+    domains_config.dump_config()
+    assert domains_config.get_file().is_file()
+    domains_config.successful_import = False
+
+    did = domain.id
+    requests = [
+        ('post', '/api/collections', dict(name='new.com', kind='domain')),
+        ('put', f'/api/collections/{did}', dict(description='changed')),
+        ('post', f'/api/collections/{did}/tag', dict(tag_name='Tagged', directory='archive/Tagged/kept.com')),
+        ('delete', f'/api/collections/{did}', None),
+    ]
+    for method, url, body in requests:
+        kwargs = dict(content=json.dumps(body)) if body else {}
+        request, response = await getattr(async_client, method)(url, **kwargs)
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE, (method, url, response.json)
+        assert response.json['code'] == 'CONFIG_NOT_IMPORTED'
+
+    test_session.expire_all()
+    domain = test_session.query(Collection).one()
+    assert domain.name == 'kept.com'
+    assert domain.description is None
+    assert domain.tag is None
+    assert domain.directory is None
+
+    # Once imported, domains can change again.
+    domains_config.import_config()
+    request, response = await async_client.put(f'/api/collections/{did}', content=json.dumps(dict(description='x')))
+    assert response.status_code == HTTPStatus.OK, response.json

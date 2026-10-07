@@ -296,3 +296,38 @@ async def test_domain_changes_wait_for_config_import(test_session: Session, test
     domains_config.import_config()
     request, response = await async_client.put(f'/api/collections/{did}', content=json.dumps(dict(description='x')))
     assert response.status_code == HTTPStatus.OK, response.json
+
+
+@pytest.mark.asyncio
+async def test_import_keeps_domains_with_archives(test_session: Session, test_directory: pathlib.Path, async_client,
+                                                  archive_factory):
+    """A domain missing from domains.yaml is deleted by the import, unless it has Archives.  Archives create their
+    domain (e.g. an upload or refresh while WROLPi starts, before domains.yaml is imported), and deleting it would
+    delete its Archives."""
+    from modules.archive.models import Archive
+    archive_factory(domain='kept.com', url='https://kept.com/1')
+    Collection.from_config(test_session, {'name': 'empty.com', 'kind': 'domain'})
+    test_session.commit()
+    domains_config.dump_config()
+    domains_config.successful_import = False
+
+    # Created before the import.
+    archive_factory(domain='new.com', url='https://new.com/1')
+    Collection.from_config(test_session, {'name': 'unused.com', 'kind': 'domain'})
+    test_session.commit()
+    assert test_session.query(Archive).count() == 2
+
+    domains_config.import_config()
+    test_session.expire_all()
+    assert {i.name for i in test_session.query(Collection)} == {'kept.com', 'empty.com', 'new.com'}
+    assert {i.collection.name for i in test_session.query(Archive)} == {'kept.com', 'new.com'}
+    assert domains_config.successful_import
+
+    # A domain with Archives which was removed from the config (by hand) is kept too.
+    config = yaml.safe_load(domains_config.get_file().read_text())
+    config['collections'] = [i for i in config['collections'] if i['name'] != 'kept.com']
+    domains_config.get_file().write_text(yaml.dump(config))
+    domains_config.import_config()
+    test_session.expire_all()
+    assert {i.name for i in test_session.query(Collection)} == {'kept.com', 'empty.com', 'new.com'}
+    assert test_session.query(Archive).count() == 2

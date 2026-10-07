@@ -153,12 +153,19 @@ class DomainsConfig(ConfigFile):
                     collections = Collection.batch_from_config(session, valid_data_list)
                     imported_domains = {c.name for c in collections}
 
-                # Delete domain collections that are no longer in config
+                # Delete domain collections that are no longer in config.  A domain with Archives is kept: Archives
+                # create their domain (e.g. one downloaded before this import), and deleting it would delete them.
+                with_archives = {i for i, in session.query(Archive.collection_id).distinct()}
                 all_domain_collections = session.query(Collection).filter_by(kind='domain').all()
                 for collection in all_domain_collections:
-                    if collection.name not in imported_domains:
-                        logger.info(f'Deleting domain collection {repr(collection.name)} (no longer in config)')
-                        session.delete(collection)
+                    if collection.name in imported_domains:
+                        continue
+                    if collection.id in with_archives:
+                        logger.warning(f'Keeping domain collection {repr(collection.name)} which is not in config,'
+                                       f' because it has archives')
+                        continue
+                    logger.info(f'Deleting domain collection {repr(collection.name)} (no longer in config)')
+                    session.delete(collection)
 
             logger.info(f'Successfully imported {len(imported_domains)} domain collections from {file_str}')
             self.successful_import = True

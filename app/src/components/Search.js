@@ -601,7 +601,7 @@ export function OtherSearchView({loading}) {
     const [activeValues, setActiveValues] = React.useState(['channels', 'repos']);
     const activeTags = searchParams.getAll('tag');
     const searchStr = searchParams.get('q') || '';
-    const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
+    const {channels, loading: channelsLoading} = useSearchChannels(activeTags, searchStr);
     const {repos} = useSearchRepos(searchStr, activeTags);
 
     if (loading || channelsLoading || channels === null) {

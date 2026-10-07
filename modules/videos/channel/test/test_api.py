@@ -721,3 +721,32 @@ async def test_search_tagged_channels(async_client, test_session, channel_factor
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['channels']) == 1, 'Only one Channel is tagged'
     assert response.json['channels'][0]['id'] == channel1.id
+
+
+@pytest.mark.asyncio
+async def test_search_channels_by_name(async_client, test_session, channel_factory, tag_factory):
+    """Channels can be searched by their name, alone or with Tags."""
+    tag = await tag_factory()
+    cooking = channel_factory(name='Cooking Show', tag_name=tag.name)
+    channel_factory(name='Cooking Basics')
+    channel_factory(name='Gardening')
+    test_session.commit()
+
+    async def search(body):
+        request, response = await async_client.post('/api/videos/channels/search', json=body)
+        assert response.status_code == HTTPStatus.OK
+        return sorted(i['name'] for i in response.json['channels'])
+
+    assert await search(dict(search_str='cooking')) == ['Cooking Basics', 'Cooking Show']
+    # The name and the Tags must both match.
+    assert await search(dict(search_str='cooking', tag_names=[tag.name])) == ['Cooking Show']
+    assert await search(dict(search_str='gardening', tag_names=[tag.name])) == []
+    # Nothing to search by matches nothing.
+    assert await search(dict(search_str='')) == []
+    assert await search(dict()) == []
+
+    # The Other tab's estimate counts the same Channels.
+    for body in (dict(search_str='cooking'), dict(search_str='cooking', tag_names=[tag.name]), dict(search_str='')):
+        request, response = await async_client.post('/api/search_other_estimates', json=body)
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['others']['channel_count'] == len(await search(body)), body

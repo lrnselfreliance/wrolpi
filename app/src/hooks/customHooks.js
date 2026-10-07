@@ -2107,7 +2107,8 @@ export const useCalcQuery = () => {
     return [calc, setCalc]
 }
 
-export const useSearchChannels = (defaultTagNames) => {
+// Channels whose name matches `searchStr` and/or which have any of the tags.
+export const useSearchChannels = (defaultTagNames, searchStr) => {
     const [tagNames, setTagNames] = useState(defaultTagNames || []);
     // null = pending, undefined = fetch failed, [] = no channels.  A search starts on mount, so the
     // first render is already loading; consumers must never see [] for a search that has not run.
@@ -2121,7 +2122,7 @@ export const useSearchChannels = (defaultTagNames) => {
         setChannels(null);
         setLoading(true);
         try {
-            const {channels: newChannels} = await searchChannels(tagNames);
+            const {channels: newChannels} = await searchChannels(tagNames, searchStr);
             if (gen === requestGen.current) {
                 setChannels(newChannels || []);
             }
@@ -2147,7 +2148,7 @@ export const useSearchChannels = (defaultTagNames) => {
 
     useEffect(() => {
         localSearchChannels();
-    }, [tagNames]);
+    }, [tagNames, searchStr]);
 
     return {
         tagNames,

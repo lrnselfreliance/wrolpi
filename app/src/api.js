@@ -2118,8 +2118,8 @@ export async function searchEstimateOthers(tagNames, searchStr) {
     }
 }
 
-export async function searchChannels(tagNames) {
-    const body = {tag_names: tagNames};
+export async function searchChannels(tagNames, searchStr) {
+    const body = {tag_names: tagNames, search_str: searchStr};
     const response = await apiPost(`${API_URI}/videos/channels/search`, body);
     if (response.ok) {
         const content = await response.json();

@@ -2870,31 +2870,15 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
 
 
 async def search_other_estimates(session: Session, tag_names: List[str], search_str: str = None) -> dict:
-    """Estimate other things that are Tagged, or match the search (Repos by their name and README)."""
-    from sqlalchemy import func
-    from wrolpi.collections.models import Collection
-    from wrolpi.tags import Tag
-    from modules.videos.models import Channel
+    """Estimate other things that match the search or the Tags (Channels by their name, Repos by their name and
+    README)."""
+    from modules.videos.channel.lib import search_channels_query
     from modules.repos.lib import count_repos
 
-    repo_count = count_repos(session, search_str, tag_names)
-
-    if not tag_names:
-        return dict(
-            channel_count=0,
-            repo_count=repo_count,
-        )
-
-    # Matches `search_channels`: Channels with any of the Tags.
-    channel_count = session.query(func.count(Channel.id)) \
-        .join(Collection, Collection.id == Channel.collection_id) \
-        .join(Tag, Tag.id == Collection.tag_id) \
-        .filter(Tag.name.in_(tag_names)) \
-        .scalar()
-
+    query = search_channels_query(session, tag_names, search_str)
     others = dict(
-        channel_count=channel_count,
-        repo_count=repo_count,
+        channel_count=query.count() if query is not None else 0,
+        repo_count=count_repos(session, search_str, tag_names),
     )
     return others
 

@@ -17,10 +17,17 @@ from wrolpi.tags import Tag
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel
-from ..lib import save_channels_config
+from ..lib import save_channels_config, get_channels_config
 from ..models import Channel, Video
 
 logger = logger.getChild(__name__)
+
+
+def check_channels_config_imported():
+    """Raise ConfigNotImported until channels.yaml is imported; the import would undo a change made before it."""
+    # A test may have no channels config.
+    if config := get_channels_config():
+        config.check_imported()
 
 
 async def get_minimal_channels(session: Session) -> List[dict]:
@@ -112,6 +119,7 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
 
 async def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
+    check_channels_config_imported()
     channel = Channel.find_by_id(session, channel_id)
 
     # Verify that the URL/Name/directory aren't taken
@@ -149,6 +157,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
     """
     Create a new Channel.  Check for conflicts with existing Channels.
     """
+    check_channels_config_imported()
     try:
         # Verify that the URL/Name/directory aren't taken
         check_for_channel_conflicts(
@@ -189,6 +198,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 
 
 def delete_channel(session: Session, *, channel_id: int):
+    check_channels_config_imported()
     channel = Channel.find_by_id(session, channel_id)
 
     channel_dict = channel.dict()
@@ -292,6 +302,7 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
+    check_channels_config_imported()
 
     if directory and flags.file_worker_busy.is_set():
         raise FileWorkerConflict('Refusing to move channel while FileWorker is busy')

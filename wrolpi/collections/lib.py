@@ -49,6 +49,10 @@ def check_config_imported(kind: str):
         # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.lib import get_domains_config
         get_domains_config().check_imported()
+    elif kind == 'channel':
+        # Local import to avoid circular import: collections -> videos -> collections
+        from modules.videos.channel.lib import check_channels_config_imported
+        check_channels_config_imported()
 
 
 def _activate_config_save(kind: str):

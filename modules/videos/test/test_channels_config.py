@@ -6,6 +6,9 @@ Tests cover:
 2. Upgrade - config file exists with data
 3. Edge cases - empty config, missing config with DB data
 """
+import json
+from http import HTTPStatus
+
 import pytest
 import yaml
 
@@ -322,3 +325,44 @@ class TestChannelsConfigEdgeCases:
         # Verify file_format restored
         test_session.refresh(channel)
         assert channel.collection.file_format == '%(upload_date)s_%(title)s.%(ext)s'
+
+
+@pytest.mark.asyncio
+async def test_channel_changes_wait_for_config_import(test_session, test_directory, async_client, channel_factory,
+                                                      test_channels_config):
+    """Until channels.yaml is imported (e.g. while WROLPi starts), Channels cannot change; the import would undo the
+    change (a new Channel would be deleted, with its Downloads)."""
+    channel = channel_factory(name='Kept')
+    test_session.commit()
+    config = get_channels_config()
+    config.dump_config()
+    assert config.get_file().is_file()
+    config.successful_import = False
+
+    cid, collection_id = channel.id, channel.collection_id
+    requests = [
+        ('post', '/api/videos/channels', dict(name='New', directory='videos/new', url='https://example.com/new')),
+        ('put', f'/api/videos/channels/{cid}', dict(name='Changed', directory=str(channel.directory))),
+        ('post', f'/api/videos/channels/{cid}/tag', dict(tag_name='Tagged')),
+        ('delete', f'/api/videos/channels/{cid}', None),
+        ('put', f'/api/collections/{collection_id}', dict(description='changed')),
+        ('post', f'/api/collections/{collection_id}/tag', dict(tag_name='Tagged')),
+        ('delete', f'/api/collections/{collection_id}', None),
+    ]
+    for method, url, body in requests:
+        kwargs = dict(content=json.dumps(body)) if body else {}
+        request, response = await getattr(async_client, method)(url, **kwargs)
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE, (method, url, response.json)
+        assert response.json['code'] == 'CONFIG_NOT_IMPORTED'
+
+    test_session.expire_all()
+    channel = test_session.query(Channel).one()
+    assert channel.name == 'Kept'
+    assert channel.tag_name is None
+    assert channel.collection.description is None
+
+    # Once imported, Channels can change again.
+    config.import_config()
+    request, response = await async_client.put(f'/api/collections/{collection_id}',
+                                               content=json.dumps(dict(description='x')))
+    assert response.status_code == HTTPStatus.OK, response.json

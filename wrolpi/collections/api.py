@@ -10,7 +10,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
-from wrolpi.errors import ValidationError
+from wrolpi.errors import ConfigNotImported, ValidationError
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
 from .errors import UnknownCollection
@@ -211,6 +211,8 @@ async def put_collection_endpoint(request: Request, collection_id: int, body: sc
 
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ConfigNotImported:
+        raise
     except Exception as e:
         return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
@@ -236,6 +238,8 @@ async def refresh_collection_endpoint(_: Request, collection_id: int):
 
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ConfigNotImported:
+        raise
     except Exception as e:
         return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
@@ -273,6 +277,8 @@ async def tag_collection_endpoint(request: Request, collection_id: int, body: sc
 
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ConfigNotImported:
+        raise
     except Exception as e:
         return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 

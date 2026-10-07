@@ -2885,11 +2885,11 @@ async def search_other_estimates(session: Session, tag_names: List[str], search_
             repo_count=repo_count,
         )
 
-    # TODO handle multiple tags
+    # Matches `search_channels`: Channels with any of the Tags.
     channel_count = session.query(func.count(Channel.id)) \
         .join(Collection, Collection.id == Channel.collection_id) \
         .join(Tag, Tag.id == Collection.tag_id) \
-        .filter(Tag.name == tag_names[0]) \
+        .filter(Tag.name.in_(tag_names)) \
         .scalar()
 
     others = dict(

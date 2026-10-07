@@ -68,6 +68,17 @@ async def search_archives(request: Request, body: schema.ArchiveSearchRequest):
     return json_response(ret)
 
 
+@archive_bp.post('/domains/search')
+@openapi.definition(
+    description='Search Domains by their name and/or Tags',
+    body=schema.DomainSearchRequest,
+)
+@validate(schema.DomainSearchRequest)
+async def domain_search(request: Request, body: schema.DomainSearchRequest):
+    domains = lib.search_domains(request.ctx.session, body.tag_names, body.search_str)
+    return json_response(dict(domains=domains))
+
+
 @archive_bp.post('/file_format')
 @openapi.definition(
     description='Preview the archive file format',

@@ -2870,14 +2870,17 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
 
 
 async def search_other_estimates(session: Session, tag_names: List[str], search_str: str = None) -> dict:
-    """Estimate other things that match the search or the Tags (Channels by their name, Repos by their name and
-    README)."""
+    """Estimate other things that match the search or the Tags (Channels and Domains by their name, Repos by their
+    name and README)."""
+    from modules.archive.lib import search_domains_query
     from modules.videos.channel.lib import search_channels_query
     from modules.repos.lib import count_repos
 
-    query = search_channels_query(session, tag_names, search_str)
+    channels = search_channels_query(session, tag_names, search_str)
+    domains = search_domains_query(session, tag_names, search_str)
     others = dict(
-        channel_count=query.count() if query is not None else 0,
+        channel_count=channels.count() if channels is not None else 0,
+        domain_count=domains.count() if domains is not None else 0,
         repo_count=count_repos(session, search_str, tag_names),
     )
     return others

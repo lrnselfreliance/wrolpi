@@ -8,6 +8,7 @@ import {
     useSearchDate,
     useSearchDeep,
     useSearchFilter,
+    useSearchDomains,
     useSearchRepos,
 } from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
@@ -562,6 +563,16 @@ function SearchChannelPreview({channel}) {
     </div>
 }
 
+function SearchDomainPreview({domain}) {
+    const {SingleTag} = React.useContext(TagsContext);
+    return <div>
+        <span style={{display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+            <Link to={`/archives?domain=${domain.domain}`}>{domain.domain}</Link>
+            {domain.tag_name && <SingleTag name={domain.tag_name}/>}
+        </span>
+    </div>
+}
+
 function SearchRepoPreview({repo}) {
     const {SingleTag} = React.useContext(TagsContext);
     return <div>
@@ -594,14 +605,15 @@ function OtherSearchSection({value, title, items, preview, emptyText, errorText}
     </Accordion.Item>
 }
 
-// `channels` follows useSearchChannels and `repos` follows useSearchRepos: null = pending,
+// `channels`, `domains`, and `repos` follow useSearchChannels, useSearchDomains, and useSearchRepos: null = pending,
 // undefined = fetch failed, [] = none.
 export function OtherSearchView({loading}) {
     const {searchParams} = React.useContext(QueryContext);
-    const [activeValues, setActiveValues] = React.useState(['channels', 'repos']);
+    const [activeValues, setActiveValues] = React.useState(['channels', 'domains', 'repos']);
     const activeTags = searchParams.getAll('tag');
     const searchStr = searchParams.get('q') || '';
     const {channels, loading: channelsLoading} = useSearchChannels(activeTags, searchStr);
+    const {domains} = useSearchDomains(searchStr, activeTags);
     const {repos} = useSearchRepos(searchStr, activeTags);
 
     if (loading || channelsLoading || channels === null) {
@@ -618,6 +630,14 @@ export function OtherSearchView({loading}) {
             preview={i => <SearchChannelPreview key={i.id} channel={i}/>}
             emptyText='No Channels'
             errorText='Could not fetch the channels.'
+        />
+        <OtherSearchSection
+            value='domains'
+            title='Domains'
+            items={domains}
+            preview={i => <SearchDomainPreview key={i.id} domain={i}/>}
+            emptyText='No Domains'
+            errorText='Could not fetch the domains.'
         />
         <OtherSearchSection
             value='repos'

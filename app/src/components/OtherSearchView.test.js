@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, render, screen} from '../test-utils';
 import {OtherSearchView} from './Search';
-import {searchChannels, searchRepos} from '../api';
+import {searchChannels, searchDomains, searchRepos} from '../api';
 
 // What the search page's Other tab shows for each state of useSearchChannels.  "No Channels"
 // must only appear once the server has confirmed there are none.
@@ -9,6 +9,7 @@ import {searchChannels, searchRepos} from '../api';
 jest.mock('../api', () => ({
     ...jest.requireActual('../api'),
     searchChannels: jest.fn(),
+    searchDomains: jest.fn(),
     searchRepos: jest.fn(),
 }));
 
@@ -18,6 +19,8 @@ beforeEach(() => {
     searchChannels.mockReset();
     searchRepos.mockReset();
     searchRepos.mockResolvedValue({repos: [], total: 0});
+    searchDomains.mockReset();
+    searchDomains.mockResolvedValue({domains: []});
 });
 
 test('pending: shows a loader, not "No Channels"', () => {
@@ -115,5 +118,42 @@ describe('Repos', () => {
         expect(container.querySelector('u').textContent).toBe('Zim');
         expect(container.querySelector('script')).toBeNull();
         expect(screen.getByText(/files <script>/)).toBeInTheDocument();
+    });
+});
+
+describe('Domains', () => {
+    test('empty: shows "No Domains"', async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        render(<OtherSearchView loading={false}/>);
+        await act(async () => {
+        });
+        expect(screen.getByText('No Domains')).toBeInTheDocument();
+    });
+
+    test('failed: shows an error only in the Domains section', async () => {
+        searchChannels.mockResolvedValue({channels: [{id: 1, name: 'Cooking'}]});
+        searchDomains.mockRejectedValue(new Error('boom'));
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        try {
+            render(<OtherSearchView loading={false}/>);
+            await act(async () => {
+            });
+            expect(screen.getByText('Cooking')).toBeInTheDocument();
+            expect(screen.getByText(/Could not fetch the domains/)).toBeInTheDocument();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('loaded: lists domains by the search, linked to their archives', async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        searchDomains.mockResolvedValue({domains: [{id: 3, domain: 'example.com', tag_name: null}]});
+        const searchParams = new URLSearchParams('q=example&tag=News');
+        render(<OtherSearchView loading={false}/>, {query: {searchParams}});
+        await act(async () => {
+        });
+        expect(searchDomains).toHaveBeenCalledWith(['News'], 'example');
+        expect(screen.getByText('example.com').closest('a')).toHaveAttribute('href', '/archives?domain=example.com');
     });
 });

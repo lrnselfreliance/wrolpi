@@ -36,6 +36,7 @@ import {
     saveSettings,
     searchArchives,
     searchChannels,
+    searchDomains,
     searchDirectories,
     searchDocs,
     searchRepos,
@@ -2156,6 +2157,27 @@ export const useSearchChannels = (defaultTagNames, searchStr) => {
         channels,
         loading,
     }
+}
+
+// Domains whose name matches `searchStr` and/or which have any of the tags.  `domains`: null = pending,
+// undefined = fetch failed, [] = none.  Only the newest request may write state.
+export const useSearchDomains = (searchStr, tagNames) => {
+    const [domains, setDomains] = useState(null);
+    const requestGen = useRef(0);
+    const tagKey = JSON.stringify(tagNames || []);
+
+    useEffect(() => {
+        const gen = ++requestGen.current;
+        setDomains(null);
+        searchDomains(JSON.parse(tagKey), searchStr)
+            .then(result => gen === requestGen.current && setDomains(result ? result.domains : undefined))
+            .catch(e => {
+                console.error(e);
+                if (gen === requestGen.current) setDomains(undefined);
+            });
+    }, [searchStr, tagKey]);
+
+    return {domains};
 }
 
 // Repos matching the search (their name and README) and/or the tags.  `repos`: null = pending,

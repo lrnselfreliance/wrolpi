@@ -2129,6 +2129,16 @@ export async function searchChannels(tagNames, searchStr) {
     }
 }
 
+// Domains whose name matches `searchStr` and/or which have any of the tags.
+export async function searchDomains(tagNames, searchStr) {
+    const body = {tag_names: tagNames, search_str: searchStr};
+    const response = await apiPost(`${ARCHIVES_API}/domains/search`, body);
+    if (response.ok) {
+        const content = await response.json();
+        return {domains: content.domains};
+    }
+}
+
 export async function getOutdatedZims() {
     const response = await apiGet(`${API_URI}/zim/outdated`);
     if (response.status === 200) {

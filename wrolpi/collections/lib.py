@@ -39,6 +39,22 @@ __all__ = [
 ]
 
 
+def check_config_imported(kind: str):
+    """Raise ConfigNotImported unless the config which holds this kind of Collection was imported.  A change made
+    before the import (e.g. while WROLPi starts) would be undone by it."""
+    if kind == 'playlist':
+        from .config import get_playlists_config
+        get_playlists_config().check_imported()
+    elif kind == 'domain':
+        # Local import to avoid circular import: collections -> archive -> collections
+        from modules.archive.lib import get_domains_config
+        get_domains_config().check_imported()
+    elif kind == 'channel':
+        # Local import to avoid circular import: collections -> videos -> collections
+        from modules.videos.channel.lib import check_channels_config_imported
+        check_channels_config_imported()
+
+
 def _activate_config_save(kind: str):
     """Activate the config-save switch for the config that owns this kind of Collection.
 
@@ -272,6 +288,7 @@ def update_collection(
         ValidationError: If validation fails
     """
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
 
     # The managed location before any rename/retag.  The API reports this location for a playlist
     # whose stored directory is None, so the UI round-trips it back; recognize it below and keep
@@ -372,6 +389,7 @@ def create_collection(session: Session, name: str, description: Optional[str] = 
         raise ValidationError('Collection name is required')
     if not collection_type_registry.is_registered(kind):
         raise ValidationError(f'Unknown collection kind: {kind!r}')
+    check_config_imported(kind)
     if not collection_type_registry.validate(kind, name):
         description_msg = collection_type_registry.get_description(kind) or 'Invalid name format'
         raise ValidationError(f'Invalid {kind} name {name!r}. {description_msg}')
@@ -414,6 +432,7 @@ def add_collection_item(session: Session, collection_id: int, item_kind: str,
     """
     from .models import CollectionItem
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
 
     if item_kind == 'file':
         from wrolpi.files.models import FileGroup
@@ -458,6 +477,7 @@ def add_collection_item(session: Session, collection_id: int, item_kind: str,
 def remove_collection_item(session: Session, collection_id: int, item_id: int) -> bool:
     """Remove an item from a collection by CollectionItem id.  Returns True if removed."""
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
     removed = collection.remove_item(session, item_id)
     if removed:
         from .config import save_playlists_config
@@ -470,6 +490,7 @@ def remove_collection_item(session: Session, collection_id: int, item_id: int) -
 def reorder_collection_items(session: Session, collection_id: int, item_ids: List[int]):
     """Reorder a collection's items from a full list of CollectionItem ids."""
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
     collection.reorder_items(session, item_ids)
     from .config import save_playlists_config
     save_playlists_config.activate_switch()
@@ -593,6 +614,7 @@ async def tag_collection(
         FileWorkerConflict: If a file operation is in progress and directory change is requested
     """
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
 
     # Track old directory before any changes for potential file moving
     old_directory = collection.directory
@@ -758,6 +780,7 @@ def delete_collection(
         UnknownCollection: If collection not found
     """
     collection = Collection.find_by_id(session, collection_id)
+    check_config_imported(collection.kind)
 
     collection_dict = {
         'id': collection.id,

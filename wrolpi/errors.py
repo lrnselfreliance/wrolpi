@@ -159,6 +159,12 @@ class InvalidConfig(APIError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
+class ConfigNotImported(APIError):
+    code = 'CONFIG_NOT_IMPORTED'
+    summary = 'WROLPi is still starting, try again in a moment'
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+
+
 class NoPrimaryFile(APIError):
     code = 'NO_PRIMARY_FILE'
     summary = 'Could not find a primary file in the provided group'

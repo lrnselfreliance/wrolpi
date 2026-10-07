@@ -40,7 +40,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, \
+from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, ConfigNotImported, \
     ValidationError
 from wrolpi.log_levels import TRACE_LEVEL
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
@@ -607,6 +607,14 @@ class ConfigFile:
             return
         todays_backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config_file, todays_backup)
+
+    def check_imported(self):
+        """Raise ConfigNotImported unless what this config holds may be changed: the config was imported (or does not
+        exist yet).  A change before the import (e.g. while WROLPi starts) could not be saved, and the import would
+        undo it."""
+        if self.get_file().exists() and not self.successful_import:
+            raise ConfigNotImported(f'WROLPi is still starting ({self.file_name} has not been loaded), try again in'
+                                    f' a moment')
 
     def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
         """Import a backup file. Subclasses override this."""

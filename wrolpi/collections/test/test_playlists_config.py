@@ -326,3 +326,45 @@ async def test_move_file_updates_playlists_config(
     await await_switches()
 
     await _assert_playlist_survives_reimport(test_session, playlists_config, 'docs/guide.pdf')
+
+
+@pytest.mark.asyncio
+async def test_playlist_changes_wait_for_config_import(test_session, test_directory, async_client, playlists_config):
+    """Until playlists.yaml is imported (e.g. while WROLPi starts), playlists cannot change; the import would undo
+    the change (a new playlist would be deleted, items rebuilt from the config)."""
+    import json
+    collection = _make_playlist(test_session, 'Kept')
+    collection.add_url(test_session, '/map?lat=3&lon=4&z=5', title='other')
+    test_session.commit()
+    item_ids = [i.id for i in collection.items]
+    playlists_config.dump_config()
+    assert playlists_config.get_file().is_file()
+    playlists_config.successful_import = False
+
+    cid = collection.id
+    requests = [
+        ('post', '/api/collections', dict(name='New')),
+        ('post', f'/api/collections/{cid}/items', dict(item_kind='url', url='/map?lat=5&lon=6&z=7')),
+        ('delete', f'/api/collections/{cid}/items/{item_ids[0]}', None),
+        ('put', f'/api/collections/{cid}/items/order', dict(item_ids=list(reversed(item_ids)))),
+        ('put', f'/api/collections/{cid}', dict(description='changed')),
+        ('post', f'/api/collections/{cid}/tag', dict(tag_name='Tagged')),
+        ('delete', f'/api/collections/{cid}', None),
+    ]
+    for method, url, body in requests:
+        kwargs = dict(content=json.dumps(body)) if body else {}
+        request, response = await getattr(async_client, method)(url, **kwargs)
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE, (method, url, response.json)
+        assert response.json['code'] == 'CONFIG_NOT_IMPORTED'
+
+    test_session.expire_all()
+    assert [i.name for i in test_session.query(Collection)] == ['Kept']
+    collection = test_session.query(Collection).one()
+    assert [i.id for i in collection.items] == item_ids
+    assert collection.description is None
+    assert collection.tag is None
+
+    # Once imported, playlists can change again.
+    playlists_config.import_config()
+    request, response = await async_client.post('/api/collections', content=json.dumps(dict(name='New')))
+    assert response.status_code == HTTPStatus.CREATED, response.json

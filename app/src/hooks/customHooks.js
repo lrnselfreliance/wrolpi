@@ -36,7 +36,7 @@ import {
     saveSettings,
     searchArchives,
     searchChannels,
-    searchDomains,
+    searchCollections,
     searchDirectories,
     searchDocs,
     searchRepos,
@@ -2159,25 +2159,31 @@ export const useSearchChannels = (defaultTagNames, searchStr) => {
     }
 }
 
-// Domains whose name matches `searchStr` and/or which have any of the tags.  `domains`: null = pending,
-// undefined = fetch failed, [] = none.  Only the newest request may write state.
-export const useSearchDomains = (searchStr, tagNames) => {
-    const [domains, setDomains] = useState(null);
+// Collections of `kind` whose name matches `searchStr` and/or which have any of the tags.  `collections`:
+// null = pending, undefined = fetch failed, [] = none.  Nothing to search by matches nothing (the API would list
+// every Collection of the kind).  Only the newest request may write state.
+export const useSearchCollections = (kind, searchStr, tagNames) => {
+    const [collections, setCollections] = useState(null);
     const requestGen = useRef(0);
     const tagKey = JSON.stringify(tagNames || []);
 
     useEffect(() => {
         const gen = ++requestGen.current;
-        setDomains(null);
-        searchDomains(JSON.parse(tagKey), searchStr)
-            .then(result => gen === requestGen.current && setDomains(result ? result.domains : undefined))
+        const tags = JSON.parse(tagKey);
+        if (!(searchStr || '').trim() && _.isEmpty(tags)) {
+            setCollections([]);
+            return;
+        }
+        setCollections(null);
+        searchCollections(kind, tags, searchStr)
+            .then(result => gen === requestGen.current && setCollections(result ? result.collections : undefined))
             .catch(e => {
                 console.error(e);
-                if (gen === requestGen.current) setDomains(undefined);
+                if (gen === requestGen.current) setCollections(undefined);
             });
-    }, [searchStr, tagKey]);
+    }, [kind, searchStr, tagKey]);
 
-    return {domains};
+    return {collections};
 }
 
 // Repos matching the search (their name and README) and/or the tags.  `repos`: null = pending,

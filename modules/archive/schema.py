@@ -28,12 +28,6 @@ class ArchiveSearchRequest:
 
 
 @dataclass
-class DomainSearchRequest:
-    tag_names: List[str] = field(default_factory=list)
-    search_str: Optional[str] = None
-
-
-@dataclass
 class ArchiveSearchResponse:
     file_groups: List[ArchiveDict]
     totals: dict

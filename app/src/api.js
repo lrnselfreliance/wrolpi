@@ -2129,13 +2129,13 @@ export async function searchChannels(tagNames, searchStr) {
     }
 }
 
-// Domains whose name matches `searchStr` and/or which have any of the tags.
-export async function searchDomains(tagNames, searchStr) {
-    const body = {tag_names: tagNames, search_str: searchStr};
-    const response = await apiPost(`${ARCHIVES_API}/domains/search`, body);
+// Collections of `kind` whose name matches `searchStr` and/or which have any of the tags.
+export async function searchCollections(kind, tagNames, searchStr) {
+    const body = {kind, tag_names: tagNames, search_str: searchStr};
+    const response = await apiPost(`${COLLECTIONS_API}/search`, body);
     if (response.ok) {
         const content = await response.json();
-        return {domains: content.domains};
+        return {collections: content.collections};
     }
 }
 

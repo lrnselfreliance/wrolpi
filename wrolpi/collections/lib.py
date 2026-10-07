@@ -8,7 +8,7 @@ import pathlib
 from typing import List, Optional, Dict
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload, noload
+from sqlalchemy.orm import Query, Session, selectinload, noload
 
 from wrolpi import flags
 from wrolpi.common import get_media_directory, logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
@@ -871,42 +871,35 @@ def delete_collection(
     return collection_dict
 
 
+def search_collections_query(
+        session: Session,
+        kind: Optional[str] = None,
+        tag_names: Optional[List[str]] = None,
+        search_str: Optional[str] = None,
+) -> Query:
+    """Collections of `kind` whose name contains `search_str` and which have any of the Tags.  A missing filter
+    matches every Collection."""
+    query = session.query(Collection)
+    if kind:
+        query = query.filter(Collection.kind == kind)
+    if tag_names:
+        query = query.join(Tag, Tag.id == Collection.tag_id).filter(Tag.name.in_(tag_names))
+    if search_str:
+        query = query.filter(Collection.name.ilike(f'%{search_str}%'))
+    return query
+
+
 def search_collections(
         session: Session,
         kind: Optional[str] = None,
         tag_names: Optional[List[str]] = None,
         search_str: Optional[str] = None,
 ) -> List[dict]:
-    """
-    Search collections by kind, tags, and search string.
-
-    Args:
-        session: Database session
-        kind: Optional collection kind filter
-        tag_names: Optional list of tag names to filter by
-        search_str: Optional search string for collection names
-
-    Returns:
-        List of matching collection dicts
-    """
-    query = session.query(Collection)
-
-    # Filter by kind
-    if kind:
-        query = query.filter(Collection.kind == kind)
-
-    # Filter by tags
-    if tag_names:
-        query = query.join(Tag).filter(Tag.name.in_(tag_names))
-
-    # Filter by search string
-    if search_str:
-        query = query.filter(Collection.name.ilike(f'%{search_str}%'))
-
-    # Order by name
-    query = query.order_by(Collection.name)
-
-    collections = query.all()
+    """Search Collections by kind, Tags, and name (see `search_collections_query`)."""
+    collections = search_collections_query(session, kind, tag_names, search_str) \
+        .options(*Collection.json_options()) \
+        .order_by(Collection.name) \
+        .all()
     return [collection.__json__() for collection in collections]
 
 

@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import pytz
 from sqlalchemy import asc, func, BigInteger
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Session
 
 from modules.archive.models import Archive
 from wrolpi import dates
@@ -34,7 +34,7 @@ from wrolpi.files.lib import handle_file_group_search_results, cached_search_tot
     search_filter_cache_key, count_file_groups
 from wrolpi.files.models import FileGroup
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
-from wrolpi.tags import Tag, tag_append_sub_select_where
+from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -1553,29 +1553,6 @@ async def search_domains_by_name(session: Session, name: str, limit: int = 5) ->
         }
         for c in collections
     ]
-
-
-def search_domains_query(session: Session, tag_names: List[str] = None, search_str: str = None) -> Optional[Query]:
-    """Domains whose name contains `search_str` and which have any of the Tags.  None when there is nothing to search
-    by."""
-    search_str = (search_str or '').strip()
-    if not tag_names and not search_str:
-        return None
-    query = session.query(Collection).filter(Collection.kind == 'domain')
-    if search_str:
-        query = query.filter(Collection.name.ilike(f'%{search_str}%'))
-    if tag_names:
-        query = query.join(Tag, Tag.id == Collection.tag_id).filter(Tag.name.in_(tag_names))
-    return query
-
-
-def search_domains(session: Session, tag_names: List[str] = None, search_str: str = None) -> List[dict]:
-    """Search Domains by their name and/or Tags."""
-    query = search_domains_query(session, tag_names, search_str)
-    if query is None:
-        return []
-    collections = query.order_by(func.lower(Collection.name)).all()
-    return [dict(id=i.id, domain=i.name, tag_name=i.tag_name) for i in collections]
 
 
 async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):

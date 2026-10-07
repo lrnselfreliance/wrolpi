@@ -103,3 +103,37 @@ test('Channels rows once the server found some', async () => {
     });
     expect(results().channels.results.map(i => i.title)).toEqual(['Food']);
 });
+
+test('Repos rows link to each repo, and the Other estimate gets the search', async () => {
+    let resolve;
+    searchSuggestions.mockReturnValue(new Promise(res => resolve = res));
+    renderProbe();
+    act(() => {
+        hook.setSearchStr('kiwix');
+    });
+    act(() => {
+        jest.advanceTimersByTime(DEBOUNCE);
+    });
+    await act(async () => {
+        resolve({channels: [], domains: [], authors: [], subjects: [], repos: [{id: 4, name: 'kiwix-tools'}]});
+    });
+    expect(results().repos.results).toEqual([{type: 'repo', title: 'kiwix-tools', id: 4, location: '/repos/4'}]);
+    // Repos count toward the Other tab by their name and README, not only by tag.
+    expect(searchEstimateOthers).toHaveBeenCalledWith([], 'kiwix');
+});
+
+test('no Repos group when none match', async () => {
+    let resolve;
+    searchSuggestions.mockReturnValue(new Promise(res => resolve = res));
+    renderProbe();
+    act(() => {
+        hook.setSearchStr('foo');
+    });
+    act(() => {
+        jest.advanceTimersByTime(DEBOUNCE);
+    });
+    await act(async () => {
+        resolve({channels: [], domains: [], authors: [], subjects: [], repos: []});
+    });
+    expect(results().repos).toBeUndefined();
+});

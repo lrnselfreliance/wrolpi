@@ -67,6 +67,7 @@ CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
 # Files
 WGET_BIN = which('wget', '/usr/bin/wget')
+GIT_BIN = which('git', '/usr/bin/git')
 
 # Map
 BASH_BIN = which('bash', '/bin/bash')
@@ -184,7 +185,7 @@ TESTING_RUN_COMMAND_RESULT = None
 async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
                       timeout: int = 600, log_command: bool = True,
                       stdout_callback: callable = None, env: dict = None,
-                      start_new_session: bool = False) -> CommandResult:
+                      start_new_session: bool = False, merge_stderr: bool = False) -> CommandResult:
     """Run a shell command, return the results (stdout/stderr/return code).
 
     When stdout_callback is provided, stdout is piped and each line is passed to the callback
@@ -196,6 +197,8 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
     :param start_new_session: Run the command in its own session/process group; when it finishes
         (or is killed by timeout/cancel), the whole group is killed.  Use for commands that may
         leave children behind (e.g. single-file's browser).
+    :param merge_stderr: Send stderr to stdout (and so to `stdout_callback`); `stderr` will be empty.  Use for
+        commands that write progress to stderr (e.g. git).
     """
     if not isinstance(cmd, (list, tuple)):
         raise RuntimeError('Command must be a list or tuple')
@@ -233,7 +236,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=stdout_arg,
-                stderr=stderr_fh,
+                stderr=asyncio.subprocess.STDOUT if merge_stderr else stderr_fh,
                 cwd=cwd,
                 env=env,
                 start_new_session=start_new_session,

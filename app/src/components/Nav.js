@@ -61,6 +61,7 @@ const allLinks = [
     {text: 'Files', to: '/files', key: 'files'},
     {text: 'Playlists', to: '/playlists', key: 'playlists'},
     {text: 'Zim', to: '/zim', key: 'zim'},
+    {text: 'Repos', to: '/repos', key: 'repos'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
     // No `end` on these two: a tab stays current for the pages beneath it, and `end` would
     // drop the mark the moment either grows a sub-page.

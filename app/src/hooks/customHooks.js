@@ -38,6 +38,7 @@ import {
     searchChannels,
     searchDirectories,
     searchDocs,
+    searchRepos,
     searchVideos,
     searchZim,
     updateChannel,
@@ -2154,6 +2155,27 @@ export const useSearchChannels = (defaultTagNames) => {
         channels,
         loading,
     }
+}
+
+// Repos matching the search (their name and README) and/or the tags.  `repos`: null = pending,
+// undefined = fetch failed, [] = none.  Only the newest request may write state.
+export const useSearchRepos = (searchStr, tagNames) => {
+    const [repos, setRepos] = useState(null);
+    const requestGen = useRef(0);
+    const tagKey = JSON.stringify(tagNames || []);
+
+    useEffect(() => {
+        const gen = ++requestGen.current;
+        setRepos(null);
+        searchRepos(searchStr, JSON.parse(tagKey))
+            .then(result => gen === requestGen.current && setRepos(result ? result.repos : undefined))
+            .catch(e => {
+                console.error(e);
+                if (gen === requestGen.current) setRepos(undefined);
+            });
+    }, [searchStr, tagKey]);
+
+    return {repos};
 }
 
 

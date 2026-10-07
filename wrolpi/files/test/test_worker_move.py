@@ -500,6 +500,50 @@ async def test_file_worker_move_unindexed_files(
 
 
 @pytest.mark.asyncio
+async def test_file_worker_move_unindexed_files_without_primary(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """Unindexed files which share a stem, but have no primary file (e.g. dotfiles), are moved as one FileGroup,
+    as a refresh would group them."""
+    make_files_structure(['source/.gitignore', 'source/.npmrc', 'source/notes.txt', 'source/notes.md'])
+    dest = test_directory / 'destination'
+    dest.mkdir()
+
+    task = FileTask(FileTaskType.move, [test_directory / 'source'], destination=dest)
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+
+    for name in ('.gitignore', '.npmrc', 'notes.txt', 'notes.md'):
+        assert (dest / 'source' / name).is_file()
+    test_session.expire_all()
+    groups = {fg.stem: sorted(i.name for i in fg.my_paths()) for fg in test_session.query(FileGroup)}
+    assert groups == {'': ['.gitignore', '.npmrc'], 'notes': ['notes.md', 'notes.txt']}
+
+
+@pytest.mark.asyncio
+async def test_file_worker_move_unindexed_group_never_replaces_a_member(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """Unindexed files moved as one FileGroup never replace a file at the destination, even one which is not the
+    group's primary file."""
+    make_files_structure({'source/.gitignore': 'a', 'source/.npmrc': 'b', 'source/notes.md': 'c',
+                          'source/notes.txt': 'd'})
+    dest = test_directory / 'destination'
+    for name, content in (('.npmrc', 'kept npmrc'), ('notes.txt', 'kept notes')):
+        (dest / 'source').mkdir(parents=True, exist_ok=True)
+        (dest / 'source' / name).write_text(content)
+
+    task = FileTask(FileTaskType.move, [test_directory / 'source'], destination=dest)
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+
+    assert (dest / 'source/.npmrc').read_text() == 'kept npmrc'
+    assert (dest / 'source/notes.txt').read_text() == 'kept notes'
+    for name, content in (('.gitignore', 'a'), ('.npmrc', 'b'), ('notes.md', 'c'), ('notes.txt', 'd')):
+        assert (test_directory / 'source' / name).read_text() == content
+
+
+@pytest.mark.asyncio
 async def test_file_worker_move_preserves_existing_destination_on_failure(
         async_client, test_session, test_directory, make_files_structure, monkeypatch
 ):

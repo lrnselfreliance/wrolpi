@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload, noload
 
 from wrolpi import flags
-from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
+from wrolpi.common import get_media_directory, logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
 from wrolpi.db import get_db_session
 from wrolpi.errors import FileWorkerConflict
 from wrolpi.errors import UnknownCollection, ValidationError
@@ -53,6 +53,9 @@ def check_config_imported(kind: str):
         # Local import to avoid circular import: collections -> videos -> collections
         from modules.videos.channel.lib import check_channels_config_imported
         check_channels_config_imported()
+    elif kind == 'repo':
+        from modules.repos.lib import get_repos_config
+        get_repos_config().check_imported()
 
 
 def _activate_config_save(kind: str):
@@ -70,6 +73,10 @@ def _activate_config_save(kind: str):
     elif kind == 'playlist':
         from .config import save_playlists_config
         save_playlists_config.activate_switch()
+    elif kind == 'repo':
+        # Local import to avoid circular import: collections -> repos -> collections
+        from modules.repos.lib import save_repos_config
+        save_repos_config.activate_switch()
 
 
 def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
@@ -571,11 +578,16 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         Events.send_directory_refresh(f'Refreshing: {relative_dir}')
 
 
-async def _background_move_collection(collection_id: int, target_directory: pathlib.Path):
+async def _background_move_collection(collection_id: int, target_directory: pathlib.Path,
+                                      old_tag_id: Optional[int] = None,
+                                      created_directories: List[pathlib.Path] = None):
     """Helper to run collection move in background with its own database session.
 
     This allows the move to continue even if the original HTTP request is cancelled
     (e.g., user closes browser tab).
+
+    A failed move leaves the Collection as it was: its directory (reverted by `move_collection`), its tag, and no
+    directories made for the move (`created_directories`, which are only removed while empty).
     """
     try:
         with get_db_session(commit=True) as session:
@@ -584,7 +596,16 @@ async def _background_move_collection(collection_id: int, target_directory: path
                 logger.error(f'_background_move_collection: collection {collection_id} not found')
                 Events.send_file_move_failed(f'Collection move failed: collection not found')
                 return
-            await collection.move_collection(target_directory, session, send_events=True)
+            try:
+                await collection.move_collection(target_directory, session, send_events=True)
+            except Exception:
+                collection.tag_id = old_tag_id
+                session.commit()
+                _activate_config_save(collection.kind)
+                for directory in sorted(created_directories or [], key=lambda i: len(i.parts), reverse=True):
+                    if directory.is_dir() and not directory.is_symlink() and not any(directory.iterdir()):
+                        directory.rmdir()
+                raise
     except Exception as e:
         logger.error(f'_background_move_collection: failed for collection_id={collection_id}', exc_info=e)
         Events.send_file_move_failed(f'Collection move failed: {e}')
@@ -616,8 +637,9 @@ async def tag_collection(
     collection = Collection.find_by_id(session, collection_id)
     check_config_imported(collection.kind)
 
-    # Track old directory before any changes for potential file moving
+    # Track old directory and tag before any changes, so a failed move can restore them.
     old_directory = collection.directory
+    old_tag_id = collection.tag_id
 
     # Determine target directory.  Collections can be tagged without a directory for UI
     # search/filtering, so a missing directory is left missing.
@@ -636,6 +658,12 @@ async def tag_collection(
     if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
                      f'{old_directory} -> {target_directory}')
+
+    if need_to_move and collection.kind == 'repo':
+        # A Repo's clone is moved as one directory; never through a link (checked before any directory is made).
+        from modules.repos.lib import repo_directory_error
+        if error := repo_directory_error(target_directory):
+            raise ValidationError(f'Cannot move the Repo: {error}')
 
     if need_to_move and flags.file_worker_busy.is_set():
         raise FileWorkerConflict('Refusing to move collection while FileWorker is busy')
@@ -656,10 +684,14 @@ async def tag_collection(
 
     # Move files if directory changed - run in background so closing tab won't cancel it
     if need_to_move:
+        media_directory = get_media_directory()
+        created_directories = [i for i in (target_directory, *target_directory.parents)
+                               if media_directory in i.parents and not i.exists()]
         target_directory.mkdir(parents=True, exist_ok=True)
         # Commit tag changes before starting background move
         session.commit()
-        background_task(_background_move_collection(collection.id, target_directory))
+        background_task(_background_move_collection(collection.id, target_directory, old_tag_id,
+                                                    created_directories))
 
     relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
     return {

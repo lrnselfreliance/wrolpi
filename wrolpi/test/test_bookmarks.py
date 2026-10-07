@@ -175,7 +175,7 @@ def test_bookmarks_config_import(test_directory, test_wrolpi_config):
     ['not a node'],
     'not a list',
 ])
-def test_bookmarks_config_import_rejects_bad_tree(test_directory, test_wrolpi_config, bookmarks):
+async def test_bookmarks_config_import_rejects_bad_tree(async_client, test_directory, test_wrolpi_config, bookmarks):
     """A hand-edited file that the API would refuse is not imported, and is not overwritten."""
     config_file = test_directory / 'config/bookmarks.yaml'
     config_file.parent.mkdir(exist_ok=True)
@@ -195,7 +195,7 @@ def test_bookmarks_config_import_rejects_bad_tree(test_directory, test_wrolpi_co
     assert config_file.read_text() == original
 
 
-def test_bookmarks_config_import_rejects_cycle(test_directory, test_wrolpi_config):
+async def test_bookmarks_config_import_rejects_cycle(async_client, test_directory, test_wrolpi_config):
     """A YAML anchor can make a directory contain itself; walking that would never end."""
     config_file = test_directory / 'config/bookmarks.yaml'
     config_file.parent.mkdir(exist_ok=True)

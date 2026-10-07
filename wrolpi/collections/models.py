@@ -1,4 +1,8 @@
+import asyncio
+import errno
+import os
 import pathlib
+import shutil
 from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
@@ -13,7 +17,7 @@ from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
-from wrolpi.files.lib import delete_directory
+from wrolpi.files.lib import delete_directory, remove_files_in_ignored_directories
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import file_worker
 from wrolpi.media_path import MediaPathType
@@ -37,11 +41,14 @@ def validate_collection_directory(directory: pathlib.Path) -> pathlib.Path:
         Normalized absolute path under media directory
 
     Raises:
-        ValidationError: If absolute path is outside media directory
+        ValidationError: If absolute path is outside media directory, or the path contains ".."
     """
     media_directory = get_media_directory()
     directory = pathlib.Path(directory)
 
+    if '..' in directory.parts:
+        # Would leave the media directory.
+        raise ValidationError(f'Collection directory cannot contain "..": {directory}')
     if not directory.is_absolute():
         # Relative path - make absolute under media directory
         directory = media_directory / directory
@@ -56,6 +63,21 @@ def validate_collection_directory(directory: pathlib.Path) -> pathlib.Path:
             )
 
     return directory
+
+
+def _move_directory(source: pathlib.Path, destination: pathlib.Path):
+    """Move `source` to `destination`, which must not exist, or be an empty directory."""
+    if destination.is_dir() and not destination.is_symlink():
+        destination.rmdir()  # Raises if it is not empty.
+    elif destination.exists() or destination.is_symlink():
+        raise FileExistsError(f'Cannot move: {destination} already exists')
+    try:
+        os.rename(source, destination)
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+        # Another filesystem.
+        shutil.move(source, destination)
 
 
 class Collection(ModelHelper, Base):
@@ -1015,6 +1037,11 @@ class Collection(ModelHelper, Base):
         """
         from wrolpi.common import get_wrolpi_config, escape_file_name
 
+        if self.kind == 'repo':
+            # Local import to avoid circular import: collections -> repos -> collections
+            from modules.repos.lib import format_collection_destination
+            return format_collection_destination(self, tag_name)
+
         config = get_wrolpi_config()
 
         if self.kind == 'channel':
@@ -1076,6 +1103,9 @@ class Collection(ModelHelper, Base):
         elif self.kind == 'channel':
             from modules.videos.lib import save_channels_config
             save_channels_config.activate_switch()
+        elif self.kind == 'repo':
+            from modules.repos.lib import save_repos_config
+            save_repos_config.activate_switch()
 
         return destination
 
@@ -1126,6 +1156,17 @@ class Collection(ModelHelper, Base):
                     file_worker.queue_refresh([old_directory, directory])
                     if send_events:
                         Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
+                elif self.kind == 'repo':
+                    # A Repo's files are not FileGroups (repos/ is ignored), so its clone is moved as one directory,
+                    # and indexed only as a refresh would index it.
+                    from modules.repos.lib import repo_directory_error
+                    if error := repo_directory_error(directory):
+                        raise ValidationError(f'Cannot move the Repo: {error}')
+                    await asyncio.to_thread(_move_directory, old_directory, directory)
+                    if refresh := remove_files_in_ignored_directories([old_directory, directory]):
+                        file_worker.queue_refresh(refresh)
+                    if send_events:
+                        Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
                 else:
                     files_to_move = list(old_directory.iterdir())
                     if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
@@ -1146,7 +1187,11 @@ class Collection(ModelHelper, Base):
                 raise
             finally:
                 session.commit()
-                if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
+                # The move keeps each moved directory (e.g. a repo's `.git`), even when emptied; delete the old
+                # directory when only empty directories remain.
+                if old_directory.exists() and not any(not i.is_dir() for i in old_directory.rglob('*')):
+                    for directory in sorted(old_directory.rglob('*'), key=lambda i: len(i.parts), reverse=True):
+                        delete_directory(directory)
                     delete_directory(old_directory)
         else:
             # Files already moved, just send event

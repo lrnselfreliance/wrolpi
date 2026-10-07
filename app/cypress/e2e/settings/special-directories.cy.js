@@ -1,5 +1,5 @@
 /*
- * The five Special Directories fields on /admin/settings.
+ * The six Special Directories fields on /admin/settings.
  *
  * These are the fields that shipped printing their own prefix over their own value, and the
  * ones whose visible labels were never associated with their inputs.  Both faults were
@@ -19,6 +19,7 @@ describe('Special Directories settings', () => {
         ['Map Directory', 'map'],
         ['Zims Directory', 'zims'],
         ['Playlists Directory', 'playlists'],
+        ['Repos Directory', 'repos/%(repo_tag)s/%(repo_name)s'],
     ];
 
     beforeEach(() => {
@@ -38,8 +39,8 @@ describe('Special Directories settings', () => {
 
     it('names every directory field, so they can be told apart', () => {
         /*
-         * All five fields sit in one grid, hold similar-looking relative paths, and share the
-         * same prefix.  Without a name attached to the input, a screen reader user hears five
+         * All six fields sit in one grid, hold similar-looking relative paths, and share the
+         * same prefix.  Without a name attached to the input, a screen reader user hears six
          * fields described only as "/media/wrolpi/" and cannot tell which one saves videos.
          */
         directories.forEach(([label, value]) => {

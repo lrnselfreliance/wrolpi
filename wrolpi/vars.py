@@ -62,6 +62,8 @@ CIRCLECI = truthy_arg(os.environ.get('CIRCLECI', ''))
 
 # Get the media directory from the environment.
 DEFAULT_MEDIA_DIRECTORY = Path('/media/wrolpi')
+# Git repositories live here; it is always an ignored directory (repo files are never indexed).
+REPOS_DIRECTORY = 'repos'
 MEDIA_DIRECTORY = Path(os.environ.get('MEDIA_DIRECTORY', DEFAULT_MEDIA_DIRECTORY))
 
 CONFIG_DIR: Path = MEDIA_DIRECTORY / 'config'

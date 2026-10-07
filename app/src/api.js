@@ -7,6 +7,7 @@ import {
     COLLECTIONS_API,
     DEFAULT_LIMIT,
     Downloaders,
+    REPOS_API,
     VIDEOS_API,
     ZIM_API
 } from "./components/Vars";
@@ -406,6 +407,7 @@ export async function getSettings() {
             nav_color: content.nav_color,
             media_directory: content.media_directory,
             playlists_destination: content.playlists_destination,
+            repos_destination: content.repos_destination,
             require_cookies_unlocked: content.require_cookies_unlocked,
             require_media_mounted: content.require_media_mounted,
             save_ffprobe_json: content.save_ffprobe_json,
@@ -925,6 +927,21 @@ export async function getCollectionTagInfo(collectionId, tagName) {
         });
         throw new Error(message);
     }
+}
+
+// Tag any Collection (and optionally move its directory).
+export async function tagCollection(collectionId, tagName, directory) {
+    const body = {tag_name: tagName};
+    if (directory) {
+        body['directory'] = directory;
+    }
+    const response = await apiPost(`${COLLECTIONS_API}/${collectionId}/tag`, body);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Unable to tag.  See server logs.');
+    toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
+    throw new Error(message);
 }
 
 export async function tagDomain(domainId, tagName, directory) {
@@ -2051,6 +2068,7 @@ export async function searchSuggestions(search_str) {
             domains: content.domains,
             authors: content.authors || [],
             subjects: content.subjects || [],
+            repos: content.repos || [],
         }
     } else {
         console.error('Failed to get file search suggestions!');
@@ -2089,8 +2107,8 @@ export async function searchEstimateZims(search_str, tagNames) {
     }
 }
 
-export async function searchEstimateOthers(tagNames) {
-    const body = {tag_names: tagNames};
+export async function searchEstimateOthers(tagNames, searchStr) {
+    const body = {tag_names: tagNames, search_str: searchStr || null};
     const response = await apiPost(`${API_URI}/search_other_estimates`, body);
     if (response.ok) {
         const content = await response.json();
@@ -2487,4 +2505,113 @@ export async function moveBookmark(nodeId, parent_id, position = null) {
 
 export async function deleteBookmark(nodeId) {
     return await bookmarksModify(apiDelete(`${API_URI}/bookmarks/${nodeId}`), 'Could not delete bookmark');
+}
+
+async function reposError(response, fallbackMessage) {
+    const message = await getErrorMessage(response, fallbackMessage);
+    toast({type: 'error', title: 'Repos Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function fetchRepos() {
+    const response = await apiGet(REPOS_API);
+    if (response.ok) {
+        return (await response.json())['repos'];
+    }
+    await reposError(response, 'Failed to fetch repos.');
+}
+
+export async function getRepo(repoId) {
+    const response = await apiGet(`${REPOS_API}/${repoId}`);
+    if (response.ok) {
+        return (await response.json())['repo'];
+    }
+    await reposError(response, 'Failed to fetch repo.');
+}
+
+// `repo`: {url, directory?, name?, tag_name?, frequency?, mode?, branch?, description?}
+export async function createRepo(repo) {
+    const response = await apiPost(REPOS_API, repo);
+    if (response.ok) {
+        return (await response.json())['repo'];
+    }
+    await reposError(response, 'Failed to add repo.');
+}
+
+// `changes`: {description?, frequency?, mode?, branch?}.  An empty branch follows the remote's default branch.
+export async function updateRepo(repoId, changes) {
+    const response = await apiPut(`${REPOS_API}/${repoId}`, changes);
+    if (response.ok) {
+        return (await response.json())['repo'];
+    }
+    await reposError(response, 'Failed to update repo.');
+}
+
+export async function deleteRepo(repoId, deleteFiles = false) {
+    const response = await apiDelete(`${REPOS_API}/${repoId}?delete_files=${deleteFiles ? 'true' : 'false'}`);
+    if (!response.ok) {
+        await reposError(response, 'Failed to delete repo.');
+    }
+}
+
+// Download the repo's updates now.
+export async function updateRepoNow(repoId) {
+    const response = await apiPost(`${REPOS_API}/${repoId}/update`);
+    if (!response.ok) {
+        await reposError(response, 'Failed to start the repo update.');
+    }
+}
+
+// One directory of a repo's files: {path, entries: [{name, path, is_dir, size}], readme_path}.
+export async function getRepoTree(repoId, path) {
+    const query = path ? `?path=${encodeURIComponent(path)}` : '';
+    const response = await apiGet(`${REPOS_API}/${repoId}/tree${query}`);
+    if (response.ok) {
+        return await response.json();
+    }
+    await reposError(response, 'Failed to list the repo files.');
+}
+
+// Repos matching the search (name and README) and/or the tags.  Each has an escaped `readme_headline`.
+export async function searchRepos(searchStr, tagNames) {
+    const body = {search_str: searchStr || null, tag_names: tagNames || []};
+    const response = await apiPost(`${REPOS_API}/search`, body);
+    if (response.ok) {
+        const content = await response.json();
+        return {repos: content.repos, total: content.totals.repos};
+    }
+    await reposError(response, 'Failed to search repos.');
+}
+
+// The commits of a repo's checked out branch, newest first: {commits: [{sha, author, date, message}], total}.
+export async function getRepoLog(repoId, offset = 0, limit = 50) {
+    const response = await apiGet(`${REPOS_API}/${repoId}/log?limit=${limit}&offset=${offset}`);
+    if (response.ok) {
+        return await response.json();
+    }
+    await reposError(response, 'Failed to fetch the repo history.');
+}
+
+// A ZIP of a repo's checked out files; the browser downloads it.
+export function repoArchiveURL(repoId) {
+    return `${REPOS_API}/${repoId}/archive.zip`;
+}
+
+// What importing the git clone in `directory` (relative to the media directory) would do.  Changes nothing.
+export async function inspectRepoImport(directory, name, tagName, url) {
+    const body = {directory, name: name || null, tag_name: tagName || null, url: url || null};
+    const response = await apiPost(`${REPOS_API}/import/inspect`, body);
+    if (response.ok) {
+        return {inspection: (await response.json())['inspection']};
+    }
+    return {error: await getErrorMessage(response, 'Cannot import this directory.')};
+}
+
+// Import an existing git clone as a Repo; it stays where it is.  `repo`: {directory, confirm, url?, name?, ...}
+export async function importRepo(repo) {
+    const response = await apiPost(`${REPOS_API}/import`, repo);
+    if (response.ok) {
+        return (await response.json())['repo'];
+    }
+    await reposError(response, 'Failed to import the repo.');
 }

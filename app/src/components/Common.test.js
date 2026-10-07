@@ -1121,7 +1121,7 @@ describe('a row of buttons', () => {
          * the two had been inline before.
          *
          * A row fixes it without touching the stack: the row is the stretched child, and it lays
-         * its buttons out at their own width.  Nine sites, so this scan rather than nine
+         * its buttons out at their own width.  Thirteen sites, so this scan rather than thirteen
          * assertions -- and a scan because a stretched button is still a working button.
          */
         const offenders = [];
@@ -1140,8 +1140,8 @@ describe('a row of buttons', () => {
             }
         }
 
-        // Nine renders.  Common.js declares it, and a declaration is not a `<BackButton`.
-        expect(found).toBe(9);
+        // Thirteen renders.  Common.js declares it, and a declaration is not a `<BackButton`.
+        expect(found).toBe(13);
 
         expect(offenders).toEqual([]);
     });

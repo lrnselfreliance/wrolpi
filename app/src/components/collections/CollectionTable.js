@@ -77,7 +77,9 @@ function renderRow(collection, columns, routes, SingleTag, onRowClick) {
         }
 
         // Format the value based on column configuration
-        if (col.format === 'bytes') {
+        if (col.render) {
+            value = col.render(collection);
+        } else if (col.format === 'bytes') {
             value = humanFileSize(value);
         } else if (col.format === 'frequency') {
             value = formatFrequency(value);
@@ -134,7 +136,9 @@ function MobileCollectionRow({collection, mobileColumns, routes}) {
                 .filter(col => col.type !== 'actions' && col.key !== primaryColumn.key && col.key !== 'tag_name')
                 .map(col => {
                     let value = collection[col.key];
-                    if (col.format === 'bytes') {
+                    if (col.render) {
+                        value = col.render(collection);
+                    } else if (col.format === 'bytes') {
                         value = humanFileSize(value);
                     } else if (col.format === 'frequency') {
                         value = formatFrequency(value);
@@ -157,7 +161,8 @@ function MobileCollectionRow({collection, mobileColumns, routes}) {
  * Reusable table component for displaying collections (Domains, Channels, etc).
  *
  * @param {Array} collections - Array of collection objects
- * @param {Array} columns - Column configurations for the table
+ * @param {Array} columns - Column configurations for the table.  A column's optional `render(collection)` displays
+ *  the cell; the column still sorts by `collection[key]`.
  * @param {Object} routes - Routes configuration for navigation (edit, search, etc.)
  * @param {String} searchStr - Search filter string (managed by parent)
  * @param {Function} onRowClick - Optional callback when a row is clicked

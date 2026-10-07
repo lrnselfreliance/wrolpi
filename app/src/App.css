@@ -326,6 +326,13 @@ pre.wrap-text {
     padding: 0 0.25em;
 }
 
+/* A repo's README is part of its page, not a modal; it grows with its content. */
+.repo-readme .markdown-preview {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+
 .markdown-raw {
     margin: 0;
     white-space: pre-wrap;

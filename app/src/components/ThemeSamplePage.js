@@ -49,6 +49,9 @@ import {contrastingColor} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
 import {BookmarkAddForms, BookmarkMenuItems, BookmarkTable} from './Bookmarks';
+import {
+    RepoBreadcrumb, RepoHistoryTable, RepoImportSummary, RepoStatusIcon, RepoSummary, RepoTreeTable,
+} from './Repos';
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -169,6 +172,28 @@ const sampleBookmarks = [
     {id: 6, name: 'WROLPi.org', url: 'https://wrolpi.org', new_tab: true},
 ];
 const noBookmarkActions = {edit: () => null, move: () => null, remove: () => null};
+
+const sampleRepo = {
+    id: 1, name: 'kiwix-tools', tag_name: null, url: 'https://github.com/kiwix/kiwix-tools',
+    description: 'Command line tools for Kiwix and Zim files.', mode: 'full', branch: null, default_branch: 'main',
+    head_sha: '3f9c2a1e7b', head_message: 'Serve Zim files with the correct mimetype', head_date: '2026-09-30T14:02:00Z',
+    size: 18_400_000, directory: 'repos/kiwix-tools', download_error: null,
+};
+const sampleFailedRepo = {
+    ...sampleRepo, name: 'gone-upstream', branch: 'release', mode: 'snapshot',
+    download_error: "git ls-remote failed (128): remote: Repository not found.\nfatal: repository " +
+        "'https://github.com/example/gone-upstream/' not found",
+};
+const sampleRepoCommits = [
+    {sha: '3f9c2a1e7b', author: 'Ada Example', date: '2026-09-30T14:02:00Z',
+        message: 'Serve Zim files with the correct mimetype'},
+    {sha: '91b0d44c02', author: 'Ben Example', date: '2026-09-12T09:15:00Z', message: 'Merge pull request #42'},
+];
+const sampleRepoEntries = [
+    {name: 'docs', path: 'src/docs', is_dir: true, size: null},
+    {name: 'kiwix-serve.cpp', path: 'src/kiwix-serve.cpp', is_dir: false, size: 48_210},
+    {name: 'README.md', path: 'src/README.md', is_dir: false, size: 2_104},
+];
 
 export function ThemeSamplePage() {
     const {theme, mediaFilterEnabled} = useContext(ThemeContext);
@@ -1123,6 +1148,36 @@ export function ThemeSamplePage() {
                 <div style={{marginTop: 12}}>
                     <BookmarkTable nodes={sampleBookmarks} actions={noBookmarkActions}/>
                     <BookmarkAddForms nodes={sampleBookmarks} onAddBookmark={() => null} onAddDirectory={() => null}/>
+                </div>
+            </Panel>
+        </Section>
+
+        <Section label='Repos'>
+            <Panel>
+                <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 0}}>
+                    A git repo's page: its summary, then its files.  A repo whose last update failed keeps
+                    its files and explains why.  The status icons appear beside a repo's name in the Repos
+                    table: <RepoStatusIcon repo={sampleFailedRepo}/> failed,{' '}
+                    <RepoStatusIcon repo={{...sampleRepo, head_sha: null}}/> not downloaded yet.
+                </p>
+                <RepoSummary repo={sampleRepo}/>
+                <div style={{marginTop: 12}}>
+                    <RepoBreadcrumb name={sampleRepo.name} path='src' onNavigate={() => null}/>
+                    <RepoTreeTable path='src' entries={sampleRepoEntries} onOpenDirectory={() => null}
+                                   onOpenFile={() => null}/>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <RepoHistoryTable commits={sampleRepoCommits}/>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <RepoImportSummary inspection={{
+                        origin: 'git@github.com:kiwix/kiwix-tools.git', branch: 'main', head_sha: '3f9c2a1e7b',
+                        head_message: 'Local work', head_date: '2026-09-30T14:02:00Z', local_commits: 2,
+                        shallow: true, directory: 'code/kiwix-tools', ignored: false,
+                    }}/>
+                </div>
+                <div style={{marginTop: 12}}>
+                    <RepoSummary repo={sampleFailedRepo}/>
                 </div>
             </Panel>
         </Section>

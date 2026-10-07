@@ -53,6 +53,7 @@ class SettingsResponse:
     archive_destination: str = 'archive/%(domain_tag)s/%(domain)s'
     map_destination: str = 'map'
     playlists_destination: str = 'playlists'
+    repos_destination: str = 'repos/%(repo_tag)s/%(repo_name)s'
     videos_destination: str = 'videos/%(channel_tag)s/%(channel_name)s'
     zims_destination: str = 'zims'
 
@@ -100,6 +101,7 @@ class SettingsRequest:
     nav_color: Optional[str] = None
     media_directory: Optional[str] = None
     playlists_destination: Optional[str] = None
+    repos_destination: Optional[str] = None
     tags_directory: Optional[bool] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
@@ -504,3 +506,4 @@ class SearchFileEstimateRequest:
 @dataclass
 class SearchOtherEstimateRequest:
     tag_names: List[str] = field(default_factory=list)
+    search_str: Optional[str] = None

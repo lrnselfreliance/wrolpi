@@ -19,11 +19,10 @@ from sqlalchemy import text, or_
 from wrolpi import flags
 from wrolpi.common import get_media_directory, logger, walk, unique_by_predicate, chunks
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, get_unique_files_by_stem, glob_shared_stem,
-    group_files_by_stem, get_primary_file, delete_directory,
+    group_files_by_stem, delete_directory,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     get_normalized_ignored_directories, remove_files_in_ignored_directories,
 )
@@ -212,44 +211,35 @@ async def build_move_plan_bulk(
             if missing_db_files:
                 logger.info(f'build_move_plan_bulk: creating FileGroups for {len(missing_db_files)} files not in DB')
                 for paths in group_files_by_stem(missing_db_files):
-                    try:
-                        get_primary_file(paths)
-                        fg = FileGroup.from_paths(session, *paths)
-                        session.flush()
+                    # One FileGroup per stem, as a refresh would group them (even when no file is a primary file,
+                    # e.g. dotfiles); the stem is unique in its directory.
+                    fg = FileGroup.from_paths(session, *paths)
+                    session.flush()
 
-                        # Determine destination path
-                        if any(str(p) in file_source_set for p in paths):
-                            new_path = destination / fg.primary_path.name
+                    # Determine destination path
+                    if any(str(p) in file_source_set for p in paths):
+                        new_path = destination / fg.primary_path.name
+                    else:
+                        # Find which directory source this came from
+                        source_dir = None
+                        for p in paths:
+                            if p in dir_file_mapping:
+                                source_dir = dir_file_mapping[p]
+                                break
+                        if source_dir:
+                            new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
                         else:
-                            # Find which directory source this came from
-                            source_dir = None
-                            for p in paths:
-                                if p in dir_file_mapping:
-                                    source_dir = dir_file_mapping[p]
-                                    break
-                            if source_dir:
-                                new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
-                            else:
-                                new_path = destination / fg.primary_path.name
+                            new_path = destination / fg.primary_path.name
 
-                        if new_path.exists() and fg.primary_path.exists():
-                            raise FileExistsError(f'Cannot move: {new_path} already exists')
-                        plan[fg.primary_path] = new_path
-
-                    except NoPrimaryFile:
-                        for file in paths:
-                            fg = FileGroup.from_paths(session, file)
-                            session.flush()
-                            if any(str(p) in file_source_set for p in paths):
-                                new_path = destination / fg.primary_path.name
-                            elif file in dir_file_mapping:
-                                source_dir = dir_file_mapping[file]
-                                new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
-                            else:
-                                new_path = destination / fg.primary_path.name
-                            if new_path.exists() and fg.primary_path.exists():
-                                raise FileExistsError(f'Cannot move: {new_path} already exists')
-                            plan[fg.primary_path] = new_path
+                    # Every file of the group is moved next to the primary (see `_move_file_group_files`); none may
+                    # replace a file at the destination.
+                    new_stem, _ = split_path_stem_and_suffix(new_path, full=True)
+                    for path in paths:
+                        _, suffix = split_path_stem_and_suffix(path)
+                        member_path = pathlib.Path(f'{new_stem}{suffix}')
+                        if member_path.exists() and path.exists():
+                            raise FileExistsError(f'Cannot move: {member_path} already exists')
+                    plan[fg.primary_path] = new_path
 
             # Add directories to plan for cleanup
             for source_dir in dir_sources:

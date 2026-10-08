@@ -49,7 +49,7 @@ describe('Channels Page', () => {
             {initialEntries: ['/videos/channel/1/edit']}
         );
         cy.wait('@channelFetch');
-        cy.wait('@searchDirectories'); // Needed for CircleCi.
+        cy.wait('@searchDirectories'); // Needed in CI.
         cy.wait(500);
         cy.get('input[name="name"]').should('be.visible');
         cy.get('input[name="name"]').should('have.value', 'Editing Channel');

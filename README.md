@@ -1,6 +1,6 @@
 # WROLPi
 
-[![Build Status](https://img.shields.io/circleci/build/github/lrnselfreliance/wrolpi/release?label=release%20build)](https://app.circleci.com/pipelines/github/lrnselfreliance/wrolpi?branch=release&filter=all)
+[![Backend Tests](https://github.com/lrnselfreliance/wrolpi/actions/workflows/backend.yml/badge.svg?branch=master)](https://github.com/lrnselfreliance/wrolpi/actions/workflows/backend.yml?query=branch%3Amaster)
 [![License: GPL v3](https://img.shields.io/github/license/lrnselfreliance/wrolpi?style=flat-square)](https://github.com/lrnselfreliance/wrolpi/blob/master/LICENSE)
 [![Discord](https://img.shields.io/discord/900430987987681330?label=Discord&logo=discord)](https://discord.gg/HrwFk7nqA2)
 [![Gitpod](https://img.shields.io/badge/Contribute%20with-Gitpod-908a85?logo=gitpod)](https://gitpod.io/#https://github.com/lrnselfreliance/wrolpi)

@@ -39,6 +39,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.map_pins_config = manager.dict()
     app.shared_ctx.flasher_config = manager.dict()
     app.shared_ctx.bookmarks_config = manager.dict()
+    app.shared_ctx.recently_viewed_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
@@ -332,3 +333,9 @@ def initialize_configs_contexts(app: Sanic):
         BOOKMARKS_CONFIG.initialize(app.shared_ctx.bookmarks_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory bookmarks config: {e}')
+
+    try:
+        from wrolpi.files.progress import RECENTLY_VIEWED_CONFIG
+        RECENTLY_VIEWED_CONFIG.initialize(app.shared_ctx.recently_viewed_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory recently viewed config: {e}')

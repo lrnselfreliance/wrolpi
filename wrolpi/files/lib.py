@@ -36,6 +36,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError, UnsupportedArchive, InvalidArchiveMember
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
+from wrolpi.files.progress import normalize_progress, save_recently_viewed_config
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST, IS_MACOS
@@ -124,11 +125,14 @@ def _get_file_dict(session: Session, file: pathlib.Path) -> Dict:
         mimetype = get_mimetype(file)
     except PermissionError:
         mimetype = None
+    file_group = FileGroup.get_by_path(session, file)
     return dict(
         path=file.relative_to(media_directory),
         size=size,
         mimetype=mimetype,
         tags=get_file_tag_names(session, file),
+        progress=file_group.progress if file_group else None,
+        position=file_group.position if file_group else None,
     )
 
 
@@ -154,6 +158,53 @@ async def set_file_viewed(session: Session, file: pathlib.Path):
         fg.do_model(session)
     fg.set_viewed()
     session.commit()
+
+
+def _get_or_create_file_group(session: Session, file: pathlib.Path) -> FileGroup:
+    if not get_paths_in_media_directory([file]):
+        raise InvalidFile('File must be in the media directory')
+    try:
+        return FileGroup.find_by_path(session, file)
+    except UnknownFile:
+        if not file.is_file():
+            raise InvalidFile(f'File does not exist: {get_relative_to_media_directory(file)}')
+        fg = FileGroup.from_paths(session, file)
+        fg.do_model(session)
+        return fg
+
+
+def set_file_progress(session: Session, file: pathlib.Path, progress: float, position: dict = None,
+                      final: bool = False) -> Tuple[float | None, dict | None]:
+    """Record how far the User is through a file (see wrolpi.files.progress).  This is also a view.
+
+    @param final: The User stopped (paused, closed); save the recently viewed config.
+    @return: The (progress, position) that was stored.
+    """
+    progress, position = normalize_progress(progress, position)
+
+    # Files in ignored directories are not tracked.
+    if not remove_files_in_ignored_directories([file]):
+        return None, None
+
+    fg = _get_or_create_file_group(session, file)
+    # Not `set_viewed`, which saves the config; a heartbeat during playback only writes the DB.
+    fg.viewed = now()
+    fg.progress = progress
+    fg.position = position
+    session.commit()
+
+    if final:
+        save_recently_viewed_config.activate_switch()
+    return progress, position
+
+
+def clear_file_progress(session: Session, file: pathlib.Path):
+    """Forget how far the User is through a file, so it starts from the beginning.  It remains viewed."""
+    fg = _get_or_create_file_group(session, file)
+    fg.progress = None
+    fg.position = None
+    session.commit()
+    save_recently_viewed_config.activate_switch()
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)

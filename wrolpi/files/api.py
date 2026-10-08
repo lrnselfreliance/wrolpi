@@ -57,6 +57,29 @@ async def get_file(request: Request, body: schema.FileRequest):
     return json_response({'file': file})
 
 
+@files_bp.post('/progress')
+@openapi.definition(
+    summary='Record how far the user is through a file, and where to resume it',
+    body=schema.FileProgressRequest,
+)
+@validate(schema.FileProgressRequest)
+async def post_file_progress(request: Request, body: schema.FileProgressRequest):
+    path = get_media_directory() / body.file
+    progress, position = lib.set_file_progress(request.ctx.session, path, body.progress, body.position, body.final)
+    return json_response({'progress': progress, 'position': position})
+
+
+@files_bp.post('/progress/clear')
+@openapi.definition(
+    summary='Forget how far the user is through a file, so it starts from the beginning',
+    body=schema.FileProgressClearRequest,
+)
+@validate(schema.FileProgressClearRequest)
+async def post_file_progress_clear(request: Request, body: schema.FileProgressClearRequest):
+    lib.clear_file_progress(request.ctx.session, get_media_directory() / body.file)
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
 @files_bp.post('/delete')
 @openapi.definition(
     summary='Delete files or directories.  Directories are deleted recursively.'

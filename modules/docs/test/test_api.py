@@ -55,6 +55,24 @@ async def test_get_doc(async_client, test_session, test_directory, example_epub,
 
 
 @pytest.mark.asyncio
+async def test_get_doc_marks_viewed(async_client, test_session, doc_factory):
+    """Getting a doc marks it viewed, unless skip_viewed is requested."""
+    doc = doc_factory()
+    file_group_id = doc.file_group_id
+    test_session.commit()
+
+    request, response = await async_client.get(f'/api/docs/{file_group_id}?skip_viewed=true')
+    assert response.status_code == HTTPStatus.OK
+    test_session.expire_all()
+    assert test_session.query(Doc).filter_by(file_group_id=file_group_id).one().file_group.viewed is None
+
+    request, response = await async_client.get(f'/api/docs/{file_group_id}')
+    assert response.status_code == HTTPStatus.OK
+    test_session.expire_all()
+    assert test_session.query(Doc).filter_by(file_group_id=file_group_id).one().file_group.viewed is not None
+
+
+@pytest.mark.asyncio
 async def test_docs_search_by_tag(async_client, test_session, doc_factory, tag_factory):
     """Docs can be searched by tag."""
     tag = await tag_factory()

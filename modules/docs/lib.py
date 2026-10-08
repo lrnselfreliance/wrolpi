@@ -338,11 +338,13 @@ def _doc_response(doc) -> dict:
     }
 
 
-def _get_doc(session, file_group_id: int):
+def _get_doc(session, file_group_id: int, skip_viewed: bool = False):
     from .models import Doc
     doc = session.query(Doc).options(*Doc.json_options()).filter_by(file_group_id=file_group_id).one_or_none()
     if not doc:
         raise ValidationError(f'Doc with file_group_id {file_group_id} not found')
+    if not skip_viewed:
+        doc.file_group.set_viewed()
     return doc
 
 

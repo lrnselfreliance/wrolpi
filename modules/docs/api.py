@@ -30,7 +30,8 @@ async def statistics(request: Request):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_doc(request: Request, file_group_id: int):
     session = request.ctx.session
-    doc = _get_doc(session, file_group_id)
+    skip_viewed = request.args.get('skip_viewed', '').lower() == 'true'
+    doc = _get_doc(session, file_group_id, skip_viewed=skip_viewed)
     return json_response(_doc_response(doc))
 
 

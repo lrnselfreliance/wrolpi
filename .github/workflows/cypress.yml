@@ -56,8 +56,7 @@ jobs:
           path: app/cypress/screenshots
           retention-days: 14
 
-  # Waiting for `npm start` to serve the app also covers the dev server starting, which
-  # CircleCI checked in a separate job.
+  # Waiting for `npm start` to serve the app also checks that the dev server starts.
   cypress-e2e-tests:
     runs-on: ubuntu-latest
 

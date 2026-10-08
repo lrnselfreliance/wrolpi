@@ -41,7 +41,7 @@ import React from "react";
 
 Cypress.on('uncaught:exception', (err, runnable) => {
     if (err.message.includes('ChunkLoadError')) {
-        return false; // Ignore this error which happens after CircleCI tests.
+        return false; // Ignore this error which happens after CI tests.
     }
     // Otherwise, fail like normal
     return true;

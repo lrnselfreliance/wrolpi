@@ -301,3 +301,117 @@ async def test_recently_viewed_follows_move(test_session, async_client, test_dir
     entry, = read_recently_viewed(test_directory)
     assert entry['path'] == 'watched/movie.mp4'
     assert entry['progress'] == 0.4
+
+
+@pytest.mark.asyncio
+async def test_progress_survives_concurrent_writer(async_client, test_session, test_directory, make_files_structure):
+    """A progress save waits for another writer (a refresh, a download) instead of failing."""
+    from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
+    movie, = make_files_structure(['videos/movie.mp4'])
+    FileGroup.from_paths(test_session, movie)
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    body = json.dumps(dict(file='videos/movie.mp4', progress=0.4, position=dict(kind='time', seconds=480)))
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file):
+            request, response = await async_client.post('/api/files/progress', content=body)
+        assert response.status_code == HTTPStatus.OK, response.body
+
+        with write_lock_held_briefly(db_file):
+            request, response = await async_client.post('/api/files/progress/clear',
+                                                        content=json.dumps(dict(file='videos/movie.mp4')))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+
+        session = maker()
+        try:
+            fg, = session.query(FileGroup).all()
+            assert fg.viewed and fg.progress is None
+        finally:
+            session.close()
+
+
+@pytest.mark.asyncio
+async def test_progress_ignored_directory_dot_dot(test_session, async_client, test_directory, make_files_structure,
+                                                  test_wrolpi_config, await_switches):
+    """`..` cannot step into an ignored directory."""
+    from wrolpi.common import get_wrolpi_config
+    make_files_structure(['private/movie.mp4', 'videos/other.mp4'])
+    get_wrolpi_config().ignored_directories = [str(test_directory / 'private')]
+    await await_switches()
+
+    body = dict(file='videos/../private/movie.mp4', progress=0.4, position=dict(kind='time', seconds=480))
+    await async_client.post('/api/files/progress', content=json.dumps(body))
+    assert test_session.query(FileGroup).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_clear_creates_nothing(test_session, async_client, test_directory, make_files_structure,
+                                              test_wrolpi_config, await_switches):
+    """Starting over a file that was never tracked (or is ignored) does not index it."""
+    from wrolpi.common import get_wrolpi_config
+    make_files_structure(['private/movie.mp4', 'videos/movie.mp4'])
+    get_wrolpi_config().ignored_directories = [str(test_directory / 'private')]
+    await await_switches()
+
+    for file in ('private/movie.mp4', 'videos/movie.mp4'):
+        request, response = await async_client.post('/api/files/progress/clear', content=json.dumps(dict(file=file)))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(FileGroup).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_recently_viewed_import_after_plain_view(test_session, async_client, test_directory,
+                                                       make_files_structure):
+    """A plain view during startup is newer, but it is not a newer resume point; the config's position applies."""
+    movie, = make_files_structure(['videos/movie.mp4'])
+    fg = FileGroup.from_paths(test_session, movie)
+    viewed_now = fg.set_viewed()
+    test_session.commit()
+
+    config_file = test_directory / 'config/recently_viewed.yaml'
+    config_file.parent.mkdir(exist_ok=True)
+    config_file.write_text(yaml.dump(dict(version=1, files=[
+        dict(path='videos/movie.mp4', viewed=(viewed_now - timedelta(days=1)).isoformat(), progress=0.5,
+             position=dict(kind='time', seconds=600))])))
+
+    get_recently_viewed_config().import_config()
+
+    test_session.expire_all()
+    fg, = test_session.query(FileGroup).all()
+    assert fg.progress == 0.5
+    assert fg.position == dict(kind='time', seconds=600.0)
+    assert fg.viewed == viewed_now, 'The newer view is kept'
+
+
+@pytest.mark.asyncio
+async def test_recently_viewed_import_outside_media_directory(test_session, async_client, test_directory,
+                                                              make_files_structure):
+    """A hand-edited entry cannot create a FileGroup outside the media directory, and one bad row in the DB
+    does not stop the config from being saved."""
+    make_files_structure(['videos/movie.mp4'])
+    outside = test_directory.parent / f'{test_directory.name}-outside.mp4'
+    outside.touch()
+    try:
+        now = dates.now()
+        config_file = test_directory / 'config/recently_viewed.yaml'
+        config_file.parent.mkdir(exist_ok=True)
+        config_file.write_text(yaml.dump(dict(version=1, files=[
+            dict(path=str(outside), viewed=now.isoformat()),
+            dict(path=f'../{outside.name}', viewed=now.isoformat()),
+            dict(path='videos/movie.mp4', viewed=(now - timedelta(hours=1)).isoformat()),
+        ])))
+        config = get_recently_viewed_config()
+        config.import_config()
+        test_session.expire_all()
+        assert [i.primary_path.name for i in test_session.query(FileGroup)] == ['movie.mp4']
+
+        # A row outside the media directory (however it got there) is skipped by the dump.
+        bad = FileGroup.from_paths(test_session, outside)
+        bad.viewed = now
+        test_session.commit()
+        config.dump_config()
+        config.save()
+        assert [i['path'] for i in read_recently_viewed(test_directory)] == ['videos/movie.mp4']
+    finally:
+        outside.unlink()

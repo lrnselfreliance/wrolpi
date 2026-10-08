@@ -14,6 +14,8 @@ The database is the working store.  `recently_viewed.yaml` holds the most recent
 history and positions survive a database rebuild.
 """
 import math
+import os
+import pathlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -21,7 +23,7 @@ from typing import List, Optional, Tuple
 import pytz
 
 from wrolpi import dates
-from wrolpi.common import ConfigFile, logger, get_media_directory
+from wrolpi.common import ConfigFile, logger, get_media_directory, get_paths_in_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, NoPrimaryFile
 from wrolpi.events import Events
@@ -155,6 +157,11 @@ class RecentlyViewedConfig(ConfigFile):
                     .limit(RECENTLY_VIEWED_LIMIT)
                 files = list()
                 for file_group in file_groups:
+                    if not get_paths_in_media_directory([file_group.primary_path]):
+                        # One bad row must not stop every later save.
+                        logger.warning(f'Not saving recently viewed file outside the media directory:'
+                                       f' {file_group.primary_path}')
+                        continue
                     entry = dict(
                         path=str(file_group.primary_path.relative_to(media_directory)),
                         viewed=file_group.viewed.isoformat(),
@@ -172,8 +179,8 @@ class RecentlyViewedConfig(ConfigFile):
                 Events.send_config_save_failed(message)
 
     def import_config(self, file=None, send_events=False):
-        """Apply the config to the database.  The newer `viewed` wins, so a file viewed while WROLPi was
-        starting keeps its newer position."""
+        """Apply the config to the database.  Progress written after the config (e.g. while WROLPi was starting)
+        is kept; a newer plain view keeps its `viewed`, but takes the config's position."""
         super().import_config(file, send_events)
         try:
             # wrolpi.files.models imports this module.
@@ -181,33 +188,51 @@ class RecentlyViewedConfig(ConfigFile):
             from wrolpi.files.models import FileGroup
 
             media_directory = get_media_directory()
-            entries = [i for i in map(_parse_entry, self.files) if i]
+            entries = list()
+            for path, viewed, progress, position in filter(None, map(_parse_entry, self.files)):
+                # An absolute `path` replaces the media directory in the join, and `..` can leave it.
+                absolute_path = pathlib.Path(os.path.normpath(media_directory / path))
+                if not get_paths_in_media_directory([absolute_path]):
+                    logger.warning(f'Not importing recently viewed file outside the media directory: {path}')
+                    continue
+                entries.append((absolute_path, viewed, progress, position))
+            absolute_paths = [i[0] for i in entries]
+
+            # Glob the files which are not yet in the DB before the write transaction; stat'ing a thousand files on
+            # a slow disk would block every other writer.
+            with get_db_session() as session:
+                known = {i for (i,) in session.query(FileGroup.primary_path)
+                .filter(FileGroup.primary_path.in_(absolute_paths))}
+            new_files = {i: glob_shared_stem(i) for i in absolute_paths if i not in known and i.is_file()}
+
             with get_db_session(commit=True) as session:
-                absolute_paths = [media_directory / path for path, *_ in entries]
                 file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(absolute_paths))
                 file_groups_by_path = {i.primary_path: i for i in file_groups}
 
                 applied = 0
-                for path, viewed, progress, position in entries:
-                    absolute_path = media_directory / path
+                for absolute_path, viewed, progress, position in entries:
                     file_group = file_groups_by_path.get(absolute_path)
                     if not file_group:
-                        if not absolute_path.is_file():
+                        if not (files := new_files.pop(absolute_path, None)):
                             # The file was deleted; its history goes with it.
-                            logger.debug(f'Not importing recently viewed file which does not exist: {path}')
+                            logger.debug(f'Not importing recently viewed file which does not exist: {absolute_path}')
                             continue
                         try:
-                            file_group = FileGroup.from_paths(session, *glob_shared_stem(absolute_path))
+                            file_group = FileGroup.from_paths(session, *files)
                         except NoPrimaryFile:
-                            logger.warning(f'Cannot import recently viewed file: {path}')
+                            logger.warning(f'Cannot import recently viewed file: {absolute_path}')
                             continue
                         session.add(file_group)
                         session.flush([file_group])
                         file_groups_by_path[absolute_path] = file_group
 
-                    if file_group.viewed and file_group.viewed >= viewed:
+                    db_is_newer = file_group.viewed is not None and file_group.viewed >= viewed
+                    if db_is_newer and file_group.progress is not None:
+                        # Progress was written after the config (e.g. while WROLPi was starting).
                         continue
-                    file_group.viewed = viewed
+                    # A newer plain view is kept, but it is not a newer place to resume.
+                    if not db_is_newer:
+                        file_group.viewed = viewed
                     file_group.progress = progress
                     file_group.position = position
                     applied += 1

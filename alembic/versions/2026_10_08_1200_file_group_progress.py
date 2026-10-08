@@ -19,6 +19,6 @@ def upgrade():
 
 
 def downgrade():
-    with op.batch_alter_table('file_group') as batch_op:
-        batch_op.drop_column('position')
-        batch_op.drop_column('progress')
+    # Not batch_alter_table: rebuilding file_group drops its FTS triggers (see 2026_09_20_1200).
+    op.execute('ALTER TABLE file_group DROP COLUMN position')
+    op.execute('ALTER TABLE file_group DROP COLUMN progress')

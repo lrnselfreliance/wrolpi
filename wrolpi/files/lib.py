@@ -36,7 +36,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError, UnsupportedArchive, InvalidArchiveMember
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
-from wrolpi.files.progress import normalize_progress, save_recently_viewed_config
+from wrolpi.files.progress import normalize_progress
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST, IS_MACOS
@@ -160,51 +160,62 @@ async def set_file_viewed(session: Session, file: pathlib.Path):
     session.commit()
 
 
-def _get_or_create_file_group(session: Session, file: pathlib.Path) -> FileGroup:
+def _trackable_path(file: pathlib.Path) -> pathlib.Path | None:
+    """Return `file` with any `..` collapsed, or None if it is in an ignored directory.
+
+    `..` is collapsed first so it cannot step into an ignored directory past the check.
+
+    @raise InvalidFile: The file is not in the media directory.
+    """
+    file = pathlib.Path(os.path.normpath(file))
     if not get_paths_in_media_directory([file]):
         raise InvalidFile('File must be in the media directory')
+    if not remove_files_in_ignored_directories([file]):
+        return None
+    return file
+
+
+def set_file_progress(session: Session, file: pathlib.Path, progress: float, position: dict = None) \
+        -> Tuple[float | None, dict | None]:
+    """Record how far the User is through a file (see wrolpi.files.progress).  This is also a view.
+
+    The caller owns the (write) transaction, and saves the recently viewed config after it commits.
+
+    @return: The (progress, position) that was stored, (None, None) if the file is not tracked.
+    """
+    progress, position = normalize_progress(progress, position)
+
+    if not (file := _trackable_path(file)):
+        return None, None
+
     try:
-        return FileGroup.find_by_path(session, file)
+        fg = FileGroup.find_by_path(session, file)
     except UnknownFile:
         if not file.is_file():
             raise InvalidFile(f'File does not exist: {get_relative_to_media_directory(file)}')
         fg = FileGroup.from_paths(session, file)
         fg.do_model(session)
-        return fg
-
-
-def set_file_progress(session: Session, file: pathlib.Path, progress: float, position: dict = None,
-                      final: bool = False) -> Tuple[float | None, dict | None]:
-    """Record how far the User is through a file (see wrolpi.files.progress).  This is also a view.
-
-    @param final: The User stopped (paused, closed); save the recently viewed config.
-    @return: The (progress, position) that was stored.
-    """
-    progress, position = normalize_progress(progress, position)
-
-    # Files in ignored directories are not tracked.
-    if not remove_files_in_ignored_directories([file]):
-        return None, None
-
-    fg = _get_or_create_file_group(session, file)
     # Not `set_viewed`, which saves the config; a heartbeat during playback only writes the DB.
     fg.viewed = now()
     fg.progress = progress
     fg.position = position
-    session.commit()
-
-    if final:
-        save_recently_viewed_config.activate_switch()
     return progress, position
 
 
-def clear_file_progress(session: Session, file: pathlib.Path):
-    """Forget how far the User is through a file, so it starts from the beginning.  It remains viewed."""
-    fg = _get_or_create_file_group(session, file)
+def clear_file_progress(session: Session, file: pathlib.Path) -> bool:
+    """Forget how far the User is through a file, so it starts from the beginning.  It remains viewed.
+
+    A file that was never tracked is left alone.  The caller owns the (write) transaction.
+
+    @return: True if a FileGroup was changed.
+    """
+    if not (file := _trackable_path(file)):
+        return False
+    if not (fg := FileGroup.get_by_path(session, file)):
+        return False
     fg.progress = None
     fg.position = None
-    session.commit()
-    save_recently_viewed_config.activate_switch()
+    return True
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)

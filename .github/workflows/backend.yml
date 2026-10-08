@@ -1,0 +1,145 @@
+name: Backend Tests
+
+# Same triggers as jest-tests.yml: `pull_request` is unfiltered so pull requests into feature
+# branches are checked too, not only those into master.
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+
+# A new push to a pull request makes the run for the previous push worthless; cancel it so it
+# does not hold runners (the free plan allows 20 concurrent jobs).  Runs on master always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The suite is split by directory so it finishes in a few minutes, and so a check's name says
+  # which area broke.  The groups are balanced by test time; `rest` runs everything the others do
+  # not, so a new directory is tested before anyone assigns it.  A path added to any other group
+  # must also be added to `rest` as an --ignore, or its tests run twice.
+  api-tests:
+    name: api-tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            paths: wrolpi/test
+          - name: media
+            paths: modules/videos modules/zim modules/docs modules/map modules/inventory modules/flasher
+          - name: files
+            paths: wrolpi/files wrolpi/collections
+          - name: rest
+            paths: >-
+              --ignore=wrolpi/test
+              --ignore=modules/videos --ignore=modules/zim --ignore=modules/docs --ignore=modules/map
+              --ignore=modules/inventory --ignore=modules/flasher
+              --ignore=wrolpi/files --ignore=wrolpi/collections
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg catdoc
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # Trixie ships 3.13.
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # `logical`, not `auto`: with psutil installed, `auto` counts physical cores, which is two on
+      # the four-vCPU runner.  No `-v`: the full test output inflates wall time and logs.
+      - name: Run pytest
+        env:
+          PATHS: ${{ matrix.paths }}
+        run: pytest -n logical $PATHS --junitxml=test-results.xml
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results-${{ matrix.name }}
+          path: test-results.xml
+          retention-days: 30
+
+  # Do the API and the frontend's test fixtures still agree?
+  #
+  # `api-tests` runs these too, as part of the whole suite.  This job exists for the signal:
+  # fixture drift is silent by nature -- the frontend suite passes against a body the API stopped
+  # sending -- so it is worth a check whose name says what broke, failing in under a minute rather
+  # than somewhere inside seventeen hundred results.  It needs no ffmpeg or catdoc.
+  api-contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fixtures match the OpenAPI spec, and the spec matches the handlers
+        run: pytest wrolpi/test/test_api_fixtures.py -v
+
+  # The migrations apply to an empty database, the models match them, and the API starts.
+  api-migrations-and-start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations
+        env:
+          MEDIA_DIRECTORY: ${{ runner.temp }}/wrolpi-media
+        run: |
+          mkdir -p "$MEDIA_DIRECTORY/config"
+          python ./main.py db upgrade
+
+      - name: Check for missing migrations
+        env:
+          MEDIA_DIRECTORY: ${{ runner.temp }}/wrolpi-media
+        run: python ./main.py db check
+
+      - name: Start Sanic API
+        run: |
+          sudo mkdir -p /media/wrolpi
+          nohup sanic main:api_app -H 0.0.0.0 -p 8081 > sanic.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8081/api/echo; then
+              echo
+              echo "Sanic API is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Sanic API failed to start"
+          cat sanic.log
+          exit 1
+
+      - name: Stop Sanic API
+        if: ${{ always() }}
+        run: pkill -f sanic || true

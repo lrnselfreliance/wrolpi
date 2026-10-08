@@ -15,7 +15,7 @@ from wrolpi.vars import CIRCLECI, IS_MACOS
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
-skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in Circle CI')
+skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in CI')
 skip_macos = pytest.mark.skipif(IS_MACOS, reason='This test is not supported on MacOS')
 only_macos = pytest.mark.skipif(not IS_MACOS, reason='This test is only supported on MacOS')
 

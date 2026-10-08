@@ -1,0 +1,122 @@
+name: Cypress Tests
+
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Component specs live under `src/`, so they need `cypress run --component`; the e2e job's
+  # `cypress run` will not match them.  Cypress starts its own dev server, so no `npm start`.
+  cypress-component-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      # The Cypress binary lives outside node_modules, and setup-node only caches ~/.npm.  Key it
+      # on the lockfile so a Cypress bump fetches the matching binary.
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm install
+
+      # A no-op when the cached binary matches.
+      - name: Install Cypress binary
+        run: npx cypress install
+
+      - name: Run Cypress component tests
+        run: npx cypress run --component
+
+      - name: Upload screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-component-screenshots
+          path: app/cypress/screenshots
+          retention-days: 14
+
+  # Waiting for `npm start` to serve the app also covers the dev server starting, which
+  # CircleCI checked in a separate job.
+  cypress-e2e-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Cypress binary
+        run: npx cypress install
+
+      # GitHub Actions sets `CI=true`, which makes cypress.config.js use http://localhost:3000 as
+      # the base URL.
+      - name: Start React app
+        env:
+          DISABLE_ESLINT_PLUGIN: 'true'
+          BROWSER: none
+        run: |
+          nohup npm start > react.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3000/manifest.json > /dev/null; then
+              echo "React app is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "React app failed to start"
+          cat react.log
+          exit 1
+
+      - name: Run Cypress e2e tests
+        run: npx cypress run
+
+      - name: Upload videos and screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-e2e-media
+          path: |
+            app/cypress/videos
+            app/cypress/screenshots
+          retention-days: 14
+          if-no-files-found: ignore

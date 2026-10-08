@@ -34,10 +34,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # `-nauto` parallelizes across all available cores via pytest-xdist.  No `-v`: the full
-      # test output inflates wall time and logs.
+      # `logical`, not `auto`: with psutil installed, `auto` counts physical cores, which is two on
+      # the four-vCPU runner.  No `-v`: the full test output inflates wall time and logs.
       - name: Run pytest
-        run: pytest -nauto --junitxml=test-results.xml
+        run: pytest -n logical --junitxml=test-results.xml
 
       - name: Upload test results
         if: ${{ !cancelled() }}

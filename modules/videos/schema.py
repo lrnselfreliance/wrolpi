@@ -266,6 +266,7 @@ class CensoredVideoResponse:
 @dataclass
 class ChannelSearchRequest:
     tag_names: List[str] = field(default_factory=list)
+    search_str: Optional[str] = None
 
 
 @dataclass

@@ -145,7 +145,7 @@ async def channel_tag(request: Request, channel_id: int, body: schema.ChannelTag
 @validate(schema.ChannelSearchRequest)
 async def channel_search(request: Request, body: schema.ChannelSearchRequest):
     session = request.ctx.session
-    channels = await lib.search_channels(session, body.tag_names)
+    channels = await lib.search_channels(session, body.tag_names, body.search_str)
     ret = dict(
         channels=channels,
     )

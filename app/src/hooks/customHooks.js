@@ -36,6 +36,7 @@ import {
     saveSettings,
     searchArchives,
     searchChannels,
+    searchCollections,
     searchDirectories,
     searchDocs,
     searchRepos,
@@ -2107,7 +2108,8 @@ export const useCalcQuery = () => {
     return [calc, setCalc]
 }
 
-export const useSearchChannels = (defaultTagNames) => {
+// Channels whose name matches `searchStr` and/or which have any of the tags.
+export const useSearchChannels = (defaultTagNames, searchStr) => {
     const [tagNames, setTagNames] = useState(defaultTagNames || []);
     // null = pending, undefined = fetch failed, [] = no channels.  A search starts on mount, so the
     // first render is already loading; consumers must never see [] for a search that has not run.
@@ -2121,7 +2123,7 @@ export const useSearchChannels = (defaultTagNames) => {
         setChannels(null);
         setLoading(true);
         try {
-            const {channels: newChannels} = await searchChannels(tagNames);
+            const {channels: newChannels} = await searchChannels(tagNames, searchStr);
             if (gen === requestGen.current) {
                 setChannels(newChannels || []);
             }
@@ -2147,7 +2149,7 @@ export const useSearchChannels = (defaultTagNames) => {
 
     useEffect(() => {
         localSearchChannels();
-    }, [tagNames]);
+    }, [tagNames, searchStr]);
 
     return {
         tagNames,
@@ -2155,6 +2157,33 @@ export const useSearchChannels = (defaultTagNames) => {
         channels,
         loading,
     }
+}
+
+// Collections of `kind` whose name matches `searchStr` and/or which have any of the tags.  `collections`:
+// null = pending, undefined = fetch failed, [] = none.  Nothing to search by matches nothing (the API would list
+// every Collection of the kind).  Only the newest request may write state.
+export const useSearchCollections = (kind, searchStr, tagNames) => {
+    const [collections, setCollections] = useState(null);
+    const requestGen = useRef(0);
+    const tagKey = JSON.stringify(tagNames || []);
+
+    useEffect(() => {
+        const gen = ++requestGen.current;
+        const tags = JSON.parse(tagKey);
+        if (!(searchStr || '').trim() && _.isEmpty(tags)) {
+            setCollections([]);
+            return;
+        }
+        setCollections(null);
+        searchCollections(kind, tags, searchStr)
+            .then(result => gen === requestGen.current && setCollections(result ? result.collections : undefined))
+            .catch(e => {
+                console.error(e);
+                if (gen === requestGen.current) setCollections(undefined);
+            });
+    }, [kind, searchStr, tagKey]);
+
+    return {collections};
 }
 
 // Repos matching the search (their name and README) and/or the tags.  `repos`: null = pending,

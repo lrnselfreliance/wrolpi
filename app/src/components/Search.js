@@ -8,6 +8,7 @@ import {
     useSearchDate,
     useSearchDeep,
     useSearchFilter,
+    useSearchCollections,
     useSearchRepos,
 } from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
@@ -562,6 +563,16 @@ function SearchChannelPreview({channel}) {
     </div>
 }
 
+function SearchCollectionPreview({collection, to}) {
+    const {SingleTag} = React.useContext(TagsContext);
+    return <div>
+        <span style={{display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+            <Link to={to}>{collection.name}</Link>
+            {collection.tag_name && <SingleTag name={collection.tag_name}/>}
+        </span>
+    </div>
+}
+
 function SearchRepoPreview({repo}) {
     const {SingleTag} = React.useContext(TagsContext);
     return <div>
@@ -594,14 +605,16 @@ function OtherSearchSection({value, title, items, preview, emptyText, errorText}
     </Accordion.Item>
 }
 
-// `channels` follows useSearchChannels and `repos` follows useSearchRepos: null = pending,
+// Each section's items follow useSearchChannels, useSearchCollections, or useSearchRepos: null = pending,
 // undefined = fetch failed, [] = none.
 export function OtherSearchView({loading}) {
     const {searchParams} = React.useContext(QueryContext);
-    const [activeValues, setActiveValues] = React.useState(['channels', 'repos']);
+    const [activeValues, setActiveValues] = React.useState(['channels', 'domains', 'playlists', 'repos']);
     const activeTags = searchParams.getAll('tag');
     const searchStr = searchParams.get('q') || '';
-    const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
+    const {channels, loading: channelsLoading} = useSearchChannels(activeTags, searchStr);
+    const {collections: domains} = useSearchCollections('domain', searchStr, activeTags);
+    const {collections: playlists} = useSearchCollections('playlist', searchStr, activeTags);
     const {repos} = useSearchRepos(searchStr, activeTags);
 
     if (loading || channelsLoading || channels === null) {
@@ -618,6 +631,23 @@ export function OtherSearchView({loading}) {
             preview={i => <SearchChannelPreview key={i.id} channel={i}/>}
             emptyText='No Channels'
             errorText='Could not fetch the channels.'
+        />
+        <OtherSearchSection
+            value='domains'
+            title='Domains'
+            items={domains}
+            preview={i => <SearchCollectionPreview key={i.id} collection={i}
+                                                   to={`/archives?domain=${encodeURIComponent(i.name)}`}/>}
+            emptyText='No Domains'
+            errorText='Could not fetch the domains.'
+        />
+        <OtherSearchSection
+            value='playlists'
+            title='Playlists'
+            items={playlists}
+            preview={i => <SearchCollectionPreview key={i.id} collection={i} to={`/playlists/${i.id}`}/>}
+            emptyText='No Playlists'
+            errorText='Could not fetch the playlists.'
         />
         <OtherSearchSection
             value='repos'

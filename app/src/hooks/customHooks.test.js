@@ -475,7 +475,7 @@ describe('useSearchChannels', () => {
         const {result} = renderHook(() => useSearchChannels(['a']));
         await act(async () => {
         });
-        expect(searchChannels).toHaveBeenCalledWith(['a']);
+        expect(searchChannels).toHaveBeenCalledWith(['a'], undefined);
         expect(result.current.channels).toEqual([{id: 1, name: 'One'}]);
         expect(result.current.loading).toBe(false);
     });
@@ -510,9 +510,25 @@ describe('useSearchChannels', () => {
         }));
         rerender({tags: ['new']});
         expect(searchChannels).toHaveBeenCalledTimes(2);
-        expect(searchChannels).toHaveBeenLastCalledWith(['new']);
+        expect(searchChannels).toHaveBeenLastCalledWith(['new'], undefined);
         expect(result.current.channels).toBeNull();
         expect(result.current.loading).toBe(true);
+    });
+
+    test('searches by the search text, and refetches when it changes', async () => {
+        searchChannels.mockResolvedValue({channels: [{id: 1, name: 'Cooking'}]});
+        const {result, rerender} = renderHook(({q}) => useSearchChannels([], q), {initialProps: {q: 'cook'}});
+        await act(async () => {
+        });
+        expect(searchChannels).toHaveBeenLastCalledWith([], 'cook');
+        expect(result.current.channels).toEqual([{id: 1, name: 'Cooking'}]);
+
+        searchChannels.mockReturnValue(new Promise(() => {
+        }));
+        rerender({q: 'garden'});
+        expect(searchChannels).toHaveBeenCalledTimes(2);
+        expect(searchChannels).toHaveBeenLastCalledWith([], 'garden');
+        expect(result.current.channels).toBeNull();
     });
 
     test('a new array with the same tags does not refetch', async () => {

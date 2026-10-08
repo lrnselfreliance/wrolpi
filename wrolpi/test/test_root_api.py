@@ -1016,6 +1016,18 @@ async def test_search_other_estimates(async_client, test_session, channel_factor
     assert response.status_code == HTTPStatus.OK
     assert response.json['others']['channel_count'] == 1, 'Only one Channel is tagged.'
 
+    # The estimate counts the Channels the search lists: those with any of the Tags.
+    tag2 = await tag_factory()
+    channel_factory(tag_name=tag2.name)
+    test_session.commit()
+    body = dict(tag_names=[tag.name, tag2.name])
+    request, response = await async_client.post('/api/search_other_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    estimate = response.json['others']['channel_count']
+    request, response = await async_client.post('/api/videos/channels/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert estimate == len(response.json['channels']) == 2
+
 
 @pytest.mark.asyncio
 async def test_mutating_request_survives_concurrent_writer(async_client, test_session, test_downloader,

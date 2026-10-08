@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, render, screen} from '../test-utils';
 import {OtherSearchView} from './Search';
-import {searchChannels, searchRepos} from '../api';
+import {searchChannels, searchCollections, searchRepos} from '../api';
 
 // What the search page's Other tab shows for each state of useSearchChannels.  "No Channels"
 // must only appear once the server has confirmed there are none.
@@ -9,6 +9,7 @@ import {searchChannels, searchRepos} from '../api';
 jest.mock('../api', () => ({
     ...jest.requireActual('../api'),
     searchChannels: jest.fn(),
+    searchCollections: jest.fn(),
     searchRepos: jest.fn(),
 }));
 
@@ -18,6 +19,8 @@ beforeEach(() => {
     searchChannels.mockReset();
     searchRepos.mockReset();
     searchRepos.mockResolvedValue({repos: [], total: 0});
+    searchCollections.mockReset();
+    searchCollections.mockResolvedValue({collections: []});
 });
 
 test('pending: shows a loader, not "No Channels"', () => {
@@ -115,5 +118,57 @@ describe('Repos', () => {
         expect(container.querySelector('u').textContent).toBe('Zim');
         expect(container.querySelector('script')).toBeNull();
         expect(screen.getByText(/files <script>/)).toBeInTheDocument();
+    });
+});
+
+// Domains and Playlists are Collections searched by kind.
+describe.each([
+    ['domain', 'Domains', 'example.com', '/archives?domain=example.com'],
+    ['playlist', 'Playlists', 'Road Trip', '/playlists/3'],
+])('%s Collections', (kind, title, name, href) => {
+    const collectionsOf = (wanted, collections) => (k) => Promise.resolve({collections: k === wanted ? collections : []});
+
+    test(`empty: shows "No ${title}"`, async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        render(<OtherSearchView loading={false}/>, {query: {searchParams: new URLSearchParams('q=nothing')}});
+        await act(async () => {
+        });
+        expect(screen.getByText(`No ${title}`)).toBeInTheDocument();
+    });
+
+    test('nothing to search by: shows none without fetching', async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        render(<OtherSearchView loading={false}/>);
+        await act(async () => {
+        });
+        expect(screen.getByText(`No ${title}`)).toBeInTheDocument();
+        expect(searchCollections).not.toHaveBeenCalled();
+    });
+
+    test(`failed: shows an error only in the ${title} section`, async () => {
+        searchChannels.mockResolvedValue({channels: [{id: 1, name: 'Cooking'}]});
+        searchCollections.mockImplementation(k => k === kind ? Promise.reject(new Error('boom')) : Promise.resolve({collections: []}));
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {
+        });
+        try {
+            render(<OtherSearchView loading={false}/>, {query: {searchParams: new URLSearchParams('q=x')}});
+            await act(async () => {
+            });
+            expect(screen.getByText('Cooking')).toBeInTheDocument();
+            expect(screen.getByText(new RegExp(`Could not fetch the ${title.toLowerCase()}`))).toBeInTheDocument();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('loaded: lists them by the search and tags, linked', async () => {
+        searchChannels.mockResolvedValue({channels: []});
+        searchCollections.mockImplementation(collectionsOf(kind, [{id: 3, name, kind, tag_name: null}]));
+        const searchParams = new URLSearchParams('q=road&tag=News');
+        render(<OtherSearchView loading={false}/>, {query: {searchParams}});
+        await act(async () => {
+        });
+        expect(searchCollections).toHaveBeenCalledWith(kind, ['News'], 'road');
+        expect(screen.getByText(name).closest('a')).toHaveAttribute('href', href);
     });
 });

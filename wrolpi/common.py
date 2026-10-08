@@ -2870,31 +2870,26 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
 
 
 async def search_other_estimates(session: Session, tag_names: List[str], search_str: str = None) -> dict:
-    """Estimate other things that are Tagged, or match the search (Repos by their name and README)."""
-    from sqlalchemy import func
-    from wrolpi.collections.models import Collection
-    from wrolpi.tags import Tag
-    from modules.videos.models import Channel
+    """Estimate other things that match the search or the Tags (Channels, Domains, and Playlists by their name, Repos
+    by their name and README)."""
+    from modules.videos.channel.lib import search_channels_query
     from modules.repos.lib import count_repos
+    from wrolpi.collections.lib import search_collections_query
 
-    repo_count = count_repos(session, search_str, tag_names)
+    search_str = (search_str or '').strip()
+    channels = search_channels_query(session, tag_names, search_str)
 
-    if not tag_names:
-        return dict(
-            channel_count=0,
-            repo_count=repo_count,
-        )
-
-    # TODO handle multiple tags
-    channel_count = session.query(func.count(Channel.id)) \
-        .join(Collection, Collection.id == Channel.collection_id) \
-        .join(Tag, Tag.id == Collection.tag_id) \
-        .filter(Tag.name == tag_names[0]) \
-        .scalar()
+    def count_collections(kind: str) -> int:
+        # Nothing to search by matches nothing, like the other searches.
+        if not tag_names and not search_str:
+            return 0
+        return search_collections_query(session, kind, tag_names, search_str).count()
 
     others = dict(
-        channel_count=channel_count,
-        repo_count=repo_count,
+        channel_count=channels.count() if channels is not None else 0,
+        domain_count=count_collections('domain'),
+        playlist_count=count_collections('playlist'),
+        repo_count=count_repos(session, search_str, tag_names),
     )
     return others
 

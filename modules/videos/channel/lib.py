@@ -1,9 +1,9 @@
 import pathlib
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 from sqlalchemy import or_, func, desc
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Query, Session, joinedload
 
 from wrolpi import flags
 from wrolpi.collections import Collection
@@ -330,8 +330,27 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
         save_channels_config.activate_switch()
 
 
-async def search_channels(session: Session, tag_names: List[str]) -> List[Channel]:
-    """Search Tagged Channels."""
-    channels = session.query(Channel).options(*Channel.json_options()) \
-        .join(Collection).join(Tag).filter(Tag.name.in_(tag_names)).all()
-    return channels
+def search_channels_query(session: Session, tag_names: List[str] = None, search_str: str = None) -> Optional[Query]:
+    """Channels whose name contains `search_str` and which have any of the Tags.  None when there is nothing to search
+    by."""
+    search_str = (search_str or '').strip()
+    if not tag_names and not search_str:
+        return None
+    query = session.query(Channel).join(Collection, Collection.id == Channel.collection_id)
+    if search_str:
+        name_no_spaces = ''.join(search_str.split(' '))
+        query = query.filter(or_(
+            Collection.name.ilike(f'%{search_str}%'),
+            Collection.name.ilike(f'%{name_no_spaces}%'),
+        ))
+    if tag_names:
+        query = query.join(Tag, Tag.id == Collection.tag_id).filter(Tag.name.in_(tag_names))
+    return query
+
+
+async def search_channels(session: Session, tag_names: List[str] = None, search_str: str = None) -> List[Channel]:
+    """Search Channels by their name and/or Tags."""
+    query = search_channels_query(session, tag_names, search_str)
+    if query is None:
+        return []
+    return query.options(*Channel.json_options()).order_by(func.lower(Collection.name)).all()

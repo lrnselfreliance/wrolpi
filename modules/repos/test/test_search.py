@@ -116,13 +116,13 @@ async def test_search_api(test_session, async_client, test_wrolpi_config):
 
     # The global search's "Other" estimate counts Repos by the search, and by Tag.
     request, response = await async_client.post('/api/search_other_estimates', content=json.dumps(body))
-    assert response.json['others'] == dict(channel_count=0, repo_count=1)
+    assert response.json['others'] == dict(channel_count=0, domain_count=0, playlist_count=0, repo_count=1)
     body = dict(tag_names=['software'])
     request, response = await async_client.post('/api/search_other_estimates', content=json.dumps(body))
-    assert response.json['others'] == dict(channel_count=0, repo_count=1)
+    assert response.json['others'] == dict(channel_count=0, domain_count=0, playlist_count=0, repo_count=1)
     body = dict(tag_names=['software'], search_str='nothing')
     request, response = await async_client.post('/api/search_other_estimates', content=json.dumps(body))
-    assert response.json['others'] == dict(channel_count=0, repo_count=0)
+    assert response.json['others'] == dict(channel_count=0, domain_count=0, playlist_count=0, repo_count=0)
 
     # Repos are suggested by name.
     request, response = await async_client.post('/api/search_suggestions', content=json.dumps(dict(search_str='kiw')))

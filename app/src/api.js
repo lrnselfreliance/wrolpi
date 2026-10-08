@@ -2118,14 +2118,24 @@ export async function searchEstimateOthers(tagNames, searchStr) {
     }
 }
 
-export async function searchChannels(tagNames) {
-    const body = {tag_names: tagNames};
+export async function searchChannels(tagNames, searchStr) {
+    const body = {tag_names: tagNames, search_str: searchStr};
     const response = await apiPost(`${API_URI}/videos/channels/search`, body);
     if (response.ok) {
         const content = await response.json();
         return {
             channels: content.channels,
         }
+    }
+}
+
+// Collections of `kind` whose name matches `searchStr` and/or which have any of the tags.
+export async function searchCollections(kind, tagNames, searchStr) {
+    const body = {kind, tag_names: tagNames, search_str: searchStr};
+    const response = await apiPost(`${COLLECTIONS_API}/search`, body);
+    if (response.ok) {
+        const content = await response.json();
+        return {collections: content.collections};
     }
 }
 

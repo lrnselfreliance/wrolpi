@@ -21,7 +21,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPr
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.tags import TagFile
-from wrolpi.test.common import only_macos, skip_circleci
+from wrolpi.test.common import only_macos, skip_ci
 from wrolpi.vars import PROJECT_DIR, IS_MACOS
 
 
@@ -663,7 +663,7 @@ async def test_refresh_a_text_no_indexer(async_client, test_session, make_files_
     assert files == {'bar bar bar-bar', 'foo'}
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_refresh_many_files(async_client, test_session, make_files_structure, refresh_files):
     """Used to profile file refreshing"""
@@ -712,7 +712,7 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
     assert empty.mimetype == 'inode/x-empty'
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_files_indexer(async_client, test_session, make_files_structure, test_directory, refresh_files,
                              await_background_tasks):

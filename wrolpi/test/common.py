@@ -11,11 +11,11 @@ import pytest
 from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.common import get_media_directory
 from wrolpi.conftest import test_db, async_client  # noqa
-from wrolpi.vars import CIRCLECI, IS_MACOS
+from wrolpi.vars import IS_CI, IS_MACOS
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
-skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in CI')
+skip_ci = pytest.mark.skipif(IS_CI, reason='This test is not supported in CI')
 skip_macos = pytest.mark.skipif(IS_MACOS, reason='This test is not supported on MacOS')
 only_macos = pytest.mark.skipif(not IS_MACOS, reason='This test is only supported on MacOS')
 

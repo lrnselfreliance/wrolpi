@@ -25,7 +25,7 @@ from wrolpi import common
 from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config, TRACE_LEVEL, \
     is_tempfile
 from wrolpi.errors import InvalidConfig
-from wrolpi.test.common import build_test_directories, skip_circleci, skip_macos
+from wrolpi.test.common import build_test_directories, skip_ci, skip_macos
 
 
 def test_build_video_directories(test_directory):
@@ -872,7 +872,7 @@ def test_config_backup(async_client, test_wrolpi_config, test_directory):
 
 
 @pytest.mark.asyncio
-@skip_circleci
+@skip_ci
 async def test_aiohttp(simple_file_server):
     """Test that aiohttp convenience functions work."""
     host, port = simple_file_server.server_address
@@ -921,7 +921,7 @@ async def test_log_level(async_client, test_wrolpi_config):
 
 
 @skip_macos
-@skip_circleci
+@skip_ci
 def test_html_screenshot(singlefile_contents_factory):
     assert common.html_screenshot(singlefile_contents_factory())
 

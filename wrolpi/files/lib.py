@@ -146,9 +146,7 @@ async def set_file_viewed(session: Session, file: pathlib.Path):
 
     Files in ignored directories are not tracked.
     """
-    # Check if file is in an ignored directory
-    remaining = remove_files_in_ignored_directories([file])
-    if not remaining:
+    if is_ignored_file(file):
         return
 
     try:
@@ -170,7 +168,7 @@ def _trackable_path(file: pathlib.Path) -> pathlib.Path | None:
     file = pathlib.Path(os.path.normpath(file))
     if not get_paths_in_media_directory([file]):
         raise InvalidFile('File must be in the media directory')
-    if not remove_files_in_ignored_directories([file]):
+    if is_ignored_file(file):
         return None
     return file
 
@@ -880,12 +878,21 @@ def _upsert_files(files: List[pathlib.Path],
             progress_callback(processed_count, total_files)
 
 
+def is_ignored_file(file: pathlib.Path) -> bool:
+    """Is `file`, or the file it links to, in an ignored directory?
+
+    Refresh does not follow links, but a link can be viewed directly."""
+    return len(remove_files_in_ignored_directories([file, file.resolve()])) < 2
+
+
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
     """Return a new list which does not contain any file paths that are in ignored directories."""
     from wrolpi.db import get_db_file
 
     ignored_directories = get_normalized_ignored_directories()
-    files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
+    # `private` must not hide `private-notes`.
+    files = [i for i in files
+             if not any(str(i) == j or str(i).startswith(f'{j}{os.sep}') for j in ignored_directories)]
     # Never index the database (or its WAL sidecars), even if the user un-ignores `config`.
     db_file = str(get_db_file())
     files = [i for i in files if not str(i).startswith(db_file)]

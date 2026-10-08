@@ -1,14 +1,16 @@
+import os
 import subprocess
 
 import pytest
 
 from modules.repos import lib
+from modules.repos.conftest import TEST_GIT_ENV
 from wrolpi.downloader import Download, DownloadStatus
 
 
 def git(directory, *args) -> str:
     return subprocess.run(['git', '-c', 'safe.directory=*', *args], cwd=directory, check=True,
-                          capture_output=True).stdout.decode().strip()
+                          env=dict(os.environ, **TEST_GIT_ENV), capture_output=True).stdout.decode().strip()
 
 
 async def update(test_session, repos_download_manager):

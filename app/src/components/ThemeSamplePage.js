@@ -45,7 +45,7 @@ import {
     toast,
 } from './ui';
 import {paletteColorNames} from '../themes/mantine';
-import {contrastingColor} from './Common';
+import {contrastingColor, ViewProgress} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
 import {BookmarkAddForms, BookmarkMenuItems, BookmarkTable} from './Bookmarks';
@@ -1030,6 +1030,31 @@ export function ThemeSamplePage() {
                 cap bites. Capping the width alone let a square thumbnail stand as tall as
                 the card is wide. A poster smaller than the card is left at its own size
                 rather than upscaled.
+            </p>
+
+            <Header as='h4'>Viewing progress</Header>
+            <CardGroup>
+                {[
+                    ['Part way through', 0.4],
+                    ['Nearly done', 0.9],
+                    ['Finished', 1],
+                    ['Not started', null],
+                ].map(([label, progress]) => <Card
+                    key={label}
+                    title={label}
+                    meta={progress ? `${Math.round(progress * 100)}%` : 'no bar'}
+                    color='blue'
+                    media={<div className='wrolpi-card-poster'>
+                        <div className='wrolpi-card-poster-frame'>
+                            <img alt='' src={samplePoster(1280, 720)}/>
+                            <ViewProgress progress={progress}/>
+                        </div>
+                    </div>}
+                />)}
+            </CardGroup>
+            <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 10}}>
+                How far the user is through a video, audio file, ebook or comic, along the bottom
+                of its poster. A full bar is finished; a file not yet started has none.
             </p>
 
             <Header as='h4'>Meta, body and actions</Header>

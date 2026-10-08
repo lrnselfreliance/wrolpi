@@ -189,7 +189,7 @@ async def post_search_files(request: Request, body: schema.FilesSearchRequest):
         file_groups, total = await asyncio.to_thread(
             lib.search_files, request.ctx.session, body.search_str, body.limit, body.offset, body.mimetypes, body.model,
             body.tag_names, body.headline, body.months, body.from_year, body.to_year,
-            body.any_tag, body.order, body.url, body.suffix, body.path, body.deep)
+            body.any_tag, body.order, body.url, body.suffix, body.path, body.deep, body.in_progress)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 

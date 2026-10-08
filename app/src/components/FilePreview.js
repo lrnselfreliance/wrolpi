@@ -8,6 +8,7 @@ import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
 import {Button, ButtonGroup, Header, Icon, IconButton, MediaGate, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
+import {useMediaProgress} from "../hooks/useFileProgress";
 import {ShareButton} from "./Share";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {pathDirectory} from "./FileBrowser";
@@ -157,6 +158,14 @@ function getImagePreviewModal(previewFile) {
     </React.Fragment>
 }
 
+/** A <video> or <audio> which resumes where the user left off, and saves how far they got. */
+function PreviewMediaPlayer({as: Element, previewFile, path, style, children}) {
+    const progressHandlers = useMediaProgress(path, previewFile);
+    return <Element controls autoPlay={true} id="player" playsInline={true} style={style} {...progressHandlers}>
+        {children}
+    </Element>
+}
+
 function getVideoPreviewModal(previewFile) {
     const url = getMediaPathURL(previewFile);
     const path = previewFile.primary_path ?? previewFile.path;
@@ -168,14 +177,10 @@ function getVideoPreviewModal(previewFile) {
         <Modal.Content>
             <Header as='h5'>{path['path']}</Header>
             <div className='preview-fit'>
-                <video controls
-                       autoPlay={true}
-                       id="player"
-                       playsInline={true}
-                       style={{maxHeight: '100%', maxWidth: '100%'}}
-                >
+                <PreviewMediaPlayer as='video' previewFile={previewFile} path={path}
+                                    style={{maxHeight: '100%', maxWidth: '100%'}}>
                     <source src={url}/>
-                </video>
+                </PreviewMediaPlayer>
             </div>
         </Modal.Content>
     </React.Fragment>
@@ -192,14 +197,10 @@ function getAudioPreviewModal(previewFile) {
             {name}
         </Modal.Header>
         <Modal.Content>
-            <audio controls
-                   autoPlay={true}
-                   id="player"
-                   playsInline={true}
-                   style={{width: '90%', maxWidth: '95%'}}
-            >
+            <PreviewMediaPlayer as='audio' previewFile={previewFile} path={path}
+                                style={{width: '90%', maxWidth: '95%'}}>
                 <source src={url} type={type}/>
-            </audio>
+            </PreviewMediaPlayer>
         </Modal.Content>
     </React.Fragment>
 }

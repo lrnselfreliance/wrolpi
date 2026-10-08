@@ -133,6 +133,8 @@ def _get_file_dict(session: Session, file: pathlib.Path) -> Dict:
         tags=get_file_tag_names(session, file),
         progress=file_group.progress if file_group else None,
         position=file_group.position if file_group else None,
+        # When a finished file (no position) was finished; the preview compares it with its own position.
+        viewed=file_group.viewed if file_group else None,
     )
 
 
@@ -1234,7 +1236,8 @@ def count_file_groups(session: Session, statement: str, params: dict) -> int:
 def search_files(session: Session, search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
-                 url: str = None, suffix: str = None, path: str = None, deep: bool = False) -> \
+                 url: str = None, suffix: str = None, path: str = None, deep: bool = False,
+                 in_progress: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -1257,6 +1260,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
     @param suffix: Only return files whose primary file has this suffix (e.g. ".bin"), case-insensitive.
     @param path: Filter by primary_path using case-insensitive partial match (ILIKE).
     @param deep: Search all text including captions/body (d_text); slower but more thorough.
+    @param in_progress: Only files the user is part way through (see wrolpi.files.progress).
     """
     from wrolpi import fts
 
@@ -1307,6 +1311,9 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
         params['path_filter'] = f'%{path}%'
         wheres.append('fg.primary_path LIKE :path_filter')
 
+    if in_progress:
+        wheres.append('fg.progress > 0 AND fg.progress < 1')
+
     if fts_search and headline:
         # b/c/d headlines come from FTS5 snippets (computed in the fts subquery); the title
         # headline is computed in Python by `handle_file_group_search_results` (title is not an
@@ -1343,7 +1350,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
     # Count separately (and cache) so the page can use the datetime/id index.
     if not search_str and not tag_names and not mimetypes and not model and not months \
             and not from_year and not to_year and not any_tag and not url and not suffix \
-            and not path and not viewed_only:
+            and not path and not viewed_only and not in_progress:
         count_stmt = 'SELECT COUNT(*) AS total FROM file_group'
         count_params = dict()
     elif fts_search:
@@ -1366,7 +1373,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
         'files', search_str=search_str, mimetypes=mimetypes, model=model,
         tag_names=tag_names, months=months, from_year=from_year, to_year=to_year,
         any_tag=any_tag, url=url, suffix=suffix, path=path, deep=deep,
-        viewed_only=viewed_only,
+        viewed_only=viewed_only, in_progress=in_progress,
     )
     total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, count_params))
     results, total = handle_file_group_search_results(session, stmt, params, total=total)

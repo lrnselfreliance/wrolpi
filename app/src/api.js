@@ -1305,7 +1305,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix, path, deep) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix, path, deep, inProgress) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
     if (suffix) {
         body['suffix'] = suffix;
@@ -1339,6 +1339,9 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
     if (deep) {
         body['deep'] = true;
+    }
+    if (inProgress) {
+        body['in_progress'] = true;
     }
     console.info('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);

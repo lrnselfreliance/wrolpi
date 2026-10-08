@@ -943,16 +943,17 @@ export const useChannels = () => {
     return [channels, total, metadata];
 }
 
-export const useSearchRecentFiles = () => {
+export const useSearchRecentFiles = (inProgress = false) => {
     const [searchFiles, setSearchFiles] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const localSearchFiles = async () => {
         setLoading(true);
         try {
+            // `inProgress` returns only the files the user is part way through.
             let [file_groups, total] = await filesSearch(
                 null, 12, null, null, null, [], false,
-                null, null, null, false, 'viewed');
+                null, null, null, false, 'viewed', null, null, false, inProgress);
             setSearchFiles(file_groups);
         } catch (e) {
             console.error(e);
@@ -969,7 +970,7 @@ export const useSearchRecentFiles = () => {
 
     React.useEffect(() => {
         localSearchFiles();
-    }, []);
+    }, [inProgress]);
 
     return {searchFiles, loading, fetchFiles: localSearchFiles};
 }

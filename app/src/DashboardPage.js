@@ -5,6 +5,7 @@ import {
     PageContainer,
     RefreshHeader,
     SearchResultsInput,
+    useLocalStorage,
     useTitle
 } from "./components/Common";
 import React, {useContext, useState} from "react";
@@ -14,6 +15,7 @@ import {DownloadMenu} from "./components/Download";
 import {
     ActionInput,
     Button,
+    ButtonGroup,
     Divider,
     Header,
     Icon,
@@ -351,7 +353,14 @@ export function DashboardStatus() {
 }
 
 function DashboardRecentFiles() {
-    const {searchFiles, loading, fetchFiles} = useSearchRecentFiles();
+    // Show only the files the user is part way through.
+    const [continueOnly, setContinueOnly] = useLocalStorage('dashboard_recent_continue', false);
+    const {searchFiles, loading, fetchFiles} = useSearchRecentFiles(continueOnly);
+
+    let files = <FileCards files={searchFiles} loading={loading}/>;
+    if (continueOnly && searchFiles && searchFiles.length === 0) {
+        files = <p>Nothing in progress. A video, audio file, ebook or comic you stop part way through will be here.</p>;
+    }
 
     return <Panel>
         <RefreshHeader
@@ -359,7 +368,15 @@ function DashboardRecentFiles() {
             popupContents='Fetch the most recent files again'
             onRefresh={fetchFiles}
         />
-        <FileCards files={searchFiles} loading={loading}/>
+        <ButtonGroup>
+            <Button size='small' variant={continueOnly ? 'default' : 'filled'} onClick={() => setContinueOnly(false)}>
+                All
+            </Button>
+            <Button size='small' variant={continueOnly ? 'filled' : 'default'} onClick={() => setContinueOnly(true)}>
+                Continue
+            </Button>
+        </ButtonGroup>
+        <div style={{marginTop: '1em'}}>{files}</div>
     </Panel>
 }
 

@@ -19,7 +19,8 @@ import {
     useTitle
 } from "./Common";
 import {VideoPlaceholder} from "./Placeholder";
-import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
+import {useChannel, useOneQuery, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
+import {useMediaProgress} from "../hooks/useFileProgress";
 import {Button, Grid, Header, Icon, Label, Loading, Panel, Placeholder, Tabs, TextInput} from "./ui";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
@@ -229,6 +230,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     if (videoFile) {
         video = videoFile.video;
     }
+
+    // `?t=120` starts at 2:00, rather than where the user left off.
+    const [startTimeQuery] = useOneQuery('t');
+    const startSeconds = startTimeQuery && Number.isFinite(parseFloat(startTimeQuery))
+        ? parseFloat(startTimeQuery) : null;
+    const progressHandlers = useMediaProgress(videoFile?.primary_path, videoFile, {startSeconds});
 
     // Seeks to the `seconds` on video player.
     const setVideoTime = (seconds) => {
@@ -456,6 +463,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                    id="player"
                    style={{width: '100%', marginTop: posterUrl ? '0.5em' : 0}}
                    ref={videoRef}
+                   {...progressHandlers}
             >
                 {videoSource}
             </audio>
@@ -467,6 +475,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                playsInline={true}
                style={{maxWidth: '100%'}}
                ref={videoRef}
+               {...progressHandlers}
         >
             {videoSource}
             {/* Only WebVTT captions can be displayed. */}

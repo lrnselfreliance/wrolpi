@@ -757,6 +757,18 @@ export function findPosterPath(file) {
     }
 }
 
+/** How far the user is through a file, as a bar along the bottom of its poster.  A full bar is finished. */
+export function ViewProgress({progress}) {
+    if (!(progress > 0)) {
+        return null;
+    }
+    const percent = Math.round(Math.min(progress, 1) * 100);
+    return <div className='wrolpi-view-progress' role='progressbar' aria-label='Viewing progress'
+                aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <div className='wrolpi-view-progress-bar' style={{width: `${percent}%`}}/>
+    </div>
+}
+
 export function CardPoster({to, file, overlay}) {
     const navigate = useNavigate();
 
@@ -785,6 +797,7 @@ export function CardPoster({to, file, overlay}) {
             {imageLabel}
             <img alt='poster' src={posterPath}/>
             {overlay}
+            <ViewProgress progress={file.progress}/>
         </>;
 
         return <div className='wrolpi-card-poster'>
@@ -802,6 +815,7 @@ export function CardPoster({to, file, overlay}) {
                 <div className='wrolpi-card-icon'>
                     {imageLabel}
                     <FileIcon file={file}/>
+                    <ViewProgress progress={file.progress}/>
                 </div>
             </PreviewLink>
         } else if (!posterPath && to) {
@@ -810,6 +824,7 @@ export function CardPoster({to, file, overlay}) {
                 <div className='wrolpi-card-icon' onClick={() => navigate(to)}>
                     {imageLabel}
                     <FileIcon file={file}/>
+                    <ViewProgress progress={file.progress}/>
                 </div>
             </Link>
         }

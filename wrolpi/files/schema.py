@@ -58,6 +58,7 @@ class FilesSearchRequest:
     suffix: Optional[str] = None  # Filter by primary file suffix (e.g. ".bin"), case-insensitive exact match
     path: Optional[str] = None  # Filter by primary_path (case-insensitive partial match)
     deep: bool = False  # When True, search all text including captions/body (d_text)
+    in_progress: bool = False  # Only files the user is part way through (0 < progress < 1)
 
     def __post_init__(self):
         if self.any_tag and self.tag_names:

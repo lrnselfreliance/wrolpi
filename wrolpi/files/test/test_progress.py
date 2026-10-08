@@ -433,3 +433,29 @@ async def test_progress_symlink_into_ignored_directory(test_session, async_clien
     await async_client.post('/api/files/file', content=json.dumps(dict(file='videos/link.mp4')))
     await await_background_tasks()
     assert test_session.query(FileGroup).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_search_in_progress(test_session, async_client, test_directory, make_files_structure):
+    """Search can return only files the user is part way through, most recently viewed first."""
+    started, finished, unviewed, older = make_files_structure(
+        ['started.mp4', 'finished.mp4', 'unviewed.mp4', 'older.mp4'])
+    now = dates.now()
+    for path, viewed, progress in ((started, now, 0.4), (finished, now, 1.0), (unviewed, None, None),
+                                   (older, now - timedelta(days=1), 0.2)):
+        fg = FileGroup.from_paths(test_session, path)
+        fg.viewed = viewed
+        fg.progress = progress
+    test_session.commit()
+
+    body = dict(order='viewed', in_progress=True)
+    request, response = await async_client.post('/api/files/search', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.OK
+    file_groups = response.json['file_groups']
+    assert [i['primary_path'] for i in file_groups] == ['started.mp4', 'older.mp4']
+    assert [i['progress'] for i in file_groups] == [0.4, 0.2]
+    assert response.json['totals']['file_groups'] == 2
+
+    # Without the filter every viewed file is returned.
+    request, response = await async_client.post('/api/files/search', content=json.dumps(dict(order='viewed')))
+    assert {i['primary_path'] for i in response.json['file_groups']} == {'started.mp4', 'finished.mp4', 'older.mp4'}

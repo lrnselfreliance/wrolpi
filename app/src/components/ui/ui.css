@@ -1675,6 +1675,24 @@ html[data-theme="amber"] .wrolpi-card-tag {
     border-bottom: 1px solid var(--border);
 }
 
+/*
+ * How far the user is through a file, along the bottom of its poster.  Drawn from tokens beside the
+ * image rather than inside it, like the tag mark, so night and amber color it themselves.
+ */
+.wrolpi-view-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 0.25rem;
+    background: var(--border);
+}
+
+.wrolpi-view-progress-bar {
+    height: 100%;
+    background: var(--red);
+}
+
 /* ------------------------------------------------------------- Statistics */
 /*
  * A statistic carries its own spacing rather than relying on a parent to supply

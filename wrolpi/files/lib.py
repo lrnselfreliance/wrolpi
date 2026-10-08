@@ -1234,7 +1234,8 @@ def count_file_groups(session: Session, statement: str, params: dict) -> int:
 def search_files(session: Session, search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
-                 url: str = None, suffix: str = None, path: str = None, deep: bool = False) -> \
+                 url: str = None, suffix: str = None, path: str = None, deep: bool = False,
+                 in_progress: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -1257,6 +1258,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
     @param suffix: Only return files whose primary file has this suffix (e.g. ".bin"), case-insensitive.
     @param path: Filter by primary_path using case-insensitive partial match (ILIKE).
     @param deep: Search all text including captions/body (d_text); slower but more thorough.
+    @param in_progress: Only files the user is part way through (see wrolpi.files.progress).
     """
     from wrolpi import fts
 
@@ -1306,6 +1308,9 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
     if path:
         params['path_filter'] = f'%{path}%'
         wheres.append('fg.primary_path LIKE :path_filter')
+
+    if in_progress:
+        wheres.append('fg.progress > 0 AND fg.progress < 1')
 
     if fts_search and headline:
         # b/c/d headlines come from FTS5 snippets (computed in the fts subquery); the title

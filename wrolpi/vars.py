@@ -57,8 +57,8 @@ PYTEST = 'pytest' in sys.modules
 # Used to test if the Internet is up.
 INTERNET_SERVER = os.environ.get('INTERNET_SERVER', 'one.one.one.one')
 
-# running on circlci
-CIRCLECI = truthy_arg(os.environ.get('CIRCLECI', ''))
+# Running on a hosted CI runner (CircleCI or GitHub Actions), which lacks things some tests need.
+CIRCLECI = truthy_arg(os.environ.get('CIRCLECI', '')) or truthy_arg(os.environ.get('GITHUB_ACTIONS', ''))
 
 # Get the media directory from the environment.
 DEFAULT_MEDIA_DIRECTORY = Path('/media/wrolpi')

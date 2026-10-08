@@ -6,7 +6,7 @@ import pytest
 
 from modules.archive import lib, Archive
 from wrolpi.common import get_relative_to_media_directory
-from wrolpi.test.common import skip_circleci, skip_macos
+from wrolpi.test.common import skip_ci, skip_macos
 
 
 async def check_results(async_client, data, ids):
@@ -194,7 +194,7 @@ async def test_archives_search_no_query(test_session, archive_factory, async_cli
 
 
 @skip_macos
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_archive_upload(test_session, async_client, singlefile_contents_factory, make_multipart_form,
                               await_switches, events_fixture):

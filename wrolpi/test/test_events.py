@@ -8,7 +8,7 @@ import pytest
 
 from wrolpi.dates import now
 from wrolpi.events import HISTORY_SIZE, Events, get_events
-from wrolpi.test.common import assert_dict_contains, skip_circleci
+from wrolpi.test.common import assert_dict_contains, skip_ci
 
 
 def assert_events(expected: List[Dict], after=None):
@@ -17,7 +17,7 @@ def assert_events(expected: List[Dict], after=None):
         assert_dict_contains(event, expected)
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_events_api_feed(test_session, async_client, example_pdf, events_fixture):
     """Events can be gotten from the API."""

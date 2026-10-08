@@ -21,7 +21,7 @@ from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
-from wrolpi.test.common import skip_circleci
+from wrolpi.test.common import skip_ci
 
 
 def make_fake_archive_result(readability=True, screenshot=True, title=True):
@@ -289,7 +289,7 @@ def test_get_domains(test_session, archive_factory):
     assert [i['domain'] for i in get_domains()] == []
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_new_archive(test_session, test_directory, fake_now, async_client):
     singlefile, readability, screenshot = make_fake_archive_result()
@@ -363,7 +363,7 @@ async def test_get_title_from_html(test_directory, test_session, fake_now, async
     assert archive.file_group.title is None
 
 
-@skip_circleci
+@skip_ci
 def test_get_new_archive_files_length(test_directory, fake_now):
     """Archive titles are truncated to fit file system BYTE limit (200 bytes - see MAXIMUM_FILE_BYTES)."""
     from wrolpi.common import MAXIMUM_FILE_BYTES
@@ -378,7 +378,7 @@ def test_get_new_archive_files_length(test_directory, fake_now):
     assert len(str(archive_files.screenshot.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
 
 
-@skip_circleci
+@skip_ci
 def test_get_new_archive_files(test_directory, fake_now):
     """Archive files have a specific format, so they are sorted by datetime, and are near each other."""
     fake_now(datetime(2001, 1, 1))
@@ -399,7 +399,7 @@ def test_get_new_archive_files(test_directory, fake_now):
     assert str(archive_files.screenshot).endswith('archive/example.com/2001-01-01-00-00-00_Title.png')
 
 
-@skip_circleci
+@skip_ci
 def test_get_new_archive_files_with_destination(test_directory, fake_now):
     """Archive files can be created in a custom destination directory instead of the default."""
     fake_now(datetime(2001, 1, 1))
@@ -420,7 +420,7 @@ def test_get_new_archive_files_with_destination(test_directory, fake_now):
     assert str(archive_files.screenshot).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.png')
 
 
-@skip_circleci
+@skip_ci
 def test_get_new_archive_files_with_subdirectory_format(test_directory, fake_now):
     """Archive files use subdirectories when the config format contains subdirectories."""
     from modules.archive.lib import get_archive_downloader_config
@@ -452,7 +452,7 @@ def test_get_new_archive_files_with_subdirectory_format(test_directory, fake_now
         config._config['file_name_format'] = original_format
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_title_in_filename(async_client, test_session, fake_now, test_directory, image_bytes_factory):
     """
@@ -1147,7 +1147,7 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
     assert download4.collection_id is None  # no frequency = no link
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_archive_download_uses_domain_collection_directory(async_client, test_session, test_directory, fake_now,
                                                                  monkeypatch):
@@ -1209,7 +1209,7 @@ async def test_archive_download_uses_domain_collection_directory(async_client, t
         f"Archive should be in domain collection directory {custom_dir}, but was in {archive.singlefile_path.parent}"
 
 
-@skip_circleci
+@skip_ci
 @pytest.mark.asyncio
 async def test_archive_download_explicit_destination_overrides_domain_collection(
         async_client, test_session, test_directory, fake_now, monkeypatch):

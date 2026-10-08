@@ -9,10 +9,10 @@ from wrolpi.common import DownloadFileInfo
 from wrolpi.downloader import Download
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.downloader import FileDownloader, PreparedFile, file_downloader
-from wrolpi.test.common import skip_circleci
+from wrolpi.test.common import skip_ci
 
 
-@skip_circleci
+@skip_ci
 async def test_file_downloader(test_session, make_files_structure, test_directory, await_switches,
                                simple_file_server, test_download_manager, video_file, video_bytes):
     """The FileDownloader can download a file without a metalink file."""
@@ -51,7 +51,7 @@ META4_XML = '''<?xml version="1.0" encoding="UTF-8"?>
 '''
 
 
-@skip_circleci
+@skip_ci
 async def test_file_downloader_meta4(test_session, make_files_structure, test_directory, await_switches,
                                      simple_file_server, test_download_manager, video_file, video_bytes):
     """The FileDownloader can download a file using a Metalink file."""
@@ -120,7 +120,7 @@ async def test_get_download_info_uuid_fallback():
     assert info.name == 'somefile.tar.gz'
 
 
-@skip_circleci
+@skip_ci
 async def test_file_downloader_aria2c_uses_output_flag(test_directory):
     """The aria2c command includes -o with the predicted filename when not using metalink."""
     file_downloader = FileDownloader()
@@ -159,7 +159,7 @@ async def test_file_downloader_aria2c_uses_output_flag(test_directory):
     assert captured_cmd[o_index + 1] == 'somefile.tar.gz'
 
 
-@skip_circleci
+@skip_ci
 async def test_file_downloader_meta4_no_output_flag(test_directory):
     """The aria2c command should NOT include -o when using a metalink file."""
     file_downloader = FileDownloader()

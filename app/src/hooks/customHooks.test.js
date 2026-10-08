@@ -2,11 +2,12 @@ import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
 import {
-    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSettings, useStatistics, useStatus,
-    useVideoExtras,
+    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSearchRecentFiles, useSettings,
+    useStatistics, useStatus, useVideoExtras,
 } from './customHooks';
 import {
-    ApiDownError, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription, searchChannels,
+    ApiDownError, filesSearch, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription,
+    searchChannels,
 } from '../api';
 import {getControllerStats} from '../api/controller';
 import {QueryContext, StatusContext} from '../contexts/contexts';
@@ -48,6 +49,7 @@ jest.mock('../api', () => ({
     getStatistics: jest.fn(),
     getStatus: jest.fn(),
     getSettings: jest.fn(),
+    filesSearch: jest.fn(),
 }));
 
 jest.mock('../api/controller', () => ({
@@ -683,5 +685,54 @@ describe('useSettings loaded', () => {
         expect(result.current.loaded).toBe(true);
         expect(result.current.failed).toBe(false);
         expect(result.current.settings.media_directory).toBe('/media/wrolpi');
+    });
+});
+
+describe('useSearchRecentFiles', () => {
+    /** A filesSearch call the test resolves when it chooses. */
+    const deferred = () => {
+        let resolve;
+        const promise = new Promise(r => resolve = r);
+        return {promise, resolve};
+    };
+
+    beforeEach(() => {
+        filesSearch.mockReset();
+    });
+
+    test('switching modes shows only the new mode\'s files, even if the old response arrives last', async () => {
+        const all = deferred();
+        const continuing = deferred();
+        filesSearch.mockReturnValueOnce(all.promise).mockReturnValueOnce(continuing.promise);
+
+        const {result, rerender} = renderHook(({inProgress}) => useSearchRecentFiles(inProgress),
+            {initialProps: {inProgress: false}});
+        // Continue, before All's response arrives.
+        rerender({inProgress: true});
+        expect(filesSearch.mock.calls[1][15]).toBe(true);
+
+        await act(async () => continuing.resolve([[{primary_path: 'started.mp4'}], 1]));
+        await act(async () => all.resolve([[{primary_path: 'started.mp4'}, {primary_path: 'finished.mp4'}], 2]));
+
+        expect(result.current.searchFiles).toEqual([{primary_path: 'started.mp4'}]);
+        expect(result.current.loading).toBe(false);
+    });
+
+    test('switching modes clears the old files until the new ones arrive', async () => {
+        const continuing = deferred();
+        filesSearch.mockResolvedValueOnce([[{primary_path: 'a.mp4'}], 1]).mockReturnValueOnce(continuing.promise);
+
+        const {result, rerender} = renderHook(({inProgress}) => useSearchRecentFiles(inProgress),
+            {initialProps: {inProgress: false}});
+        await act(async () => {
+        });
+        expect(result.current.searchFiles).toEqual([{primary_path: 'a.mp4'}]);
+
+        rerender({inProgress: true});
+        // Not the All list, and not an empty list ("No results!"): nothing yet.
+        expect(result.current.searchFiles).toBeNull();
+
+        await act(async () => continuing.resolve([[], 0]));
+        expect(result.current.searchFiles).toEqual([]);
     });
 });

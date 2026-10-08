@@ -78,6 +78,8 @@ async def test_progress_api(test_session, async_client, test_directory, make_fil
         dict(file='videos/movie.mp4', skip_tracking=True)))
     assert response.json['file']['progress'] == 0.4
     assert response.json['file']['position'] == dict(kind='time', seconds=480.5)
+    # The preview dates a finished file by when it was viewed.
+    assert dates.strptime_ms(response.json['file']['viewed']) == fg.viewed
 
     # Rewinding is allowed; the last write wins.
     body = dict(file='videos/movie.mp4', progress=0.2, position=dict(kind='time', seconds=240))
@@ -459,3 +461,31 @@ async def test_search_in_progress(test_session, async_client, test_directory, ma
     # Without the filter every viewed file is returned.
     request, response = await async_client.post('/api/files/search', content=json.dumps(dict(order='viewed')))
     assert {i['primary_path'] for i in response.json['file_groups']} == {'started.mp4', 'finished.mp4', 'older.mp4'}
+
+
+@pytest.mark.asyncio
+async def test_search_in_progress_totals(test_session, async_client, test_directory, make_files_structure,
+                                         monkeypatch):
+    """The total counts only files in progress, and is cached apart from the unfiltered total."""
+    from wrolpi.files import lib as files_lib
+    monkeypatch.setattr(files_lib, 'PYTEST', False)  # Use the totals cache, as production does.
+    monkeypatch.setattr(files_lib, '_SEARCH_TOTALS_CACHE', dict())
+
+    started, finished, unviewed = make_files_structure(['started.mp4', 'finished.mp4', 'unviewed.mp4'])
+    for path, viewed, progress in ((started, dates.now(), 0.4), (finished, dates.now(), 1.0), (unviewed, None, None)):
+        fg = FileGroup.from_paths(test_session, path)
+        fg.viewed = viewed
+        fg.progress = progress
+    test_session.commit()
+
+    async def total(**body):
+        request, response = await async_client.post('/api/files/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK
+        return response.json['totals']['file_groups']
+
+    # The dashboard's All and Continue, back to back.
+    assert await total(order='viewed') == 2
+    assert await total(order='viewed', in_progress=True) == 1
+    assert await total(order='viewed') == 2
+    # Without an order, the only filter is in_progress; it must not count the whole library.
+    assert await total(in_progress=True) == 1

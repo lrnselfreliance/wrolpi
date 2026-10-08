@@ -133,6 +133,8 @@ def _get_file_dict(session: Session, file: pathlib.Path) -> Dict:
         tags=get_file_tag_names(session, file),
         progress=file_group.progress if file_group else None,
         position=file_group.position if file_group else None,
+        # When a finished file (no position) was finished; the preview compares it with its own position.
+        viewed=file_group.viewed if file_group else None,
     )
 
 
@@ -1348,7 +1350,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
     # Count separately (and cache) so the page can use the datetime/id index.
     if not search_str and not tag_names and not mimetypes and not model and not months \
             and not from_year and not to_year and not any_tag and not url and not suffix \
-            and not path and not viewed_only:
+            and not path and not viewed_only and not in_progress:
         count_stmt = 'SELECT COUNT(*) AS total FROM file_group'
         count_params = dict()
     elif fts_search:
@@ -1371,7 +1373,7 @@ def search_files(session: Session, search_str: str, limit: int, offset: int, mim
         'files', search_str=search_str, mimetypes=mimetypes, model=model,
         tag_names=tag_names, months=months, from_year=from_year, to_year=to_year,
         any_tag=any_tag, url=url, suffix=suffix, path=path, deep=deep,
-        viewed_only=viewed_only,
+        viewed_only=viewed_only, in_progress=in_progress,
     )
     total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, count_params))
     results, total = handle_file_group_search_results(session, stmt, params, total=total)

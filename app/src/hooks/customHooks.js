@@ -946,29 +946,41 @@ export const useChannels = () => {
 export const useSearchRecentFiles = (inProgress = false) => {
     const [searchFiles, setSearchFiles] = useState(null);
     const [loading, setLoading] = useState(false);
+    // All and Continue share this hook; only the latest request may write, so a slow response for the
+    // previous mode cannot replace the current one.
+    const latestRequestRef = React.useRef(0);
 
     const localSearchFiles = async () => {
+        const requestId = ++latestRequestRef.current;
         setLoading(true);
         try {
             // `inProgress` returns only the files the user is part way through.
-            let [file_groups, total] = await filesSearch(
+            let [file_groups] = await filesSearch(
                 null, 12, null, null, null, [], false,
                 null, null, null, false, 'viewed', null, null, false, inProgress);
-            setSearchFiles(file_groups);
+            if (requestId === latestRequestRef.current) {
+                setSearchFiles(file_groups);
+            }
         } catch (e) {
             console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get recent files',
-                time: 5000,
-            });
+            if (requestId === latestRequestRef.current) {
+                toast({
+                    type: 'error',
+                    title: 'Unexpected server response',
+                    description: 'Could not get recent files',
+                    time: 5000,
+                });
+            }
         } finally {
-            setLoading(false);
+            if (requestId === latestRequestRef.current) {
+                setLoading(false);
+            }
         }
     }
 
     React.useEffect(() => {
+        // The other mode's files are not this mode's; show the placeholder until they arrive.
+        setSearchFiles(null);
         localSearchFiles();
     }, [inProgress]);
 

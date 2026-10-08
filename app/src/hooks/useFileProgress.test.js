@@ -12,6 +12,9 @@ const sent = () => [
     ...global.fetch.mock.calls.map(([, init]) => init.body),
 ].map(i => JSON.parse(i));
 
+const {Blob: realBlob, fetch: realFetch} = global;
+const realSendBeacon = navigator.sendBeacon;
+
 beforeEach(() => {
     jest.useFakeTimers();
     window.sessionStorage.clear();
@@ -28,6 +31,9 @@ beforeEach(() => {
 afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+    global.Blob = realBlob;
+    global.fetch = realFetch;
+    navigator.sendBeacon = realSendBeacon;
 });
 
 describe('getResumePosition', () => {
@@ -54,6 +60,14 @@ describe('getResumePosition', () => {
         window.sessionStorage.setItem(CACHE_KEY, JSON.stringify({progress: 0.6, position: cached, updated_at: 500}));
         const fileGroup = {progress: 1, position: null, viewed: new Date(9000).toISOString()};
         expect(getResumePosition(PATH, fileGroup)).toBeNull();
+    });
+
+    test('a file finished on another device starts over in a preview, too', () => {
+        // The shape of POST /api/files/file, which the file browser and `?preview=` use.
+        const cached = {kind: 'time', seconds: 400, updated_at: 500};
+        window.sessionStorage.setItem(CACHE_KEY, JSON.stringify({progress: 0.6, position: cached, updated_at: 500}));
+        const previewFile = {path: PATH, progress: 1, position: null, viewed: new Date(9000).toISOString()};
+        expect(getResumePosition(PATH, previewFile)).toBeNull();
     });
 
     test.each([

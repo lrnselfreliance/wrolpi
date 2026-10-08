@@ -442,6 +442,9 @@ export function FilePreviewProvider({children}) {
     const [previewQuery, setPreviewQuery] = useOneQuery('preview');
     const [errorModalOpen, setErrorModalOpen] = React.useState(false);
     const location = useLocation();
+    // The path of the open preview that has been marked viewed.  One opening is one view, however
+    // many times previewFile is replaced while it is open (re-fetching after tagging, for example).
+    const trackedPathRef = React.useRef(null);
 
     // Determine if tracking should be skipped based on current route
     const skipTracking = shouldSkipTracking(location.pathname);
@@ -471,7 +474,8 @@ export function FilePreviewProvider({children}) {
     const initPreviewFile = async () => {
         // Get simple information about the file, preview the file.
         try {
-            const file = await getFile(previewQuery, skipTracking);
+            // Not a view; the preview effect marks the file viewed once it is displayed.
+            const file = await getFile(previewQuery, true);
             setPreviewFile(file);
         } catch (e) {
             console.error(e);
@@ -496,7 +500,7 @@ export function FilePreviewProvider({children}) {
         // Get the file again with its Tags.
         const {path, primary_path} = previewFile;
         try {
-            const file = await getFile(primary_path ?? path, skipTracking);
+            const file = await getFile(primary_path ?? path, true);
             setPreviewFile(file);
         } finally {
             await handleCallbacks();
@@ -586,6 +590,9 @@ export function FilePreviewProvider({children}) {
 
     React.useEffect(() => {
         setPreviewModal(null);
+        if (_.isEmpty(previewFile)) {
+            trackedPathRef.current = null;
+        }
         if (previewFile && !_.isObject(previewFile)) {
             console.error(`Unknown previewFile type: ${typeof previewFile}`);
             toast({
@@ -650,7 +657,8 @@ export function FilePreviewProvider({children}) {
             }
 
             // Trigger tracking for the file view (unless on an excluded route)
-            if (!skipTracking) {
+            if (!skipTracking && trackedPathRef.current !== path) {
+                trackedPathRef.current = path;
                 getFile(path).catch(e => {
                     console.error(e);
                     console.error('Failed to get file to set FileGroup.viewed');

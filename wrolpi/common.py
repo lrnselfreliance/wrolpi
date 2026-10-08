@@ -1190,6 +1190,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if repos_config := get_repos_config():
         all_configs[repos_config.file_name] = repos_config
 
+    from wrolpi.files.progress import get_recently_viewed_config
+    if recently_viewed_config := get_recently_viewed_config():
+        all_configs[recently_viewed_config.file_name] = recently_viewed_config
+
     return all_configs
 
 
@@ -1315,6 +1319,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import flasher config: {e}')
         results['flasher'] = False
+
+    # Recently viewed files (positions in FileGroups, no dependencies)
+    try:
+        from wrolpi.files.progress import get_recently_viewed_config
+        await asyncio.to_thread(get_recently_viewed_config().import_config)
+        results['recently_viewed'] = True
+        logger.debug('recently viewed config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import recently viewed config: {e}')
+        results['recently_viewed'] = False
 
     return results
 

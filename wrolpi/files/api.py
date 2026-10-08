@@ -14,6 +14,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_
     background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from wrolpi.events import Events
+from wrolpi.files.progress import save_recently_viewed_config
 from . import lib, schema
 from .worker import file_worker
 from ..api_utils import json_response, api_app
@@ -55,6 +56,37 @@ async def get_file(request: Request, body: schema.FileRequest):
     if not body.skip_tracking:
         background_task(lib.set_file_viewed(session, get_media_directory() / body.file))
     return json_response({'file': file})
+
+
+@files_bp.post('/progress')
+@openapi.definition(
+    summary='Record how far the user is through a file, and where to resume it',
+    body=schema.FileProgressRequest,
+)
+@validate(schema.FileProgressRequest)
+async def post_file_progress(request: Request, body: schema.FileProgressRequest):
+    path = get_media_directory() / body.file
+    # Begin as a writer; a playback heartbeat often overlaps a refresh or download.
+    with request.ctx.db.write() as session:
+        progress, position = lib.set_file_progress(session, path, body.progress, body.position)
+    if body.final and progress is not None:
+        # The User stopped (paused, closed).  Heartbeats during playback only write the DB.
+        save_recently_viewed_config.activate_switch()
+    return json_response({'progress': progress, 'position': position})
+
+
+@files_bp.post('/progress/clear')
+@openapi.definition(
+    summary='Forget how far the user is through a file, so it starts from the beginning',
+    body=schema.FileProgressClearRequest,
+)
+@validate(schema.FileProgressClearRequest)
+async def post_file_progress_clear(request: Request, body: schema.FileProgressClearRequest):
+    with request.ctx.db.write() as session:
+        changed = lib.clear_file_progress(session, get_media_directory() / body.file)
+    if changed:
+        save_recently_viewed_config.activate_switch()
+    return response.empty(HTTPStatus.NO_CONTENT)
 
 
 @files_bp.post('/delete')

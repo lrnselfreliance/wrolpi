@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON, or_
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index, Integer, JSON, or_
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session, selectinload
 
@@ -18,6 +18,7 @@ from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
+from wrolpi.files.progress import save_recently_viewed_config
 from wrolpi.tags import Tag, TagFile, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST
 
@@ -116,6 +117,9 @@ class FileGroup(ModelHelper, Base):
     title = Column(String)  # user-displayable title
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
+    # How far the User is through this file, see wrolpi.files.progress.
+    progress = Column(Float)  # 0.0 to 1.0, where 1.0 is finished.
+    position = Column(JSON)  # Where to resume, e.g. {"kind": "time", "seconds": 512.3}.
 
     # Columns updated by triggers.
     # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
@@ -180,6 +184,8 @@ class FileGroup(ModelHelper, Base):
             title=self.title,
             url=self.url,
             viewed=self.viewed,
+            progress=self.progress,
+            position=self.position,
         )
         return d
 
@@ -224,6 +230,7 @@ class FileGroup(ModelHelper, Base):
         :return: The datetime that was set.
         """
         self.viewed = viewed or now()
+        save_recently_viewed_config.activate_switch()
         return self.viewed
 
     def set_tags(self, session: Session, tag_names_or_ids: Iterable[str | int]):

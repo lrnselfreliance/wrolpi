@@ -173,6 +173,32 @@ def test_drop_file_group_idempotency_preserves_fts(test_directory):
         assert len(hits) == 1
 
 
+def test_file_group_progress_downgrade_preserves_fts(test_directory):
+    """Dropping file_group.progress/position must not rebuild file_group, which would drop its FTS triggers."""
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri
+    from wrolpi.vars import PROJECT_DIR
+
+    (test_directory / 'config').mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_10_08_1200')
+    command.downgrade(config, '2026_10_06_1500')
+
+    with sqlite3.connect(get_db_file()) as conn:
+        cols = {r[1] for r in conn.execute('PRAGMA table_info(file_group)')}
+        assert not {'progress', 'position'} & cols
+        triggers = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+        assert {'file_group_fts_ai', 'file_group_fts_ad', 'file_group_fts_au'} <= triggers
+        conn.execute(
+            'INSERT INTO file_group (directory, primary_path, files, stem, indexed, a_text) VALUES (?,?,?,?,0,?)',
+            (str(test_directory), str(test_directory / 'searchable.txt'), '[]', 'searchable', 'alpha uniquephrase'),
+        )
+        hits = conn.execute("SELECT rowid FROM file_group_fts WHERE file_group_fts MATCH 'uniquephrase'").fetchall()
+        assert len(hits) == 1
+
+
 def test_domain_collection_summary_migration_backfills(test_directory):
     """The domain-summary migration installs the archive triggers and backfills the summary
     columns of existing Domain Collections from their Archives."""

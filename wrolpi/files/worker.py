@@ -25,6 +25,7 @@ from wrolpi.common import get_media_directory, logger
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.events import Events
 from wrolpi.vars import PYTEST
+from wrolpi.files.progress import save_recently_viewed_config
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, glob_shared_stem,
     group_files_by_stem, choose_primary_file, apply_indexers,
@@ -1095,6 +1096,8 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
         with flags.file_worker_cleanup:
             await apply_refresh_cleanup()
             save_tags_config.activate_switch()
+            # Moved, renamed, and deleted files change the recently viewed paths.
+            save_recently_viewed_config.activate_switch()
 
 
 # Each Sanic worker constructs a FileWorker.  The perpetual signal is started

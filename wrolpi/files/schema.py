@@ -16,6 +16,19 @@ class FileRequest:
 
 
 @dataclass
+class FileProgressRequest:
+    file: str
+    progress: float
+    position: Optional[dict] = None
+    final: bool = False
+
+
+@dataclass
+class FileProgressClearRequest:
+    file: str
+
+
+@dataclass
 class DeleteRequest:
     paths: List[str] = field(default_factory=list)
     force: bool = False

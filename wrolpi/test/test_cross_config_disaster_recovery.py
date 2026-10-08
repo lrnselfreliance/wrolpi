@@ -164,6 +164,7 @@ class TestRealisticFullRecovery:
         assert 'channels' in results
         assert 'domains' in results
         assert 'inventories' in results
+        assert results['recently_viewed'] is True
 
 
 @pytest.mark.asyncio

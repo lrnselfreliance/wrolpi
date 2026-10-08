@@ -3,6 +3,7 @@ import {IconArrowLeft, IconArrowRight} from '@tabler/icons-react';
 import {getArchiveContents, getArchiveMemberUrl} from '../api';
 import {IconButton, Label, Loading, Message} from './ui';
 import {useLocalStorage} from './Common';
+import {usePageProgress} from '../hooks/useFileProgress';
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i;
 
@@ -22,9 +23,18 @@ function flattenEntries(entries, prefix = '') {
     return paths;
 }
 
-export function CbzViewer({path}) {
+/**
+ * @param path The comic book file.
+ * @param progressPath The FileGroup's primary path, to resume and save the reader's page; omit to not track it.
+ * @param fileGroup The FileGroup JSON, which holds the saved page.
+ */
+export function CbzViewer({path, progressPath = null, fileGroup = null}) {
     const [pages, setPages] = useState(null);
     const [currentPage, setCurrentPage] = useState(0);
+    const {initialPage, onPageChange} = usePageProgress(progressPath, fileGroup, {enabled: !!progressPath});
+    // Read when the pages load; a later save must not move the reader.
+    const initialPageRef = useRef(initialPage);
+    initialPageRef.current = initialPage;
     const [rtl, setRtl] = useLocalStorage('cbzViewerRtl', false);
     const [fullscreen, setFullscreen] = useState(false);
     const [error, setError] = useState(null);
@@ -42,13 +52,19 @@ export function CbzViewer({path}) {
                     .sort();
                 const urls = images.map(member => getArchiveMemberUrl(path, member));
                 setPages(urls);
-                setCurrentPage(0);
+                setCurrentPage(Math.min(initialPageRef.current, Math.max(urls.length - 1, 0)));
             } catch (e) {
                 setError(e.message || 'Could not read archive contents.');
             }
         };
         load();
     }, [path]);
+
+    useEffect(() => {
+        if (pages && pages.length > 0) {
+            onPageChange(currentPage, pages.length);
+        }
+    }, [currentPage, pages, onPageChange]);
 
     const goNext = useCallback(() => {
         setCurrentPage(p => Math.min(p + 1, (pages?.length || 1) - 1));

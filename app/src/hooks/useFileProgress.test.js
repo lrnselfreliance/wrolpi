@@ -1,6 +1,8 @@
 import React from 'react';
 import {act, render, renderHook} from '@testing-library/react';
-import {getResumePosition, useFileProgress, useMediaProgress} from './useFileProgress';
+import {
+    getResumePosition, useEpubProgress, useFileProgress, useMediaProgress, usePageProgress, useResumePosition,
+} from './useFileProgress';
 import {ViewProgress} from '../components/Common';
 
 const PATH = 'videos/movie.mp4';
@@ -208,5 +210,102 @@ describe('ViewProgress', () => {
         const bar = getByRole('progressbar');
         expect(bar).toHaveAttribute('aria-valuenow', '40');
         expect(bar.firstChild).toHaveStyle({width: '40%'});
+    });
+});
+
+describe('useResumePosition', () => {
+    test('is decided once per file, so later saves do not move the viewer', () => {
+        const fileGroup = {progress: 0.5, position: {kind: 'epub', cfi: 'epubcfi(/6/4)', updated_at: 1000}};
+        const {result, rerender} = renderHook(({path, fileGroup}) => useResumePosition(path, fileGroup),
+            {initialProps: {path: PATH, fileGroup}});
+        expect(result.current.cfi).toBe('epubcfi(/6/4)');
+
+        // The user reads on; this tab saves a newer position.
+        window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(
+            {progress: 0.6, position: {kind: 'epub', cfi: 'epubcfi(/6/8)'}, updated_at: 2000}));
+        rerender({path: PATH, fileGroup: {...fileGroup}});
+        expect(result.current.cfi).toBe('epubcfi(/6/4)');
+
+        // Another file is decided afresh.
+        rerender({path: 'books/other.epub', fileGroup: {progress: 0.3, position: {kind: 'epub', cfi: 'epubcfi(/6/2)'}}});
+        expect(result.current.cfi).toBe('epubcfi(/6/2)');
+    });
+});
+
+describe('useEpubProgress', () => {
+    const fileGroup = {progress: 0.5, position: {kind: 'epub', cfi: 'epubcfi(/6/4)', updated_at: 1000}};
+
+    /** Render the hook with an iframe whose window posts the messages. */
+    const renderEpub = (options) => {
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        const hook = renderHook(() => {
+            const result = useEpubProgress(PATH, fileGroup, options);
+            result.iframeRef.current = iframe;
+            return result;
+        });
+        const post = (data, {source = iframe.contentWindow, origin = window.location.origin} = {}) =>
+            act(() => window.dispatchEvent(new MessageEvent('message', {data, source, origin})));
+        return {...hook, post};
+    };
+
+    test('resumes at the saved CFI', () => {
+        const {result} = renderEpub();
+        expect(result.current.resumeCfi).toBe('epubcfi(/6/4)');
+    });
+
+    test('saves where the viewer says the reader is', () => {
+        const {post, unmount} = renderEpub();
+        post({type: 'wrolpi:epub-location', cfi: 'epubcfi(/6/10)', progress: 0.45});
+        unmount();
+        expect(sent()).toEqual([expect.objectContaining({
+            file: PATH, progress: 0.45, final: true,
+            position: {kind: 'epub', cfi: 'epubcfi(/6/10)', updated_at: expect.any(Number)},
+        })]);
+    });
+
+    test.each([
+        ['another window', {source: window}],
+        ['another origin', {origin: 'https://example.com'}],
+    ])('ignores a message from %s', (_, from) => {
+        const {post, unmount} = renderEpub();
+        post({type: 'wrolpi:epub-location', cfi: 'epubcfi(/6/10)', progress: 0.45}, from);
+        unmount();
+        expect(sent()).toEqual([]);
+    });
+
+    test('ignores a malformed message', () => {
+        const {post, unmount} = renderEpub();
+        post({type: 'wrolpi:epub-location', cfi: 42, progress: 0.45});
+        post({type: 'something-else', cfi: 'epubcfi(/6/10)', progress: 0.45});
+        unmount();
+        expect(sent()).toEqual([]);
+    });
+
+    test('does nothing when not enabled', () => {
+        const {result, post, unmount} = renderEpub({enabled: false});
+        expect(result.current.resumeCfi).toBeNull();
+        post({type: 'wrolpi:epub-location', cfi: 'epubcfi(/6/10)', progress: 0.45});
+        unmount();
+        expect(sent()).toEqual([]);
+    });
+});
+
+describe('usePageProgress', () => {
+    test('opens at the saved page and saves each page shown', () => {
+        const fileGroup = {progress: 0.3, position: {kind: 'page', page: 5, updated_at: 1000}};
+        const {result, unmount} = renderHook(() => usePageProgress(PATH, fileGroup));
+        expect(result.current.initialPage).toBe(5);
+
+        act(() => result.current.onPageChange(9, 20));
+        unmount();
+        expect(sent()).toEqual([expect.objectContaining({
+            progress: 0.5, final: true, position: expect.objectContaining({kind: 'page', page: 9}),
+        })]);
+    });
+
+    test('a new comic opens at the first page', () => {
+        const {result} = renderHook(() => usePageProgress(PATH, {progress: null, position: null}));
+        expect(result.current.initialPage).toBe(0);
     });
 });

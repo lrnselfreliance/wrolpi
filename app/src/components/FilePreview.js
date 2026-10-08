@@ -8,7 +8,7 @@ import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
 import {Button, ButtonGroup, Header, Icon, IconButton, MediaGate, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
-import {useMediaProgress} from "../hooks/useFileProgress";
+import {useEpubProgress, useMediaProgress} from "../hooks/useFileProgress";
 import {ShareButton} from "./Share";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {pathDirectory} from "./FileBrowser";
@@ -102,7 +102,7 @@ function getEpubViewerURL(previewFile) {
  * A component rather than part of `getIframePreviewModal` because it reads the theme: the
  * modal builders are plain functions called from an event handler, where hooks cannot run.
  */
-export function IframePreview({url, gatePdf}) {
+export function IframePreview({url, gatePdf, iframeRef}) {
     const {isDark, mediaFilterEnabled} = React.useContext(ThemeContext);
 
     /*
@@ -118,7 +118,7 @@ export function IframePreview({url, gatePdf}) {
      */
     return <MediaGate key={url} gated={!!gatePdf && !!mediaFilterEnabled}>
         <div className='preview-fit'>
-            <iframe title='textModal' src={url}
+            <iframe title='textModal' src={url} ref={iframeRef}
                     style={{
                         height: '100%', width: '100%', border: 'none',
                         // A same-origin document has no styles of its own; it renders with the
@@ -136,6 +136,19 @@ function getIframePreviewModal(previewFile, url, {gatePdf = false} = {}) {
     url = url || getMediaPathURL(previewFile);
     return <Modal.Content>
         <IframePreview url={url} gatePdf={gatePdf}/>
+    </Modal.Content>
+}
+
+/** The EPUB viewer, opened where the user left off. */
+function EpubPreview({previewFile}) {
+    const path = previewFile.primary_path ?? previewFile.path;
+    const {iframeRef, resumeCfi} = useEpubProgress(path, previewFile);
+    let url = getEpubViewerURL(previewFile);
+    if (resumeCfi) {
+        url = `${url}&cfi=${encodeURIComponent(resumeCfi)}`;
+    }
+    return <Modal.Content>
+        <IframePreview url={url} iframeRef={iframeRef}/>
     </Modal.Content>
 }
 
@@ -627,7 +640,7 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
-                setModalContent(getIframePreviewModal(previewFile, viewerURL), viewerURL, downloadURL, path, taggable);
+                setModalContent(<EpubPreview previewFile={previewFile}/>, viewerURL, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/pdf')) {
                 setModalContent(getIframePreviewModal(previewFile, null, {gatePdf: true}), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('image/')) {
@@ -649,7 +662,9 @@ export function FilePreviewProvider({children}) {
                     <OpenInSlicerButton previewFile={previewFile}/>);
             } else if (mimetype.includes('cbz') || mimetype.includes('cbr') || mimetype.includes('comicbook+zip') || mimetype.includes('comicbook-rar')
                 || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr') || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
-                setModalContent(<Modal.Content><CbzViewer path={path}/></Modal.Content>, null, downloadURL, path, taggable);
+                setModalContent(<Modal.Content>
+                    <CbzViewer path={path} progressPath={path} fileGroup={previewFile}/>
+                </Modal.Content>, null, downloadURL, path, taggable);
             } else if (isSupportedArchive(mimetype, lowerPath)) {
                 setModalContent(<ArchivePreviewContent previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else {

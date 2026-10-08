@@ -14,8 +14,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The suite is split by directory so it finishes in a few minutes, and so a check's name says
+  # which area broke.  The groups are balanced by test time; `rest` runs everything the others do
+  # not, so a new directory is tested before anyone assigns it.  A path added to any other group
+  # must also be added to `rest` as an --ignore, or its tests run twice.
   api-tests:
+    name: api-tests (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            paths: wrolpi/test
+          - name: media
+            paths: modules/videos modules/zim modules/docs modules/map modules/inventory modules/flasher
+          - name: files
+            paths: wrolpi/files wrolpi/collections
+          - name: rest
+            paths: >-
+              --ignore=wrolpi/test
+              --ignore=modules/videos --ignore=modules/zim --ignore=modules/docs --ignore=modules/map
+              --ignore=modules/inventory --ignore=modules/flasher
+              --ignore=wrolpi/files --ignore=wrolpi/collections
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,13 +58,15 @@ jobs:
       # `logical`, not `auto`: with psutil installed, `auto` counts physical cores, which is two on
       # the four-vCPU runner.  No `-v`: the full test output inflates wall time and logs.
       - name: Run pytest
-        run: pytest -n logical --junitxml=test-results.xml
+        env:
+          PATHS: ${{ matrix.paths }}
+        run: pytest -n logical $PATHS --junitxml=test-results.xml
 
       - name: Upload test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: api-test-results
+          name: api-test-results-${{ matrix.name }}
           path: test-results.xml
           retention-days: 30
 

@@ -1896,3 +1896,18 @@ def test_bulk_update_file_groups_reorganize_updates_stem(test_session, test_dire
     fg = test_session.query(FileGroup).filter_by(id=fg_id).one()
     assert fg.stem == '2024-01-01 New Title'
     assert fg.primary_path == new_path
+
+
+@pytest.mark.asyncio
+async def test_remove_files_in_ignored_directories(async_client, test_directory, test_wrolpi_config, await_switches):
+    """An ignored directory hides its own files only, not those of a sibling which shares its name as a prefix."""
+    get_wrolpi_config().ignored_directories = [str(test_directory / 'private')]
+    await await_switches()
+
+    private = test_directory / 'private/movie.mp4'
+    nested = test_directory / 'private/deeper/movie.mp4'
+    sibling = test_directory / 'private-notes/notes.txt'
+    other = test_directory / 'videos/movie.mp4'
+    assert lib.remove_files_in_ignored_directories([private, nested, sibling, other]) == [sibling, other]
+    # The ignored directory itself is ignored.
+    assert lib.remove_files_in_ignored_directories([test_directory / 'private']) == []

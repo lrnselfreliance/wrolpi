@@ -415,3 +415,21 @@ async def test_recently_viewed_import_outside_media_directory(test_session, asyn
         assert [i['path'] for i in read_recently_viewed(test_directory)] == ['videos/movie.mp4']
     finally:
         outside.unlink()
+
+
+@pytest.mark.asyncio
+async def test_progress_symlink_into_ignored_directory(test_session, async_client, test_directory,
+                                                       make_files_structure, test_wrolpi_config, await_switches,
+                                                       await_background_tasks):
+    """A link outside an ignored directory, to a file in it, is not tracked (viewed or progress)."""
+    from wrolpi.common import get_wrolpi_config
+    movie, _ = make_files_structure(['private/movie.mp4', 'videos/other.mp4'])
+    (test_directory / 'videos/link.mp4').symlink_to(movie)
+    get_wrolpi_config().ignored_directories = [str(test_directory / 'private')]
+    await await_switches()
+
+    body = dict(file='videos/link.mp4', progress=0.4, position=dict(kind='time', seconds=480))
+    await async_client.post('/api/files/progress', content=json.dumps(body))
+    await async_client.post('/api/files/file', content=json.dumps(dict(file='videos/link.mp4')))
+    await await_background_tasks()
+    assert test_session.query(FileGroup).count() == 0

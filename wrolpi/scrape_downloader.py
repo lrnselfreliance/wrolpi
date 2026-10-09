@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List
 from urllib.parse import urlparse
 
+from bs4.dammit import UnicodeDammit
 from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, get_html_soup, aiohttp_get
@@ -64,8 +65,12 @@ class ScrapeHTMLDownloader(Downloader):
 
     @staticmethod
     async def fetch_html(url: str) -> str:
+        """Fetch and decode a page.  A charset in the Content-Type header wins, then the page's
+        <meta> charset; aiohttp alone ignores <meta> and assumes UTF-8."""
         async with aiohttp_get(url, timeout=60 * 5) as response:
-            return await response.text()
+            body = await response.read()
+            known_encodings = [response.charset] if response.charset else []
+        return UnicodeDammit(body, known_definite_encodings=known_encodings, is_html=True).unicode_markup
 
     def prepare_download(self, session: Session, download: Download) -> PreparedScrape:
         """Validate settings and ensure the destination directory exists.

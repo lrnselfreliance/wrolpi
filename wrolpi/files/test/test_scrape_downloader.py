@@ -261,3 +261,20 @@ def test_finalize_returns_success_with_downloads_and_settings(test_session, test
     assert result.settings['suffix'] == '.pdf'    # original setting preserved
     assert result.error == 'Reached max page count.'
     assert result.location == f'/files?folders={executed.destination}'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('encoding,charset_tag', [
+    ('iso-8859-1', '<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">'),
+    ('iso-8859-1', '<meta charset="ISO-8859-1">'),
+    ('utf-8', ''),
+])
+async def test_fetch_html_decodes_declared_charset(test_directory, simple_file_server, encoding, charset_tag):
+    """fetch_html honors a <meta> charset when the Content-Type header has none, so non-ASCII links survive."""
+    html = f'<html><head>{charset_tag}</head><body><a href="zurück.txt">Zurück</a></body></html>'
+    (test_directory / 'page.html').write_bytes(html.encode(encoding))
+    host, port = simple_file_server.server_address
+
+    content = await ScrapeHTMLDownloader.fetch_html(f'http://127.0.0.1:{port}/page.html')
+
+    assert '<a href="zurück.txt">Zurück</a>' in content

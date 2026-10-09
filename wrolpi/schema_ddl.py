@@ -185,13 +185,21 @@ def install_raw_ddl(conn):
     from wrolpi import fts
 
     for statement in [*TRIGGER_DDL, *fts.FTS_DDL]:
-        conn.execute(statement)
+        execute_sql(conn, statement)
 
     # DDL for tables created after the baseline migration (which also calls this function).
     if _table_exists(conn, 'repository'):
         for statement in fts.REPOSITORY_FTS_DDL:
-            conn.execute(statement)
+            execute_sql(conn, statement)
+
+
+def execute_sql(conn, statement: str):
+    """Execute a plain SQL string on a SQLAlchemy Connection or a raw `sqlite3.Connection`."""
+    if hasattr(conn, 'exec_driver_sql'):
+        return conn.exec_driver_sql(statement)
+    return conn.execute(statement)
 
 
 def _table_exists(conn, name: str) -> bool:
-    return conn.execute(f"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '{name}'").fetchone() is not None
+    sql = f"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '{name}'"
+    return execute_sql(conn, sql).fetchone() is not None

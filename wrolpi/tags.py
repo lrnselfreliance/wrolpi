@@ -8,7 +8,7 @@ import cachetools
 from cachetools.keys import hashkey
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, event, UniqueConstraint
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import Mapped, relationship, Session
 
 from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
@@ -33,7 +33,7 @@ class TagFile(ModelHelper, Base):
     __table_args__ = (
         UniqueConstraint('tag_id', 'file_group_id', name='tag_file_tag_id_file_group_id_key'),
     )
-    created_at: datetime = Column(TZDateTime, default=dates.now)
+    created_at: Mapped[datetime] = Column(TZDateTime, default=dates.now)
 
     tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
     # Joined: a TagFile is loaded for its Tag's name (serializers, the tags config).
@@ -77,8 +77,8 @@ class Tag(ModelHelper, Base):
     name = Column(String, unique=True, nullable=False)
     color = Column(String)
 
-    tag_files: List[TagFile] = relationship('TagFile', back_populates='tag', cascade='all')
-    tag_zim_entries: List = relationship('TagZimEntry', back_populates='tag', cascade='all')
+    tag_files: Mapped[List[TagFile]] = relationship('TagFile', back_populates='tag', cascade='all')
+    tag_zim_entries: Mapped[List['TagZimEntry']] = relationship('TagZimEntry', back_populates='tag', cascade='all')
 
     # Note: Channel relationship removed - Channels now access Tags through Collection
 
@@ -722,7 +722,7 @@ def _sync_tags_directory_tag_files(tags_directory: pathlib.Path, session: Sessio
     """Create all links that should be in the Tags Directory.  Return all links that should exist."""
     from wrolpi.files.models import FileGroup
     tag_files: List[Tuple[Tag, TagFile, FileGroup]] = session.query(Tag, TagFile, FileGroup) \
-        .outerjoin(Tag, FileGroup).all()
+        .select_from(TagFile).join(TagFile.tag).join(TagFile.file_group).all()
     links = list()
     for tag, tag_file, file_group in tag_files:
         paths_map = file_group.get_tag_directory_paths_map()

@@ -135,7 +135,7 @@ async def test_model_archive_extracts_url_from_singlefile(async_client, test_ses
         "collection_id should be set after URL extraction"
 
     # Verify collection was created with correct domain
-    collection = test_session.query(Collection).get(archive.collection_id)
+    collection = test_session.get(Collection, archive.collection_id)
     assert collection.name == domain
     assert collection.kind == 'domain'
 

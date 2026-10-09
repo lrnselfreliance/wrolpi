@@ -3,8 +3,7 @@ import pathlib
 from typing import Optional, Dict, List
 
 from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text, JSON
-from sqlalchemy.orm import relationship, Session, deferred, undefer, joinedload, selectinload
-from sqlalchemy.orm.collections import InstrumentedList
+from sqlalchemy.orm import Mapped, relationship, Session, deferred, undefer, joinedload, selectinload
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions, read_captions_with_timestamps
@@ -49,7 +48,7 @@ class Video(ModelHelper, Base):
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: Mapped[FileGroup] = relationship('FileGroup')
 
     def __repr__(self):
         v = None
@@ -628,7 +627,7 @@ class Channel(ModelHelper, Base):
     info_json = deferred(Column(JSON))
     info_date = Column(Date)
 
-    videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
+    videos: Mapped[List['Video']] = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
     # Joined: a Channel's name, directory and Tag live on its Collection.
     collection = relationship('Collection', foreign_keys=[collection_id], lazy='joined')

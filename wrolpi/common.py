@@ -36,7 +36,7 @@ from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from sqlalchemy import types
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp

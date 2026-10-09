@@ -225,7 +225,7 @@ async def test_handle_reorganize_marks_job_failed_on_exception(
 
     video = video_factory(channel_id=channel_id, title='will_fail', with_video_file=True)
     with get_db_session() as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         old_path = video_obj.file_group.primary_path
 
     dest = channel_dir / 'renamed_will_fail.mp4'
@@ -337,7 +337,7 @@ async def test_reorganize_updates_filegroup_data_fields(async_client, test_direc
 
     with get_db_session(commit=True) as session:
         # Link archive to our collection
-        archive_obj = session.query(Archive).get(archive.id)
+        archive_obj = session.get(Archive, archive.id)
         archive_obj.collection_id = collection_id
         session.commit()
 
@@ -378,7 +378,7 @@ async def test_reorganize_updates_filegroup_data_fields(async_client, test_direc
 
     # Verify results
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
 
         # Verify files were physically renamed
         assert new_primary_path.exists(), "New primary file should exist"
@@ -751,7 +751,7 @@ async def test_reorganize_preserves_tag_association(async_client, test_directory
     video = video_factory(channel_id=channel_id, title='test_video', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         video_obj.file_group.add_tag(session, tag.id)
         fg_id = video_obj.file_group.id
         old_primary_path = video_obj.file_group.primary_path
@@ -759,7 +759,7 @@ async def test_reorganize_preserves_tag_association(async_client, test_directory
 
     # Verify tag was added
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert fg.tag_names == ['mytag'], "Tag should be applied before reorganization"
 
     # Create move mapping: rename files to a new pattern
@@ -779,7 +779,7 @@ async def test_reorganize_preserves_tag_association(async_client, test_directory
 
     # Verify tags preserved after file move
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert fg.tag_names == ['mytag'], "Tag should be preserved after reorganization"
         assert fg.primary_path == new_primary_path, "File should have moved"
 
@@ -810,7 +810,7 @@ async def test_reorganize_updates_playlists_config(async_client, test_directory,
     video = video_factory(channel_id=channel_id, title='test_video', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        file_group = session.query(Video).get(video.id).file_group
+        file_group = session.get(Video, video.id).file_group
         old_primary_path = file_group.primary_path
         playlist = Collection(name='Watch', kind='playlist')
         session.add(playlist)
@@ -869,7 +869,7 @@ async def test_reorganize_then_refresh_preserves_filegroup_id_and_tags(
     video = video_factory(channel_id=channel_id, title='old title', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         video_obj.file_group.add_tag(session, tag.id)
         fg_id = video_obj.file_group.id
         old_primary_path = video_obj.file_group.primary_path
@@ -887,7 +887,7 @@ async def test_reorganize_then_refresh_preserves_filegroup_id_and_tags(
     await refresh_files([channel_dir])
 
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert fg is not None, 'FileGroup was dropped by refresh after reorganize'
         assert fg.primary_path == new_primary_path
         assert fg.stem == '2024-01-01 New Title'
@@ -929,7 +929,7 @@ async def test_reorganize_preserves_multiple_tags(async_client, test_directory, 
     video = video_factory(channel_id=channel_id, title='multi_tagged_video', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         video_obj.file_group.add_tag(session, tag1.id)
         video_obj.file_group.add_tag(session, tag2.id)
         video_obj.file_group.add_tag(session, tag3.id)
@@ -939,7 +939,7 @@ async def test_reorganize_preserves_multiple_tags(async_client, test_directory, 
 
     # Verify all tags were added
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert sorted(fg.tag_names) == ['alpha', 'beta', 'gamma'], "All tags should be applied"
 
     # Create move mapping
@@ -958,7 +958,7 @@ async def test_reorganize_preserves_multiple_tags(async_client, test_directory, 
 
     # Verify all tags preserved
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert sorted(fg.tag_names) == ['alpha', 'beta', 'gamma'], \
             "All tags should be preserved after reorganization"
         assert fg.primary_path == new_primary_path, "File should have moved"
@@ -1002,7 +1002,7 @@ async def test_reorganize_updates_tag_directory_links(async_client, test_directo
     video = video_factory(channel_id=channel_id, title='link_test_video', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         video_obj.file_group.add_tag(session, tag.id)
         fg_id = video_obj.file_group.id
         old_primary_path = video_obj.file_group.primary_path
@@ -1099,11 +1099,11 @@ async def test_batch_reorganize_preserves_tags(async_client, test_directory, vid
     video2 = video_factory(channel_id=channel2_id, title='batch_video_2', with_video_file=True)
 
     with get_db_session(commit=True) as session:
-        video1_obj = session.query(Video).get(video1.id)
+        video1_obj = session.get(Video, video1.id)
         video1_obj.file_group.add_tag(session, tag_a.id)
         fg1_id = video1_obj.file_group.id
 
-        video2_obj = session.query(Video).get(video2.id)
+        video2_obj = session.get(Video, video2.id)
         video2_obj.file_group.add_tag(session, tag_b.id)
         fg2_id = video2_obj.file_group.id
 
@@ -1111,8 +1111,8 @@ async def test_batch_reorganize_preserves_tags(async_client, test_directory, vid
 
     # Verify tags before batch reorganization
     with get_db_session() as session:
-        fg1 = session.query(FileGroup).get(fg1_id)
-        fg2 = session.query(FileGroup).get(fg2_id)
+        fg1 = session.get(FileGroup, fg1_id)
+        fg2 = session.get(FileGroup, fg2_id)
         assert fg1.tag_names == ['batch_tag_a']
         assert fg2.tag_names == ['batch_tag_b']
 
@@ -1125,8 +1125,8 @@ async def test_batch_reorganize_preserves_tags(async_client, test_directory, vid
 
     # Verify tags preserved after batch reorganization
     with get_db_session() as session:
-        fg1 = session.query(FileGroup).get(fg1_id)
-        fg2 = session.query(FileGroup).get(fg2_id)
+        fg1 = session.get(FileGroup, fg1_id)
+        fg2 = session.get(FileGroup, fg2_id)
         assert fg1.tag_names == ['batch_tag_a'], \
             "Tag on first channel's video should be preserved after batch reorganization"
         assert fg2.tag_names == ['batch_tag_b'], \
@@ -1172,7 +1172,7 @@ async def test_reorganize_file_format_updated_after_completion(async_client, tes
     video = video_factory(channel_id=channel_id, title='format_test_video', with_video_file=True)
 
     with get_db_session() as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         old_primary_path = video_obj.file_group.primary_path
 
     # Get the current config format (what it should become after reorganization)
@@ -1195,7 +1195,7 @@ async def test_reorganize_file_format_updated_after_completion(async_client, tes
 
     # Before completion, file_format should still be old
     with get_db_session() as session:
-        collection = session.query(Collection).get(collection_id)
+        collection = session.get(Collection, collection_id)
         assert collection.file_format == old_format, \
             "file_format should NOT be updated before reorganization completes"
 
@@ -1204,7 +1204,7 @@ async def test_reorganize_file_format_updated_after_completion(async_client, tes
 
     # After completion, file_format should now be updated
     with get_db_session() as session:
-        collection = session.query(Collection).get(collection_id)
+        collection = session.get(Collection, collection_id)
         assert collection.file_format == new_format, \
             "file_format should be updated after reorganization completes"
         assert collection.needs_reorganization is False, \
@@ -1248,9 +1248,9 @@ async def test_reorganize_can_retry_after_partial_failure(async_client, test_dir
     video3 = video_factory(channel_id=channel_id, title='partial_video_3', with_video_file=True)
 
     with get_db_session() as session:
-        video1_obj = session.query(Video).get(video1.id)
-        video2_obj = session.query(Video).get(video2.id)
-        video3_obj = session.query(Video).get(video3.id)
+        video1_obj = session.get(Video, video1.id)
+        video2_obj = session.get(Video, video2.id)
+        video3_obj = session.get(Video, video3.id)
 
         path1 = video1_obj.file_group.primary_path
         path2 = video2_obj.file_group.primary_path
@@ -1265,13 +1265,13 @@ async def test_reorganize_can_retry_after_partial_failure(async_client, test_dir
     assert not path1.exists(), "Video 1 should not be at source"
 
     with get_db_session() as session:
-        video1_obj = session.query(Video).get(video1.id)
+        video1_obj = session.get(Video, video1.id)
         assert video1_obj.file_group.primary_path == path1, \
             "DB should still point to old location (simulating partial failure before DB update)"
 
     # Verify needs_reorganization is still True (file_format not updated)
     with get_db_session() as session:
-        collection = session.query(Collection).get(collection_id)
+        collection = session.get(Collection, collection_id)
         assert collection.file_format == old_format, \
             "file_format should still be old after partial failure"
         assert collection.needs_reorganization is True, \
@@ -1315,7 +1315,7 @@ async def test_reorganize_handles_already_moved_files(async_client, test_directo
     video = video_factory(channel_id=channel_id, title='recovery_video', with_video_file=True)
 
     with get_db_session() as session:
-        video_obj = session.query(Video).get(video.id)
+        video_obj = session.get(Video, video.id)
         old_primary_path = video_obj.file_group.primary_path
         fg_id = video_obj.file_group.id
 
@@ -1331,7 +1331,7 @@ async def test_reorganize_handles_already_moved_files(async_client, test_directo
     assert dest_path.exists(), "Destination should exist (manually moved)"
 
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert fg.primary_path == old_primary_path, "DB should still point to source"
 
     # Now run reorganization - it should recover by updating DB
@@ -1352,7 +1352,7 @@ async def test_reorganize_handles_already_moved_files(async_client, test_directo
 
     # Verify recovery: DB should now point to destination
     with get_db_session() as session:
-        fg = session.query(FileGroup).get(fg_id)
+        fg = session.get(FileGroup, fg_id)
         assert fg.primary_path == dest_path, \
             f"DB should be updated to destination path after recovery. Got {fg.primary_path}"
         assert fg.directory == dest_path.parent, \
@@ -1404,9 +1404,9 @@ async def test_reorganize_handles_mixed_state(async_client, test_directory, vide
     video3 = video_factory(channel_id=channel_id, title='mixed_video_3', with_video_file=True)
 
     with get_db_session() as session:
-        v1_obj = session.query(Video).get(video1.id)
-        v2_obj = session.query(Video).get(video2.id)
-        v3_obj = session.query(Video).get(video3.id)
+        v1_obj = session.get(Video, video1.id)
+        v2_obj = session.get(Video, video2.id)
+        v3_obj = session.get(Video, video3.id)
 
         path1 = v1_obj.file_group.primary_path
         path2 = v2_obj.file_group.primary_path
@@ -1452,19 +1452,19 @@ async def test_reorganize_handles_mixed_state(async_client, test_directory, vide
 
     with get_db_session() as session:
         # Video 1: Should have DB updated to dest (recovery)
-        fg1 = session.query(FileGroup).get(fg1_id)
+        fg1 = session.get(FileGroup, fg1_id)
         assert fg1.primary_path == dest1, \
             f"Video 1 should have DB updated to dest path (recovery). Got {fg1.primary_path}"
 
         # Video 2: Should be moved and DB updated (normal)
-        fg2 = session.query(FileGroup).get(fg2_id)
+        fg2 = session.get(FileGroup, fg2_id)
         assert fg2.primary_path == dest2, \
             f"Video 2 should be moved to dest. Got {fg2.primary_path}"
         assert dest2.exists(), "Video 2 file should exist at destination"
         assert not path2.exists(), "Video 2 file should not exist at source"
 
         # Video 3: Should be skipped (both exist - conflict)
-        fg3 = session.query(FileGroup).get(fg3_id)
+        fg3 = session.get(FileGroup, fg3_id)
         assert fg3.primary_path == path3, \
             f"Video 3 should remain at source (conflict skipped). Got {fg3.primary_path}"
         assert path3.exists(), "Video 3 should still exist at source"
@@ -1526,8 +1526,8 @@ async def test_batch_reorganize_can_resume_after_collection_failure(async_client
 
     # Verify both collections need reorganization
     with get_db_session() as session:
-        c1 = session.query(Collection).get(collection1_id)
-        c2 = session.query(Collection).get(collection2_id)
+        c1 = session.get(Collection, collection1_id)
+        c2 = session.get(Collection, collection2_id)
         assert c1.needs_reorganization is True
         assert c2.needs_reorganization is True
 
@@ -1542,8 +1542,8 @@ async def test_batch_reorganize_can_resume_after_collection_failure(async_client
 
     # Verify first collection completed
     with get_db_session() as session:
-        c1 = session.query(Collection).get(collection1_id)
-        c2 = session.query(Collection).get(collection2_id)
+        c1 = session.get(Collection, collection1_id)
+        c2 = session.get(Collection, collection2_id)
 
         # First collection should be done (file_format updated)
         # Note: This tests current behavior - may need adjustment based on implementation
@@ -1609,9 +1609,9 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
     video3 = video_factory(channel_id=channel_id, title='existing_video_3', with_video_file=True)
 
     with get_db_session() as session:
-        v1_obj = session.query(Video).get(video1.id)
-        v2_obj = session.query(Video).get(video2.id)
-        v3_obj = session.query(Video).get(video3.id)
+        v1_obj = session.get(Video, video1.id)
+        v2_obj = session.get(Video, video2.id)
+        v3_obj = session.get(Video, video3.id)
 
         path1 = v1_obj.file_group.primary_path
         path2 = v2_obj.file_group.primary_path
@@ -1626,8 +1626,8 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
     # (The video_modeler would otherwise create a new Video and try to ffprobe it)
     os.remove(str(path2))
     with get_db_session(commit=True) as session:
-        video_to_delete = session.query(Video).get(video2.id)
-        fg_to_delete = session.query(FileGroup).get(fg2_id)
+        video_to_delete = session.get(Video, video2.id)
+        fg_to_delete = session.get(FileGroup, fg2_id)
         session.delete(video_to_delete)
         session.delete(fg_to_delete)
 
@@ -1663,7 +1663,7 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
     # Verify results
     with get_db_session() as session:
         # Video 1: Should be moved and DB updated
-        fg1 = session.query(FileGroup).get(fg1_id)
+        fg1 = session.get(FileGroup, fg1_id)
         assert fg1.primary_path == dest1, f"Video 1 should be moved to dest. Got {fg1.primary_path}"
         assert dest1.exists(), "Video 1 file should exist at destination"
         assert not path1.exists(), "Video 1 file should not exist at source"
@@ -1674,13 +1674,13 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
         assert not dest2.exists(), "Video 2 file should not exist at destination (was deleted)"
 
         # Video 3: Should be moved and DB updated
-        fg3 = session.query(FileGroup).get(fg3_id)
+        fg3 = session.get(FileGroup, fg3_id)
         assert fg3.primary_path == dest3, f"Video 3 should be moved to dest. Got {fg3.primary_path}"
         assert dest3.exists(), "Video 3 file should exist at destination"
         assert not path3.exists(), "Video 3 file should not exist at source"
 
         # Collection file_format should be updated (reorganization completed successfully)
-        collection = session.query(Collection).get(collection_id)
+        collection = session.get(Collection, collection_id)
         assert collection.file_format == config.file_name_format, \
             "Collection file_format should be updated after successful reorganization"
 
@@ -1750,7 +1750,7 @@ def test_reorganize_skips_videos_missing_required_metadata(
         with_info_json=info_json if info_json else None,
     )
 
-    video_obj = test_session.query(Video).get(video.id)
+    video_obj = test_session.get(Video, video.id)
 
     # Set source_id directly on the Video model (separate from info_json)
     video_obj.source_id = 'abc123' if has_source_id else None
@@ -1823,7 +1823,7 @@ def test_reorganize_skips_archives_missing_required_metadata(
         title='Test Article',
     )
 
-    archive_obj = test_session.query(Archive).get(archive.id)
+    archive_obj = test_session.get(Archive, archive.id)
 
     # Clear URL if testing without it
     if not has_url:
@@ -1892,12 +1892,12 @@ async def test_domain_reorganization_moves_files_from_root_to_year_subdirectory(
         archive = archive_factory(domain='test.com', url='https://test.com/article', title='Test Article')
 
         with get_db_session(commit=True) as session:
-            archive_obj = session.query(Archive).get(archive.id)
+            archive_obj = session.get(Archive, archive.id)
             archive_obj.collection_id = collection_id
             session.commit()
 
             # Verify: collection appears organized but files are in wrong place
-            collection = session.query(Collection).get(collection_id)
+            collection = session.get(Collection, collection_id)
             assert collection.file_format == year_format, "Collection format should match config"
             assert collection.needs_reorganization is False, \
                 "Collection should appear organized (format matches config)"
@@ -1923,7 +1923,7 @@ async def test_domain_reorganization_moves_files_from_root_to_year_subdirectory(
 
         # Verify: files moved to year subdirectory
         with get_db_session() as session:
-            archive_obj = session.query(Archive).get(archive.id)
+            archive_obj = session.get(Archive, archive.id)
             new_path = archive_obj.file_group.primary_path
             assert '/2000/' in str(new_path), f"File should be in year subdirectory. Got: {new_path}"
             assert new_path.exists(), "New file should exist"
@@ -1985,7 +1985,7 @@ async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory
         )
 
         with get_db_session(commit=True) as session:
-            video_obj = session.query(Video).get(video.id)
+            video_obj = session.get(Video, video.id)
 
             old_path = video_obj.file_group.primary_path
             assert old_path.parent == channel_dir, \
@@ -2008,7 +2008,7 @@ async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory
 
         # Verify: files moved to year subdirectory
         with get_db_session() as session:
-            video_obj = session.query(Video).get(video.id)
+            video_obj = session.get(Video, video.id)
             new_path = video_obj.file_group.primary_path
             assert '/2024/' in str(new_path), f"File should be in year subdirectory. Got: {new_path}"
             assert new_path.exists(), "New file should exist"
@@ -2081,8 +2081,8 @@ async def test_channel_reorganization_preserves_root_level_files(
 
         # Verify initial state: videos in root, root files exist
         with get_db_session() as session:
-            v1 = session.query(Video).get(video1.id)
-            v2 = session.query(Video).get(video2.id)
+            v1 = session.get(Video, video1.id)
+            v2 = session.get(Video, video2.id)
             assert v1.file_group.primary_path.parent == channel_dir
             assert v2.file_group.primary_path.parent == channel_dir
         assert root_json.exists(), "Root JSON should exist before reorganization"
@@ -2099,8 +2099,8 @@ async def test_channel_reorganization_preserves_root_level_files(
 
         # Verify: videos moved to year subdirectory
         with get_db_session() as session:
-            v1 = session.query(Video).get(video1.id)
-            v2 = session.query(Video).get(video2.id)
+            v1 = session.get(Video, video1.id)
+            v2 = session.get(Video, video2.id)
             assert '/2024/' in str(v1.file_group.primary_path), "Video 1 should be in year subdirectory"
             assert '/2024/' in str(v2.file_group.primary_path), "Video 2 should be in year subdirectory"
             assert v1.file_group.primary_path.exists()
@@ -2154,7 +2154,7 @@ async def test_preview_computes_actual_moves(async_client, test_session, test_di
         archive = archive_factory(domain='exactcount.com', url='https://exactcount.com/article', title='Test')
 
         with get_db_session(commit=True) as session:
-            archive_obj = session.query(Archive).get(archive.id)
+            archive_obj = session.get(Archive, archive.id)
             archive_obj.collection_id = collection_id
             session.commit()
 
@@ -2233,8 +2233,8 @@ async def test_reorganize_fails_on_filename_conflicts(async_client, test_directo
     # Update both videos to have the same title and source_id
     # This makes them produce the same destination filename
     with get_db_session(commit=True) as session:
-        v1 = session.query(Video).get(video1.id)
-        v2 = session.query(Video).get(video2.id)
+        v1 = session.get(Video, video1.id)
+        v2 = session.get(Video, video2.id)
         v1.file_group.title = 'Duplicate Title'
         v2.file_group.title = 'Duplicate Title'
         v1.source_id = same_source_id
@@ -2296,8 +2296,8 @@ async def test_reorganize_preview_returns_conflict_details(async_client, test_di
 
     # Update both videos to have the same title and source_id
     with get_db_session(commit=True) as session:
-        v1 = session.query(Video).get(video1.id)
-        v2 = session.query(Video).get(video2.id)
+        v1 = session.get(Video, video1.id)
+        v2 = session.get(Video, video2.id)
         v1.file_group.title = 'Duplicate Preview Title'
         v2.file_group.title = 'Duplicate Preview Title'
         v1.source_id = same_source_id
@@ -2428,8 +2428,8 @@ async def test_conflict_preview_includes_quality_rank(async_client, test_directo
 
     # Make both videos conflict (same title, same source_id → same destination)
     with get_db_session(commit=True) as session:
-        v1 = session.query(Video).get(video1.id)
-        v2 = session.query(Video).get(video2.id)
+        v1 = session.get(Video, video1.id)
+        v2 = session.get(Video, video2.id)
         v1.file_group.title = 'Same Title'
         v2.file_group.title = 'Same Title'
         v1.source_id = same_source_id
@@ -2762,7 +2762,7 @@ def test_preview_excludes_files_already_in_correct_location(test_session, test_d
 
         # Verify the video is at the expected location
         with get_db_session() as session:
-            video_obj = session.query(Video).get(video.id)
+            video_obj = session.get(Video, video.id)
             current_path = video_obj.file_group.primary_path
 
             # The format_video_filename should produce the same filename

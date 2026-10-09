@@ -5,7 +5,7 @@ from typing import Iterable, List, Optional
 
 import pytz
 from sqlalchemy import Column, Integer, ForeignKey, BigInteger, Index
-from sqlalchemy.orm import relationship, Session, joinedload
+from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 
 from wrolpi import dates
 from wrolpi.collections import Collection
@@ -36,9 +36,9 @@ class Archive(Base, ModelHelper):
     id = Column(Integer, primary_key=True)
 
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
-    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id')
+    collection: Mapped[Collection] = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: Mapped[FileGroup] = relationship('FileGroup')
 
     @staticmethod
     def json_options() -> tuple:

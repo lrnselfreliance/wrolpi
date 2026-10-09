@@ -2,7 +2,7 @@ import pathlib
 from typing import Optional
 
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
-from sqlalchemy.orm import relationship, Session, joinedload
+from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 
 from wrolpi.common import ModelHelper, Base
 from wrolpi.db import get_db_session, serializer
@@ -56,7 +56,7 @@ class Doc(ModelHelper, Base):
     description = Column(Text)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False, unique=True)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: Mapped[FileGroup] = relationship('FileGroup')
     sections = relationship('DocSection', back_populates='doc',
                             cascade='all, delete-orphan',
                             passive_deletes=True)

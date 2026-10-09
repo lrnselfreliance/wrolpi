@@ -6,9 +6,9 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index, Integer, JSON, or_
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index, Integer, JSON, or_, Text
 from sqlalchemy import types
-from sqlalchemy.orm import deferred, relationship, Session, selectinload
+from sqlalchemy.orm import Mapped, deferred, relationship, Session, selectinload
 
 from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
@@ -51,6 +51,7 @@ class FancyJSON(types.TypeDecorator):
     Converts datetime to ISO strings when moving into DB, and vice versa.
     """
     impl = JSON
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if value:
@@ -89,11 +90,11 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_directory_stem_idx', 'directory', 'stem', unique=True),
     )
     # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
-    id: int = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
+    id: Mapped[int] = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
 
     # Directory containing all files in this group (absolute path).
     # All paths in `files` and `data` are relative to this directory.
-    directory: pathlib.Path = Column(MediaPathType, nullable=False)
+    directory: Mapped[pathlib.Path] = Column(MediaPathType, nullable=False)
 
     author = Column(String)  # name of the author, maybe even a URL
     censored = Column(Boolean)  # the file is no longer available for download
@@ -109,7 +110,7 @@ class FileGroup(ModelHelper, Base):
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "doc", etc.
     modification_datetime = Column(TZDateTime)  # the modification date of the file on disk
-    primary_path: pathlib.Path = Column(MediaPathType, nullable=False, unique=True)
+    primary_path: Mapped[pathlib.Path] = Column(MediaPathType, nullable=False, unique=True)
     published_datetime = Column(TZDateTime)  # the date the creator published this file
     published_modified_datetime = Column(TZDateTime)  # the date the publisher modified this file
     size = Column(BigInteger, default=lambda: 0)
@@ -125,7 +126,7 @@ class FileGroup(ModelHelper, Base):
     # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
     effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
 
-    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
+    tag_files: Mapped[List[TagFile]] = relationship('TagFile', cascade='all')
 
     # Full-text search over these columns is provided by the external-content FTS5 table
     # `file_group_fts` (see `wrolpi.fts`): a=title, b=author-ish, c=description, d=body/captions.
@@ -863,8 +864,8 @@ class Directory(ModelHelper, Base):
         Index('directory_name_idx', 'name'),
     )
 
-    path: pathlib.Path = Column(MediaPathType, primary_key=True)
-    name: str = Column(String, nullable=False)
+    path: Mapped[pathlib.Path] = Column(MediaPathType, primary_key=True)
+    name: Mapped[str] = Column(String, nullable=False)
     idempotency = Column(TZDateTime, default=lambda: now())
 
     @serializer
@@ -883,5 +884,7 @@ class WrolpiKV(Base):
     """Internal key/value store.  Not user config.  Holds schema-adjacent stamps such as
     STEM_ALGORITHM_VERSION so compare can refuse to run on a stale stem cache."""
     __tablename__ = 'wrolpi_kv'
-    key = Column(String, primary_key=True)
-    value = Column(String, nullable=False)
+    # Matches the table the migration created (`key TEXT PRIMARY KEY`); SQLite lets a non-INTEGER
+    # primary key hold NULL unless it is declared NOT NULL.
+    key = Column(Text, primary_key=True, nullable=True)
+    value = Column(Text, nullable=False)

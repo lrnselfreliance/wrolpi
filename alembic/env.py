@@ -98,7 +98,10 @@ def run_migrations_online():
 
     connectable = create_wrolpi_engine(get_url())
 
-    with connectable.connect() as connection:
+    # Autocommit: each migration statement is its own transaction.  A migration may call WROLPi
+    # functions which write on their own connection; a migration connection holding an open read
+    # transaction could not then upgrade to a writer ("database is locked").
+    with connectable.connect().execution_options(isolation_level='AUTOCOMMIT') as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

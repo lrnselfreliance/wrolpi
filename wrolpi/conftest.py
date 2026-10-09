@@ -75,7 +75,7 @@ def test_db() -> Tuple[Engine, Session]:
     # Create all tables.  No need to check if they exist because this is a test DB.
     Base.metadata.create_all(test_engine, checkfirst=False)
     # Triggers and FTS5 tables, exactly as the alembic baseline installs them.
-    with test_engine.connect() as conn:
+    with test_engine.begin() as conn:
         install_raw_ddl(conn)
     session = sessionmaker(bind=test_engine)()
     return test_engine, session
@@ -1124,9 +1124,9 @@ def insert_file_group(test_session, test_directory):
             files=json.dumps(files),
             stem=stem,
         )
-        test_session.execute('INSERT INTO file_group '
-                             '(indexed, directory, primary_path, files, stem) VALUES '
-                             '(true, :directory, :primary_path, :files, :stem)', params)
+        test_session.execute(sqlalchemy.text('INSERT INTO file_group '
+                                             '(indexed, directory, primary_path, files, stem) VALUES '
+                                             '(true, :directory, :primary_path, :files, :stem)'), params)
 
     return _
 

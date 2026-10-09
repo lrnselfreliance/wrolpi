@@ -9,7 +9,7 @@
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
-    "@tabler/icons-react": "^3.48.0",
+    "@tabler/icons-react": "^3.49.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^14.6.7",
     "cypress": "^15.21.1",
@@ -32,7 +32,7 @@
     "react-scripts": "5.0.1",
     "react-stl-viewer": "^2.5.0",
     "three": "^0.186",
-    "web-vitals": "^6.2.2"
+    "web-vitals": "^6.2.3"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -63,7 +63,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@types/lodash": "^4.17.25",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "typescript": "^5.9.3",

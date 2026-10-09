@@ -67,7 +67,11 @@ export function useForm({
             setReady(false);
             return
         }
-        const missingValues = Object.keys(memoizedRequires).filter(i => !_.get(formData, i));
+        // 0 is a real value (a download frequency of "Once"), only empty values are missing.
+        const missingValues = Object.keys(memoizedRequires).filter(i => {
+            const value = _.get(formData, i);
+            return value === null || value === undefined || value === '' || value === false || Number.isNaN(value);
+        });
         if (missingValues.length > 0) {
             console.debug(`Form invalid because it is missing required value: ${missingValues[0]}`);
             setReady(false);

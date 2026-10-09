@@ -727,6 +727,29 @@ describe('useForm', () => {
             });
         });
 
+        it('zero satisfies a required field', async () => {
+            // A download frequency of 0 means "Once".
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {frequency: null},
+                submitter: jest.fn(),
+            }));
+
+            act(() => {
+                result.current.getCustomProps({name: 'frequency', required: true});
+            });
+            await waitFor(() => {
+                expect(result.current.ready).toBe(false);
+            });
+
+            act(() => {
+                result.current.setValue('frequency', 0);
+            });
+            await waitFor(() => {
+                expect(result.current.formData.frequency).toBe(0);
+                expect(result.current.ready).toBe(true);
+            });
+        });
+
         it('addRequires marks field as required', async () => {
             const {result} = renderHook(() => useForm({
                 defaultFormData: {field: ''},

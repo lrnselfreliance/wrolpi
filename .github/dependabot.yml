@@ -8,13 +8,10 @@ updates:
     target-branch: "master"
     open-pull-requests-limit: 5
     ignore:
-      # SQLAlchemy 1.4 is the 2.0 transition release and is not a drop-in
-      # change for this codebase; alembic >=1.11 requires SQLAlchemy 2.
-      # Hold both until the SQLAlchemy 2 migration lands.
+      # SQLAlchemy 2.1 is a minor release with its own deprecations; upgrade it
+      # deliberately rather than by an automatic bump.
       - dependency-name: "SQLAlchemy"
-        versions: [">=1.4"]
-      - dependency-name: "alembic"
-        versions: [">=1.11"]
+        versions: [">=2.1"]
     groups:
       python-dependencies:
         patterns:

@@ -22,6 +22,8 @@ import re
 import sqlite3
 from typing import List, Optional, Tuple
 
+from wrolpi.schema_ddl import execute_sql
+
 FILE_GROUP_FTS_COLUMNS = ('a_text', 'b_text', 'c_text', 'd_text')
 # The fast (non-deep) path searches these columns only.
 ABC_COLUMNS = ('a_text', 'b_text', 'c_text')
@@ -330,10 +332,12 @@ def headline_texts(entries: List[Optional[str]], search_str: str,
     return results
 
 
-def rebuild_fts(curs):
-    """Rebuild the FTS5 indexes from their content tables (e.g. after a bulk import)."""
-    curs.execute("INSERT INTO file_group_fts(file_group_fts) VALUES('rebuild')")
-    curs.execute("INSERT INTO doc_section_fts(doc_section_fts) VALUES('rebuild')")
+def rebuild_fts(conn):
+    """Rebuild the FTS5 indexes from their content tables (e.g. after a bulk import).
+
+    `conn` may be a SQLAlchemy Connection, a raw `sqlite3.Connection`, or a cursor."""
+    execute_sql(conn, "INSERT INTO file_group_fts(file_group_fts) VALUES('rebuild')")
+    execute_sql(conn, "INSERT INTO doc_section_fts(doc_section_fts) VALUES('rebuild')")
 
 
 def optimize_fts(curs):

@@ -7,8 +7,7 @@ from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
     or_, CheckConstraint
-from sqlalchemy.orm import relationship, Session, joinedload, selectinload
-from sqlalchemy.orm.collections import InstrumentedList
+from sqlalchemy.orm import Mapped, relationship, Session, joinedload, selectinload
 
 from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
@@ -108,7 +107,7 @@ class Collection(ModelHelper, Base):
     kind = Column(String, nullable=False, server_default='channel', default='channel')
 
     # Optional directory restriction - if set, only files in this directory tree can be added
-    directory: Optional[pathlib.Path] = Column(MediaPathType, nullable=True)
+    directory: Mapped[Optional[pathlib.Path]] = Column(MediaPathType, nullable=True)
 
     # Optional tag relationship (similar to Channel)
     tag_id = Column(Integer, ForeignKey('tag.id'))
@@ -126,7 +125,7 @@ class Collection(ModelHelper, Base):
     total_size = Column(BigInteger, default=0, nullable=False)
 
     # Relationship to items (ordered)
-    items: InstrumentedList = relationship(
+    items: Mapped[List['CollectionItem']] = relationship(
         'CollectionItem',
         primaryjoin='Collection.id==CollectionItem.collection_id',
         back_populates='collection',
@@ -135,7 +134,7 @@ class Collection(ModelHelper, Base):
     )
 
     # Relationship to downloads
-    downloads: InstrumentedList = relationship(
+    downloads: Mapped[List['Download']] = relationship(
         'Download',
         primaryjoin='Download.collection_id==Collection.id',
         back_populates='collection',
@@ -1239,7 +1238,7 @@ class CollectionItem(ModelHelper, Base):
 
     # Relationships
     collection = relationship('Collection', back_populates='items')
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: Mapped[FileGroup] = relationship('FileGroup')
     zim = relationship('Zim')
 
     # Indexes for performance

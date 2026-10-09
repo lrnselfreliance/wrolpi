@@ -8,6 +8,7 @@ PATH_TYPE = Union[str, pathlib.Path]
 
 class MediaPathType(types.TypeDecorator):  # noqa
     impl = types.String
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         """Convert paths into what the DB expects. (pathlib.Path -> str)"""

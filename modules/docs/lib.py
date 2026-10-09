@@ -404,8 +404,7 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
         from wrolpi.tags import Tag, TagFile
         tagged_fg_ids = session.query(TagFile.file_group_id) \
             .join(Tag, Tag.id == TagFile.tag_id) \
-            .filter(Tag.name.in_(tag_names)) \
-            .subquery()
+            .filter(Tag.name.in_(tag_names))
         query = query.filter(FileGroup.id.in_(tagged_fg_ids))
 
     unfiltered = not (search_str or author or subject or language or mimetype or tag_names)
@@ -497,10 +496,10 @@ def _fetch_section_hints(session, file_group_ids, search_str):
     rows = session.execute(sql, {'q': match, 'ids': list(file_group_ids)}).fetchall()
     hints = {}
     for row in rows:
-        hints[row['fg_id']] = {
-            'kind': row['kind'],
-            'ordinal': row['ordinal'],
-            'label': row['label'],
-            'snippet': row['snippet'],
+        hints[row.fg_id] = {
+            'kind': row.kind,
+            'ordinal': row.ordinal,
+            'label': row.label,
+            'snippet': row.snippet,
         }
     return hints

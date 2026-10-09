@@ -4,6 +4,7 @@ import sqlite3
 from unittest import mock
 
 import pytest
+import sqlalchemy
 
 from wrolpi.conftest import production_like_sessions, probe_write_lock_is_held, count_connections
 from wrolpi.db import get_db_session, _configure_sqlite_connection, RequestDB, RequestSession, no_db_access, \
@@ -121,7 +122,7 @@ def test_write_session_takes_write_lock_up_front(test_session):
         with get_db_session(commit=True) as session:
             # Trigger the transaction's BEGIN with a trivial read (as the download dispatcher
             # does before writing).  This session already holds the write lock.
-            session.execute('SELECT 1')
+            session.execute(sqlalchemy.text('SELECT 1'))
             assert probe_write_lock_is_held(db_file), \
                 'immediate session did not hold the write lock after BEGIN'
 
@@ -132,7 +133,7 @@ def test_read_session_does_not_take_write_lock(test_session):
 
     with production_like_sessions(test_session):
         with get_db_session() as session:
-            session.execute('SELECT 1')
+            session.execute(sqlalchemy.text('SELECT 1'))
             assert not probe_write_lock_is_held(db_file), \
                 'read-only session unexpectedly holds the write lock'
 
@@ -152,12 +153,12 @@ async def test_background_task_does_not_inherit_write_intent(test_session):
 
     async def child():
         with get_db_session() as session:  # A read session: it must stay deferred.
-            session.execute('SELECT 1')
+            session.execute(sqlalchemy.text('SELECT 1'))
             held_during_child_read['held'] = probe_write_lock_is_held(db_file)
 
     with production_like_sessions(test_session):
         with get_db_session(commit=True) as session:
-            session.execute('SELECT 1')
+            session.execute(sqlalchemy.text('SELECT 1'))
             task = asyncio.create_task(child())
         # The write session has committed; only the child's own session can hold the lock now.
         await task

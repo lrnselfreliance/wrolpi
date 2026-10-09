@@ -15,6 +15,7 @@ import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer, get_wrolpi_config
 from wrolpi.conftest import await_switches
+import sqlalchemy
 from sqlalchemy.exc import IntegrityError
 
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
@@ -1429,9 +1430,9 @@ async def test_apply_indexers_concurrent_writer(test_session, make_files_structu
             # Another connection commits a write mid-batch, like a modeler or download worker.
             other = maker()
             try:
-                other.execute("INSERT INTO directory (path, name, idempotency) "
-                              "VALUES ('/tmp/concurrent', 'concurrent', CURRENT_TIMESTAMP) "
-                              "ON CONFLICT (path) DO UPDATE SET name = 'concurrent'")
+                other.execute(sqlalchemy.text("INSERT INTO directory (path, name, idempotency) "
+                                              "VALUES ('/tmp/concurrent', 'concurrent', CURRENT_TIMESTAMP) "
+                                              "ON CONFLICT (path) DO UPDATE SET name = 'concurrent'"))
                 other.commit()
             finally:
                 other.close()

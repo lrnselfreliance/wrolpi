@@ -191,12 +191,15 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):
+        if conn.get_execution_options().get('isolation_level') == 'AUTOCOMMIT':
+            # Every statement is its own transaction (e.g. Alembic migrations).
+            return
         # Write sessions (`commit=True`) take the write lock up front; read sessions stay deferred
         # so readers never block (in WAL; see `_immediate_txn`).
         if _immediate_txn.get():
-            conn.execute('BEGIN IMMEDIATE')
+            conn.exec_driver_sql('BEGIN IMMEDIATE')
         else:
-            conn.execute('BEGIN')
+            conn.exec_driver_sql('BEGIN')
 
     return engine
 
@@ -325,7 +328,7 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
         # Rollback only if a transaction hasn't been committed.
         # In tests, the test_session fixture manages the session lifecycle,
         # so we should not rollback here - that would undo other test operations.
-        if not PYTEST and session.transaction.is_active:
+        if not PYTEST and session.in_transaction():
             session.rollback()
 
 
@@ -394,8 +397,9 @@ def session_curs(session: Session) -> Generator[sqlite3.Cursor, Any, None]:
 
 def _session_has_connection(session: Session) -> bool:
     """True if the Session's transaction has already connected (and so already emitted BEGIN)."""
-    # SQLAlchemy 1.3 has no public API for this; 2.0 replaces it with `session.in_transaction()`.
-    transaction = session.transaction
+    # `in_transaction()` is also true for a transaction that has autobegun but not yet connected;
+    # SQLAlchemy has no public API for "connected".
+    transaction = session.get_transaction()
     return transaction is not None and bool(transaction._connections)
 
 

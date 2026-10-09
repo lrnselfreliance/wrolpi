@@ -138,7 +138,7 @@ async def _apply_per_item(
         for attempt in range(lock_retries):
             try:
                 with get_db_session(commit=True) as session:
-                    file_group = session.query(FileGroup).get(fg_id)
+                    file_group = session.get(FileGroup, fg_id)
                     if file_group is None:
                         break
                     apply(session, file_group, prepared)

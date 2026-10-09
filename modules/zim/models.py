@@ -7,7 +7,7 @@ from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional, 
 
 from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean, UniqueConstraint
-from sqlalchemy.orm import relationship, Session, joinedload
+from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
@@ -71,10 +71,10 @@ class Zim(Base, ModelHelper):
         UniqueConstraint('path', name='zim_path_key'),
     )
     id = Column(Integer, primary_key=True)
-    path: pathlib.Path = Column(MediaPathType, nullable=False)
+    path: Mapped[pathlib.Path] = Column(MediaPathType, nullable=False)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
-    file_group: FileGroup = relationship('FileGroup')
+    file_group: Mapped[FileGroup] = relationship('FileGroup')
     auto_search = Column(Boolean, default=True)
 
     def __repr__(self):
@@ -359,11 +359,11 @@ class TagZimEntry(Base):
     )
 
     tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
-    tag: Tag = relationship('Tag')
+    tag: Mapped[Tag] = relationship('Tag')
     zim_id = Column(Integer, ForeignKey('zim.id', ondelete='CASCADE'), primary_key=True)
-    zim: Zim = relationship('Zim')
-    zim_entry: str = Column(Text, nullable=False, primary_key=True)
-    created_at: datetime = Column(TZDateTime, default=dates.now)
+    zim: Mapped[Zim] = relationship('Zim')
+    zim_entry: Mapped[str] = Column(Text, nullable=False, primary_key=True)
+    created_at: Mapped[datetime] = Column(TZDateTime, default=dates.now)
 
     def __repr__(self):
         tag = self.tag_id
@@ -384,11 +384,11 @@ class TagZimEntry(Base):
 class ZimSubscription(Base):
     __tablename__ = 'zim_subscription'
 
-    id: int = Column(Integer, primary_key=True)
-    name: str = Column(Text, unique=True, nullable=False)
-    language: str = Column(Text, nullable=False)
-    download_id: int = Column(Integer, ForeignKey('download.id', ondelete='CASCADE'), nullable=False)
-    download: Download = relationship('Download', primaryjoin='ZimSubscription.download_id==Download.id')
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    name: Mapped[str] = Column(Text, unique=True, nullable=False)
+    language: Mapped[str] = Column(Text, nullable=False)
+    download_id: Mapped[int] = Column(Integer, ForeignKey('download.id', ondelete='CASCADE'), nullable=False)
+    download: Mapped[Download] = relationship('Download', primaryjoin='ZimSubscription.download_id==Download.id')
 
     def __repr__(self):
         name = self.name

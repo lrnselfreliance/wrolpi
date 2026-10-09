@@ -1259,7 +1259,7 @@ class VideoDownloader(Downloader, ABC):
         # Update channel's collection's file_format to track the format used.
         if executed.channel_id:
             from modules.videos.lib import save_channels_config
-            channel_obj = session.query(Channel).get(executed.channel_id)
+            channel_obj = session.get(Channel, executed.channel_id)
             if channel_obj and channel_obj.collection and not channel_obj.collection.file_format:
                 video_config = get_videos_downloader_config()
                 channel_obj.collection.file_format = video_config.file_name_format

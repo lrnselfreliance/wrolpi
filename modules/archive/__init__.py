@@ -6,6 +6,7 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT
@@ -405,7 +406,7 @@ def archive_cleanup():
     with get_db_session(commit=True) as session:
         # Remove any domain Collections without any Archives.
         # Get all collection_ids that have archives
-        collection_ids = [i[0] for i in session.execute('SELECT DISTINCT collection_id FROM archive') if i[0]]
+        collection_ids = [i[0] for i in session.execute(text('SELECT DISTINCT collection_id FROM archive')) if i[0]]
         # Find domain collections that have no archives
         for collection in session.query(Collection).filter_by(kind='domain'):
             if collection.id not in collection_ids:

@@ -26,7 +26,7 @@ import pytz
 from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Mapped, Session, relationship
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -253,7 +253,7 @@ class Download(ModelHelper, Base):  # noqa
     url = Column(String, nullable=False, unique=True)
 
     attempts = Column(Integer, default=0)
-    destination: pathlib.Path = Column(MediaPathType)  # '/media/wrolpi/videos/WROLPi'
+    destination: Mapped[pathlib.Path] = Column(MediaPathType)  # '/media/wrolpi/videos/WROLPi'
     downloader = Column(Text)  # 'videos', 'archive', 'kiwix_zim', etc.
     sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
     error = Column(Text)  # traceback from an error during downloading.

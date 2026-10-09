@@ -107,7 +107,9 @@ class ScrapeHTMLDownloader(Downloader):
 
     async def execute_download(self, prepared: PreparedScrape, ctx: DownloadContext,
                                download: Download = None) -> ExecutedScrape:
-        """Crawl HTML pages up to depth, collecting links that match the configured suffix."""
+        """Crawl HTML pages up to depth, collecting links that match any of the configured suffixes."""
+        # The UI submits a comma-separated list of suffixes.
+        suffixes = tuple(i.strip() for i in prepared.suffix.split(',') if i.strip())
         urls = [prepared.url]
         download_urls: List[str] = []
         page_count = 0
@@ -143,7 +145,7 @@ class ScrapeHTMLDownloader(Downloader):
                         logger.debug(f'Not a real anchor: {a}')
                         continue
                     child_url = resolve_url(url, href)
-                    if child_url and child_url.lower().endswith(prepared.suffix):
+                    if child_url and child_url.lower().endswith(suffixes):
                         # Found a file that the User requested.
                         logger.info(f'ScrapeHTMLDownloader will download {child_url}')
                         download_urls.append(child_url)

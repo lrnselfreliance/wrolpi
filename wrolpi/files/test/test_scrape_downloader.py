@@ -278,3 +278,25 @@ async def test_fetch_html_decodes_declared_charset(test_directory, simple_file_s
     content = await ScrapeHTMLDownloader.fetch_html(f'http://127.0.0.1:{port}/page.html')
 
     assert '<a href="zurück.txt">Zurück</a>' in content
+
+
+@pytest.mark.asyncio
+async def test_execute_collects_multiple_suffixes(test_directory):
+    """The UI submits a comma-separated list of suffixes; a link matching any of them is collected."""
+    prepared = PreparedScrape(
+        url='https://example.com/dir',
+        depth=1,
+        suffix='.pdf,.html',
+        max_pages=100,
+        destination=test_directory,
+    )
+
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html):
+        executed = await scrape_html_downloader.execute_download(prepared, make_test_ctx())
+
+    assert sorted(executed.download_urls) == sorted([
+        'https://example.com/one.pdf',
+        'https://example.com/two.pdf',
+        'https://example.com/dir/three.pdf',
+        'https://example.com/dir/other.html',
+    ])

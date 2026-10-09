@@ -11,6 +11,7 @@ from wrolpi.scrape_downloader import (
     ExecutedScrape,
     PreparedScrape,
     ScrapeHTMLDownloader,
+    resolve_url,
     scrape_html_downloader,
 )
 
@@ -29,7 +30,8 @@ EXAMPLE_HTTP = '''
 
 
 async def fake_fetch_html(self, url: str):
-    return EXAMPLE_HTTP
+    # Servers redirect a directory URL to its trailing-slash form.
+    return f'{url.rstrip("/")}/', EXAMPLE_HTTP
 
 
 async def fake_file_do_download(*a, **kwargs):
@@ -275,7 +277,7 @@ async def test_fetch_html_decodes_declared_charset(test_directory, simple_file_s
     (test_directory / 'page.html').write_bytes(html.encode(encoding))
     host, port = simple_file_server.server_address
 
-    content = await ScrapeHTMLDownloader.fetch_html(f'http://127.0.0.1:{port}/page.html')
+    _, content = await ScrapeHTMLDownloader.fetch_html(f'http://127.0.0.1:{port}/page.html')
 
     assert '<a href="zurück.txt">Zurück</a>' in content
 
@@ -300,3 +302,31 @@ async def test_execute_collects_multiple_suffixes(test_directory):
         'https://example.com/dir/three.pdf',
         'https://example.com/dir/other.html',
     ])
+
+
+@pytest.mark.parametrize('page_url,href,expected', [
+    # A link on a page resolves against the page's directory, not the page itself.
+    ('http://example.com/archive/archive.html', 'bc-a02.txt', 'http://example.com/archive/bc-a02.txt'),
+    ('http://example.com/archive/', 'bc-a02.txt', 'http://example.com/archive/bc-a02.txt'),
+    ('http://example.com/archive/archive.html', '../index.html', 'http://example.com/index.html'),
+    ('http://example.com/archive/archive.html', './a.txt', 'http://example.com/archive/a.txt'),
+    ('http://example.com/archive/archive.html', '/root.txt', 'http://example.com/root.txt'),
+    ('http://example.com/archive/archive.html', 'https://other.com/x.txt', 'https://other.com/x.txt'),
+    ('https://example.com/archive/archive.html', '//cdn.example.com/x.txt', 'https://cdn.example.com/x.txt'),
+    ('http://example.com/archive/archive.html', 'a.txt?v=1', 'http://example.com/archive/a.txt?v=1'),
+])
+def test_resolve_url(page_url, href, expected):
+    assert resolve_url(page_url, href) == expected
+
+
+@pytest.mark.asyncio
+async def test_fetch_html_returns_redirected_url(test_directory, simple_file_server):
+    """Links in a directory listing resolve against the redirected URL (with trailing slash)."""
+    (test_directory / 'archive').mkdir()
+    (test_directory / 'archive' / 'a.txt').write_text('a')
+    host, port = simple_file_server.server_address
+
+    final_url, content = await ScrapeHTMLDownloader.fetch_html(f'http://127.0.0.1:{port}/archive')
+
+    assert final_url == f'http://127.0.0.1:{port}/archive/'
+    assert resolve_url(final_url, 'a.txt') == f'http://127.0.0.1:{port}/archive/a.txt'

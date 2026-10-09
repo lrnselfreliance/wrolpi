@@ -1,8 +1,8 @@
 import pathlib
 from copy import copy
 from dataclasses import dataclass
-from typing import List
-from urllib.parse import urlparse
+from typing import List, Tuple
+from urllib.parse import urljoin
 
 from bs4.dammit import UnicodeDammit
 from sqlalchemy.orm import Session
@@ -14,20 +14,9 @@ from wrolpi.errors import UnrecoverableDownloadError
 logger = logger.getChild(__name__)
 
 
-def resolve_url(parent_url: str, url: str):
-    parsed_domain = urlparse(parent_url)
-
-    parsed = urlparse(url)
-    if parsed.scheme:
-        # URL is complete or external.
-        return url
-    elif parsed.path.startswith('/'):
-        # URL is absolute from domain.
-        return f'{parsed_domain.scheme}://{parsed_domain.netloc}{url}'
-
-    # Assume URL is relative to the parent URL page.
-    parent_url = parent_url.rstrip('/')
-    return f'{parent_url}/{url}'
+def resolve_url(page_url: str, url: str) -> str:
+    """Resolve a link the way a browser does: relative to the page's directory (or absolute/external)."""
+    return urljoin(page_url, url)
 
 
 @dataclass
@@ -64,13 +53,16 @@ class ScrapeHTMLDownloader(Downloader):
         return '<ScrapeHTMLDownloader>'
 
     @staticmethod
-    async def fetch_html(url: str) -> str:
+    async def fetch_html(url: str) -> Tuple[str, str]:
         """Fetch and decode a page.  A charset in the Content-Type header wins, then the page's
-        <meta> charset; aiohttp alone ignores <meta> and assumes UTF-8."""
+        <meta> charset; aiohttp alone ignores <meta> and assumes UTF-8.
+
+        Returns the final URL after redirects (links resolve against it) and the page content."""
         async with aiohttp_get(url, timeout=60 * 5) as response:
             body = await response.read()
             known_encodings = [response.charset] if response.charset else []
-        return UnicodeDammit(body, known_definite_encodings=known_encodings, is_html=True).unicode_markup
+            final_url = str(response.url)
+        return final_url, UnicodeDammit(body, known_definite_encodings=known_encodings, is_html=True).unicode_markup
 
     def prepare_download(self, session: Session, download: Download) -> PreparedScrape:
         """Validate settings and ensure the destination directory exists.
@@ -124,7 +116,7 @@ class ScrapeHTMLDownloader(Downloader):
                     break
 
                 # Get the HTML of the URL.
-                content = await self.fetch_html(url)
+                url, content = await self.fetch_html(url)
                 page_count += 1
                 if not content:
                     logger.error(f'Failed to download url: {url}')

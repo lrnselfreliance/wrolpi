@@ -127,6 +127,15 @@ describe('<ChannelDownloadForm/>', () => {
         shouldBeInvalid('#url_input');
     });
 
+    it('can be submitted with a frequency of Once', () => {
+        cy.get('#url_input').type('https://example.com/playlist').wait(500);
+        cy.get('#frequency_select').click();
+        cy.contains('[role="option"]:visible', 'Once').should('be.visible').click({force: true});
+        cy.get('#frequency_select').should('have.value', 'Once');
+
+        cy.get('#download_form_download_button').should('not.be.disabled');
+    });
+
     it('can choose different options', () => {
         /*
          * `#download_frequency_selector` and `.item` named the old dropdown and its menu rows.

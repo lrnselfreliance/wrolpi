@@ -38,6 +38,7 @@ import {toast} from "./ui";
 import {CollectionTable} from "./collections/CollectionTable";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {CbzViewer} from "./CbzViewer";
+import {useEpubProgress} from "../hooks/useFileProgress";
 import _ from "lodash";
 
 function DocsPage() {
@@ -165,6 +166,23 @@ function DocsPage() {
     </>;
 }
 
+/**
+ * The embedded viewer (the EPUB viewer, or the browser's PDF viewer).  An EPUB opens where the user left off,
+ * unless a search result says where (`deepLinked`), and saves their place as they read.
+ *
+ * @param epubProgressPath The FileGroup's primary path when an EPUB is shown and tracked, otherwise null.
+ */
+function DocViewerFrame({url, epubProgressPath, fileGroup, deepLinked, title}) {
+    const {iframeRef, resumeCfi} = useEpubProgress(epubProgressPath, fileGroup, {enabled: !!epubProgressPath});
+    const src = resumeCfi && !deepLinked ? `${url}&cfi=${encodeURIComponent(resumeCfi)}` : url;
+    return <iframe
+        ref={iframeRef}
+        src={src}
+        title={title}
+        style={{width: '100%', height: '80vh', border: '1px solid var(--border)'}}
+    />
+}
+
 function DocPage() {
     const {fileGroupId} = useParams();
     const navigate = useNavigate();
@@ -245,6 +263,8 @@ function DocPage() {
         ? `/media/${encodeMediaPath(activePath)}${pageParam ? `#page=${encodeURIComponent(pageParam)}` : ''}`
         : null;
     const embedUrl = isEpub ? viewerUrl : pdfSrc;
+    // Progress belongs to the FileGroup; another format of the same book (a PDF beside the EPUB) is not tracked.
+    const trackedPath = String(activePath) === String(docFile.primary_path) ? docFile.primary_path : null;
 
     const handleDelete = async (force = false) => {
         if (doc && doc.id) {
@@ -354,7 +374,7 @@ function DocPage() {
     return <>
         <div className='wrolpi-button-row'><BackButton/></div>
 
-        {isCbz && activePath && <CbzViewer path={activePath}/>}
+        {isCbz && activePath && <CbzViewer path={activePath} progressPath={trackedPath} fileGroup={docFile}/>}
 
         {canEmbed && embedUrl && !isCbz && <div style={{marginBottom: '1em'}}>
             {/*
@@ -364,11 +384,8 @@ function DocPage() {
               * re-gates rather than inheriting the last one's reveal.
               */}
             <MediaGate key={activePath} gated={isPdf && mediaFilterEnabled}>
-                <iframe
-                    src={embedUrl}
-                    title={docFile.title || docFile.name}
-                    style={{width: '100%', height: '80vh', border: '1px solid var(--border)'}}
-                />
+                <DocViewerFrame url={embedUrl} epubProgressPath={isEpub ? trackedPath : null} fileGroup={docFile}
+                                deepLinked={!!locParam} title={docFile.title || docFile.name}/>
             </MediaGate>
         </div>}
 

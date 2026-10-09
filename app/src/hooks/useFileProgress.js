@@ -17,6 +17,17 @@ const CACHE_PREFIX = 'wrolpi-progress:';
 const FINISHED_PROGRESS = 0.95;
 const MINIMUM_PROGRESS = 0.01;
 const MINIMUM_SECONDS = 10;
+// The most a reader who has not reached the end can be through a file.  The server drops the position of a
+// file at FINISHED_PROGRESS, so the last pages before the end stay resumable.
+const BEFORE_FINISHED = 0.94;
+
+/**
+ * Progress to save for a reader who is past the start and not at the end: kept between the server's floor (below
+ * which it discards the position) and its finished line.
+ */
+export function resumableProgress(fraction) {
+    return Math.min(Math.max(fraction, MINIMUM_PROGRESS), BEFORE_FINISHED);
+}
 
 function readCache(path) {
     try {
@@ -197,4 +208,74 @@ export function useMediaProgress(path, fileGroup, {startSeconds = null, enabled 
     };
 
     return {onLoadedMetadata, onTimeUpdate, onPause, onEnded};
+}
+
+/**
+ * Where to resume `path`, decided once when it is opened.  Saves made while it is open do not move it,
+ * so a viewer whose URL holds the start (the EPUB viewer) is not reloaded as the user reads.
+ */
+export function useResumePosition(path, fileGroup) {
+    const resumeRef = React.useRef({path: null, position: null});
+    if (path && fileGroup && resumeRef.current.path !== path) {
+        resumeRef.current = {path, position: getResumePosition(path, fileGroup)};
+    }
+    return path && resumeRef.current.path === path ? resumeRef.current.position : null;
+}
+
+/**
+ * Track and resume the EPUB viewer (public/epub/epub.html), which posts its location to this window.
+ *
+ * @returns {{iframeRef, resumeCfi}} Put `iframeRef` on the viewer's <iframe>, and pass `resumeCfi` to it as `cfi`.
+ */
+export function useEpubProgress(path, fileGroup, {enabled = true} = {}) {
+    const trackedPath = enabled ? path : null;
+    const {report} = useFileProgress(trackedPath);
+    const resume = useResumePosition(trackedPath, fileGroup);
+    const iframeRef = React.useRef(null);
+
+    React.useEffect(() => {
+        if (!trackedPath) {
+            return;
+        }
+        const onMessage = (event) => {
+            // Only our own viewer, in this iframe.
+            if (event.origin !== window.location.origin || !iframeRef.current
+                || event.source !== iframeRef.current.contentWindow) {
+                return;
+            }
+            const {type, cfi, progress} = event.data || {};
+            if (type !== 'wrolpi:epub-location' || typeof cfi !== 'string' || !Number.isFinite(progress)) {
+                return;
+            }
+            // The viewer posts nothing at the start of the book, so a finished book opened there stays finished.
+            report({progress: progress >= 1 ? 1 : resumableProgress(progress), position: {kind: 'epub', cfi}});
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [trackedPath, report]);
+
+    return {iframeRef, resumeCfi: resume && resume.kind === 'epub' ? resume.cfi : null};
+}
+
+/**
+ * Track and resume a paged viewer (comic books).
+ *
+ * @returns {{initialPage, onPageChange}} The 0-based page to open at, and a callback for each page shown.
+ */
+export function usePageProgress(path, fileGroup, {enabled = true} = {}) {
+    const trackedPath = enabled ? path : null;
+    const {report} = useFileProgress(trackedPath);
+    const resume = useResumePosition(trackedPath, fileGroup);
+
+    const onPageChange = React.useCallback((page, pageCount) => {
+        // The cover is not a place to resume; saving it would clear the reader's place, so a peek at it keeps
+        // the last page saved.
+        if (pageCount <= 0 || page <= 0) {
+            return;
+        }
+        const progress = page >= pageCount - 1 ? 1 : resumableProgress((page + 1) / pageCount);
+        report({progress, position: {kind: 'page', page}});
+    }, [report]);
+
+    return {initialPage: resume && resume.kind === 'page' ? resume.page : 0, onPageChange};
 }

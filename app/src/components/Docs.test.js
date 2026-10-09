@@ -19,10 +19,15 @@ const source = fs.readFileSync(path.join(__dirname, 'Docs.js'), 'utf8');
 
 describe('DocPage embed gating (source contract)', () => {
     it('wraps the embedded viewer in a MediaGate', () => {
-        // The iframe must not be reachable without passing through the gate.
-        const embed = source.match(/<MediaGate[^>]*>\s*<iframe/);
-
+        // The iframe must not be reachable without passing through the gate.  The gate's only child is the
+        // viewer frame, and the frame is just the iframe.
+        const embed = source.match(/<MediaGate[^>]*>\s*<DocViewerFrame/);
         expect(embed).not.toBeNull();
+
+        const frame = source.match(/function DocViewerFrame[\s\S]*?\n}\n/);
+        expect(frame).not.toBeNull();
+        expect(frame[0]).toMatch(/return <iframe/);
+        expect(source.match(/<iframe/g)).toHaveLength(1);
     });
 
     it('gates on the live filter state, not on the theme name', () => {

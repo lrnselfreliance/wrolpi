@@ -242,6 +242,8 @@ either expressed or implied, of the FreeBSD Project. -->
     // Optional search term passed in from a search-result deep link. If present we'll
     // search the spine item at `loc` and jump to + highlight the first match.
     let searchQuery = (params && params.get("q")) ? params.get("q") : null;
+    // Where the reader left off (an EPUB CFI).  A search result's `loc` wins over it.
+    let startCfi = (params && params.get("cfi")) ? params.get("cfi") : null;
 
     let book = ePub(url);
     let rendition = book.renderTo("viewer", {
@@ -250,7 +252,33 @@ either expressed or implied, of the FreeBSD Project. -->
         height: "100%"
     });
 
-    rendition.display(currentSectionIndex);
+    rendition.display(currentSectionIndex !== undefined ? currentSectionIndex : (startCfi || undefined));
+
+    // How far through the book `location` is, from its chapter and its page within that chapter.  Cheaper
+    // than `book.locations.generate()`, which stalls a Raspberry Pi on a large book.
+    function readingProgress(location) {
+        if (location.atEnd) {
+            return 1;
+        }
+        const start = location.start;
+        const sections = book.spine.length || 1;
+        const displayed = start.displayed || {page: 1, total: 1};
+        const withinSection = (displayed.page - 1) / Math.max(displayed.total, 1);
+        return Math.min((start.index + withinSection) / sections, 1);
+    }
+
+    // Tell the WROLPi page that embeds this viewer where the reader is, so it can save their place.  Nothing is
+    // posted at the start of the book: that is where a finished book opens, and saving it would un-finish it.
+    function postLocation(location) {
+        if (window.parent === window || !location || !location.start || location.atStart) {
+            return;
+        }
+        window.parent.postMessage({
+            type: "wrolpi:epub-location",
+            cfi: location.start.cfi,
+            progress: readingProgress(location),
+        }, window.location.origin);
+    }
 
     // --- In-book search ---------------------------------------------------
     // State is module-level so the toolbar buttons can drive it. `hits` is the
@@ -516,6 +544,7 @@ either expressed or implied, of the FreeBSD Project. -->
             prev.style.visibility = "visible";
         }
 
+        postLocation(location);
     });
 
     rendition.on("layout", function (layout) {

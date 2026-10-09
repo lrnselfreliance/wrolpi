@@ -585,6 +585,32 @@ async def test_update_download_with_settings_collection_id(test_session, async_c
 
 
 @pytest.mark.asyncio
+async def test_update_download_frequency_once(test_session, async_client, test_download_manager_config,
+                                             test_download_manager):
+    """Editing a recurring Download to a frequency of 0 ("Once") stores a once-download, not a zero interval."""
+
+    async def dispatch_downloads(*a, **kw):
+        pass
+
+    with mock.patch('wrolpi.downloader.DownloadManager.dispatch_downloads', dispatch_downloads):
+        body = dict(urls=['https://example.com/feed.xml'], downloader='rss', sub_downloader='archive',
+                    frequency=86400)
+        request, response = await async_client.post('/api/download', json=body)
+        assert response.status_code == HTTPStatus.CREATED
+        download = test_session.query(Download).one()
+        assert download.frequency == 86400
+
+        body = dict(urls=['https://example.com/feed.xml'], downloader='rss', sub_downloader='archive', frequency=0)
+        request, response = await async_client.put(f'/api/download/{download.id}', json=body)
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+
+        test_session.expire_all()
+        download = test_session.query(Download).one()
+        assert download.frequency is None
+        assert test_download_manager.get_recurring_downloads(test_session) == []
+
+
+@pytest.mark.asyncio
 async def test_get_downloaders(async_client):
     """A list of Downloaders the user can use can be gotten."""
     request, response = await async_client.get('/api/downloaders')

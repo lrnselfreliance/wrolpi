@@ -1062,6 +1062,8 @@ class DownloadManager:
                         sub_downloader: str | None = None, frequency: int = None,
                         settings: Dict = None, collection_id: int = None) -> Download:
         download = Download.find_by_id(session, id_)
+        # A once-download has no frequency; a frequency of 0 ("Once") is never stored as an interval.
+        frequency = frequency or None
         if collection_id and not frequency:
             raise InvalidDownload(f'A once-download cannot be associated with a Collection')
         download.url = url

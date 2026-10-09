@@ -87,10 +87,12 @@ function Root() {
     </QueryProvider>
 }
 
-const router = createBrowserRouter(createRoutesFromElements(<Route
+export const routes = createRoutesFromElements(<Route
     path='/'
     element={<Root/>}
-    errorElement={<PageNotFound/>}
+    // Root (and its ThemeProvider) is not rendered when Root itself fails, so the error page
+    // brings its own theme; Mantine components cannot render without one.
+    errorElement={<ThemeProvider><PageNotFound/></ThemeProvider>}
 >
     <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
@@ -121,7 +123,11 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path='repos/*' element={<ErrorBoundary><ReposRoute/></ErrorBoundary>}/>
     <Route path='files/*' element={<ErrorBoundary><FilesRoute/></ErrorBoundary>}/>
     <Route path='flasher/*' element={<ErrorBoundary><FlasherRoute/></ErrorBoundary>}/>
-</Route>));
+    {/* Unknown URLs render inside Root, with the navigation bar and theme. */}
+    <Route path='*' element={<PageNotFound/>}/>
+</Route>);
+
+const router = createBrowserRouter(routes);
 
 export default function App() {
     useEventsInterval();

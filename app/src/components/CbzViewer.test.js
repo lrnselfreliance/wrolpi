@@ -62,4 +62,23 @@ describe('CbzViewer progress', () => {
         unmount();
         expect(saves()).toEqual([]);
     });
+
+    test('opening a comic saves nothing, so a finished comic stays finished', async () => {
+        const fileGroup = {progress: 1, position: null, viewed: new Date(9000).toISOString()};
+        const {unmount} = renderWithProviders(<CbzViewer path={PATH} progressPath={PATH} fileGroup={fileGroup}/>);
+        expect(await screen.findByText('1 / 4')).toBeInTheDocument();
+        unmount();
+        expect(saves()).toEqual([]);
+    });
+
+    test('peeking at the cover keeps the reader\'s place', async () => {
+        const fileGroup = {progress: 0.75, position: {kind: 'page', page: 2, updated_at: 1000}};
+        const {unmount} = renderWithProviders(<CbzViewer path={PATH} progressPath={PATH} fileGroup={fileGroup}/>);
+        expect(await screen.findByText('3 / 4')).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText('Previous page'));
+        fireEvent.click(screen.getByLabelText('Previous page'));
+        expect(screen.getByText('1 / 4')).toBeInTheDocument();
+        unmount();
+        expect(saves()).toEqual([expect.objectContaining({position: expect.objectContaining({page: 1})})]);
+    });
 });

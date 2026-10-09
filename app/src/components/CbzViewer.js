@@ -35,6 +35,8 @@ export function CbzViewer({path, progressPath = null, fileGroup = null}) {
     // Read when the pages load; a later save must not move the reader.
     const initialPageRef = useRef(initialPage);
     initialPageRef.current = initialPage;
+    // The page shown on opening is where the reader already is (or the cover of a finished comic); it is not saved.
+    const justOpenedRef = useRef(true);
     const [rtl, setRtl] = useLocalStorage('cbzViewerRtl', false);
     const [fullscreen, setFullscreen] = useState(false);
     const [error, setError] = useState(null);
@@ -51,6 +53,7 @@ export function CbzViewer({path, progressPath = null, fileGroup = null}) {
                     .filter(name => IMAGE_EXTENSIONS.test(name))
                     .sort();
                 const urls = images.map(member => getArchiveMemberUrl(path, member));
+                justOpenedRef.current = true;
                 setPages(urls);
                 setCurrentPage(Math.min(initialPageRef.current, Math.max(urls.length - 1, 0)));
             } catch (e) {
@@ -61,9 +64,14 @@ export function CbzViewer({path, progressPath = null, fileGroup = null}) {
     }, [path]);
 
     useEffect(() => {
-        if (pages && pages.length > 0) {
-            onPageChange(currentPage, pages.length);
+        if (!pages || pages.length === 0) {
+            return;
         }
+        if (justOpenedRef.current) {
+            justOpenedRef.current = false;
+            return;
+        }
+        onPageChange(currentPage, pages.length);
     }, [currentPage, pages, onPageChange]);
 
     const goNext = useCallback(() => {

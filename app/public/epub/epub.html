@@ -267,9 +267,10 @@ either expressed or implied, of the FreeBSD Project. -->
         return Math.min((start.index + withinSection) / sections, 1);
     }
 
-    // Tell the WROLPi page that embeds this viewer where the reader is, so it can save their place.
+    // Tell the WROLPi page that embeds this viewer where the reader is, so it can save their place.  Nothing is
+    // posted at the start of the book: that is where a finished book opens, and saving it would un-finish it.
     function postLocation(location) {
-        if (window.parent === window || !location || !location.start) {
+        if (window.parent === window || !location || !location.start || location.atStart) {
             return;
         }
         window.parent.postMessage({

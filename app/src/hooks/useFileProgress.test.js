@@ -277,6 +277,7 @@ describe('useEpubProgress', () => {
     test('ignores a malformed message', () => {
         const {post, unmount} = renderEpub();
         post({type: 'wrolpi:epub-location', cfi: 42, progress: 0.45});
+        post({type: 'wrolpi:epub-location', cfi: 'epubcfi(/6/10)', progress: NaN});
         post({type: 'something-else', cfi: 'epubcfi(/6/10)', progress: 0.45});
         unmount();
         expect(sent()).toEqual([]);
@@ -302,6 +303,26 @@ describe('usePageProgress', () => {
         expect(sent()).toEqual([expect.objectContaining({
             progress: 0.5, final: true, position: expect.objectContaining({kind: 'page', page: 9}),
         })]);
+    });
+
+    test.each([
+        // [page, pages, progress]: progress stays where the server keeps the page, until the last page.
+        [1, 500, 0.01],
+        [9, 20, 0.5],
+        [37, 40, 0.94],
+        [39, 40, 1],
+    ])('page %i of %i is saved as %f', (page, pageCount, progress) => {
+        const {result, unmount} = renderHook(() => usePageProgress(PATH, null));
+        act(() => result.current.onPageChange(page, pageCount));
+        unmount();
+        expect(sent()).toEqual([expect.objectContaining({progress})]);
+    });
+
+    test('the cover is not saved', () => {
+        const {result, unmount} = renderHook(() => usePageProgress(PATH, null));
+        act(() => result.current.onPageChange(0, 20));
+        unmount();
+        expect(sent()).toEqual([]);
     });
 
     test('a new comic opens at the first page', () => {

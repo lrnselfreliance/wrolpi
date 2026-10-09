@@ -17,6 +17,17 @@ const CACHE_PREFIX = 'wrolpi-progress:';
 const FINISHED_PROGRESS = 0.95;
 const MINIMUM_PROGRESS = 0.01;
 const MINIMUM_SECONDS = 10;
+// The most a reader who has not reached the end can be through a file.  The server drops the position of a
+// file at FINISHED_PROGRESS, so the last pages before the end stay resumable.
+const BEFORE_FINISHED = 0.94;
+
+/**
+ * Progress to save for a reader who is past the start and not at the end: kept between the server's floor (below
+ * which it discards the position) and its finished line.
+ */
+export function resumableProgress(fraction) {
+    return Math.min(Math.max(fraction, MINIMUM_PROGRESS), BEFORE_FINISHED);
+}
 
 function readCache(path) {
     try {
@@ -233,10 +244,11 @@ export function useEpubProgress(path, fileGroup, {enabled = true} = {}) {
                 return;
             }
             const {type, cfi, progress} = event.data || {};
-            if (type !== 'wrolpi:epub-location' || typeof cfi !== 'string' || typeof progress !== 'number') {
+            if (type !== 'wrolpi:epub-location' || typeof cfi !== 'string' || !Number.isFinite(progress)) {
                 return;
             }
-            report({progress, position: {kind: 'epub', cfi}});
+            // The viewer posts nothing at the start of the book, so a finished book opened there stays finished.
+            report({progress: progress >= 1 ? 1 : resumableProgress(progress), position: {kind: 'epub', cfi}});
         };
         window.addEventListener('message', onMessage);
         return () => window.removeEventListener('message', onMessage);
@@ -256,9 +268,13 @@ export function usePageProgress(path, fileGroup, {enabled = true} = {}) {
     const resume = useResumePosition(trackedPath, fileGroup);
 
     const onPageChange = React.useCallback((page, pageCount) => {
-        if (pageCount > 0) {
-            report({progress: (page + 1) / pageCount, position: {kind: 'page', page}});
+        // The cover is not a place to resume; saving it would clear the reader's place, so a peek at it keeps
+        // the last page saved.
+        if (pageCount <= 0 || page <= 0) {
+            return;
         }
+        const progress = page >= pageCount - 1 ? 1 : resumableProgress((page + 1) / pageCount);
+        report({progress, position: {kind: 'page', page}});
     }, [report]);
 
     return {initialPage: resume && resume.kind === 'page' ? resume.page : 0, onPageChange};

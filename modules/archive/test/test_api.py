@@ -590,3 +590,40 @@ async def test_delete_archive_atomic_when_some_tagged(async_client, test_session
     assert all(p.is_file() for p in untagged_paths)
     assert all(p.is_file() for p in tagged_paths)
     assert test_session.query(Archive).count() == 2
+
+
+@pytest.mark.asyncio
+async def test_get_archive_loads_history_eagerly(test_session, archive_factory, async_client, tag_factory):
+    """An Archive's page returns its history, with each Archive's Tags, without a query per history Archive."""
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    tag = await tag_factory()
+    short = [archive_factory('example.com', 'https://example.com/short', tag_names=[tag.name]) for _ in range(2)]
+    long = [archive_factory('example.com', 'https://example.com/long', tag_names=[tag.name]) for _ in range(6)]
+    test_session.commit()
+
+    async def get(archive):
+        statements = []
+
+        def count(conn, cursor, statement, *_):
+            statements.append(statement)
+
+        event.listen(Engine, 'before_cursor_execute', count)
+        try:
+            request, response = await async_client.get(f'/api/archive/{archive.file_group_id}?skip_viewed=true')
+        finally:
+            event.remove(Engine, 'before_cursor_execute', count)
+        assert response.status_code == HTTPStatus.OK, response.json
+        return response.json, len(statements)
+
+    await get(short[-1])  # The first request does one-time work; measure the next ones.
+    short_json, short_statements = await get(short[-1])
+    long_json, long_statements = await get(long[-1])
+
+    assert len(short_json['history']) == 1
+    assert len(long_json['history']) == 5
+    assert long_json['file_group']['tags'] == [tag.name]
+    assert all(i['tags'] == [tag.name] for i in long_json['history'])
+    # Five history Archives cost no more queries than one.
+    assert long_statements == short_statements, (short_statements, long_statements)

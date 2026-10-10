@@ -172,6 +172,7 @@ class Archive(Base, ModelHelper):
             FileGroup.url != None,  # noqa
         ) \
                        .join(FileGroup, FileGroup.id == Archive.file_group_id) \
+                       .options(*Archive.json_options()) \
                        .order_by(FileGroup.published_datetime))
         return history
 

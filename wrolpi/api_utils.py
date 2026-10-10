@@ -53,6 +53,22 @@ def json_response(*a, **kwargs) -> HTTPResponse:
 
 class CustomJSONEncoder(json.JSONEncoder):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # One encoder serializes one response; look up the media directory once, not once per path.
+        self._media_prefix = None
+
+    def _relative_path(self, path: Path) -> str:
+        """The path relative to the media directory, or unchanged if it is outside of it."""
+        if self._media_prefix is None:
+            self._media_prefix = str(get_media_directory()).rstrip('/') + '/'
+        path = str(path)
+        if path.startswith(self._media_prefix):
+            return path[len(self._media_prefix):]
+        if path == '.' or path + '/' == self._media_prefix:
+            return ''
+        return path
+
     def default(self, obj):
         try:
             if hasattr(obj, '__json__'):
@@ -77,15 +93,7 @@ class CustomJSONEncoder(json.JSONEncoder):
                 if hasattr(obj, 'dict'):
                     return obj.dict()
             elif isinstance(obj, Path):
-                media_directory = get_media_directory()
-                try:
-                    path = obj.relative_to(media_directory)
-                except ValueError:
-                    # Path may not be absolute.
-                    path = obj
-                if str(path) == '.':
-                    return ''
-                return str(path)
+                return self._relative_path(obj)
             return super(CustomJSONEncoder, self).default(obj)
         except Exception as e:
             logger.fatal(f'Failed to JSON encode {obj}', exc_info=e)

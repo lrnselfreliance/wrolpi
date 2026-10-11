@@ -35,6 +35,7 @@ import yaml
 from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import types
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import Session
@@ -336,6 +337,30 @@ __all__ = [
 
 # Base is used for all SQLAlchemy models.
 Base = declarative_base()
+
+
+def loaded(obj, *path: str):
+    """Follow `path` (attribute names) from `obj` through state that is already loaded: never runs SQL.
+
+    For `__repr__`, which runs inside log calls on objects that may be expired or detached.  A primary key
+    comes from the identity key, which survives both.  Anything not loaded is None.
+
+    >>> loaded(video, 'file_group', 'title')
+    """
+    for name in path:
+        if obj is None:
+            return None
+        if name in obj.__dict__:
+            obj = obj.__dict__[name]
+            continue
+        state = sa_inspect(obj, raiseerr=False)
+        value = None
+        if state is not None and state.identity:
+            keys = [state.mapper.get_property_by_column(i).key for i in state.mapper.primary_key]
+            if name in keys:
+                value = state.identity[keys.index(name)]
+        obj = value
+    return obj
 
 
 class ModelHelper:

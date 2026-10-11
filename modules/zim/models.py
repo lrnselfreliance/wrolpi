@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
-from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
+from wrolpi.common import loaded, Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
 from wrolpi.db import session_curs, serializer
 from wrolpi.downloader import Download, download_manager
@@ -78,7 +78,8 @@ class Zim(Base, ModelHelper):
     auto_search = Column(Boolean, default=True)
 
     def __repr__(self):
-        return f'<Zim id={self.id} file_group_id={self.file_group_id} path={self.path}>'
+        return f'<Zim id={loaded(self, "id")} file_group_id={loaded(self, "file_group_id")} ' \
+               f'path={loaded(self, "path")}>'
 
     @staticmethod
     def json_options() -> tuple:
@@ -366,13 +367,11 @@ class TagZimEntry(Base):
     created_at: Mapped[datetime] = Column(TZDateTime, default=dates.now)
 
     def __repr__(self):
-        tag = self.tag_id
-        if self.tag:
-            tag = self.tag.name
-        zim = self.zim_id
-        if self.zim:
-            zim = get_relative_to_media_directory(self.zim.path)
-        return f'<TagZimEntry {tag=} zim={str(zim)} zim_entry={self.zim_entry}>'
+        tag = loaded(self, 'tag', 'name') or loaded(self, 'tag_id')
+        zim = loaded(self, 'zim_id')
+        if zim_path := loaded(self, 'zim', 'path'):
+            zim = get_relative_to_media_directory(zim_path)
+        return f'<TagZimEntry {tag=} zim={str(zim)} zim_entry={loaded(self, "zim_entry")}>'
 
     @staticmethod
     def get_by_primary_keys(tag_id: int, zim_id: int, zim_entry: str, session: Session):
@@ -391,10 +390,10 @@ class ZimSubscription(Base):
     download: Mapped[Download] = relationship('Download', primaryjoin='ZimSubscription.download_id==Download.id')
 
     def __repr__(self):
-        name = self.name
-        language = self.language
-        download_id = self.download_id
-        return f'<ZimSubscription id={self.id} {name=} {language=} {download_id=}>'
+        name = loaded(self, 'name')
+        language = loaded(self, 'language')
+        download_id = loaded(self, 'download_id')
+        return f'<ZimSubscription id={loaded(self, "id")} {name=} {language=} {download_id=}>'
 
     @staticmethod
     def json_options() -> tuple:

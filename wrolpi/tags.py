@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, relationship, Session
 
 from wrolpi import dates, flags
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
+from wrolpi.common import loaded, ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
@@ -42,7 +42,9 @@ class TagFile(ModelHelper, Base):
     file_group = relationship('FileGroup', back_populates='tag_files')
 
     def __repr__(self):
-        return f'<TagFile tag={self.tag.name} file_group={self.file_group.primary_path}>'
+        tag = loaded(self, 'tag', 'name') or loaded(self, 'tag_id')
+        file_group = loaded(self, 'file_group', 'primary_path') or loaded(self, 'file_group_id')
+        return f'<TagFile tag={tag} file_group={file_group}>'
 
     @staticmethod
     def get_by_primary_keys(session: Session, file_group_id: int, tag_id: int) -> Optional['TagFile']:
@@ -83,8 +85,8 @@ class Tag(ModelHelper, Base):
     # Note: Channel relationship removed - Channels now access Tags through Collection
 
     def __repr__(self):
-        name = self.name
-        color = self.color
+        name = loaded(self, 'name')
+        color = loaded(self, 'color')
         return f'<Tag {name=} {color=}>'
 
     @serializer

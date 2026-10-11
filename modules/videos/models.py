@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, deferred, undefer, joi
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions, read_captions_with_timestamps
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
+from wrolpi.common import loaded, Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     background_task
 from wrolpi.db import get_db_curs, get_db_session, session_curs, serializer
 from wrolpi.collections.models import Collection
@@ -53,11 +53,10 @@ class Video(ModelHelper, Base):
     file_group: Mapped[FileGroup] = relationship('FileGroup')
 
     def __repr__(self):
-        v = None
-        if self.video_path:
-            v = repr(str(self.video_path.relative_to(get_media_directory())))
-        return f'<Video id={self.id} title={repr(self.file_group.title)} path={v} channel={self.channel_id} ' \
-               f'source_id={repr(self.source_id)}>'
+        title = loaded(self, 'file_group', 'title')
+        path = repr(str(loaded(self, 'file_group', 'primary_path')))
+        return f'<Video id={loaded(self, "id")} title={repr(title)} path={path} channel={loaded(self, "channel_id")} ' \
+               f'source_id={repr(loaded(self, "source_id"))}>'
 
     @staticmethod
     def json_options() -> tuple:
@@ -665,7 +664,8 @@ class Channel(ModelHelper, Base):
         return [d for d in self.collection.downloads if d.frequency] if self.collection else []
 
     def __repr__(self):
-        return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
+        return f'<Channel id={loaded(self, "id")} name={repr(loaded(self, "collection", "name"))} ' \
+               f'url={loaded(self, "url")} directory={loaded(self, "collection", "directory")}>'
 
     @property
     def name(self) -> str | None:

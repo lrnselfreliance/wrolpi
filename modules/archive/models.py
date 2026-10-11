@@ -9,8 +9,8 @@ from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 
 from wrolpi import dates
 from wrolpi.collections import Collection
-from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory, \
-    strip_surrogates
+from wrolpi.common import loaded, ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, \
+    get_media_directory, strip_surrogates
 from wrolpi.dates import now
 from wrolpi.db import serializer
 from wrolpi.errors import UnknownArchive
@@ -60,11 +60,11 @@ class Archive(Base, ModelHelper):
         return d
 
     def __repr__(self):
-        domain_name = self.domain if self.collection else None
-        if domain_name:
-            return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))} ' \
-                   f'domain={domain_name}>'
-        return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))}>'
+        id_, url = loaded(self, 'id'), loaded(self, 'file_group', 'url')
+        path = repr(str(loaded(self, 'file_group', 'primary_path')))
+        if domain_name := loaded(self, 'collection', 'name'):
+            return f'<Archive id={id_} url={url} path={path} domain={domain_name}>'
+        return f'<Archive id={id_} url={url} path={path}>'
 
     @property
     def domain(self) -> str | None:

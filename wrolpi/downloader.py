@@ -31,7 +31,7 @@ from sqlalchemy.orm import Mapped, Session, relationship
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command, CommandResult
-from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
+from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
@@ -273,12 +273,13 @@ class Download(ModelHelper, Base):  # noqa
                               back_populates='downloads')
 
     def __repr__(self):
-        if self.next_download or self.frequency:
-            return f'<Download id={self.id} status={self.status} url={repr(self.url)} ' \
-                   f'next_download={repr(self.next_download)} frequency={self.frequency} attempts={self.attempts} ' \
-                   f'error={bool(self.error)}>'
-        return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts} ' \
-               f'error={bool(self.error)}>'
+        id_, status, url, attempts = (loaded(self, i) for i in ('id', 'status', 'url', 'attempts'))
+        next_download, frequency, error = (loaded(self, i) for i in ('next_download', 'frequency', 'error'))
+        if next_download or frequency:
+            return f'<Download id={id_} status={status} url={repr(url)} ' \
+                   f'next_download={repr(next_download)} frequency={frequency} attempts={attempts} ' \
+                   f'error={bool(error)}>'
+        return f'<Download id={id_} status={status} url={repr(url)} attempts={attempts} error={bool(error)}>'
 
     @serializer
     def __json__(self) -> dict:

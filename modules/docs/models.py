@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
 from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 
-from wrolpi.common import ModelHelper, Base
+from wrolpi.common import loaded, ModelHelper, Base
 from wrolpi.db import get_db_session, serializer
 from wrolpi.files.models import FileGroup
 
@@ -62,8 +62,8 @@ class Doc(ModelHelper, Base):
                             passive_deletes=True)
 
     def __repr__(self):
-        path = str(self.file_group.primary_path) if self.file_group else 'None'
-        return f'<Doc id={self.id} path={repr(path)} file_group_id={self.file_group_id}>'
+        path = str(loaded(self, 'file_group', 'primary_path'))
+        return f'<Doc id={loaded(self, "id")} path={repr(path)} file_group_id={loaded(self, "file_group_id")}>'
 
     @staticmethod
     def json_options() -> tuple:
@@ -166,4 +166,5 @@ class DocSection(ModelHelper, Base):
     doc = relationship('Doc', back_populates='sections')
 
     def __repr__(self):
-        return f'<DocSection id={self.id} doc_id={self.doc_id} kind={self.kind} ordinal={self.ordinal}>'
+        return f'<DocSection id={loaded(self, "id")} doc_id={loaded(self, "doc_id")} kind={loaded(self, "kind")} ' \
+               f'ordinal={loaded(self, "ordinal")}>'

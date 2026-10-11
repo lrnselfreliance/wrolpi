@@ -1338,7 +1338,8 @@ async def test_upsert_file_video_with_channel(async_client, test_session, test_d
     info_json_file.write_text(json.dumps({'duration': 5}))
 
     # Upsert the file, it should be modeled.
-    fg: FileGroup = await lib.upsert_file(video_file)
+    upserted = await lib.upsert_file(video_file)
+    fg = test_session.query(FileGroup).filter_by(id=upserted.file_group_id).one()
     assert fg.model == 'video', 'Upserted file should have been modeled.'
     assert fg.my_video_files(), 'Video file was upserted.'
     assert fg.my_json_files(), 'Info json file should have been found near video file.'
@@ -1348,6 +1349,21 @@ async def test_upsert_file_video_with_channel(async_client, test_session, test_d
     assert video.channel_id == channel.id, "Videos should be assigned to the Channel their files are in"
     assert video.video_path, 'Video file was upserted'
     assert video.info_json_path, 'Info json file not found near video file.'
+
+
+@pytest.mark.asyncio
+async def test_upsert_file_result_outlives_its_session(test_session, test_directory, video_bytes):
+    """`upsert_file`'s Session is gone once it returns (production frees it), so its result must not need it."""
+    video_file = test_directory / 'video.mp4'
+    video_file.write_bytes(video_bytes)
+
+    upserted = await lib.upsert_file(video_file)
+    sqlalchemy.orm.close_all_sessions()
+
+    location = upserted.location
+    file_group = test_session.query(FileGroup).one()
+    assert location == file_group.location
+    assert upserted.file_group_id == file_group.id
 
 
 @only_macos

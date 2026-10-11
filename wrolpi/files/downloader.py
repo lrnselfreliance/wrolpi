@@ -95,8 +95,8 @@ class FileDownloader(Downloader, ABC):
         output_path = None
         try:
             output_path = await self.download_file(download, prepared.url, prepared.destination, ctx=ctx)
-            fg = await upsert_file(output_path, tag_names=download.tag_names)
-            return ExecutedFile(output_path=output_path, location=fg.location)
+            upserted = await upsert_file(output_path, tag_names=download.tag_names)
+            return ExecutedFile(output_path=output_path, location=upserted.location)
         except IgnoredDirectoryError:
             # `upsert_file` says this is an ignored file, that's fine.
             return ExecutedFile(

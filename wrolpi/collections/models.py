@@ -10,7 +10,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Inde
 from sqlalchemy.orm import Mapped, relationship, Session, joinedload, selectinload
 
 from wrolpi import flags
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
+from wrolpi.common import loaded, Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
 from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
@@ -141,7 +141,8 @@ class Collection(ModelHelper, Base):
     )
 
     def __repr__(self):
-        return f'<Collection id={self.id} name={repr(self.name)} directory={self.directory} items={self.item_count}>'
+        return f'<Collection id={loaded(self, "id")} name={repr(loaded(self, "name"))} ' \
+               f'directory={loaded(self, "directory")} items={loaded(self, "item_count")}>'
 
     @property
     def tag_name(self) -> str | None:
@@ -1265,8 +1266,8 @@ class CollectionItem(ModelHelper, Base):
     )
 
     def __repr__(self):
-        return (f'<CollectionItem collection={self.collection_id} kind={self.item_kind} '
-                f'position={self.position}>')
+        return (f'<CollectionItem collection={loaded(self, "collection_id")} kind={loaded(self, "item_kind")} '
+                f'position={loaded(self, "position")}>')
 
     @staticmethod
     def json_options() -> tuple:

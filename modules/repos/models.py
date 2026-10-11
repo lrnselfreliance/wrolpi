@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, Text, Bo
 from sqlalchemy.orm import relationship, Session, joinedload, selectinload, deferred
 
 from wrolpi.collections.models import Collection
-from wrolpi.common import Base, ModelHelper, get_relative_to_media_directory
+from wrolpi.common import loaded, Base, ModelHelper, get_relative_to_media_directory
 from wrolpi.dates import TZDateTime
 from wrolpi.db import serializer
 from wrolpi.downloader import Download
@@ -57,7 +57,8 @@ class Repository(ModelHelper, Base):
                                 uselist=False)
 
     def __repr__(self):
-        return f'<Repository id={self.id} url={self.url} directory={self.directory}>'
+        return f'<Repository id={loaded(self, "id")} url={loaded(self, "url")} ' \
+               f'directory={loaded(self, "collection", "directory")}>'
 
     @property
     def name(self) -> Optional[str]:

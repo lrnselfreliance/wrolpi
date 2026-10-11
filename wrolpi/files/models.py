@@ -10,7 +10,7 @@ from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index,
 from sqlalchemy import types
 from sqlalchemy.orm import Mapped, deferred, relationship, Session, selectinload
 
-from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
+from wrolpi.common import loaded, Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import get_db_session, serializer
@@ -136,8 +136,9 @@ class FileGroup(ModelHelper, Base):
     d_text = deferred(Column(String))
 
     def __repr__(self):
-        m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
-        return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
+        model = loaded(self, 'model')
+        m = f'model={model}' if model else f'mimetype={loaded(self, "mimetype")}'
+        return f'<FileGroup id={loaded(self, "id")} {m} primary_path={repr(str(loaded(self, "primary_path")))}>'
 
     @staticmethod
     def json_options() -> tuple:
@@ -877,7 +878,7 @@ class Directory(ModelHelper, Base):
         return d
 
     def __repr__(self):
-        return f'<Directory path={repr(str(self.path))}>'
+        return f'<Directory path={repr(str(loaded(self, "path")))}>'
 
 
 class WrolpiKV(Base):

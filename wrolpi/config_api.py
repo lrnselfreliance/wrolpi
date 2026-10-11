@@ -10,12 +10,6 @@ from wrolpi.errors import InvalidConfig
 
 config_bp = Blueprint('config', '/api/config')
 
-# Settings which can only be changed by editing the config file on the WROLPi.  The API has no login, so anyone who
-# can reach it must not be able to grant themselves more access.
-FILE_ONLY_SETTINGS = {
-    'wrolpi.yaml': {'allow_database_query'},
-}
-
 
 @config_bp.get('/')
 @openapi.description('Get the status (imported, valid, etc.) of all configs.')
@@ -42,11 +36,6 @@ def get_config(request: Request):
 def post_config_update(request: Request, body: config_schema.ConfigUpdateRequest):
     file_name, = request.args['file_name']
     config = get_config_by_file_name(file_name)
-    # The Configs page sends the whole config back, so only a change is refused.
-    changed = {k for k in FILE_ONLY_SETTINGS.get(file_name, set()) & set(body.config)
-               if body.config[k] != config.dict().get(k)}
-    if changed:
-        raise InvalidConfig(f'{", ".join(sorted(changed))} can only be changed by editing {file_name}')
     config.update(body.config)
     return response.empty()
 

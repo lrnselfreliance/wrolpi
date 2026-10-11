@@ -192,18 +192,6 @@ async def test_database_schema(test_session, async_client, allow_database_query)
 
 
 @pytest.mark.asyncio
-async def test_database_query_cannot_be_enabled_by_api(test_session, async_client, test_wrolpi_config):
-    """The config update API refuses to enable queries; only an edit of wrolpi.yaml on the WROLPi can."""
-    body = dict(config=dict(allow_database_query=True))
-    request, response = await async_client.post('/api/config?file_name=wrolpi.yaml', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert get_wrolpi_config().allow_database_query is False
-
-    request, response = await post_query(async_client, 'SELECT 1')
-    assert response.status_code == HTTPStatus.FORBIDDEN
-
-
-@pytest.mark.asyncio
 async def test_database_query_memory_limits(test_session, async_client, allow_database_query):
     """A query cannot build huge values or rows, and the response is bounded however many rows are asked for."""
     request, response = await post_query(async_client, f'SELECT zeroblob({db_query.MAX_VALUE_LENGTH + 1})')

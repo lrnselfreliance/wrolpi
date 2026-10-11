@@ -632,6 +632,9 @@ class Channel(ModelHelper, Base):
     # Joined: a Channel's name, directory and Tag live on its Collection.
     collection = relationship('Collection', foreign_keys=[collection_id], lazy='joined')
 
+    # The yt-dlp catalog is large and no response reads it.
+    dict_exclude = ('info_json',)
+
     @property
     def downloads(self) -> list:
         """Get recurring downloads from associated Collection.  Once-downloads are excluded because they are not
@@ -966,6 +969,7 @@ class Channel(ModelHelper, Base):
         )
         return d
 
+    @serializer
     def dict(self, with_statistics: bool = False, with_downloads: bool = True) -> dict:
         d = super(Channel, self).dict()
         # Add Collection-delegated properties

@@ -604,6 +604,8 @@ async def test_get_archive_loads_history_eagerly(test_session, archive_factory, 
     test_session.commit()
 
     async def get(archive):
+        url = f'/api/archive/{archive.file_group_id}?skip_viewed=true'
+        test_session.expire_all()  # Each request starts from the same Session state.
         statements = []
 
         def count(conn, cursor, statement, *_):
@@ -611,7 +613,7 @@ async def test_get_archive_loads_history_eagerly(test_session, archive_factory, 
 
         event.listen(Engine, 'before_cursor_execute', count)
         try:
-            request, response = await async_client.get(f'/api/archive/{archive.file_group_id}?skip_viewed=true')
+            request, response = await async_client.get(url)
         finally:
             event.remove(Engine, 'before_cursor_execute', count)
         assert response.status_code == HTTPStatus.OK, response.json

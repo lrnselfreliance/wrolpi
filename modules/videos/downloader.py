@@ -712,7 +712,6 @@ class ChannelDownloader(Downloader, ABC):
         with get_db_session(commit=True) as session:
             channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name,
                                             destination=prepared.destination)
-            channel.dict()  # get all attributes while we have the session.
             if channel and channel.id:
                 channel_id = channel.id
                 collection_id = channel.collection_id
@@ -1469,8 +1468,6 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
     """
     try:
         channel = get_channel(session, source_id=source_id, url=url, name=name, return_dict=False)
-        # Get all properties while we have the session.
-        channel.dict()
         return channel
     except UnknownChannel:
         pass
@@ -1481,7 +1478,6 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
     if destination:
         try:
             channel = get_channel(session, directory=destination, return_dict=False)
-            channel.dict()
             return channel
         except UnknownChannel:
             pass
@@ -1498,7 +1494,6 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
     # Reuse the Channel that already owns this directory instead of creating a conflicting one.
     try:
         channel = get_channel(session, directory=channel_directory, return_dict=False)
-        channel.dict()
         return channel
     except UnknownChannel:
         pass
@@ -1519,9 +1514,6 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
             f'Cannot create channel {name!r}: conflicts with an existing channel') from e
     # Create the directory now that the channel is approved.
     channel_directory.mkdir(exist_ok=True)
-    # Get all properties while we have the session.
-    channel.dict()
-
     return channel
 
 

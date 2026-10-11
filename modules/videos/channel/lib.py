@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from sqlalchemy import or_, func, desc
-from sqlalchemy.orm import Query, Session, joinedload
+from sqlalchemy.orm import Query, Session
 
 from wrolpi import flags
 from wrolpi.collections import Collection
@@ -71,9 +71,11 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
     """
     channel: COD = None  # noqa
     # Try to find the channel by the most reliable methods first.
-    # Always eagerly load Collection to ensure name/directory/tag_id are available
+    # Load what `Channel.dict()` reads: the Collection (name/directory/tag) and its Downloads.  Overwrite any
+    # copy already in the Session so the Channel reflects the database.
+    query = session.query(Channel).options(*Channel.json_options()).populate_existing()
     if channel_id:
-        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(id=channel_id).one_or_none()
+        channel = query.filter_by(id=channel_id).one_or_none()
     if not channel and directory:
         directory = Path(directory)
         if not directory.is_absolute():
@@ -85,31 +87,27 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
         media_dir = get_media_directory()
         current = directory
         while current != media_dir and current != current.parent:
-            channel = session.query(Channel).options(joinedload(Channel.collection)).join(Collection).filter(
-                Collection.directory == str(current)).one_or_none()
+            channel = query.join(Collection).filter(Collection.directory == str(current)).one_or_none()
             if channel:
                 break
             current = current.parent
     if not channel and source_id:
-        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
-            source_id=source_id).one_or_none()
+        channel = query.filter_by(source_id=source_id).one_or_none()
     if not channel and url:
-        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(url=url).one_or_none()
+        channel = query.filter_by(url=url).one_or_none()
     if not channel and url:
         # Try to extract YouTube channel ID from the URL and match by source_id.
         from modules.videos.common import get_youtube_channel_id
         yt_channel_id = get_youtube_channel_id(url)
         if yt_channel_id:
-            channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
-                source_id=yt_channel_id).one_or_none()
+            channel = query.filter_by(source_id=yt_channel_id).one_or_none()
     if not channel and name:
-        channel = session.query(Channel).join(Collection).filter(Collection.name == name).one_or_none()
+        channel = query.join(Collection).filter(Collection.name == name).one_or_none()
 
     if not channel:
         raise UnknownChannel(f'No channel matches {channel_id=} {source_id=} {url=} {directory=}')
 
     logger.debug(f'Found {channel=} using {channel_id=} {source_id=} {url=} {directory=}')
-    session.refresh(channel)
     if return_dict:
         statistics = channel.get_statistics()
         channel = channel.dict()
@@ -179,12 +177,13 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
         name=data.name,
         kind='channel',
         directory=directory,
+        downloads=[],  # A new Collection has none; nothing to load.
     )
     session.add(collection)
     session.flush([collection])
 
     # Create Channel linked to Collection
-    channel = Channel(collection_id=collection.id)
+    channel = Channel(collection=collection)
     session.add(channel)
     session.flush([channel])
     # Apply the changes now that we've OK'd them
@@ -199,7 +198,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 
 def delete_channel(session: Session, *, channel_id: int):
     check_channels_config_imported()
-    channel = Channel.find_by_id(session, channel_id)
+    channel = get_channel(session, channel_id=channel_id, return_dict=False)
 
     channel_dict = channel.dict()
     channel.delete_with_videos()

@@ -115,14 +115,14 @@ async def test_channels_no_url(async_client, test_session, test_directory, test_
         directory=str(channel1_directory),
     )
     channel1.url = ''
-    lib.create_channel(test_session, data=channel1)
+    lib.create_channel(test_session, data=channel1, return_dict=False)
 
     channel2 = schema.ChannelPostRequest(
         name='bar',
         directory=str(channel2_directory),
         url=''
     )
-    lib.create_channel(test_session, data=channel2)
+    lib.create_channel(test_session, data=channel2, return_dict=False)
 
     channels = list(test_session.query(Channel))
     assert len(channels) == 2

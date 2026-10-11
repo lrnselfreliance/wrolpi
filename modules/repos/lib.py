@@ -738,6 +738,8 @@ def _set_repository_download(session: Session, repo: Repository, frequency: int,
     (`frequency` is NEVER) has none; with `clone`, it is cloned once if its clone is missing."""
     if not frequency:
         if download := repo.download:
+            # A deleted object stays in loaded collections; remove it so the Repo reads as never updated.
+            repo.collection.downloads.remove(download)
             session.delete(download)
         if clone and not (repo.directory / '.git').exists():
             request_repository_update(session, repo)

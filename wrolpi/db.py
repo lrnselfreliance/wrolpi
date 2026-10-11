@@ -204,6 +204,12 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
     return engine
 
 
+# Options for a request's Session.  Committing does not expire loaded objects: the handler serializes them after
+# its commit without a query (see `no_db_access`), and an async Session cannot reload them at all.  A handler that
+# changes data outside the Session (raw SQL, triggers, another connection) must `session.refresh()` what it reads
+# next.  Background Sessions (`get_db_session`) keep SQLAlchemy's default and reload expired objects after a commit.
+REQUEST_SESSION_OPTIONS = dict(expire_on_commit=False)
+
 _engine_lock = threading.Lock()
 _engine: sqlalchemy.engine.Engine = None
 _session_maker: sessionmaker = None
@@ -259,7 +265,7 @@ class RequestSession(Session):
     it.  `close()` releases the connection."""
 
     def __init__(self, engine: sqlalchemy.engine.Engine, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(**{**REQUEST_SESSION_OPTIONS, **kwargs})
         self._request_engine = engine
         self._request_connection = None
 

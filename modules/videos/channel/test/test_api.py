@@ -317,6 +317,8 @@ async def test_channel_by_id(test_session, async_client, simple_channel, simple_
     channel = response.json['channel']
     # needs_reorganization should be included for UI to display reorganization status
     assert 'needs_reorganization' in channel
+    # The yt-dlp catalog is large and deferred; it is never loaded for a response.
+    assert 'info_json' not in channel
 
 
 @pytest.mark.asyncio

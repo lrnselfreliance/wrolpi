@@ -549,7 +549,9 @@ class TestConfigStatusIncludesBackupInfo:
         assert status['has_backup_import'] is True
         assert 'backup_dates' not in status
 
-    def test_non_db_config_no_backup_info(self, test_directory, test_wrolpi_config):
+    @pytest.mark.asyncio
+    async def test_non_db_config_no_backup_info(self, test_directory, test_wrolpi_config, async_client):
+        """`config_status` reads the shared context, which `async_client` attaches."""
         from wrolpi.common import get_wrolpi_config
         config = get_wrolpi_config()
         status = config.config_status()

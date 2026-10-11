@@ -2066,7 +2066,14 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
     get_wrolpi_config().ignored_directories = kept
 
 
-async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> FileGroup:
+@dataclasses.dataclass(frozen=True)
+class UpsertedFile:
+    """The FileGroup `upsert_file` created or updated.  Plain values: its Session is gone once it returns."""
+    file_group_id: int
+    location: str
+
+
+async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> UpsertedFile:
     """Insert/update all files in the provided file's FileGroup."""
     if not file or not file.is_file():
         raise InvalidFile(f'Cannot upsert file that does not exist: {file}')
@@ -2130,11 +2137,12 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
 
         # Commit all changes in one transaction
         session.commit()
+        upserted = UpsertedFile(file_group_id=file_group.id, location=file_group.location)
 
     # Upsert directories after FileGroup is committed
     upsert_directories([], file.parents)
 
-    return file_group
+    return upserted
 
 
 def get_file_location_href(file: pathlib.Path) -> str:

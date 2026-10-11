@@ -181,7 +181,7 @@ async def singlefile_upload_switch_handler(url=None):
         # abort the whole transaction — the loser of the race rolls back its
         # own savepoint, set_tags() re-resolves the name, and finds the row
         # the winner just committed.
-        file_group_id = archive.file_group.id
+        file_group_id = archive.file_group_id
         with get_db_session(commit=True) as session:
             for name in tag_names:
                 if Tag.get_by_name(session, name):
@@ -197,10 +197,10 @@ async def singlefile_upload_switch_handler(url=None):
             fg = session.query(FileGroup).filter_by(id=file_group_id).one()
             fg.set_tags(session, list(tag_names))
 
-    name = archive.file_group.title or archive.file_group.url
-    logger.info(f'Created Archive from upload ({q_size}): {archive}')
+    name = archive.name
+    logger.info(f'Created Archive from upload ({q_size}): {name}')
     Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
-    url = archive.file_group.url
+    url = archive.url
     with get_db_session(commit=True) as session:
         if url and (download := Download.get_by_url(session, url)):
             if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:

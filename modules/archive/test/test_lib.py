@@ -1402,3 +1402,26 @@ async def test_get_statistics(test_session, archive_factory):
     assert stats['archives']['archives'] == 4
     # Should count 2 domain collections (example.com and example.org).
     assert stats['domains']['domains'] == 2
+
+
+@pytest.mark.asyncio
+async def test_singlefile_to_archive_result_outlives_its_session(async_client, test_session, test_directory,
+                                                                  singlefile_contents_factory):
+    """`singlefile_to_archive`'s Session is gone once it returns (production frees it), so its result must not
+    need it."""
+    import sqlalchemy.orm
+    from unittest import mock
+
+    singlefile = singlefile_contents_factory(title='upload title', url='https://example.com/upload').encode()
+    artifacts = lib.SinglefileArtifacts(url='https://example.com/upload', singlefile=singlefile,
+                                        readability=None, screenshot=None)
+    with mock.patch('modules.archive.lib.extract_singlefile_artifacts', return_value=artifacts):
+        uploaded = await lib.singlefile_to_archive(singlefile)
+    sqlalchemy.orm.close_all_sessions()
+
+    location, name, url = uploaded.location, uploaded.name, uploaded.url
+    archive = test_session.query(Archive).one()
+    assert location == archive.location
+    assert name == 'upload title'
+    assert url == 'https://example.com/upload'
+    assert uploaded.file_group_id == archive.file_group_id

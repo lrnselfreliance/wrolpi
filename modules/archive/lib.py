@@ -1491,8 +1491,10 @@ def search_archives(session: Session, search_str: str, domain: str, limit: int, 
         )
     else:
         if file_group_search:
+            # An inner join lets SQLite start from the FTS matches; a LEFT JOIN pins `archive` as the outer
+            # table, which runs the MATCH once per Archive.
             count_from = f'''FROM archive a
-            LEFT JOIN file_group fg ON fg.id = a.file_group_id
+            JOIN file_group fg ON fg.id = a.file_group_id
             {file_group_search.join}'''
             count_wheres = list(wheres)
             count_wheres.append(file_group_search.where)

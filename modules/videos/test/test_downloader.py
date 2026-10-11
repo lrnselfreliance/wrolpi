@@ -564,6 +564,44 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
 
 
 @pytest.mark.asyncio
+async def test_video_download_deletes_format_leftovers(test_session, test_directory, mock_video_extract_info,
+                                                       simple_channel, await_switches, video_download_manager,
+                                                       mock_video_process_runner, image_file):
+    """yt-dlp's per-format files (`<stem>.f313.webm`) left by an earlier, unmerged download are deleted, whatever
+    their extension, so they do not join the new Video's FileGroup."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    # An earlier download's video-only format file was never merged; WROLPi indexed it and made a poster for it.
+    leftover_video = simple_channel.directory / 'a video.f313.webm'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', leftover_video)
+    leftover_poster = simple_channel.directory / 'a video.f313.jpg'
+    image_file.rename(leftover_poster)
+    leftover_ytdl = simple_channel.directory / 'a video.f251.webm.ytdl'
+    leftover_ytdl.write_text('{}')
+    # Not a format file of this video.
+    other = simple_channel.directory / 'a video.f313 notes.txt'
+    other.write_text('keep me')
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name)
+        await video_download_manager.wait_for_all_downloads()
+
+    video: Video = test_session.query(Video).one()
+    assert video.video_path == video_path
+    assert not leftover_video.exists() and not leftover_poster.exists() and not leftover_ytdl.exists()
+    assert not any('.f313.' in i.name or '.f251.' in i.name for i in video.file_group.my_paths())
+    assert other.exists()
+
+
+@pytest.mark.asyncio
 async def test_download_info_json_finds_existing_video(test_session, test_directory, video_factory):
     """`download_info_json` looks up the existing Video by its URL.
 

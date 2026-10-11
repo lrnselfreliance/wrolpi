@@ -1406,23 +1406,20 @@ class VideoDownloader(Downloader, ABC):
         """Delete temporary "part" files that are used by yt-dlp when downloading video (and related) files."""
         files = list(files)
 
-        video_suffix = video_file.suffix.lstrip('.')
-
         # Delete any files in this group that end with .part.
         for part_file in [i for i in files if i.name.endswith('.part')]:
             logger.warning(f'Deleting leftover .part file: {part_file}')
             part_file.unlink()
             files.remove(part_file)
 
-        # Delete any video files that are a temporary file that contain the "format" number.
-        # Example:  The Video Title.f616.mp4
-        video_files = [i for i in files if i != video_file and i.name.endswith(video_suffix)]
-        for part_video in video_files:
-            if VIDEO_FORMAT_PARSER.match(part_video.stem):
-                # Extra yt-dlp format video file that is not the video file, delete it.
-                logger.warning(f'Deleting leftover incomplete video file: {part_video}')
-                part_video.unlink()
-                files.remove(part_video)
+        # Delete files of an unmerged yt-dlp "format" download, whatever their extension, and anything made from them
+        # (an earlier refresh may have indexed one and made a poster).  Example:  The Video Title.f313.webm
+        video_stem, _ = split_path_stem_and_suffix(video_file)
+        format_file = re.compile(rf'^{re.escape(video_stem)}\.f\d{{2,4}}\.')
+        for part_file in [i for i in files if i != video_file and format_file.match(i.name)]:
+            logger.warning(f'Deleting leftover yt-dlp format file: {part_file}')
+            part_file.unlink()
+            files.remove(part_file)
 
         return files
 
@@ -1451,7 +1448,6 @@ class VideoDownloader(Downloader, ABC):
 
 VTT_SUFFIX_PARSER = re.compile(r'^\.([a-z]{2,3})-(.+?)\.(vtt|srt)$', re.IGNORECASE)
 
-VIDEO_FORMAT_PARSER = re.compile(r'^.+?\.f\d{2,4}')
 
 channel_downloader = ChannelDownloader()
 # Videos may match the ChannelDownloader, give it a higher priority.

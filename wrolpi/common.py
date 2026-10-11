@@ -340,8 +340,12 @@ Base = declarative_base()
 
 class ModelHelper:
 
+    # Columns `dict()` leaves out, such as large deferred columns that no response needs.
+    dict_exclude = ()
+
     def dict(self, *_, **__) -> dict:
-        d = {i.name: getattr(self, i.name) for i in self.__table__.columns}  # noqa
+        d = {i.name: getattr(self, i.name) for i in self.__table__.columns  # noqa
+             if i.name not in self.dict_exclude}
         return d
 
     @classmethod

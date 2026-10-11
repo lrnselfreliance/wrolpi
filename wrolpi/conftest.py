@@ -45,7 +45,7 @@ from wrolpi.common import logger, await_background_tasks as await_background_tas
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
-from wrolpi.db import create_wrolpi_engine, RequestSession
+from wrolpi.db import create_wrolpi_engine, RequestDB, RequestSession, REQUEST_SESSION_OPTIONS
 from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
@@ -90,9 +90,25 @@ def test_session(test_directory) -> Generator[Session, Any, None]:
         """Get the testing db"""
         return test_engine, session
 
+    def fake_get_request_session():
+        """A request shares the testing db, but commits like a `RequestSession`: without expiring.  The default
+        returns once the handler is done (`background_task_listener`, `finish`), for the background code which
+        shares the session."""
+        session.expire_on_commit = REQUEST_SESSION_OPTIONS['expire_on_commit']
+        return test_engine, session
+
+    finish = RequestDB.finish
+
+    def fake_finish(self, ok: bool):
+        try:
+            finish(self, ok)
+        finally:
+            session.expire_on_commit = True
+
     try:
         with mock.patch('wrolpi.db._get_db_session', fake_get_db_session), \
-                mock.patch('wrolpi.db._get_request_session', fake_get_db_session):
+                mock.patch('wrolpi.db._get_request_session', fake_get_request_session), \
+                mock.patch.object(RequestDB, 'finish', fake_finish):
             yield session
     finally:
         session.rollback()
@@ -193,6 +209,9 @@ ROUTES_ATTACHED = False
 @api_app.on_response
 async def background_task_listener(request, response):
     """Wait for all background tasks to finish before returning API response while testing."""
+    if session := getattr(request.ctx, 'session', None):
+        # The handler is done.  Background work shares the test's Session, and expires on commit like production.
+        session.expire_on_commit = True
     await await_switches_()
 
 

@@ -284,7 +284,8 @@ class Collection(ModelHelper, Base):
             )
         if reset_attempts:
             download.attempts = 0
-        download.collection_id = self.id
+        # Through the relationship, so `self.downloads` stays current if it is loaded.
+        download.collection = self
         return download
 
     @staticmethod
@@ -931,6 +932,7 @@ class Collection(ModelHelper, Base):
             return collection
         raise UnknownCollection(f'Cannot find Collection with directory {path}')
 
+    @serializer
     def dict(self) -> dict:
         """Return dictionary representation."""
         d = super(Collection, self).dict()
@@ -1272,6 +1274,7 @@ class CollectionItem(ModelHelper, Base):
         FileGroup's Tags, or its Zim."""
         return joinedload(CollectionItem.file_group).selectinload(FileGroup.tag_files), joinedload(CollectionItem.zim)
 
+    @serializer
     def dict(self) -> dict:
         """Return dictionary representation."""
         d = super(CollectionItem, self).dict()

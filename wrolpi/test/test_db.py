@@ -262,6 +262,25 @@ def test_request_session_keeps_one_connection_until_closed(test_session):
         session.close()
 
 
+def test_only_request_sessions_keep_objects_after_commit(test_session):
+    """A request serializes what it committed without a query (an async Session could not query at all).  Background
+    Sessions reload objects after a commit, because they change data outside the Session (raw SQL, triggers)."""
+    test_session.add(Tag(name='one', color='#000000'))
+    test_session.commit()
+    with production_like_sessions(test_session) as maker:
+        request_session = RequestSession(maker.kw['bind'])
+        tag = request_session.query(Tag).one()
+        request_session.commit()
+        with no_db_access('reading after a commit'):
+            assert tag.name == 'one'
+        request_session.close()
+
+        with get_db_session() as session:
+            tag = session.query(Tag).one()
+            session.commit()
+            assert sqlalchemy.inspect(tag).expired
+
+
 @pytest.mark.allow_unexpected_queries
 def test_no_db_access_refuses_queries_during_tests(test_session):
     """Serializing must not query: the data must already be loaded."""

@@ -37,7 +37,6 @@ async def get_channels(request: Request):
 def channel_get(request: Request, channel_id: int = None):
     session = request.ctx.session
     channel = lib.get_channel(session, channel_id=channel_id, return_dict=True)
-    channel.pop('info_json')
     return json_response({'channel': channel})
 
 

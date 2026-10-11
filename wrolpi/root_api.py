@@ -30,6 +30,7 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
     set_global_log_level, get_relative_to_media_directory, search_other_estimates, set_system_timezone
 from wrolpi.config_api import config_bp
+from wrolpi.db_query import db_query_bp
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
@@ -59,6 +60,7 @@ api_app.blueprint(archive_bp)
 api_app.blueprint(bookmarks_bp)
 api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
+api_app.blueprint(db_query_bp)
 api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(flasher_bp)

@@ -1102,6 +1102,7 @@ class MultiFileConfig:
 
 @dataclass
 class WROLPiConfigValidator:
+    allow_database_query: bool = None
     archive_destination: str = None
     check_for_upgrades: bool = None
     download_daily_limit_global: int = None
@@ -1348,6 +1349,7 @@ def get_config_by_file_name(file_name: str) -> ConfigFile:
 class WROLPiConfig(ConfigFile):
     file_name = 'wrolpi.yaml'
     default_config = dict(
+        allow_database_query=False,
         archive_destination='archive/%(domain_tag)s/%(domain)s',
         download_daily_limit_global=None,
         download_daily_limit_per_domain=None,
@@ -1599,6 +1601,14 @@ class WROLPiConfig(ConfigFile):
     @throttle_on_startup.setter
     def throttle_on_startup(self, value: bool):
         self.update({'throttle_on_startup': value})
+
+    @property
+    def allow_database_query(self) -> bool:
+        return self._config['allow_database_query']
+
+    @allow_database_query.setter
+    def allow_database_query(self, value: bool):
+        self.update({'allow_database_query': value})
 
     @property
     def wrol_mode(self) -> bool:

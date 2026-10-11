@@ -229,3 +229,15 @@ class InvalidJob(APIError):
     code = 'INVALID_JOB'
     summary = 'The Job request is invalid.'
     status_code = HTTPStatus.BAD_REQUEST
+
+
+class DatabaseQueryDisabled(APIError):
+    code = 'DATABASE_QUERY_DISABLED'
+    summary = 'Database queries are disabled.  Set `allow_database_query: true` in wrolpi.yaml, then import it.'
+    status_code = HTTPStatus.FORBIDDEN
+
+
+class InvalidDatabaseQuery(APIError):
+    code = 'INVALID_DATABASE_QUERY'
+    summary = 'The database query is invalid, not read-only, or took too long.'
+    status_code = HTTPStatus.BAD_REQUEST

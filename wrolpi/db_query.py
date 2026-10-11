@@ -51,8 +51,10 @@ ALLOWED_ACTIONS = {
     sqlite3.SQLITE_FUNCTION,
     sqlite3.SQLITE_RECURSIVE,
 }
-# PRAGMAs which only describe the schema.  A PRAGMA with an argument (e.g. `PRAGMA x=1`) is refused.
+# PRAGMAs which only read, whatever their argument.  Every other PRAGMA (e.g. `PRAGMA foreign_keys=OFF`) is refused.
 ALLOWED_PRAGMAS = {
+    # FTS5 reads this when it opens a table, through the authorizer, on SQLite 3.46 (Debian 13).
+    'data_version',
     'foreign_key_list',
     'index_info',
     'index_list',
@@ -108,7 +110,7 @@ def _raise_query_error(e: sqlite3.Error):
     message = str(e)
     if isinstance(e, sqlite3.OperationalError) and message == 'interrupted':
         message = f'Query exceeded the {QUERY_TIMEOUT:g} second time limit'
-    elif 'not authorized' in message:
+    elif 'not authorized' in message or 'authorization denied' in message:
         message = 'Only read-only queries (SELECT) are allowed'
     elif 'too big' in message:
         message = f'A value is too large (over {MAX_VALUE_LENGTH} bytes)'

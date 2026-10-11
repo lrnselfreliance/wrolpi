@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from http import HTTPStatus
 from unittest import mock
 
@@ -89,6 +90,7 @@ async def test_database_query_select(test_session, async_client, allow_database_
     'PRAGMA foreign_keys=OFF',
     'BEGIN',
     'VACUUM',
+    "VACUUM INTO 'copy.db'",
     "SELECT load_extension('evil')",
     "SELECT 1; DELETE FROM tag",
 ])
@@ -100,6 +102,8 @@ async def test_database_query_refuses_writes(test_session, async_client, allow_d
     request, response = await post_query(async_client, sql)
     assert response.status_code == HTTPStatus.BAD_REQUEST, response.json
     assert response.json['code'] == 'INVALID_DATABASE_QUERY'
+    if ';' not in sql:
+        assert response.json['error'] == 'Only read-only queries (SELECT) are allowed'
 
     request, response = await post_query(async_client, 'SELECT name FROM tag')
     assert response.json['rows'] == [['one']]
@@ -210,3 +214,19 @@ async def test_database_query_memory_limits(test_session, async_client, allow_da
     assert response.status_code == HTTPStatus.OK, response.json
     assert response.json['row_count'] == 3
     assert response.json['truncated'] is True
+
+
+@pytest.mark.asyncio
+async def test_database_query_full_text_search(test_session, async_client, allow_database_query, video_factory):
+    """FTS5 tables can be searched.  FTS5 reads `PRAGMA data_version` through the authorizer on some SQLite
+    versions (3.46), so that PRAGMA must be allowed even where this SQLite does not ask."""
+    video_factory(title='Catching rain water')
+    test_session.commit()
+
+    sql = "SELECT fg.title FROM file_group_fts JOIN file_group fg ON fg.id = file_group_fts.rowid" \
+          " WHERE file_group_fts MATCH 'water'"
+    request, response = await post_query(async_client, sql)
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['rows'] == [['Catching rain water']]
+
+    assert db_query._authorizer(sqlite3.SQLITE_PRAGMA, 'data_version', None, 'main', None) == sqlite3.SQLITE_OK

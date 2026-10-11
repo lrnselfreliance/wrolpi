@@ -1644,7 +1644,16 @@ async def extract_singlefile_artifacts(singlefile: bytes) -> SinglefileArtifacts
     return SinglefileArtifacts(url=url, singlefile=singlefile, readability=readability, screenshot=screenshot)
 
 
-async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = None) -> Archive:
+@dataclass(frozen=True)
+class UploadedArchive:
+    """The Archive `singlefile_to_archive` created.  Plain values: its Session is gone once it returns."""
+    file_group_id: int
+    name: str
+    url: Optional[str]
+    location: str
+
+
+async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = None) -> UploadedArchive:
     """
     Convert a SingleFile to an Archive.
 
@@ -1662,7 +1671,9 @@ async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = N
                                   artifacts.screenshot, destination=destination)
     with get_db_session(commit=True) as session:
         archive = register_archive(session, written)
-    return archive
+        file_group = archive.file_group
+        return UploadedArchive(file_group_id=file_group.id, name=file_group.title or file_group.url,
+                               url=file_group.url, location=archive.location)
 
 
 async def get_statistics(session: Session):

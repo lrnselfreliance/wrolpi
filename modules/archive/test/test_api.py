@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from modules.archive import lib, Archive
+from modules.archive.lib import UploadedArchive
 from wrolpi.common import get_relative_to_media_directory
 from wrolpi.test.common import skip_ci, skip_macos
 
@@ -235,7 +236,8 @@ async def test_archive_upload_with_tags(test_session, async_client, singlefile_c
     test_session.commit()
 
     async def fake_singlefile_to_archive(singlefile, destination=None):
-        return archive
+        return UploadedArchive(file_group_id=archive.file_group_id, name=archive.file_group.title,
+                               url=archive.file_group.url, location=archive.location)
 
     singlefile_contents = singlefile_contents_factory(title='tagged', url='https://example.com/tagged')
     forms = [
@@ -265,7 +267,8 @@ async def test_archive_upload_without_tags_unchanged(test_session, async_client,
     test_session.commit()
 
     async def fake_singlefile_to_archive(singlefile, destination=None):
-        return archive
+        return UploadedArchive(file_group_id=archive.file_group_id, name=archive.file_group.title,
+                               url=archive.file_group.url, location=archive.location)
 
     singlefile_contents = singlefile_contents_factory(title='no-tags', url='https://example.com/no-tags')
     forms = [

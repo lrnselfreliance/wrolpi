@@ -3,11 +3,13 @@ import pathlib
 import tempfile
 from datetime import datetime, timedelta
 from http import HTTPStatus
+from unittest import mock
 
 import pytest
 import pytz
 from PIL import Image
 from pytz import utc
+from sqlalchemy import text
 
 from modules.archive import lib
 from modules.archive.lib import ArchiveDownloaderConfigValidator
@@ -20,6 +22,7 @@ from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
+from wrolpi.files.lib import count_file_groups
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_ci
 
@@ -1425,3 +1428,27 @@ async def test_singlefile_to_archive_result_outlives_its_session(async_client, t
     assert name == 'upload title'
     assert url == 'https://example.com/upload'
     assert uploaded.file_group_id == archive.file_group_id
+
+
+@pytest.mark.parametrize('deep', [False, True])
+def test_search_archives_count_is_driven_by_the_search_index(test_directory, test_session, archive_factory, deep):
+    """A search's total starts from the FTS matches.  Starting from `archive` runs the MATCH once per Archive,
+    which took ~20 seconds on a Pi with 128k Archives."""
+    archive_factory(domain='example.com', title='solar panels', contents='solar panels')
+    archive_factory(domain='example.com', title='wind turbines', contents='wind turbines')
+    test_session.commit()
+
+    counts = []
+
+    def capture_count(session, statement, params):
+        counts.append((statement, params))
+        return count_file_groups(session, statement, params)
+
+    with mock.patch('modules.archive.lib.count_file_groups', capture_count):
+        file_groups, total = lib.search_archives(test_session, search_str='solar', domain=None, limit=10, offset=0,
+                                                 order=None, tag_names=None, deep=deep)
+    assert total == 1 and len(file_groups) == 1
+
+    (statement, params), = counts
+    plan = [row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {statement}'), params).fetchall()]
+    assert plan[0].startswith('SCAN fts VIRTUAL TABLE'), plan

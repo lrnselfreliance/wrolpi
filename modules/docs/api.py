@@ -31,8 +31,13 @@ async def statistics(request: Request):
 async def get_doc(request: Request, file_group_id: int):
     session = request.ctx.session
     skip_viewed = request.args.get('skip_viewed', '').lower() == 'true'
-    doc = _get_doc(session, file_group_id, skip_viewed=skip_viewed)
-    return json_response(_doc_response(doc))
+    doc = _get_doc(session, file_group_id, skip_viewed=True)
+    response = _doc_response(doc)
+    if not skip_viewed:
+        # Marking the doc viewed is a write; it must not upgrade the read above (see `RequestDB.write`).
+        with request.ctx.db.write():
+            response['file_group']['viewed'] = doc.file_group.set_viewed()
+    return json_response(response)
 
 
 doc_limit_limiter = api_param_limiter(100)

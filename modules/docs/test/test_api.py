@@ -1,10 +1,15 @@
 """Tests for the docs API."""
 import json
 from http import HTTPStatus
+from unittest.mock import patch
 
 import pytest
 
 from modules.docs.models import Doc
+from wrolpi.conftest import production_like_sessions
+from wrolpi.db import get_db_session
+from wrolpi.files.models import FileGroup
+from wrolpi.tags import Tag
 
 
 @pytest.mark.asyncio
@@ -169,3 +174,30 @@ async def test_delete_doc_atomic_when_some_tagged(async_client, test_session, do
     assert all(p.is_file() for p in untagged_paths)
     assert all(p.is_file() for p in tagged_paths)
     assert test_session.query(Doc).count() == 2
+
+
+@pytest.mark.asyncio
+async def test_get_doc_records_view_after_a_concurrent_write(async_client, test_session, doc_factory):
+    """Viewing a doc still succeeds, and is recorded, when another connection commits during the request."""
+    file_group_id = doc_factory().file_group_id
+    test_session.commit()
+
+    __json__ = FileGroup.__json__
+    concurrent_writes = []
+
+    def json_after_a_concurrent_write(self):
+        # A download or refresh commits while the doc is being read.
+        if not concurrent_writes:
+            with get_db_session(commit=True) as session:
+                session.add(Tag(name='concurrent', color='#000000'))
+            concurrent_writes.append(True)
+        return __json__(self)
+
+    with production_like_sessions(test_session), \
+            patch.object(FileGroup, '__json__', json_after_a_concurrent_write):
+        request, response = await async_client.get(f'/api/docs/{file_group_id}')
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['file_group']['viewed']
+
+    test_session.rollback()  # End the test's own read snapshot to see the request's commit.
+    assert test_session.query(FileGroup).filter_by(id=file_group_id).one().viewed is not None

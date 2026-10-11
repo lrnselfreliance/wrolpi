@@ -7,6 +7,10 @@ import pytest
 from modules.archive import lib, Archive
 from modules.archive.lib import UploadedArchive
 from wrolpi.common import get_relative_to_media_directory
+from wrolpi.conftest import production_like_sessions
+from wrolpi.db import get_db_session
+from wrolpi.files.models import FileGroup
+from wrolpi.tags import Tag
 from wrolpi.test.common import skip_ci, skip_macos
 
 
@@ -632,3 +636,33 @@ async def test_get_archive_loads_history_eagerly(test_session, archive_factory, 
     assert all(i['tags'] == [tag.name] for i in long_json['history'])
     # Five history Archives cost no more queries than one.
     assert long_statements == short_statements, (short_statements, long_statements)
+
+
+@pytest.mark.asyncio
+async def test_get_archive_records_view_after_a_concurrent_write(test_session, archive_factory, async_client):
+    """Viewing an Archive still succeeds, and is recorded, when another connection commits during the request."""
+    archive = archive_factory('example.com', 'https://example.com/page')
+    archive_factory('example.com', 'https://example.com/page')
+    file_group_id = archive.file_group_id
+    test_session.commit()
+
+    __json__ = FileGroup.__json__
+    concurrent_writes = []
+
+    def json_after_a_concurrent_write(self):
+        # A download or refresh commits while the page is being read.
+        if not concurrent_writes:
+            with get_db_session(commit=True) as session:
+                session.add(Tag(name='concurrent', color='#000000'))
+            concurrent_writes.append(True)
+        return __json__(self)
+
+    with production_like_sessions(test_session), \
+            patch.object(FileGroup, '__json__', json_after_a_concurrent_write):
+        request, response = await async_client.get(f'/api/archive/{file_group_id}')
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert len(response.json['history']) == 1
+    assert response.json['file_group']['viewed']
+
+    test_session.rollback()  # End the test's own read snapshot to see the request's commit.
+    assert test_session.query(FileGroup).filter_by(id=file_group_id).one().viewed is not None

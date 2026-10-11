@@ -1,3 +1,4 @@
+import itertools
 import json
 import pathlib
 import shutil
@@ -993,6 +994,22 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
     foo, bar = make_files_structure({'foo': 'text', 'bar': None})
     with pytest.raises(NoPrimaryFile):
         assert lib.get_primary_file([foo, bar])
+
+
+def test_get_primary_file_skips_ytdlp_format_files(test_directory):
+    """A yt-dlp per-format file (`<stem>.f313.webm`) is never the primary file when the merged media is present."""
+    merged = test_directory / 'a video.mp4'
+    video_only = test_directory / 'a video.f313.webm'
+    audio_only = test_directory / 'a video.f251.webm'
+    for path in (merged, video_only):
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny.mp3', audio_only)
+
+    for files in itertools.permutations([merged, video_only, audio_only]):
+        assert lib.get_primary_file(list(files)) == merged
+
+    # Only format files remain (an unmerged download); one must still be the primary.
+    assert lib.get_primary_file([video_only, audio_only]) in (video_only, audio_only)
 
 
 @pytest.mark.asyncio

@@ -694,6 +694,10 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
     return files
 
 
+# The stem of a yt-dlp per-format file, which is merged into the final media file.  Example:  The Title.f313.webm
+YTDLP_FORMAT_STEM = re.compile(r'\.f\d{2,4}$')
+
+
 def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) -> pathlib.Path:
     """Given a list of files, return the file that we can model or index.
 
@@ -720,13 +724,16 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     # EPUB has high priority.
     mimetypes = {i[1] for i in file_mimetypes}
     has_epub = any(i.startswith('application/epub') for i in mimetypes)
+    # A yt-dlp per-format file (video-only or audio-only) is primary only when no merged media file is present.
+    has_merged_media = any(m.startswith(('video/', 'audio/')) and not YTDLP_FORMAT_STEM.search(f.stem)
+                           for f, m in file_mimetypes)
     for file, mimetype in file_mimetypes:
         # These are the files that can be modeled.
         if is_singlefile_file(file):
             return file
-        if mimetype.startswith('video/'):
-            return file
-        if mimetype.startswith('audio/'):
+        if mimetype.startswith(('video/', 'audio/')):
+            if has_merged_media and YTDLP_FORMAT_STEM.search(file.stem):
+                continue
             return file
         if mimetype.startswith('application/epub'):
             return file

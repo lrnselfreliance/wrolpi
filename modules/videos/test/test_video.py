@@ -286,6 +286,92 @@ async def test_delete_duplicate_video_smaller_copy_at_destination(async_client, 
     assert set(channel.directory.iterdir()) == set(video.file_group.my_paths())
 
 
+VIDEO_STREAM = {'codec_type': 'video', 'codec_name': 'h264'}
+AUDIO_STREAM = {'codec_type': 'audio', 'codec_name': 'aac'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('incomplete_streams', [[VIDEO_STREAM], [AUDIO_STREAM]])
+async def test_delete_duplicate_video_keeps_complete_copy(async_client, test_session, channel_factory, video_factory,
+                                                          incomplete_streams):
+    """A larger copy without audio (or without video), like an unmerged yt-dlp format file, is deleted rather than
+    the complete copy."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
+    entry = channel.info_json['entries'][0]
+
+    complete = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title',
+                             source_id='ABC123456', with_video_file=True)
+    incomplete = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title.f313',
+                               source_id='ABC123456', with_video_file=True)
+    complete.ffprobe_json = {'streams': [VIDEO_STREAM, AUDIO_STREAM]}
+    incomplete.ffprobe_json = {'streams': incomplete_streams}
+    incomplete.file_group.size = complete.file_group.size * 10
+    complete_id, incomplete_path = complete.id, incomplete.video_path
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    video = test_session.query(Video).one()
+    assert video.id == complete_id, 'The complete Video was not the one kept'
+    assert video.video_path == video_path and video.video_path.is_file()
+    assert not incomplete_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_duplicate_video_keeps_viewing_history(async_client, test_session, channel_factory,
+                                                            video_factory):
+    """The kept Video takes the most recent view, and the resume position of a deleted duplicate when it has none."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
+    entry = channel.info_json['entries'][0]
+
+    kept = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title',
+                         source_id='ABC123456', with_video_file=True)
+    watched = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title ',
+                            source_id='ABC123456', with_video_file=True)
+    older = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title  ',
+                          source_id='ABC123456', with_video_file=True)
+    kept.file_group.size = watched.file_group.size * 10
+    watched.file_group.viewed = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    watched.file_group.progress = 0.5
+    watched.file_group.position = {'kind': 'time', 'seconds': 100.0}
+    older.file_group.viewed = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    older.file_group.progress = 0.9
+    older.file_group.position = {'kind': 'time', 'seconds': 900.0}
+    kept_id = kept.id
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    video = test_session.query(Video).one()
+    assert video.id == kept_id
+    assert video.file_group.viewed == datetime(2026, 2, 1, tzinfo=timezone.utc)
+    assert video.file_group.progress == 0.5
+    assert video.file_group.position == {'kind': 'time', 'seconds': 100.0}
+
+    # The kept Video's own position is not replaced.
+    other = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title ',
+                          source_id='ABC123456', with_video_file=True)
+    other.file_group.viewed = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    other.file_group.progress = 0.2
+    other.file_group.position = {'kind': 'time', 'seconds': 20.0}
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    video = test_session.query(Video).one()
+    assert video.id == kept_id
+    assert video.file_group.viewed == datetime(2026, 3, 1, tzinfo=timezone.utc)
+    assert video.file_group.progress == 0.5
+    assert video.file_group.position == {'kind': 'time', 'seconds': 100.0}
+
+
 @pytest.mark.asyncio
 async def test_delete_renamed_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, delete all the videos that do not have the new title."""

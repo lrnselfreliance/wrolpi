@@ -1,6 +1,7 @@
 import json
 import pathlib
-from typing import Optional, Dict, List
+from datetime import datetime, timezone
+from typing import Optional, Dict, List, Tuple
 
 from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text, JSON
 from sqlalchemy.orm import Mapped, relationship, Session, deferred, undefer, joinedload, selectinload
@@ -15,6 +16,7 @@ from wrolpi.downloader import Download
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
+from wrolpi.files.progress import save_recently_viewed_config
 from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 
@@ -534,35 +536,56 @@ class Video(ModelHelper, Base):
             logger.debug(f'No duplicates to delete: {url=} {source_id=}')
             return changes
 
+        def has_streams(video_: Video) -> Tuple[bool, bool]:
+            """(has audio, has video) from the stored ffprobe data.  Unknown counts as complete; probing here would
+            hold this write transaction while ffprobe runs."""
+            streams = (video_.ffprobe_json or dict()).get('streams')
+            if not streams:
+                return True, True
+            codec_types = {i.get('codec_type') for i in streams}
+            return 'audio' in codec_types, 'video' in codec_types
+
         # Order videos by oldest first, we should keep the oldest if all files are the same size.
         duplicate_videos = sorted(duplicate_videos, key=lambda i: i.file_group.primary_path.stat().st_mtime)
 
-        # Find the largest video, if possible.  If all videos are the same size then rename the oldest.
-        largest_video_idx = 0
-        for idx, video in enumerate(duplicate_videos):
-            if video.file_group.size > duplicate_videos[largest_video_idx].file_group.size:
-                largest_video_idx = idx
-        largest_video = duplicate_videos.pop(largest_video_idx)
+        # Keep a complete video (a yt-dlp format file has only video, or only audio), then the largest.  `max` returns
+        # the first of equals, so the oldest is kept when all are the same.
+        kept_video = max(duplicate_videos, key=lambda i: (*has_streams(i), i.file_group.size or 0))
+        duplicate_videos.remove(kept_video)
 
-        # Delete the video at the destination, if it is not the largest.
+        # The kept video takes the most recent view, and the resume position of the most recently viewed duplicate
+        # when it has none of its own.
+        kept_group = kept_video.file_group
+        viewed = [i.file_group.viewed for i in duplicate_videos if i.file_group.viewed]
+        if viewed and (not kept_group.viewed or max(viewed) > kept_group.viewed):
+            kept_group.viewed = max(viewed)
+            save_recently_viewed_config.activate_switch()
+        if kept_group.position is None and kept_group.progress is None:
+            watched = [i.file_group for i in duplicate_videos
+                       if i.file_group.position is not None or i.file_group.progress is not None]
+            if watched:
+                latest = max(watched, key=lambda i: i.viewed or datetime.min.replace(tzinfo=timezone.utc))
+                kept_group.position, kept_group.progress = latest.position, latest.progress
+
+        # Delete the video at the destination, if it is not the one kept.
         existing_video = Video.get_by_path(session, video_path)
-        if existing_video and largest_video != existing_video:
+        if existing_video and kept_video != existing_video:
             delete_video(existing_video)
             for idx, video in enumerate(duplicate_videos):
                 if video == existing_video:
                     duplicate_videos.pop(idx)
 
         # Rename the video, add any missing tag names.
-        if largest_video.video_path != video_path:
+        if kept_video.video_path != video_path:
             # Every deletion above unlinked its files immediately, but only queued its DELETE on the session.  The
             # rename claims `video_path` as its `primary_path`, and SQLAlchemy emits UPDATEs before DELETEs within a
             # flush -- so without this flush the UPDATE can hit a not-yet-deleted row and violate the unique index on
             # `file_group.primary_path`, rolling back the entire download.
             session.flush()
-            largest_video.file_group.move(video_path)
+            kept_video.file_group.move(video_path)
         for tag_name in tag_names:
-            if tag_name not in largest_video.file_group.tag_names:
-                largest_video.add_tag(session, tag_name)
+            if tag_name not in kept_video.file_group.tag_names:
+                kept_video.add_tag(session, tag_name)
 
         logger.warning(f'Deleting duplicate videos: {duplicate_videos}')
 

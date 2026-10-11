@@ -9,7 +9,9 @@ A query can never change the database:
 A query cannot monopolize the device:
     * A progress handler interrupts it after `QUERY_TIMEOUT` seconds (this also bounds how long it pins a
       WAL snapshot).
-    * Rows are capped at `MAX_LIMIT`, and long values are cut to `MAX_CELL_LENGTH`.
+    * SQLite refuses to build a value longer than `MAX_VALUE_LENGTH`, or a row wider than `MAX_COLUMNS`.
+    * Rows are read one at a time; long values are cut to `MAX_CELL_LENGTH`, and rows stop at `MAX_LIMIT` or once
+      the response holds `MAX_RESPONSE_LENGTH` characters.
 """
 import asyncio
 import contextlib
@@ -35,6 +37,10 @@ logger = logger.getChild(__name__)
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 5000
 MAX_CELL_LENGTH = 10_000
+MAX_RESPONSE_LENGTH = 5_000_000
+# Larger than any value WROLPi stores (a document's text), far smaller than SQLite's 1 GB default.
+MAX_VALUE_LENGTH = 32 * 1024 * 1024
+MAX_COLUMNS = 100
 QUERY_TIMEOUT = 10.0
 # How many SQLite VM instructions run between timeout checks.
 PROGRESS_INTERVAL = 10_000
@@ -79,6 +85,8 @@ def read_only_connection(timeout: float = QUERY_TIMEOUT):
         deadline = time.monotonic() + timeout
         conn.set_progress_handler(lambda: int(time.monotonic() > deadline), PROGRESS_INTERVAL)
         conn.set_authorizer(_authorizer)
+        conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_LENGTH)
+        conn.setlimit(sqlite3.SQLITE_LIMIT_COLUMN, MAX_COLUMNS)
         yield conn
     finally:
         conn.close()
@@ -92,12 +100,18 @@ def _cell(value):
     return value
 
 
+def _cell_length(value) -> int:
+    return len(value) if isinstance(value, str) else 8
+
+
 def _raise_query_error(e: sqlite3.Error):
     message = str(e)
     if isinstance(e, sqlite3.OperationalError) and message == 'interrupted':
         message = f'Query exceeded the {QUERY_TIMEOUT:g} second time limit'
     elif 'not authorized' in message:
         message = 'Only read-only queries (SELECT) are allowed'
+    elif 'too big' in message:
+        message = f'A value is too large (over {MAX_VALUE_LENGTH} bytes)'
     raise InvalidDatabaseQuery(message) from e
 
 
@@ -108,19 +122,25 @@ def run_query(sql: str, limit: int = DEFAULT_LIMIT) -> dict:
     limit = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
 
     start = time.monotonic()
+    rows, truncated, response_length = [], False, 0
     with read_only_connection() as conn:
         try:
             curs = conn.execute(sql)
             columns = [i[0] for i in curs.description or []]
-            rows = curs.fetchmany(limit + 1)
+            # One row at a time, so only the kept (truncated) values are held.
+            for row in curs:
+                if len(rows) >= limit or response_length >= MAX_RESPONSE_LENGTH:
+                    truncated = True
+                    break
+                row = [_cell(i) for i in row]
+                response_length += sum(_cell_length(i) for i in row)
+                rows.append(row)
         except sqlite3.Error as e:
             _raise_query_error(e)
         except sqlite3.Warning as e:
             # Python refuses more than one statement.
             raise InvalidDatabaseQuery(str(e)) from e
 
-    truncated = len(rows) > limit
-    rows = [[_cell(i) for i in row] for row in rows[:limit]]
     return dict(
         columns=columns,
         rows=rows,

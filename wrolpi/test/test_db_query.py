@@ -189,3 +189,36 @@ async def test_database_schema(test_session, async_client, allow_database_query)
         assert f'{table["name"]}_data' not in tables
     assert not any(name.startswith('sqlite_') for name in tables)
     assert get_db_file().is_file()
+
+
+@pytest.mark.asyncio
+async def test_database_query_cannot_be_enabled_by_api(test_session, async_client, test_wrolpi_config):
+    """The config update API refuses to enable queries; only an edit of wrolpi.yaml on the WROLPi can."""
+    body = dict(config=dict(allow_database_query=True))
+    request, response = await async_client.post('/api/config?file_name=wrolpi.yaml', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert get_wrolpi_config().allow_database_query is False
+
+    request, response = await post_query(async_client, 'SELECT 1')
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_database_query_memory_limits(test_session, async_client, allow_database_query):
+    """A query cannot build huge values or rows, and the response is bounded however many rows are asked for."""
+    request, response = await post_query(async_client, f'SELECT zeroblob({db_query.MAX_VALUE_LENGTH + 1})')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'too large' in response.json['error']
+
+    columns = ', '.join(['1'] * (db_query.MAX_COLUMNS + 1))
+    request, response = await post_query(async_client, f'SELECT {columns}')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # Every row is a full-size cell; rows stop once the response budget is spent.
+    sql = (f"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 100)"
+           f" SELECT printf('%.*c', {db_query.MAX_CELL_LENGTH}, 'a') FROM n")
+    with mock.patch.object(db_query, 'MAX_RESPONSE_LENGTH', db_query.MAX_CELL_LENGTH * 3):
+        request, response = await post_query(async_client, sql, limit=100)
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['row_count'] == 3
+    assert response.json['truncated'] is True

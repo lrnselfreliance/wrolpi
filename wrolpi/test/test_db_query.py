@@ -186,6 +186,12 @@ async def test_database_schema(test_session, async_client, allow_database_query)
     assert 'name' in columns
     assert any(i['columns'] == ['name'] for i in tag['indexes'])
 
+    # Foreign keys say how tables join; `video.channel_id` is a channel, not a collection.
+    video_columns = {i['name']: i for i in tables['video']['columns']}
+    assert video_columns['channel_id']['references'] == 'channel.id'
+    assert video_columns['file_group_id']['references'] == 'file_group.id'
+    assert columns['name']['references'] is None
+
     # FTS5 tables are described (with their definition), but their shadow tables are not.
     virtual = [i for i in tables.values() if i['type'] == 'virtual']
     assert virtual and all('fts5' in i['sql'].lower() for i in virtual)

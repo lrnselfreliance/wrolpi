@@ -157,7 +157,8 @@ def _is_fts_shadow_table(name: str, virtual_tables: List[str]) -> bool:
 
 
 def get_schema() -> List[dict]:
-    """Describe every table and view (but not SQLite internals or FTS5's shadow tables)."""
+    """Describe every table and view (but not SQLite internals or FTS5's shadow tables), with the foreign key each
+    column references."""
     with read_only_connection() as conn:
         objects = conn.execute(
             "SELECT name, type, sql FROM sqlite_master"
@@ -169,8 +170,14 @@ def get_schema() -> List[dict]:
             if _is_fts_shadow_table(name, virtual_tables):
                 continue
             is_virtual = name in virtual_tables
+            # How this table joins to others, e.g. {'channel_id': 'channel.id'}.
+            references = {
+                from_: f'{table}.{to}' for _, _, table, from_, to, *_ in conn.execute(
+                    'SELECT * FROM pragma_foreign_key_list(?)', (name,)).fetchall()
+            }
             columns = [
-                dict(name=col_name, type=col_type, not_null=bool(not_null), primary_key=bool(pk))
+                dict(name=col_name, type=col_type, not_null=bool(not_null), primary_key=bool(pk),
+                     references=references.get(col_name))
                 for _, col_name, col_type, not_null, _, pk in conn.execute(
                     'SELECT * FROM pragma_table_info(?)', (name,)).fetchall()
             ]

@@ -8,6 +8,7 @@ import pytest
 from modules.videos.transcode import codecs_match, get_stream_codec_names, get_transcode_target, \
     transcode_can_satisfy_codecs, transcode_video_file, TRANSCODE_VIDEO_TARGETS, TRANSCODE_AUDIO_TARGETS, \
     verify_transcode_output, validate_transcode_request, REMOVE_VIDEO, FRAGMENT_DURATION_US
+from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import CommandResult
 
 
@@ -142,6 +143,8 @@ async def test_transcode_video_file(test_directory, async_client):
     assert '-c:a' in cmd and cmd[cmd.index('-c:a') + 1] == 'aac'
     # Attached-picture streams are excluded; a missing audio stream is tolerated.
     assert '0:V:0' in cmd and '0:a:0?' in cmd
+    # The encode runs at the least CPU priority so it never starves the rest of WROLPi.
+    assert cmd[:3] == ('/usr/bin/nice', '-n19', FFMPEG_BIN)
 
 
 @pytest.mark.asyncio

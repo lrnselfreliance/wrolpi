@@ -392,7 +392,8 @@ async def _transcode_video_file(video_path: pathlib.Path, target_vcodec: Optiona
 
     final_path = video_path.with_suffix(f'.{container}')
     tmp_path = transcode_tmp_path(video_path, container)
-    cmd = (FFMPEG_BIN, '-y',
+    cmd = ('/usr/bin/nice', '-n19',  # Least priority, a transcode can take hours.
+           FFMPEG_BIN, '-y',
            '-i', video_path,
            *map_args,
            *video_args,

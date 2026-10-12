@@ -3,9 +3,11 @@ Unit tests for controller.lib.scripts module.
 """
 
 import subprocess
+import time
 from unittest import mock
 
 from controller.lib.scripts import (
+    _get_service_timing,
     AVAILABLE_SCRIPTS,
     get_current_branch,
     get_script_output,
@@ -285,3 +287,22 @@ class TestGetScriptOutput:
                 assert "wrolpi-repair.service" in call_args
                 assert "-n" in call_args
                 assert "50" in call_args
+
+
+class TestGetServiceTiming:
+
+    def test_elapsed_is_independent_of_local_timezone(self):
+        """systemd prints timestamps in local time; elapsed must not be off by the UTC offset."""
+        started = time.time() - 90
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=f"ExecMainStartTimestamp=@{started:.6f}\n")
+        with mock.patch("controller.lib.scripts.subprocess.run", return_value=completed) as run:
+            started_at, elapsed = _get_service_timing("wrolpi-upgrade.service")
+        assert "--timestamp=unix" in run.call_args.args[0]
+        assert 89 <= elapsed <= 91
+        assert started_at.endswith("+00:00")
+
+    def test_not_started(self):
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="ExecMainStartTimestamp=\n")
+        with mock.patch("controller.lib.scripts.subprocess.run", return_value=completed):
+            assert _get_service_timing("wrolpi-upgrade.service") == (None, None)

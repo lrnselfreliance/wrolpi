@@ -7,7 +7,8 @@ Uses systemd oneshot services for process survival across controller restarts.
 
 import logging
 import subprocess
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from controller.lib.config import is_docker_mode
@@ -172,27 +173,24 @@ def _get_service_timing(service: str) -> tuple[Optional[str], Optional[int]]:
         Tuple of (started_at ISO string, elapsed_seconds)
     """
     try:
-        # Get ExecMainStartTimestamp from systemctl show
+        # A Unix timestamp, because systemd prints dates in the local timezone.
         result = subprocess.run(
-            ["systemctl", "show", service, "--property=ExecMainStartTimestamp"],
+            ["systemctl", "show", service, "--property=ExecMainStartTimestamp", "--timestamp=unix"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode == 0:
-            # Format: ExecMainStartTimestamp=Wed 2025-01-15 10:30:00 UTC
-            line = result.stdout.strip()
-            if "=" in line:
-                timestamp_str = line.split("=", 1)[1].strip()
-                if timestamp_str:
-                    # Parse the timestamp
-                    try:
-                        # Try common systemd timestamp format
-                        dt = datetime.strptime(timestamp_str, "%a %Y-%m-%d %H:%M:%S %Z")
-                        elapsed = int((datetime.utcnow() - dt).total_seconds())
-                        return dt.isoformat(), max(0, elapsed)
-                    except ValueError:
-                        pass
+            # Format: ExecMainStartTimestamp=@1760226500.123456
+            value = result.stdout.strip().partition("=")[2].lstrip("@")
+            if value:
+                try:
+                    started = float(value)
+                except ValueError:
+                    pass
+                else:
+                    elapsed = int(time.time() - started)
+                    return datetime.fromtimestamp(started, timezone.utc).isoformat(), max(0, elapsed)
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         pass
 

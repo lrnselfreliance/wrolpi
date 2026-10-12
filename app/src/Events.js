@@ -9,7 +9,7 @@ function eventToast(title, description, type = 'info', time = 5000, onClick = nu
     toast({type: type, title: title, description: description, time: time, onClick: onClick});
 }
 
-function handleEvents(events) {
+export function handleEvents(events) {
     const newestEvents = {};
 
     events.forEach(e => {
@@ -63,13 +63,17 @@ function handleEvents(events) {
         }
 
         if (event === 'user_notify_message') {
-            console.log(message, url);
-            eventToast(
-                message,
-                'Click here to view the shared page',
-                'info',
-                10_000,
-                () => window.open(url, '_self'));
+            // Only a shared page carries a URL; other notifications (jobs, transcodes) are text.
+            if (url) {
+                eventToast(
+                    message,
+                    'Click here to view the shared page',
+                    'info',
+                    10_000,
+                    () => window.open(url, '_self'));
+            } else {
+                eventToast(message, null, 'info', 10_000);
+            }
         }
 
         if (event === 'deleted') {

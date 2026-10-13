@@ -93,7 +93,7 @@ More Docker documentation is available in [docker/README.md](docker/README.md)
 Full installation instructions are in [INSTALL.md](INSTALL.md).  Pick the option that matches your hardware:
 
 * **[WROLPi Portable (Live USB)](INSTALL.md#wrolpi-portable-live-usb)** — boot a complete WROLPi from a USB stick on any x86 PC or laptop.  Nothing is installed to the computer; the first boot creates a persistence partition on the USB so your library, database, and configuration survive reboots.
-* **[Debian 12](INSTALL.md#debian-12-install)** — install WROLPi onto an x86 PC or laptop.
+* **[Debian 13](INSTALL.md#debian-13-install)** — install WROLPi onto an x86 PC or laptop.
 * **[Raspberry Pi](INSTALL.md#raspberry-pi-install)** — install WROLPi onto a Raspberry Pi with an external drive.
 * **[Docker](docker/README.md)** — run the WROLPi containers on an existing Linux host.
 

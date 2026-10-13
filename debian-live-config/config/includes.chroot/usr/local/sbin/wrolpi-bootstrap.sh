@@ -27,6 +27,8 @@
 #    drive, or is a plain directory on the root filesystem if the user
 #    installed without one.  The SQLite database lives inside
 #    /media/wrolpi/config/ in every shape, so it travels with the drive.
+#    Until the Controller onboarding wizard writes controller.yaml, this
+#    script does nothing; the wizard's repair.sh finishes setup.
 
 set -euo pipefail
 
@@ -224,6 +226,17 @@ if [ ! -d /media/wrolpi ]; then
   mkdir -p /media/wrolpi
 fi
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || true
+
+# --- Installed: wait for the Controller onboarding wizard ---------------
+# Until the user picks a drive (or the internal disk) in the wizard, there
+# is no controller.yaml.  Leave Caddy on the onboarding Caddyfile from
+# wrolpi-first-startup.service so every page leads to the wizard, and leave
+# certificates, the database, and services to the wizard's repair.sh.
+
+if [ "$MODE" = "installed" ] && [ ! -e /media/wrolpi/config/controller.yaml ]; then
+  log "primary drive is not set up; the Controller onboarding wizard will finish setup"
+  exit 0
+fi
 
 mkdir -p /media/wrolpi/config
 chown wrolpi:wrolpi /media/wrolpi/config

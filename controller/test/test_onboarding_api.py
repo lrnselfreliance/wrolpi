@@ -15,6 +15,7 @@ class TestOnboardingDockerAndMounted:
         ("post", "/api/onboarding/probe", {"device_path": "/dev/sda1", "fstype": "ext4"}),
         ("post", "/api/onboarding/commit", {"device_path": "/dev/sda1", "fstype": "ext4"}),
         ("post", "/api/onboarding/cancel", None),
+        ("post", "/api/onboarding/without-drive", None),
     ])
     def test_endpoint_returns_501_in_docker(self, test_client_docker_mode, method, endpoint, payload):
         client_call = getattr(test_client_docker_mode, method)
@@ -24,6 +25,7 @@ class TestOnboardingDockerAndMounted:
     @pytest.mark.parametrize("method,endpoint,payload", [
         ("get", "/api/onboarding/candidates", None),
         ("post", "/api/onboarding/probe", {"device_path": "/dev/sda1", "fstype": "ext4"}),
+        ("post", "/api/onboarding/without-drive", None),
     ])
     def test_endpoint_returns_409_when_drive_mounted(self, test_client, method, endpoint, payload):
         """Onboarding endpoints reject when the primary drive is already mounted."""
@@ -196,3 +198,26 @@ class TestOnboardingCancelEndpoint:
         ):
             response = test_client.post("/api/onboarding/cancel")
             assert response.status_code == 200
+
+
+class TestOnboardingWithoutDrive:
+
+    def test_without_drive_success(self, test_client):
+        with mock.patch("controller.api.onboarding.is_primary_drive_mounted", return_value=False), \
+                mock.patch("controller.api.onboarding.onboard_without_drive",
+                           return_value={"success": True, "mounts": [], "repair_started": True}) as onboard:
+            response = test_client.post("/api/onboarding/without-drive")
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert response.json()["repair_started"] is True
+        onboard.assert_called_once_with()
+
+    def test_without_drive_failure(self, test_client):
+        with mock.patch("controller.api.onboarding.is_primary_drive_mounted", return_value=False), \
+                mock.patch("controller.api.onboarding.onboard_without_drive",
+                           return_value={"success": False, "error": "disk full"}):
+            response = test_client.post("/api/onboarding/without-drive")
+
+        assert response.status_code == 500
+        assert "disk full" in response.json()["detail"]

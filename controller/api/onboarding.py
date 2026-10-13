@@ -19,6 +19,7 @@ from controller.lib.onboarding import (
     cancel_probe,
     commit_onboarding,
     get_onboarding_candidates,
+    onboard_without_drive,
     probe_drive,
 )
 
@@ -96,6 +97,25 @@ async def commit(request: OnboardingCommitRequest):
             shadowed_data=ShadowedDataInfo(**shadowed) if shadowed else None,
         )
 
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Onboarding failed"))
+
+    return OnboardingCommitResponse(
+        success=True,
+        mounts=result.get("mounts", []),
+        repair_started=result.get("repair_started", False),
+    )
+
+
+@router.post("/without-drive", response_model=OnboardingCommitResponse)
+async def without_drive():
+    """Keep the library on the internal disk, and start repair."""
+    _check_preconditions()
+
+    try:
+        result = onboard_without_drive()
+    except Exception as e:
+        result = {"success": False, "error": str(e)}
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Onboarding failed"))
 

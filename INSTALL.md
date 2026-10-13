@@ -85,14 +85,12 @@ These steps are the same for every install.
 1. Join the WROLPi hotspot, or connect your WROLPi to your network, then browse to https://wrolpi.local (or the IP
    address of your WROLPi).
 2. **Choose your drive.**
-    * **Raspberry Pi:** until a drive is set up, you will see the **Controller** with a *Welcome to WROLPi* wizard (also
-      at https://wrolpi.local/controller/).  Select the drive which will hold your library; WROLPi mounts it at
-      `/media/wrolpi`, adds it to `/etc/fstab`, and runs the repair script for you.  If the drive already holds a WROLPi
-      library (from another WROLPi, or a backup), its configuration is used.  No external drive?  Choose **Run repair
-      without external drive** to keep your library on the SD card.
+    * **Raspberry Pi and Debian:** until a drive is set up, you will see the **Controller** with a *Welcome to WROLPi*
+      wizard (also at http://wrolpi.local).  Select the drive which will hold your library; WROLPi mounts it
+      at `/media/wrolpi`, adds it to `/etc/fstab`, and runs the repair script for you.  If the drive already holds a
+      WROLPi library (from another WROLPi, or a backup), its configuration is used.  No external drive?  Choose **Run
+      repair without external drive** to keep your library on the internal disk or SD card.
     * **WROLPi Portable:** nothing to do; your library lives in the persistence partition on the USB drive.
-    * **Debian:** your library starts on the internal disk at `/media/wrolpi`.  To keep it on an external drive instead,
-      mount the drive at `/media/wrolpi` from the *Disks* section of the Controller (https://wrolpi.local/controller/).
 3. **Trust the certificate.**  Your browser will warn about the HTTPS certificate because it was made by your WROLPi,
    not by a public authority.  Download https://wrolpi.local/ca.crt and trust it on each device you use; see
    *Help > Certificates* on your WROLPi for per-device instructions.

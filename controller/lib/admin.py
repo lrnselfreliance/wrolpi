@@ -9,11 +9,13 @@ import enum
 import json
 import logging
 import subprocess
+import time
 from pathlib import Path
 
 import yaml
 
 from controller.lib import config as config_lib
+from controller.lib import fstab as fstab_lib
 from controller.lib import captive_portal as captive_portal_lib
 from controller.lib.config import is_docker_mode, get_config_value, get_media_directory
 
@@ -263,12 +265,70 @@ def migrate_hotspot_settings_from_wrolpi_config():
             config_lib.update_config(f'hotspot.{controller_key}', value)
             changed = True
 
+    # A user who never wants the hotspot (e.g. to avoid broadcasting) set this false.
+    on_startup = wrolpi_config.get('hotspot_on_startup')
+    if isinstance(on_startup, bool) and 'on_startup' not in explicit \
+            and on_startup != get_config_value('hotspot.on_startup'):
+        config_lib.update_config('hotspot.on_startup', on_startup)
+        changed = True
+
     if changed:
         try:
             config_lib.save_config()
             logger.info("Migrated hotspot settings from wrolpi.yaml to controller.yaml")
         except RuntimeError as e:
             logger.warning("Could not save migrated hotspot settings: %s", e)
+
+
+# In /run so it is cleared by every reboot.
+HOTSPOT_BOOT_MARKER = Path("/run/wrolpi-controller/hotspot-on-startup")
+HOTSPOT_BOOT_ATTEMPTS = 3
+HOTSPOT_BOOT_RETRY_SECONDS = 10
+
+
+def should_start_hotspot_on_boot() -> bool:
+    """True unless the user set `hotspot.on_startup` false.
+
+    The user's choice is in controller.yaml on the primary drive.  When it cannot be read, the hotspot is only
+    started on a fresh install (no drive in /etc/fstab), which needs it to reach the onboarding wizard; a configured
+    drive which failed to mount must not start a hotspot the user disabled.
+    """
+    if is_docker_mode():
+        return False
+    if not config_lib.CONFIG_PATH_ON_DRIVE.exists():
+        media_directory = str(get_media_directory())
+        try:
+            entries = fstab_lib.parse_fstab()
+        except OSError as e:
+            logger.warning("Cannot read fstab to decide on the hotspot: %s", e)
+            return False
+        return not any(e.get("mount_point") == media_directory for e in entries)
+    return get_config_value("hotspot.on_startup", True) is True
+
+
+def start_hotspot_on_boot():
+    """Start the hotspot once per boot (not when the Controller restarts), unless the user disabled it."""
+    if HOTSPOT_BOOT_MARKER.exists():
+        return
+    try:
+        HOTSPOT_BOOT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        HOTSPOT_BOOT_MARKER.touch()
+    except OSError as e:
+        logger.warning("Cannot write %s, the hotspot may restart with the Controller: %s", HOTSPOT_BOOT_MARKER, e)
+
+    if not should_start_hotspot_on_boot():
+        logger.info("Not starting the hotspot on boot")
+        return
+
+    # The WiFi device may still be starting early in boot.
+    for attempt in range(1, HOTSPOT_BOOT_ATTEMPTS + 1):
+        result = start_hotspot()
+        if result.get("success"):
+            logger.info("Started the hotspot on boot")
+            return
+        logger.warning("Failed to start the hotspot on boot (attempt %s): %s", attempt, result.get("error"))
+        if attempt < HOTSPOT_BOOT_ATTEMPTS:
+            time.sleep(HOTSPOT_BOOT_RETRY_SECONDS)
 
 
 def get_wifi_devices() -> list[str]:

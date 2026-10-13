@@ -123,6 +123,10 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Primary drive not mounted - using default configuration")
 
+    # After the config (and any migrated hotspot settings) are loaded.  Starting can take a while; do not block.
+    from controller.lib.admin import start_hotspot_on_boot
+    app.state.hotspot_on_boot_task = asyncio.create_task(asyncio.to_thread(start_hotspot_on_boot))
+
     # Initialize cached status
     app.state.cached_status = {}
 

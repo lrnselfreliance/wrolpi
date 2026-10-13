@@ -124,6 +124,8 @@ DEFAULT_CONFIG = {
         "protocol": "wpa2",  # wpa2 (wpa-psk) or wpa3 (sae); see get_device_hotspot_protocols
         # Show a landing page (with this WROLPi's address) to devices that join the hotspot.
         "captive_portal": True,
+        # Start the hotspot when WROLPi boots.  Set false to never start it unless asked.
+        "on_startup": True,
     },
 
     "throttle": {

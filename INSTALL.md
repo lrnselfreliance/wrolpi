@@ -82,8 +82,8 @@ Install WROLPi onto a Raspberry Pi.  An external drive is recommended for your l
 
 These steps are the same for every install.
 
-1. Join the WROLPi hotspot, or connect your WROLPi to your network, then browse to https://wrolpi.local (or the IP
-   address of your WROLPi).
+1. Join the WROLPi hotspot (network **WROLPi**, password **wrolpi hotspot**; it starts on every boot), or connect
+   your WROLPi to your network, then browse to https://wrolpi.local (or the IP address of your WROLPi).
 2. **Choose your drive.**
     * **Raspberry Pi and Debian:** until a drive is set up, you will see the **Controller** with a *Welcome to WROLPi*
       wizard (also at http://wrolpi.local).  Select the drive which will hold your library; WROLPi mounts it

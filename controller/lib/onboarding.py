@@ -165,6 +165,31 @@ def cancel_probe() -> dict:
     return {"success": True}
 
 
+def onboard_without_drive() -> dict:
+    """
+    Set up WROLPi with the library on the internal disk, then start repair.
+
+    controller.yaml marks the primary drive as set up; without it the wizard
+    would be shown again after repair.
+
+    Returns:
+        dict with success, mounts, and repair_started
+    """
+    config_dir = get_media_directory() / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    save_config()
+
+    repair_result = start_script("repair")
+    if not repair_result.get("success"):
+        logger.warning("Failed to start repair: %s", repair_result.get("error"))
+
+    return {
+        "success": True,
+        "mounts": [],
+        "repair_started": bool(repair_result.get("success")),
+    }
+
+
 def commit_onboarding(
     device_path: str,
     fstype: str,

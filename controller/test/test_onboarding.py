@@ -14,6 +14,7 @@ from controller.lib.onboarding import (
     cancel_probe,
     commit_onboarding,
     get_onboarding_candidates,
+    onboard_without_drive,
     probe_drive,
 )
 
@@ -516,3 +517,37 @@ class TestCommitOnboardingShadowedData:
             result = commit_onboarding("/dev/sda1", "ext4", force_shadowed=True)
 
         assert result["success"] is True
+
+
+class TestOnboardWithoutDrive:
+    """Tests for onboard_without_drive."""
+
+    def test_writes_marker_and_starts_repair(self, mock_docker_mode, tmp_path):
+        """The library stays on the internal disk, and the wizard does not return after repair."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        config_path = media_dir / "config" / "controller.yaml"
+
+        with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
+                mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", config_path), \
+                mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}) as start:
+            result = onboard_without_drive()
+
+        assert result == {"success": True, "mounts": [], "repair_started": True}
+        assert config_path.is_file()
+        start.assert_called_once_with("repair")
+
+    def test_repair_failure_is_reported(self, mock_docker_mode, tmp_path):
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        config_path = media_dir / "config" / "controller.yaml"
+
+        with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
+                mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", config_path), \
+                mock.patch("controller.lib.onboarding.start_script",
+                           return_value={"success": False, "error": "already running"}):
+            result = onboard_without_drive()
+
+        assert result["success"] is True
+        assert result["repair_started"] is False
+        assert config_path.is_file()

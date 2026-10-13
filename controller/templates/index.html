@@ -2547,7 +2547,7 @@
         document.querySelector('#onboarding-progress p').textContent = 'Starting repair without external drive. Please wait...';
 
         try {
-            const resp = await fetch('api/scripts/repair/start', {
+            const resp = await fetch('api/onboarding/without-drive', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
                 signal: AbortSignal.timeout(60000)

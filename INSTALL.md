@@ -3,8 +3,10 @@
 There are several ways to run WROLPi.  Pick the one that matches your hardware:
 
 * [WROLPi Portable (Live USB)](#wrolpi-portable-live-usb) — boot a full WROLPi from a USB stick on any x86 PC or laptop, no installation required.
-* [Debian 12 Install](#debian-12-install) — install WROLPi onto an x86 PC or laptop.
+* [Debian 13 Install](#debian-13-install) — install WROLPi onto an x86 PC or laptop.
 * [Raspberry Pi Install](#raspberry-pi-install) — install WROLPi onto a Raspberry Pi with an external drive.
+
+After installing, follow [First Boot](#first-boot) to set up your drive.
 * [Docker](docker/README.md) — run the WROLPi containers on an existing Linux host (best for trying it out or development).
 
 See [UPGRADE.md](UPGRADE.md) for upgrading an existing WROLPi.
@@ -52,30 +54,52 @@ Notes:
 * **Upgrading.**  See [Upgrading a WROLPi Portable USB](UPGRADE.md#upgrading-a-wrolpi-portable-usb)
   to move to a newer ISO without losing your library.
 
-## Debian 12 Install
+## Debian 13 Install
 
-Steps necessary to initialize your WROLPi after installing the Debian image from wrolpi.org
+Install WROLPi onto the internal disk of an x86 PC or laptop.  This uses the same
+`WROLPi-v*-amd64.iso` as WROLPi Portable.
 
-1. Download and copy a pre-built Debian image from https://wrolpi.org onto a USB thumb-drive (USB 2 recommended).
-2. Insert the thumb-drive into the laptop, boot to the thumb-drive.
-    1. Select "Start Installer".
-    2. Install Debian 12 as you would like.
-        1. It is recommended to use the hostname **wrolpi**.
-        2. (WROLPi will be installed during the installation without your intervention.)
-3. Unplug the thumb-drive after the installation has completed.
-4. Login as the user _you_ created during installation.
-5. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
-6. Reboot: `reboot`
-7. Browse to https://wrolpi.local or the IP address of your WROLPi!
+1. Download the latest `WROLPi-v*-amd64.iso` from [wrolpi.org](https://wrolpi.org) and flash it to a USB drive
+   (see [WROLPi Portable](#wrolpi-portable-live-usb) step 2).
+2. Boot the PC from the USB drive.  At the boot menu, choose **Install** or **Graphical Install**.
+3. Install Debian 13 as you would like.
+    1. It is recommended to use the hostname **wrolpi**.
+    2. WROLPi is installed along with Debian; there is nothing extra to select.
+4. Unplug the USB drive after the installation has completed, and reboot.
+5. Continue with [First Boot](#first-boot).
 
 ## Raspberry Pi Install
 
-Steps necessary to initialize your WROLPi after installing the Raspberry Pi image from wrolpi.org
+Install WROLPi onto a Raspberry Pi.  An external drive is recommended for your library.
 
-1. Download and copy a pre-built image from https://wrolpi.org onto an SD card.
-2. Boot the Raspberry Pi, login with username pi and password wrolpi.
-3. Modify fstab to mount your external drive to /media/wrolpi (modify this command to match your system).
-    * `echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | sudo tee -a /etc/fstab`
-4. Initialize the WROLPi databases using the repair script: `sudo /opt/wrolpi/repair.sh`
-5. Reboot `sudo reboot`
-6. Join the Hotspot or browse to https://wrolpi.local or the IP address of your WROLPi!
+1. Download the latest `WROLPi-v*-aarch64-desktop.img.xz` from [wrolpi.org](https://wrolpi.org).
+2. Flash it to an SD card using Raspberry Pi Imager.
+3. Plug in your external drive, insert the SD card, and boot the Raspberry Pi.
+4. On the first boot, Raspberry Pi OS asks you to create your own user.
+5. Continue with [First Boot](#first-boot).
+
+## First Boot
+
+These steps are the same for every install.
+
+1. Join the WROLPi hotspot, or connect your WROLPi to your network, then browse to https://wrolpi.local (or the IP
+   address of your WROLPi).
+2. **Choose your drive.**
+    * **Raspberry Pi:** until a drive is set up, you will see the **Controller** with a *Welcome to WROLPi* wizard (also
+      at https://wrolpi.local/controller/).  Select the drive which will hold your library; WROLPi mounts it at
+      `/media/wrolpi`, adds it to `/etc/fstab`, and runs the repair script for you.  If the drive already holds a WROLPi
+      library (from another WROLPi, or a backup), its configuration is used.  No external drive?  Choose **Run repair
+      without external drive** to keep your library on the SD card.
+    * **WROLPi Portable:** nothing to do; your library lives in the persistence partition on the USB drive.
+    * **Debian:** your library starts on the internal disk at `/media/wrolpi`.  To keep it on an external drive instead,
+      mount the drive at `/media/wrolpi` from the *Disks* section of the Controller (https://wrolpi.local/controller/).
+3. **Trust the certificate.**  Your browser will warn about the HTTPS certificate because it was made by your WROLPi,
+   not by a public authority.  Download https://wrolpi.local/ca.crt and trust it on each device you use; see
+   *Help > Certificates* on your WROLPi for per-device instructions.
+4. **Refresh your files.**  If you copied files onto the drive, the dashboard will ask you to refresh so WROLPi can find
+   them.  Your library looks empty until the refresh completes.
+5. Start adding content: download a video channel, archive a web page, or add a Zim (Wikipedia) file.  The *Help* page
+   on your WROLPi explains each module.
+
+You do not need to edit `/etc/fstab` or run `repair.sh` by hand.  `sudo /opt/wrolpi/repair.sh` is still available if
+your WROLPi ever needs repairing.

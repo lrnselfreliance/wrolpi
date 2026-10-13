@@ -94,8 +94,8 @@ These steps are the same for every install.
 3. **Trust the certificate.**  Your browser will warn about the HTTPS certificate because it was made by your WROLPi,
    not by a public authority.  Download https://wrolpi.local/ca.crt and trust it on each device you use; see
    *Help > Certificates* on your WROLPi for per-device instructions.
-4. **Refresh your files.**  If you copied files onto the drive, the dashboard will ask you to refresh so WROLPi can find
-   them.  Your library looks empty until the refresh completes.
+4. **Wait for the first refresh.**  WROLPi refreshes all your files when it first starts so it can find anything already
+   on the drive.  Your library looks empty, and Download and Upload are disabled, until the refresh completes.
 5. Start adding content: download a video channel, archive a web page, or add a Zim (Wikipedia) file.  The *Help* page
    on your WROLPi explains each module.
 

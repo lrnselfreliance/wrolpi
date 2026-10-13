@@ -21,7 +21,7 @@ from sqlalchemy import text, or_
 
 from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
-from wrolpi.common import get_media_directory, logger
+from wrolpi.common import get_media_directory, logger, wrol_mode_enabled
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.events import Events
 from wrolpi.vars import PYTEST
@@ -253,6 +253,18 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
         self._set_job_status(job_id, 'pending')
         self.public_queue.put_nowait(task)
         return job_id
+
+    def queue_first_refresh(self) -> str | None:
+        """Queue a refresh of the entire media directory if one has never completed for this database (a fresh
+        install, or a rebuilt database).  Downloads and uploads are disabled until it completes.
+
+        Returns:
+            The job_id, or None if no refresh was queued.
+        """
+        if flags.refresh_complete.is_set() or wrol_mode_enabled():
+            return None
+        logger.info('Refreshing all files because no refresh has completed')
+        return self.queue_refresh([get_media_directory()])
 
     def queue_move(self, destination: pathlib.Path, sources: list[pathlib.Path]) -> str:
         """Queue a move task for background processing.

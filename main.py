@@ -310,6 +310,8 @@ async def start_single_tasks(app: Sanic):
     if flags.refresh_complete.is_set():
         # Set all downloads to new.
         download_manager.retry_downloads_on_startup()
+    else:
+        file_worker.queue_first_refresh()
 
     # Hotspot/throttle on startup are now handled by the Controller service.
 

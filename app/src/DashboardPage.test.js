@@ -21,11 +21,11 @@ jest.mock('./hooks/customHooks', () => ({
     useWROLMode: () => false,
 }));
 
-function renderAtUrl(url) {
+function renderAtUrl(url, flags = {refresh_complete: true}) {
     // test-utils' render() wraps content in a BrowserRouter (not MemoryRouter),
     // so point the jsdom location at the desired URL before rendering.
     window.history.pushState({}, '', url);
-    const status = {flags: {refresh_complete: true}};
+    const status = {flags};
     return render(
         <StatusContext.Provider value={{status}}>
             <Getters/>
@@ -64,6 +64,25 @@ describe('DashboardPage Getters deep-link', () => {
         renderAtUrl('/?downloader=rss&download_url=https%3A%2F%2Ffeed.example.com');
         await screen.findByTestId('download-menu');
         expect(screen.getByTestId('initial-downloader').textContent).toBe('rss');
+    });
+});
+
+describe('DashboardPage Getters before the first refresh', () => {
+    const note = /available after your files are refreshed/i;
+
+    it('explains why Download and Upload are disabled', () => {
+        renderAtUrl('/', {refresh_complete: false});
+        expect(screen.getByText(note)).toBeInTheDocument();
+    });
+
+    it('says nothing once the refresh has completed', () => {
+        renderAtUrl('/');
+        expect(screen.queryByText(note)).toBeNull();
+    });
+
+    it('says nothing before the status has loaded', () => {
+        renderAtUrl('/', null);
+        expect(screen.queryByText(note)).toBeNull();
     });
 });
 

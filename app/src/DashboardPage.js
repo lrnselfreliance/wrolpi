@@ -252,6 +252,8 @@ export function Getters() {
             </div>
             <span className='wrolpi-or-label'>Or</span>
         </div>
+        {status?.flags && gettersDisabled &&
+            <p>Download and Upload are available after your files are refreshed.</p>}
     </Panel>;
 
     let getterModal;

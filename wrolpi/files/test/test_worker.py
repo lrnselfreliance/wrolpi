@@ -1949,3 +1949,29 @@ async def test_directory_refresh_deletes_stale_ignored_file_groups(
     test_session.expire_all()
     primary_paths = {str(i.primary_path) for i in test_session.query(FileGroup)}
     assert primary_paths == {str(video)}
+
+
+@pytest.mark.asyncio
+async def test_queue_first_refresh(async_client, test_session, test_directory, make_files_structure,
+                                   await_background_tasks, flags_lock):
+    """A new database is refreshed without the user asking, so a fresh WROLPi can download right away."""
+    make_files_structure(['docs/file1.txt'])
+    flags.refresh_complete.clear()
+
+    assert file_worker.queue_first_refresh() is not None
+    await await_background_tasks()
+
+    assert flags.refresh_complete.is_set() is True
+    assert test_session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_first_refresh_skipped(async_client, test_session, test_directory, wrol_mode_fixture,
+                                           flags_lock):
+    """Only the first refresh is automatic, and WROL Mode never refreshes."""
+    flags.refresh_complete.set()
+    assert file_worker.queue_first_refresh() is None
+
+    flags.refresh_complete.clear()
+    await wrol_mode_fixture(True)
+    assert file_worker.queue_first_refresh() is None

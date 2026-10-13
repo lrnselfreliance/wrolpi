@@ -21,7 +21,13 @@ from controller.lib.config import (
     save_config,
     update_config,
 )
-from controller.lib.disks import check_shadowed_data, get_block_devices, mount_drive, unmount_drive
+from controller.lib.disks import (
+    check_shadowed_data,
+    get_block_devices,
+    is_transient_config,
+    mount_drive,
+    unmount_drive,
+)
 from controller.lib.fstab import add_fstab_entry
 from controller.lib.scripts import start_script
 
@@ -226,9 +232,12 @@ def commit_onboarding(
 
         # Step 1b: Clean up any transient config directory created on the root
         # filesystem (e.g. by generate_certificates.sh running before the drive
-        # was mounted). This prevents stale root CAs from lingering.
+        # was mounted). This prevents stale root CAs from lingering.  A config
+        # directory with anything else in it is a library kept on the internal
+        # disk; the shadowed data check below protects it.
         transient_config = Path(media_dir) / "config"
-        if transient_config.exists() and not Path(media_dir).is_mount():
+        if transient_config.exists() and not Path(media_dir).is_mount() \
+                and is_transient_config(transient_config):
             import shutil
             shutil.rmtree(transient_config)
             logger.info("Removed transient config directory at %s", transient_config)

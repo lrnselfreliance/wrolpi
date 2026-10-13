@@ -437,12 +437,23 @@ class TestCheckShadowedData:
         assert check_shadowed_data(str(target)) is None
 
     def test_returns_none_when_only_config_present(self, tmp_path):
-        """`config/` is whitelisted — it's expected pre-mount state."""
+        """A `config/` holding only the CA from generate_certificates.sh is expected pre-mount state."""
         target = tmp_path / "wrolpi"
         target.mkdir()
-        (target / "config").mkdir()
-        (target / "config" / "ssl.crt").write_text("cert")
+        (target / "config" / "ssl").mkdir(parents=True)
+        (target / "config" / "ssl" / "ca.crt").write_text("cert")
         assert check_shadowed_data(str(target)) is None
+
+    def test_detects_config_with_user_data(self, tmp_path):
+        """A library kept on the internal disk has its database and configs in `config/`."""
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "config" / "ssl").mkdir(parents=True)
+        (target / "config" / "ssl" / "ca.crt").write_text("cert")
+        (target / "config" / "wrolpi.db").write_bytes(b"x" * 10)
+        result = check_shadowed_data(str(target))
+        assert result["entries"] == ["config"]
+        assert result["size_bytes"] == 14
 
     def test_detects_directory_entry(self, tmp_path):
         target = tmp_path / "wrolpi"

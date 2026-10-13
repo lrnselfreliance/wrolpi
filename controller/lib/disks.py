@@ -271,15 +271,25 @@ def is_mount_busy(mount_point: str) -> bool:
         return False
 
 
+def is_transient_config(config_dir: Path) -> bool:
+    """True when `config_dir` holds only the `ssl/` CA that `generate_certificates.sh` writes before the primary
+    drive is mounted.  Anything else (wrolpi.db, configs) belongs to a library kept on that disk."""
+    try:
+        return all(e.name == "ssl" for e in config_dir.iterdir())
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+
+
 def check_shadowed_data(target: str) -> Optional[dict]:
     """Look for user data at `target` that would be hidden by a mount over it.
 
-    Returns a dict with `size_bytes` and `entries` when non-config content is
-    present, or None when the target is empty (or contains only `config/`).
+    Returns a dict with `size_bytes` and `entries` when user data is present,
+    or None when the target is empty (or contains only a transient `config/`).
 
-    `config/` is whitelisted because it is created transiently by
-    `generate_certificates.sh` before the primary drive is mounted; that is
-    expected, not user data.
+    A `config/` holding only `ssl/` is ignored because `generate_certificates.sh`
+    creates it before the primary drive is mounted; see `is_transient_config`.
 
     Returns None for non-existent targets.
     """
@@ -288,7 +298,8 @@ def check_shadowed_data(target: str) -> Optional[dict]:
         return None
 
     try:
-        entries = [e.name for e in target_path.iterdir() if e.name != "config"]
+        entries = [e.name for e in target_path.iterdir()
+                   if not (e.name == "config" and is_transient_config(e))]
     except OSError:
         return None
     if not entries:

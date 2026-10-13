@@ -259,17 +259,20 @@ class TestCommitOnboarding:
         """Full onboarding with config file on drive."""
         media_dir = tmp_path / "wrolpi"
         media_dir.mkdir()
-        config_dir = media_dir / "config"
-        config_dir.mkdir()
-
         config_data = {"drives": {"mounts": [
             {"device": "/dev/sdb1", "mount_point": "/media/backup", "fstype": "ext4"},
         ]}}
-        (config_dir / "controller.yaml").write_text(yaml.dump(config_data))
+
+        def mount_side_effect(device, mount_point, **kwargs):
+            if device == "/dev/sda1":
+                # The drive's config appears once it is mounted.
+                (media_dir / "config").mkdir()
+                (media_dir / "config" / "controller.yaml").write_text(yaml.dump(config_data))
+            return {"success": True}
 
         with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
              mock.patch("controller.lib.onboarding._cleanup_temp_mount"), \
-             mock.patch("controller.lib.onboarding.mount_drive", return_value={"success": True}), \
+             mock.patch("controller.lib.onboarding.mount_drive", side_effect=mount_side_effect), \
              mock.patch("controller.lib.onboarding.add_fstab_entry", return_value={"success": True}), \
              mock.patch("controller.lib.onboarding.reload_config_from_drive", return_value=True), \
              mock.patch("controller.lib.onboarding.save_config"), \
@@ -277,7 +280,7 @@ class TestCommitOnboarding:
             result = commit_onboarding("/dev/sda1", "ext4")
 
         assert result["success"] is True
-        assert str(media_dir) in result["mounts"]
+        assert result["mounts"] == [str(media_dir), "/media/backup"]
         assert result["repair_started"] is True
 
     def test_fresh_drive_proceeds(self, mock_docker_mode, tmp_path):
@@ -402,13 +405,9 @@ class TestCommitOnboarding:
         """Secondary mount failure should not abort onboarding."""
         media_dir = tmp_path / "wrolpi"
         media_dir.mkdir()
-        config_dir = media_dir / "config"
-        config_dir.mkdir()
-
         config_data = {"drives": {"mounts": [
             {"device": "/dev/sdb1", "mount_point": "/media/backup", "fstype": "ext4"},
         ]}}
-        (config_dir / "controller.yaml").write_text(yaml.dump(config_data))
 
         call_count = 0
 
@@ -416,7 +415,10 @@ class TestCommitOnboarding:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return {"success": True}  # Primary mount succeeds
+                # Primary mount succeeds, and the drive's config appears.
+                (media_dir / "config").mkdir()
+                (media_dir / "config" / "controller.yaml").write_text(yaml.dump(config_data))
+                return {"success": True}
             return {"success": False, "error": "Not found"}  # Secondary fails
 
         with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
@@ -429,6 +431,7 @@ class TestCommitOnboarding:
             result = commit_onboarding("/dev/sda1", "ext4")
 
         assert result["success"] is True
+        assert call_count == 2
         # Only primary mount should be in the list
         assert len(result["mounts"]) == 1
 
@@ -476,8 +479,8 @@ class TestCommitOnboardingShadowedData:
         """A target containing only `config/` is the expected pre-mount state."""
         media_dir = tmp_path / "wrolpi"
         media_dir.mkdir()
-        (media_dir / "config").mkdir()
-        (media_dir / "config" / "ssl.crt").write_text("cert")
+        (media_dir / "config" / "ssl").mkdir(parents=True)
+        (media_dir / "config" / "ssl" / "ca.crt").write_text("cert")
 
         with contextlib.ExitStack() as stack:
             for p in self._patched_mount_calls(media_dir):
@@ -485,6 +488,36 @@ class TestCommitOnboardingShadowedData:
             result = commit_onboarding("/dev/sda1", "ext4")
 
         assert result["success"] is True
+
+    def test_internal_library_config_blocks_and_is_kept(self, mock_docker_mode, tmp_path):
+        """A library kept on the internal disk is never deleted by onboarding a drive."""
+        media_dir = tmp_path / "wrolpi"
+        (media_dir / "config" / "ssl").mkdir(parents=True)
+        (media_dir / "config" / "wrolpi.db").write_bytes(b"x" * 10)
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4")
+
+        assert result["success"] is False
+        assert result["needs_force"] == "shadowed"
+        assert result["shadowed_data"]["entries"] == ["config"]
+        assert (media_dir / "config" / "wrolpi.db").is_file()
+
+    def test_internal_library_config_kept_when_forced(self, mock_docker_mode, tmp_path):
+        """Forcing the mount hides the internal library, but does not delete it."""
+        media_dir = tmp_path / "wrolpi"
+        (media_dir / "config" / "ssl").mkdir(parents=True)
+        (media_dir / "config" / "wrolpi.db").write_bytes(b"x" * 10)
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4", force_shadowed=True)
+
+        assert result["success"] is True
+        assert (media_dir / "config" / "wrolpi.db").is_file()
 
     def test_shadowed_data_blocks_without_force(self, mock_docker_mode, tmp_path):
         """A target with non-config data should soft-block."""

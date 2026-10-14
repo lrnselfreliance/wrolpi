@@ -81,16 +81,8 @@ echo "
 
 WROLPi has successfully been installed!
 
-Mount your external hard drive to /media/wrolpi if you have one.  Change the
-file permissions if necessary:
- # sudo chown -R wrolpi:wrolpi /media/wrolpi
-
-Start the WROLPi services using:
- # sudo systemctl start wrolpi.target
-
-then navigate to:  https://$(hostname).local
-
-Or, join to the Wifi hotspot:
+Browse to http://$(hostname).local to choose the drive for your library, or join
+the WiFi hotspot:
 SSID: WROLPi
 Password: wrolpi hotspot
 

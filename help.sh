@@ -43,10 +43,13 @@ rpi=false
 rpi4=false
 rpi5=false
 debian12=false
+debian13=false
 grep -q 'Raspberry Pi' /proc/cpuinfo >/dev/null && rpi=true
 grep -q 'Raspberry Pi 4' /proc/cpuinfo >/dev/null && rpi4=true
 grep -q 'Raspberry Pi 5' /proc/cpuinfo >/dev/null && rpi5=true
 grep -q 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null && debian12=true
+os_version=$(awk -F= '$1=="VERSION_ID"{gsub(/"/,"",$2);print $2}' /etc/os-release 2>/dev/null)
+[[ ${os_version} =~ ^[0-9]+$ && ${os_version} -ge 13 ]] && debian13=true
 
 if [[ ${rpi4} == true ]]; then
   echo 'OK: Running on Raspberry Pi 4'
@@ -54,8 +57,10 @@ elif [[ ${rpi5} == true ]]; then
   echo 'OK: Running on Raspberry Pi 5'
 elif [[ ${rpi} == true ]]; then
   echo 'OK: Running on unknown Raspberry Pi'
+elif [[ ${debian13} == true ]]; then
+  echo "OK: Running on Debian ${os_version}"
 elif [[ ${debian12} == true ]]; then
-  echo 'OK: Running on Debian 12'
+  echo 'FAILED: Debian 12 is not supported by new versions of WROLPi.  Reinstall on Debian 13.'
 else
   echo "FAILED: Running on unknown operating system"
 fi

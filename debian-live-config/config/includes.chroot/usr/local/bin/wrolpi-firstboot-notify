@@ -37,8 +37,8 @@ elif command -v notify-send >/dev/null 2>&1; then
 fi
 
 # bootstrap.sh writes the summary as root; /tmp's sticky bit means a
-# non-root rm fails.  Try via sudo (passwordless on WROLPi) so the file
-# doesn't survive into another login session.
+# non-root rm fails.  Try via sudo (passwordless for the live session's
+# user) so the file doesn't survive into another login session.
 sudo rm -f "$F" 2>/dev/null || rm -f "$F" 2>/dev/null || true
 
 echo "done"

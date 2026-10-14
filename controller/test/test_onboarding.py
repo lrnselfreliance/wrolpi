@@ -151,6 +151,48 @@ class TestGetOnboardingCandidates:
 
         assert len(candidates) == 0
 
+    def test_excludes_unlabeled_efi_at_boot_efi(self, mock_docker_mode):
+        """The Debian installer's EFI partition has no label and is mounted at /boot/efi; offering it as the
+        library drive would mount the boot partition over /media/wrolpi."""
+        from controller.lib.disks import BlockDevice
+
+        devices = [
+            BlockDevice(
+                name="nvme0n1p1", path="/dev/nvme0n1p1", size="976M", fstype="vfat",
+                mountpoint="/boot/efi", label=None, uuid="D019-F19C", model="QEMU NVMe Ctrl",
+            ),
+        ]
+        with mock.patch("controller.lib.onboarding.get_block_devices", return_value=devices):
+            candidates = get_onboarding_candidates()
+
+        assert candidates == []
+
+    @pytest.mark.parametrize("parttype", [
+        "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",  # GPT EFI System Partition.
+        "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
+        "0xef",  # MBR EFI System Partition.
+    ])
+    def test_excludes_unmounted_efi_by_partition_type(self, mock_docker_mode, parttype):
+        """An unmounted, unlabeled EFI partition (e.g. on a second internal disk) is excluded by its type,
+        while an ordinary vfat USB drive is still offered."""
+        from controller.lib.disks import BlockDevice
+
+        devices = [
+            BlockDevice(
+                name="sdb1", path="/dev/sdb1", size="100M", fstype="vfat",
+                mountpoint=None, label=None, uuid="AAAA-BBBB", model="Old Disk", parttype=parttype,
+            ),
+            BlockDevice(
+                name="sdc1", path="/dev/sdc1", size="64G", fstype="vfat",
+                mountpoint=None, label="USB", uuid="CCCC-DDDD", model="Flash",
+                parttype="ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",  # GPT Microsoft basic data.
+            ),
+        ]
+        with mock.patch("controller.lib.onboarding.get_block_devices", return_value=devices):
+            candidates = get_onboarding_candidates()
+
+        assert [c["path"] for c in candidates] == ["/dev/sdc1"]
+
     def test_excludes_temp_onboarding_mount(self, mock_docker_mode):
         """Drives mounted at the temp onboarding path should be excluded."""
         from controller.lib.disks import BlockDevice

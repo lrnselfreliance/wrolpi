@@ -3,7 +3,7 @@
 # Table of Contents
 
 * [Upgrading Docker containers](#upgrading-docker-containers)
-* [Upgrading Raspberry Pi or Debian 12 Installation](#upgrading-raspberry-pi-or-debian-12-installation)
+* [Upgrading Raspberry Pi or Debian Installation](#upgrading-raspberry-pi-or-debian-installation)
 * [Upgrading a WROLPi Portable USB](#upgrading-a-wrolpi-portable-usb)
 
 ## Upgrading Docker containers
@@ -24,7 +24,9 @@
 7. Start all docker containers
     * `docker-compose up -d`
 
-## Upgrading Raspberry Pi or Debian 12 Installation
+## Upgrading Raspberry Pi or Debian Installation
+
+A Debian 12 (bookworm) WROLPi stays on the final version for Debian 12; reinstall on Debian 13 to get newer versions.
 
 1. Run the upgrade script
     * `sudo /bin/bash /opt/wrolpi/upgrade.sh`

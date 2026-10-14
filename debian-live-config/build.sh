@@ -73,6 +73,8 @@ set -e
 # usual graphical/text installer flow.  GRUB gets "Install" + "Graphical
 # install" + "Live" entries.  noswap prevents the live system from
 # activating swap partitions found on the host machine's internal disks.
+# ca-certificates must be in the bootstrap so apt can reach the HTTPS
+# repositories in config/archives/ before the package lists are installed.
 lb config \
  --binary-images iso-hybrid \
  --mode debian \
@@ -85,6 +87,7 @@ lb config \
  --updates true \
  --security true \
  --apt-recommends false \
+ --debootstrap-options "--include=ca-certificates" \
  --firmware-binary true \
  --firmware-chroot true \
  --win32-loader false \

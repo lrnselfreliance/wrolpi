@@ -1,0 +1,7 @@
+# Only ever install Caddy from Caddy's repository (caddy-stable.list).  Debian
+# ships a much older caddy; if Caddy's repository is unreachable, the build
+# fails instead of silently falling back to it, and installed systems never
+# switch to it.
+Package: caddy
+Pin: release o=Debian
+Pin-Priority: -1

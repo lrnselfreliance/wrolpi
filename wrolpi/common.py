@@ -473,7 +473,24 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
-DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml',
+def library_on_internal_disk(media_directory: Path = None) -> bool:
+    """True when the user chose to keep the library on the internal disk (the Controller's "Run repair without
+    external drive"), so /media/wrolpi need not be a mount.
+
+    The Controller's config/controller.yaml is the only source of this choice.  It is read from the media
+    directory itself: when a drive fails to mount, the root filesystem beneath has no marker (unless the
+    library really lives there)."""
+    media_directory = media_directory or get_media_directory()
+    try:
+        with (media_directory / 'config' / 'controller.yaml').open() as fh:
+            config = yaml.safe_load(fh)
+    except (OSError, yaml.YAMLError):
+        return False
+    drives = config.get('drives') if isinstance(config, dict) else None
+    return isinstance(drives, dict) and drives.get('library_on_internal_disk') is True
+
+
+DB_CONFIG_FILE_NAMES ={'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml',
                         'playlists.yaml', 'repos.yaml'}
 
 

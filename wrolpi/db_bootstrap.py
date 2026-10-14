@@ -89,6 +89,10 @@ def media_directory_is_unmounted_production(media_directory: Path = None) -> boo
     if not str(media_directory).startswith('/media/'):
         # A custom MEDIA_DIRECTORY (dev boxes) may legitimately not be a mount.
         return False
+    from wrolpi.common import library_on_internal_disk
+    if library_on_internal_disk(media_directory):
+        # The user chose to keep the library on the internal disk; there is no drive to wait for.
+        return False
     try:
         return not media_directory.is_mount()
     except OSError:

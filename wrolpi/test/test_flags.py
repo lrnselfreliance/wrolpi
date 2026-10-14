@@ -85,6 +85,14 @@ def test_destinations_have_mounted_storage_nothing_mounted(test_directory, test_
         assert flags._destinations_have_mounted_storage() is False
 
 
+def test_destinations_have_mounted_storage_library_on_internal_disk(test_directory, test_wrolpi_config):
+    """Nothing is mounted, but the user chose to keep the library on the internal disk, so downloads may use it."""
+    (test_directory / 'config').mkdir(exist_ok=True)
+    (test_directory / 'config' / 'controller.yaml').write_text('drives:\n  library_on_internal_disk: true\n')
+    with _patch_mounts(set(), test_directory):
+        assert flags._destinations_have_mounted_storage() is True
+
+
 def test_destinations_have_mounted_storage_partial_coverage(async_client, test_directory, test_wrolpi_config):
     """If videos is on a drive but archive/zims/map are not, return False.
 

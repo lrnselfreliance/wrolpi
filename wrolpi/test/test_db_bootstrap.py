@@ -410,6 +410,8 @@ def test_unmounted_production_guard(test_directory):
 
     fake_media = mock.MagicMock(spec=pathlib.Path)
     fake_media.__str__ = lambda self: '/media/wrolpi'
+    # Files beneath it (config/controller.yaml) come from the real, marker-less test directory.
+    fake_media.__truediv__ = lambda self, other: test_directory / other
     fake_media.is_mount.return_value = False
     fake_media.is_dir.return_value = True
 
@@ -431,3 +433,43 @@ def test_unmounted_production_guard(test_directory):
     assert db_bootstrap.ensure_db() is True  # create a real DB in the test directory first
     with mock.patch.object(db_bootstrap, 'media_directory_is_unmounted_production', return_value=True):
         assert db_bootstrap.ensure_db() is False
+
+
+def test_unmounted_production_guard_library_on_internal_disk(test_directory):
+    """A library the user chose to keep on the internal disk ("Run repair without external drive") is not an
+    unmounted drive: the Controller's marker in config/controller.yaml lifts the guard."""
+    import pathlib
+
+    config_dir = test_directory / 'config'
+    config_dir.mkdir(exist_ok=True)
+    fake_media = mock.MagicMock(spec=pathlib.Path)
+    fake_media.__str__ = lambda self: '/media/wrolpi'
+    fake_media.__truediv__ = lambda self, other: test_directory / other
+    fake_media.is_mount.return_value = False
+
+    with mock.patch.object(db_bootstrap, 'PYTEST', False), \
+            mock.patch.object(db_bootstrap, 'DOCKERIZED', False), \
+            mock.patch.object(db_bootstrap.sys, 'platform', 'linux'):
+        # A controller.yaml without the marker (a drive that failed to mount) stays guarded.
+        (config_dir / 'controller.yaml').write_text('{}\n')
+        assert db_bootstrap.media_directory_is_unmounted_production(fake_media) is True
+
+        (config_dir / 'controller.yaml').write_text('drives:\n  library_on_internal_disk: true\n')
+        assert db_bootstrap.media_directory_is_unmounted_production(fake_media) is False
+
+
+@pytest.mark.parametrize('contents,expected', [
+    (None, False),
+    ('{}\n', False),
+    ('drives:\n  library_on_internal_disk: false\n', False),
+    ('drives:\n  library_on_internal_disk: true\n', True),
+    ('drives: [not, a, dict]\n', False),
+    ('drives: {library_on_internal_disk: true\n', False),  # Malformed YAML.
+])
+def test_library_on_internal_disk(test_directory, contents, expected):
+    from wrolpi.common import library_on_internal_disk
+
+    if contents is not None:
+        (test_directory / 'config').mkdir(exist_ok=True)
+        (test_directory / 'config' / 'controller.yaml').write_text(contents)
+    assert library_on_internal_disk() is expected

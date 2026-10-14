@@ -48,6 +48,7 @@ class BlockDevice:
     uuid: Optional[str]
     model: Optional[str]
     is_wrolpi_drive: bool = False
+    parttype: Optional[str] = None  # GPT type GUID, or MBR type like "0xef".
 
 
 def get_block_devices() -> list[BlockDevice]:
@@ -60,7 +61,7 @@ def get_block_devices() -> list[BlockDevice]:
     if is_docker_mode():
         return []
 
-    cmd = ["lsblk", "-J", "-o", "NAME,PATH,SIZE,TYPE,FSTYPE,MOUNTPOINT,LABEL,UUID,MODEL"]
+    cmd = ["lsblk", "-J", "-o", "NAME,PATH,SIZE,TYPE,FSTYPE,MOUNTPOINT,LABEL,UUID,MODEL,PARTTYPE"]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
@@ -83,6 +84,7 @@ def get_block_devices() -> list[BlockDevice]:
                     label=dev.get("label"),
                     uuid=dev.get("uuid"),
                     model=dev.get("model") or parent_model,
+                    parttype=dev.get("parttype"),
                 ))
             # Process children (partitions)
             for child in dev.get("children", []):

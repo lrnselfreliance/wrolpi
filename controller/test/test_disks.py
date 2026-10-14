@@ -98,6 +98,22 @@ class TestGetBlockDevices:
                 assert result[0].fstype == "ext4"
                 assert result[0].model == "Samsung SSD"
 
+    def test_reads_partition_type(self):
+        """The partition type identifies an EFI system partition whatever its label or mount."""
+        lsblk_output = json.dumps({"blockdevices": [{
+            "name": "sda", "path": "/dev/sda", "size": "500G", "type": "disk", "children": [{
+                "name": "sda1", "path": "/dev/sda1", "size": "512M", "type": "part", "fstype": "vfat",
+                "parttype": "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",
+            }],
+        }]})
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.return_value = mock.Mock(returncode=0, stdout=lsblk_output)
+                result = get_block_devices()
+
+        assert "PARTTYPE" in mock_run.call_args.args[0][-1].split(",")
+        assert result[0].parttype == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+
     def test_filters_unsupported_filesystems(self):
         """Should only return devices with supported filesystems."""
         lsblk_output = json.dumps({

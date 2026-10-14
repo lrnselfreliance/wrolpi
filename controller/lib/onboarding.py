@@ -36,10 +36,14 @@ logger = logging.getLogger(__name__)
 TEMP_MOUNT_PATH = "/media/wrolpi_temp_onboarding"
 
 # System mountpoints that should never be candidates
-EXCLUDED_MOUNTPOINTS = {"/", "/boot", "/boot/firmware"}
+EXCLUDED_MOUNTPOINTS = {"/", "/boot", "/boot/efi", "/boot/firmware"}
 
 # Partition labels that should never be candidates (case-insensitive)
 EXCLUDED_LABELS = {"efi", "efi system partition"}
+
+# EFI system partition types (GPT GUID, MBR id); these partitions are often
+# unlabeled, so the label check alone misses them.
+EFI_PARTTYPES = {"c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "0xef"}
 
 
 def get_onboarding_candidates() -> list[dict]:
@@ -64,6 +68,8 @@ def get_onboarding_candidates() -> list[dict]:
             continue
         # Skip EFI system partitions
         if d.label and d.label.lower() in EXCLUDED_LABELS:
+            continue
+        if d.parttype and d.parttype.lower() in EFI_PARTTYPES:
             continue
         candidates.append({
             "path": d.path,

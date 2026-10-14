@@ -176,6 +176,14 @@ if [ "$MODE" = "direct" ]; then
   mkdir -p /mnt/persistence
   mountpoint -q /mnt/persistence || mount "$PERSIST_PART" /mnt/persistence
   mkdir -p /mnt/persistence/wrolpi
+  # The library must be owned by this image's wrolpi.  ISOs before wrolpi
+  # became a system account wrote it as UID 1000, which a USB upgraded with a
+  # newer ISO would leave unwritable; re-own it once.
+  if [ "$(stat -c %u /mnt/persistence/wrolpi)" != "$(id -u wrolpi)" ]; then
+    progress "Updating library ownership for this WROLPi version..."
+    chown -R wrolpi:wrolpi /mnt/persistence/wrolpi
+    note_action "Updated the library's ownership for this WROLPi version"
+  fi
   chown wrolpi:wrolpi /mnt/persistence/wrolpi
 
   # persistence.conf: live-boot reads this on boot and applies the bind

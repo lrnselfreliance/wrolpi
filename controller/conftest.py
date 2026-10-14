@@ -68,6 +68,16 @@ def _isolate_dnsmasq_include(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_hotspot_boot_marker(tmp_path_factory, monkeypatch):
+    """Tests never start a real hotspot, nor write /run, when the Controller app starts up.  The marker exists, so
+    start_hotspot_on_boot does nothing unless a test points it elsewhere."""
+    import controller.lib.admin as admin
+    marker = tmp_path_factory.mktemp("run") / "hotspot-on-startup"
+    marker.touch()
+    monkeypatch.setattr(admin, "HOTSPOT_BOOT_MARKER", marker)
+
+
+@pytest.fixture(autouse=True)
 def _patch_status_worker():
     """Replace the real status worker with a no-op for every test.
 

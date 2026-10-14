@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 import yaml
 
-from controller.lib.config import reload_config_from_drive
+from controller.lib.config import get_media_directory, reload_config_from_drive
 from controller.lib import captive_portal
 from controller.lib.admin import (
     apply_timezone_from_config,
@@ -29,6 +29,8 @@ from controller.lib.admin import (
     get_hotspot_ssid,
     get_wifi_devices,
     migrate_hotspot_settings_from_wrolpi_config,
+    should_start_hotspot_on_boot,
+    start_hotspot_on_boot,
     reboot_system,
     restart_all_services,
     set_timezone,
@@ -626,6 +628,17 @@ class TestHotspotSettingsMigration:
 
         assert get_hotspot_device() == 'wlan0'
         assert yaml.safe_load(mock_config_path.read_text()) == {}
+
+    def test_migrates_hotspot_on_startup_false(self, test_directory, test_config_directory, mock_config_path,
+                                               reset_runtime_config):
+        """A user who never wants the hotspot keeps that choice in controller.yaml."""
+        mock_config_path.write_text("{}\n")
+        self._write_wrolpi_yaml(test_config_directory, hotspot_on_startup='false')
+
+        with mock.patch("controller.lib.admin.get_media_directory", return_value=test_directory):
+            migrate_hotspot_settings_from_wrolpi_config()
+
+        assert yaml.safe_load(mock_config_path.read_text()) == {'hotspot': {'on_startup': False}}
 
     def test_noop_when_drive_not_mounted(self, test_directory, test_config_directory, mock_config_path,
                                          reset_runtime_config):
@@ -1828,3 +1841,82 @@ class TestVncStartStop:
 
         assert result["success"] is False
         assert result["error"] == "No VNC server installed"
+
+
+class TestHotspotOnBoot:
+    """The hotspot is started once per boot unless the user disabled it."""
+
+    @pytest.fixture
+    def fstab(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("proc /proc proc defaults 0 0\n")
+        with mock.patch("controller.lib.fstab.FSTAB_PATH", str(path)):
+            yield path
+
+    @pytest.fixture
+    def boot_marker(self, tmp_path):
+        path = tmp_path / "run" / "hotspot-on-startup"
+        with mock.patch("controller.lib.admin.HOTSPOT_BOOT_MARKER", path):
+            yield path
+
+    def test_on_by_default(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab):
+        mock_config_path.write_text("{}\n")
+        reload_config_from_drive()
+        assert should_start_hotspot_on_boot() is True
+
+    def test_disabled_by_user(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab):
+        mock_config_path.write_text("hotspot:\n  on_startup: false\n")
+        reload_config_from_drive()
+        assert should_start_hotspot_on_boot() is False
+
+    def test_never_in_docker(self, mock_docker_mode_enabled, mock_config_path, reset_runtime_config, fstab):
+        mock_config_path.write_text("{}\n")
+        reload_config_from_drive()
+        assert should_start_hotspot_on_boot() is False
+
+    def test_fresh_install(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab):
+        """Without controller.yaml or a configured drive, the hotspot leads to the onboarding wizard."""
+        assert not mock_config_path.exists()
+        assert should_start_hotspot_on_boot() is True
+
+    def test_configured_drive_missing(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab):
+        """A drive which failed to mount hides the user's choice, so the hotspot is not started."""
+        fstab.write_text(f"UUID=abcd {get_media_directory()} ext4 defaults,nofail 0 0\n")
+        assert not mock_config_path.exists()
+        assert should_start_hotspot_on_boot() is False
+
+    def test_starts_once_per_boot(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab,
+                                  boot_marker):
+        """Restarting the Controller (upgrade, repair) does not restart the hotspot."""
+        mock_config_path.write_text("{}\n")
+        reload_config_from_drive()
+
+        with mock.patch("controller.lib.admin.start_hotspot", return_value={"success": True}) as start:
+            start_hotspot_on_boot()
+            start_hotspot_on_boot()
+
+        start.assert_called_once_with()
+        assert boot_marker.exists()
+
+    def test_not_started_when_disabled(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab,
+                                       boot_marker):
+        mock_config_path.write_text("hotspot:\n  on_startup: false\n")
+        reload_config_from_drive()
+
+        with mock.patch("controller.lib.admin.start_hotspot") as start:
+            start_hotspot_on_boot()
+
+        start.assert_not_called()
+
+    def test_retries_while_wifi_starts(self, mock_docker_mode, mock_config_path, reset_runtime_config, fstab,
+                                       boot_marker):
+        """The WiFi device may not be ready early in boot."""
+        mock_config_path.write_text("{}\n")
+        reload_config_from_drive()
+
+        results = [{"success": False, "error": "not ready"}, {"success": True}]
+        with mock.patch("controller.lib.admin.start_hotspot", side_effect=results) as start, \
+                mock.patch("controller.lib.admin.HOTSPOT_BOOT_RETRY_SECONDS", 0):
+            start_hotspot_on_boot()
+
+        assert start.call_count == 2

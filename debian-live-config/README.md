@@ -17,8 +17,10 @@ sudo ./build.sh                # build from 'release' branch
 sudo ./build.sh -b master      # build from a specific branch
 ```
 
-Requires Debian / Ubuntu with `live-build` installed.  The resulting ISO is
-written to this directory as `WROLPi-v${VERSION}-amd64.iso`.
+Requires Debian / Ubuntu with `live-build` and `libarchive-tools` (bsdtar)
+installed.  The resulting ISO is written to this directory as
+`WROLPi-v${VERSION}-amd64.iso`, and `check-iso.sh` then checks it for
+problems that would only appear after the Debian installer runs.
 
 Flash with Raspberry Pi Imager, Rufus, or:
 

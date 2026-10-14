@@ -1,0 +1,6 @@
+# Caddy's official apt repository.  live-build installs this (and
+# caddy-stable.key, fingerprint 65760C51EDEA2017CEA2CA15155B6D79CA56EA34)
+# into the build chroot and into the final image, so caddy can be listed in
+# package-lists/ -- packages installed by a chroot hook instead are purged by
+# the Debian installer (see check-iso.sh).
+deb https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main

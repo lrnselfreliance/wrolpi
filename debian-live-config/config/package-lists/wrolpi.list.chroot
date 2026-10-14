@@ -6,6 +6,7 @@ bind9-dnsutils
 build-essential
 bzip2
 ca-certificates
+caddy
 calibre
 cargo
 catdoc

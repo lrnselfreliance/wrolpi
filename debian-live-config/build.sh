@@ -183,4 +183,8 @@ if command -v blkid >/dev/null 2>&1; then
 fi
 echo "ISO sanity checks passed ($(numfmt --to=iec "${ISO_BYTES}" 2>/dev/null || echo "${ISO_BYTES} bytes"), iso9660)."
 
+# Problems that only appear once the Debian installer has run (e.g. packages it
+# would purge from the installed system).
+"${SCRIPT_DIR}/check-iso.sh" "${DEST}" || exit 1
+
 echo "Build has completed. ISO output ${DEST}"

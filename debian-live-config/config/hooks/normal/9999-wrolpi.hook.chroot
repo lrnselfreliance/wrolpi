@@ -106,13 +106,9 @@ python3 -m venv /opt/wrolpi/controller/venv
   /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt
 echo "Controller pre-installed"
 
-# Install Caddy from official apt repo.
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-apt-get update
-apt-get install -y caddy
-
-# Configure Caddy.
+# Configure Caddy.  Caddy itself comes from package-lists/ (repository in
+# config/archives/), never apt-get here: the Debian installer purges packages
+# that a hook installs.
 mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
 mkdir -p /var/www

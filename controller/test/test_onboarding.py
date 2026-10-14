@@ -3,12 +3,14 @@ Unit tests for onboarding orchestration logic.
 """
 
 import contextlib
+import copy
 from pathlib import Path
 from unittest import mock
 
 import pytest
 import yaml
 
+from controller.defaults import DEFAULT_CONFIG
 from controller.lib.onboarding import (
     TEMP_MOUNT_PATH,
     cancel_probe,
@@ -361,12 +363,13 @@ class TestCommitOnboarding:
              mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}):
             commit_onboarding("/dev/sda1", "ext4")
 
-        mock_update.assert_called_once_with("drives.mounts", [{
+        mounts_updates = [c for c in mock_update.call_args_list if c.args[0] == "drives.mounts"]
+        assert mounts_updates == [mock.call("drives.mounts", [{
             "device": "UUID=abc-123",
             "mount_point": str(media_dir),
             "fstype": "ext4",
             "options": "defaults",
-        }])
+        }])]
 
     def test_does_not_overwrite_existing_mounts(self, mock_docker_mode, tmp_path):
         """Should not modify drives.mounts when config already has mounts."""
@@ -384,7 +387,7 @@ class TestCommitOnboarding:
              mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}):
             commit_onboarding("/dev/sda1", "ext4")
 
-        mock_update.assert_not_called()
+        assert not [c for c in mock_update.call_args_list if c.args[0] == "drives.mounts"]
 
     def test_mount_failure(self, mock_docker_mode, tmp_path):
         """Should return error when primary mount fails."""
@@ -563,12 +566,38 @@ class TestOnboardWithoutDrive:
 
         with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
                 mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", config_path), \
+                mock.patch("controller.lib.config._runtime_config", copy.deepcopy(DEFAULT_CONFIG)), \
                 mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}) as start:
             result = onboard_without_drive()
 
         assert result == {"success": True, "mounts": [], "repair_started": True}
-        assert config_path.is_file()
+        # The API reads this marker; without it, it refuses to create a database on an unmounted /media/wrolpi.
+        assert yaml.safe_load(config_path.read_text()) == {"drives": {"library_on_internal_disk": True}}
         start.assert_called_once_with("repair")
+
+    def test_onboarding_a_drive_later_does_not_copy_the_marker(self, mock_docker_mode, tmp_path):
+        """The marker describes the internal disk; a drive onboarded afterward (same Controller process) must
+        not inherit it, or the API would accept an unmounted drive's directory as the library."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        config_path = media_dir / "config" / "controller.yaml"
+
+        with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
+                mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", config_path), \
+                mock.patch("controller.lib.config._runtime_config", copy.deepcopy(DEFAULT_CONFIG)), \
+                mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}):
+            onboard_without_drive()
+            # The drive is mounted over the internal disk's directory; it has no controller.yaml yet.
+            config_path.unlink()
+            with mock.patch("controller.lib.onboarding._cleanup_temp_mount"), \
+                    mock.patch("controller.lib.onboarding.mount_drive", return_value={"success": True}), \
+                    mock.patch("controller.lib.onboarding.add_fstab_entry", return_value={"success": False}):
+                # The internal disk's library is shadowed by the drive; the user confirmed.
+                result = commit_onboarding("/dev/sda1", "ext4", force_shadowed=True)
+
+        assert result["success"] is True
+        drive_config = yaml.safe_load(config_path.read_text()) or {}
+        assert drive_config.get("drives", {}).get("library_on_internal_disk") is not True
 
     def test_repair_failure_is_reported(self, mock_docker_mode, tmp_path):
         media_dir = tmp_path / "wrolpi"

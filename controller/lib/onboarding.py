@@ -176,13 +176,15 @@ def onboard_without_drive() -> dict:
     Set up WROLPi with the library on the internal disk, then start repair.
 
     controller.yaml marks the primary drive as set up; without it the wizard
-    would be shown again after repair.
+    would be shown again after repair.  Its drives.library_on_internal_disk
+    tells the API that /media/wrolpi is deliberately not a mount.
 
     Returns:
         dict with success, mounts, and repair_started
     """
     config_dir = get_media_directory() / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
+    update_config("drives.library_on_internal_disk", True)
     save_config()
 
     repair_result = start_script("repair")
@@ -282,8 +284,11 @@ def commit_onboarding(
         if not fstab_result.get("success"):
             logger.warning("Failed to add primary fstab entry: %s", fstab_result.get("error"))
 
-        # Step 5: Reload config from drive and ensure controller.yaml exists
+        # Step 5: Reload config from drive and ensure controller.yaml exists.
+        # The library now lives on this drive, even if this process earlier
+        # onboarded without one.
         reload_config_from_drive()
+        update_config("drives.library_on_internal_disk", False)
         try:
             save_config()
         except RuntimeError:

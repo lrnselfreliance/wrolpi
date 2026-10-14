@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import Column, Boolean, Integer
 
-from wrolpi.common import logger, Base, get_media_directory, get_wrolpi_config
+from wrolpi.common import logger, Base, get_media_directory, get_wrolpi_config, library_on_internal_disk
 from wrolpi.vars import DOCKERIZED
 
 __all__ = [
@@ -210,9 +210,10 @@ def _destinations_have_mounted_storage() -> bool:
     silently write to the SD card on a Raspberry Pi.
 
     Docker mode is exempt: the media directory is always a bind mount and
-    the user cannot remount drives from inside the container.
+    the user cannot remount drives from inside the container.  So is a
+    library the user chose to keep on the internal disk.
     """
-    if DOCKERIZED:
+    if DOCKERIZED or library_on_internal_disk():
         return True
 
     media_dir = get_media_directory().resolve()

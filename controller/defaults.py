@@ -14,6 +14,9 @@ DEFAULT_CONFIG = {
         "supported_filesystems": ["ext4", "btrfs", "vfat", "exfat"],
         "auto_mount": True,
         "mounts": [],  # Populated from controller.yaml after drive mount
+        # True when the user chose "Run repair without external drive"; the
+        # API then accepts an unmounted /media/wrolpi as the library.
+        "library_on_internal_disk": False,
     },
 
     "managed_services": [

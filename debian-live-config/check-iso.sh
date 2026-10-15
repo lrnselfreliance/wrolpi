@@ -69,6 +69,27 @@ if awk -F: '$3 >= 1000 && $3 < 60000 {found=1} END {exit !found}' "${TMP}/passwd
   FAILED=1
 fi
 
+# A Live USB must come back on its own after a reboot or power loss: the boot
+# menus must boot their default entry after a timeout (0 waits forever).
+if ! extract boot/grub/config.cfg || ! grep -qE '^set timeout=[1-9]' "${TMP}/config.cfg"; then
+  echo "ERROR: the GRUB (UEFI) boot menu has no timeout; a Live USB would wait at it forever." >&2
+  FAILED=1
+fi
+if extract isolinux/isolinux.cfg && ! grep -qE '^timeout [1-9]' "${TMP}/isolinux.cfg"; then
+  echo "ERROR: the ISOLINUX (BIOS) boot menu has no timeout; a Live USB would wait at it forever." >&2
+  FAILED=1
+fi
+
+# The installer should default the hostname to wrolpi (wrolpi.local), via the
+# preseed live-build copies into each installer initrd.
+for initrd in install/initrd.gz install/gtk/initrd.gz; do
+  if ! bsdtar -xOf "${ISO}" "${initrd}" 2>/dev/null | bsdtar -xOf - preseed.cfg 2>/dev/null \
+      | grep -q '^d-i netcfg/get_hostname string wrolpi$'; then
+    echo "ERROR: ${initrd} does not preseed the hostname wrolpi." >&2
+    FAILED=1
+  fi
+done
+
 if [ "${FAILED}" -ne 0 ]; then
   exit 1
 fi

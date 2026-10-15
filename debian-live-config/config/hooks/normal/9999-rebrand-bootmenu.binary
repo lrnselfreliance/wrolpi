@@ -1,5 +1,7 @@
 #!/bin/sh
-# Rebrand the live-build generated boot menus.
+# Rebrand the live-build generated boot menus, and boot the default entry
+# ("Run WROLPi (live)") after a timeout so a Live USB comes back on its own
+# after a reboot or power loss.
 #
 # live-build invokes binary hooks with cwd = the build's binary/ directory
 # (it does `cd binary && ../hook`), so paths here are relative to binary/.
@@ -45,3 +47,15 @@ for f in isolinux/live.cfg \
       "$f"
   fi
 done
+
+# Boot the default entry after 10 seconds (live-build sets no timeout, so the
+# menu waited forever).  Any key stops the countdown.
+BOOT_MENU_TIMEOUT=10
+# GRUB (UEFI): grub.cfg sources config.cfg, which sets default=0.
+if [ -f boot/grub/config.cfg ]; then
+  echo "set timeout=${BOOT_MENU_TIMEOUT}" >> boot/grub/config.cfg
+fi
+# ISOLINUX (BIOS): timeout is in tenths of a second; 0 waits forever.
+if [ -f isolinux/isolinux.cfg ]; then
+  sed -i "s|^timeout 0$|timeout $((BOOT_MENU_TIMEOUT * 10))|" isolinux/isolinux.cfg
+fi

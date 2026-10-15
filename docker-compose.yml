@@ -66,6 +66,10 @@ services:
       - './docker/archive/main.py:/app/main.py'
     ports:
       - '8083:8080'
+    # The Sanic app is PID 1 and reaps nothing; check_output kills each command's process group,
+    # and the killed grandchildren (chrome, cat, node) are orphaned to it as zombies (several per
+    # archive).  init runs tini as PID 1 to reap them.
+    init: true
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8080/' ]
       interval: 2m

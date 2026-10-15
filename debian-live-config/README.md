@@ -17,8 +17,9 @@ sudo ./build.sh                # build from 'release' branch
 sudo ./build.sh -b master      # build from a specific branch
 ```
 
-Requires Debian / Ubuntu with `live-build` and `libarchive-tools` (bsdtar)
-installed.  The resulting ISO is written to this directory as
+Requires Debian / Ubuntu with `live-build`, `libarchive-tools` (bsdtar),
+`genisoimage` (isoinfo) and `squashfs-tools` installed.  The resulting ISO is
+written to this directory as
 `WROLPi-v${VERSION}-amd64.iso`, and `check-iso.sh` then checks it for
 problems that would only appear after the Debian installer runs.
 
@@ -59,6 +60,14 @@ is no safe, filesystem-agnostic way to graft WROLPi onto a full drive.
 
 Afterwards, future ISO upgrades preserve your library via the
 `upgrade` command above.
+
+## Users
+
+- `wrolpi` is a system account (no password, no login sudo) that owns
+  `/media/wrolpi` and runs the WROLPi services, as on every other WROLPi.
+- The live session logs in automatically as `user` (live-config).
+- An installed system has the user the Debian installer asked for, with sudo,
+  and no automatic login.
 
 ## Layout on disk
 
@@ -117,7 +126,7 @@ needing a dedicated drive.)
 
 - [x] **Phase 1 — merged live + chroot config**:  Single `debian-live-config/`
       produces a Debian Live ISO with the full WROLPi stack, XFCE auto-login
-      as `wrolpi`, persistence partition created on first boot.
+      as `user`, persistence partition created on first boot.
 - [x] **Phase 2 — Debian Installer**:  Standard `debian-installer` bundled
       via `lb config --debian-installer live --debian-installer-gui true`.
       GRUB exposes "Live", "Install", and "Graphical Install" entries.

@@ -5,7 +5,8 @@
 #
 #   ./check-iso.sh WROLPi-v0.30.0-beta-amd64.iso
 #
-# Requires bsdtar (Debian package libarchive-tools; built into macOS).
+# Requires bsdtar (libarchive-tools), isoinfo (genisoimage) and unsquashfs
+# (squashfs-tools).
 
 ISO=$1
 if [ -z "${ISO}" ] || [ ! -f "${ISO}" ]; then
@@ -13,10 +14,12 @@ if [ -z "${ISO}" ] || [ ! -f "${ISO}" ]; then
   exit 1
 fi
 
-if ! command -v bsdtar >/dev/null 2>&1; then
-  echo "ERROR: bsdtar is required (apt install libarchive-tools)." >&2
-  exit 1
-fi
+for tool in bsdtar:libarchive-tools isoinfo:genisoimage unsquashfs:squashfs-tools; do
+  if ! command -v "${tool%%:*}" >/dev/null 2>&1; then
+    echo "ERROR: ${tool%%:*} is required (apt install ${tool#*:})." >&2
+    exit 1
+  fi
+done
 
 TMP=$(mktemp -d)
 trap 'rm -rf "${TMP}"' EXIT
@@ -45,6 +48,24 @@ if extract live/filesystem.packages-remove && [ -s "${TMP}/filesystem.packages-r
   echo "ERROR: the Debian installer would remove these packages from an installed WROLPi:" >&2
   sed 's/^/  /' "${TMP}/filesystem.packages-remove" >&2
   echo "Install them via config/package-lists/ instead of a chroot hook." >&2
+  FAILED=1
+fi
+
+# The Debian installer creates the user it asks for only if no user with a UID
+# from 1000 to 59999 exists (user-setup's is_system_user); otherwise it skips
+# that user silently.  wrolpi must be a system account (UID < 1000), as on
+# every other WROLPi deployment.
+SQUASHFS_LBA=$(isoinfo -i "${ISO}" -R -l 2>/dev/null \
+  | awk '/ filesystem\.squashfs/ {sub(/.*\[ */, ""); print $1; exit}')
+if [ -z "${SQUASHFS_LBA}" ] \
+    || ! unsquashfs -o $((SQUASHFS_LBA * 2048)) -cat "${ISO}" etc/passwd > "${TMP}/passwd" 2>/dev/null; then
+  echo "ERROR: could not read /etc/passwd from live/filesystem.squashfs in ${ISO}." >&2
+  exit 1
+fi
+if awk -F: '$3 >= 1000 && $3 < 60000 {found=1} END {exit !found}' "${TMP}/passwd"; then
+  echo "ERROR: the Debian installer would not create the user it asks for, because these users exist:" >&2
+  awk -F: '$3 >= 1000 && $3 < 60000 {print "  " $1 " (UID " $3 ")"}' "${TMP}/passwd" >&2
+  echo "Create them with useradd --system." >&2
   FAILED=1
 fi
 

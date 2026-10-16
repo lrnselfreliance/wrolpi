@@ -11,6 +11,7 @@ import logging
 import os
 import os.path
 import pathlib
+import re
 import signal
 import subprocess
 import sys
@@ -187,6 +188,31 @@ async def call_single_file(url, compress: bool = False) -> (bytes, bytes):
     return singlefile, page_html
 
 
+# The prefix and payload of a base64 data URI.  Keep in sync with modules/archive/lib.py.
+BASE64_DATA_URI = re.compile(rb'(data:[^,;\s"\'()]*(?:;[^,;\s"\'()]*)*;base64,)([A-Za-z0-9+/]+=*)')
+DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI(\d+)X')
+
+
+def strip_data_uris(html: bytes) -> (bytes, list):
+    """Replace each base64 data URI payload with a placeholder; readability-extractor takes minutes on a
+    page of large inline images (SingleFile inlines every image).  Returns the HTML and the payloads."""
+    payloads = list()
+
+    def replace(match):
+        payloads.append(match.group(2))
+        return match.group(1) + f'WROLPIDATAURI{len(payloads) - 1}X'.encode()
+
+    return BASE64_DATA_URI.sub(replace, html), payloads
+
+
+def restore_data_uris(readability: dict, payloads: list) -> dict:
+    """Put the payloads removed by `strip_data_uris` back into the readability output."""
+    for key, value in readability.items():
+        if isinstance(value, str):
+            readability[key] = DATA_URI_PLACEHOLDER.sub(lambda m: payloads[int(m.group(1))].decode(), value)
+    return readability
+
+
 async def extract_readability(path: str, url: str) -> dict:
     """
     Call the CLI command for readability-extractor.
@@ -194,6 +220,9 @@ async def extract_readability(path: str, url: str) -> dict:
     See https://github.com/ArchiveBox/readability-extractor
     """
     logger.info(f'readability for {url}')
+    html, data_uri_payloads = strip_data_uris(pathlib.Path(path).read_bytes())
+    path = pathlib.Path(path).with_name('readability-input.html')
+    path.write_bytes(html)
     cmd = f'readability-extractor {path} "{url}"'
     logger.debug(f'readability cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd, timeout=3 * 60)
@@ -203,7 +232,7 @@ async def extract_readability(path: str, url: str) -> dict:
         stderr = stderr.decode() if stderr else None
         raise RuntimeError(f'Failed to extract readability.  {stderr}') from e
     logger.debug(f'done readability for {url}')
-    return output
+    return restore_data_uris(output, data_uri_payloads)
 
 
 async def take_screenshot(url: str) -> bytes:

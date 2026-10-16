@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import tempfile
 from datetime import datetime, timedelta
 from http import HTTPStatus
@@ -19,6 +20,7 @@ from modules.archive.lib import get_or_create_domain_collection, get_new_archive
     delete_archives_by_file_group_ids, model_archive_result, get_domains
 from modules.archive.models import Archive
 from wrolpi.api_utils import CustomJSONEncoder
+from wrolpi.cmd import CommandResult
 from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
@@ -1452,3 +1454,42 @@ def test_search_archives_count_is_driven_by_the_search_index(test_directory, tes
     (statement, params), = counts
     plan = [row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {statement}'), params).fetchall()]
     assert plan[0].startswith('SCAN fts VIRTUAL TABLE'), plan
+
+
+@pytest.mark.asyncio
+async def test_html_to_readability_data_uris(test_directory):
+    """readability-extractor never receives inline base64 data, which makes it take minutes on a page of
+    inline images; the data is restored in the readability output."""
+    png = 'iVBORw0KGgo' + 'A' * 5000 + '=='
+    webp = 'UklGRiQAAABXRUJQ' + 'B' * 5000
+    html = f'<html><head><style>.x {{ background: url(data:image/png;base64,{png}) }}</style></head>' \
+           f'<body><article><p>Some text</p>' \
+           f'<img src="data:image/png;base64,{png}">' \
+           f'<img src=\'data:image/webp;base64,{webp}\'>' \
+           f'<img src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">' \
+           f'</article></body></html>'
+
+    received = list()
+
+    async def fake_run_command(cmd, *args, **kwargs):
+        # Echo the images back like readability-extractor does in `content`.
+        page = pathlib.Path(cmd[3]).read_text()
+        received.append(page)
+        content = ''.join(re.findall(r'<img[^>]*>', page))
+        stdout = json.dumps({'title': 'Title', 'content': content, 'textContent': 'Some text'}).encode()
+        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=0)
+
+    with mock.patch('modules.archive.lib.run_command', fake_run_command):
+        readability = await lib.html_to_readability(html, 'https://example.com')
+
+    # readability-extractor got the page without the base64 payloads.
+    assert png not in received[0] and webp not in received[0]
+    assert 'Some text' in received[0]
+    assert 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E' in received[0], 'non-base64 data URI should be untouched'
+
+    # The images were restored in the output.
+    assert readability['content'] == f'<img src="data:image/png;base64,{png}">' \
+                                     f'<img src=\'data:image/webp;base64,{webp}\'>' \
+                                     f'<img src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">'
+    assert readability['textContent'] == 'Some text'
+    assert readability['title'] == 'Title'

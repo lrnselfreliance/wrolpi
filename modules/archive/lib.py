@@ -5,13 +5,14 @@ import json
 import os
 import pathlib
 import re
+import secrets
 import shlex
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from json import JSONDecodeError
-from typing import Optional, Tuple, List, Union
+from typing import Optional, Tuple, List, Union, Dict
 from urllib.parse import urlparse
 
 import pytz
@@ -1558,10 +1559,42 @@ async def search_domains_by_name(session: Session, name: str, limit: int = 5) ->
     ]
 
 
+# The prefix and payload of a base64 data URI.  Keep in sync with docker/archive/main.py.
+BASE64_DATA_URI = re.compile(rb'(data:[^,;\s"\'()]*(?:;[^,;\s"\'()]*)*;base64,)([A-Za-z0-9+/]+=*)')
+DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI[0-9a-f]{160}N\d+X')
+
+
+def strip_data_uris(html: bytes) -> Tuple[bytes, Dict[str, bytes]]:
+    """Replace each base64 data URI payload with a placeholder; readability-extractor takes minutes on a
+    page of large inline images (SingleFile inlines every image).  Returns the HTML and the payloads by
+    placeholder.  The placeholder holds a random token, so text in the page cannot be mistaken for one."""
+    # At least 133 characters: Readability drops a shorter base64 `src` as a lazy-load placeholder when another
+    # attribute names an image file (e.g. alt="cat.png").
+    token = secrets.token_hex(80)
+    payloads = dict()
+
+    def replace(match):
+        placeholder = f'WROLPIDATAURI{token}N{len(payloads)}X'
+        payloads[placeholder] = match.group(2)
+        return match.group(1) + placeholder.encode()
+
+    return BASE64_DATA_URI.sub(replace, html), payloads
+
+
+def restore_data_uris(readability: dict, payloads: Dict[str, bytes]) -> dict:
+    """Put the payloads removed by `strip_data_uris` back into the readability output."""
+    for key, value in readability.items():
+        if isinstance(value, str):
+            readability[key] = DATA_URI_PLACEHOLDER.sub(
+                lambda m: payloads[m.group(0)].decode() if m.group(0) in payloads else m.group(0), value)
+    return readability
+
+
 async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
     """Extract the readability dict from the provided HTML."""
+    html, data_uri_payloads = strip_data_uris(html.encode() if isinstance(html, str) else html)
     with tempfile.NamedTemporaryFile('wb', suffix='.html') as singlefile_file:
-        singlefile_file.write(html.encode() if isinstance(html, str) else html)
+        singlefile_file.write(html)
         singlefile_file.flush()
         os.fsync(singlefile_file.fileno())
 
@@ -1585,7 +1618,7 @@ async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
                     e = ChildProcessError(stderr)
                 raise RuntimeError(f'Failed to extract readability from {url}') from e
             logger.debug(f'done readability for {url}')
-            return readability
+            return restore_data_uris(readability, data_uri_payloads)
         else:
             logger.error(f'Failed to extract readability for {url}')
             e = ChildProcessError(stdout if stdout else 'No stdout')

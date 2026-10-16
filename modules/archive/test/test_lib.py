@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import tempfile
 from datetime import datetime, timedelta
 from http import HTTPStatus
@@ -19,6 +20,7 @@ from modules.archive.lib import get_or_create_domain_collection, get_new_archive
     delete_archives_by_file_group_ids, model_archive_result, get_domains
 from modules.archive.models import Archive
 from wrolpi.api_utils import CustomJSONEncoder
+from wrolpi.cmd import CommandResult
 from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
@@ -1452,3 +1454,76 @@ def test_search_archives_count_is_driven_by_the_search_index(test_directory, tes
     (statement, params), = counts
     plan = [row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {statement}'), params).fetchall()]
     assert plan[0].startswith('SCAN fts VIRTUAL TABLE'), plan
+
+
+@pytest.mark.asyncio
+async def test_html_to_readability_data_uris(test_directory):
+    """readability-extractor never receives inline base64 data, which makes it take minutes on a page of
+    inline images; the data is restored in the readability output."""
+    png = 'iVBORw0KGgo' + 'A' * 5000 + '=='
+    webp = 'UklGRiQAAABXRUJQ' + 'B' * 5000
+    html = f'<html><head><style>.x {{ background: url(data:image/png;base64,{png}) }}</style></head>' \
+           f'<body><article><p>Some text</p>' \
+           f'<img src="data:image/png;base64,{png}">' \
+           f'<img src=\'data:image/webp;base64,{webp}\'>' \
+           f'<img src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">' \
+           f'</article></body></html>'
+
+    received = list()
+
+    async def fake_run_command(cmd, *args, **kwargs):
+        # Echo the images back like readability-extractor does in `content`.
+        page = pathlib.Path(cmd[3]).read_text()
+        received.append(page)
+        content = ''.join(re.findall(r'<img[^>]*>', page))
+        stdout = json.dumps({'title': 'Title', 'content': content, 'textContent': 'Some text'}).encode()
+        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=0)
+
+    with mock.patch('modules.archive.lib.run_command', fake_run_command):
+        readability = await lib.html_to_readability(html, 'https://example.com')
+
+    # readability-extractor got the page without the base64 payloads.
+    assert png not in received[0] and webp not in received[0]
+    assert 'Some text' in received[0]
+    assert 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E' in received[0], 'non-base64 data URI should be untouched'
+
+    # The images were restored in the output.
+    assert readability['content'] == f'<img src="data:image/png;base64,{png}">' \
+                                     f'<img src=\'data:image/webp;base64,{webp}\'>' \
+                                     f'<img src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">'
+    assert readability['textContent'] == 'Some text'
+    assert readability['title'] == 'Title'
+
+
+@pytest.mark.asyncio
+async def test_html_to_readability_forged_placeholder():
+    """Placeholder-like text already in a page is not treated as a placeholder; it cannot index past the
+    payloads or duplicate an image into the output."""
+    png = 'iVBORw0KGgo' + 'A' * 5000
+    html = f'<p>WROLPIDATAURI0X WROLPIDATAURI99X</p><img src="data:image/png;base64,{png}">'
+
+    async def fake_run_command(cmd, *args, **kwargs):
+        page = pathlib.Path(cmd[3]).read_text()
+        stdout = json.dumps({'content': page, 'textContent': 'WROLPIDATAURI0X WROLPIDATAURI99X'}).encode()
+        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=0)
+
+    with mock.patch('modules.archive.lib.run_command', fake_run_command):
+        readability = await lib.html_to_readability(html, 'https://example.com')
+
+    assert readability['content'] == html
+    assert readability['content'].count(png) == 1
+    assert readability['textContent'] == 'WROLPIDATAURI0X WROLPIDATAURI99X'
+
+
+def test_strip_data_uris_placeholder_length():
+    """Readability's _fixLazyImages removes an <img> `src` whose base64 payload is shorter than 133 characters
+    when another attribute names an image file (e.g. alt="cat.png"), so a placeholder must be at least that
+    long or the image is lost before it can be restored."""
+    png = 'iVBORw0KGgo' + 'A' * 4000
+    html, payloads = lib.strip_data_uris(f'<img src="data:image/png;base64,{png}" alt="cat.png">'.encode())
+
+    (placeholder,) = payloads
+    assert len(placeholder) >= 133
+    assert html == f'<img src="data:image/png;base64,{placeholder}" alt="cat.png">'.encode()
+    assert lib.restore_data_uris({'content': html.decode()}, payloads)['content'] \
+           == f'<img src="data:image/png;base64,{png}" alt="cat.png">'

@@ -12,6 +12,7 @@ import os
 import os.path
 import pathlib
 import re
+import secrets
 import signal
 import subprocess
 import sys
@@ -190,26 +191,30 @@ async def call_single_file(url, compress: bool = False) -> (bytes, bytes):
 
 # The prefix and payload of a base64 data URI.  Keep in sync with modules/archive/lib.py.
 BASE64_DATA_URI = re.compile(rb'(data:[^,;\s"\'()]*(?:;[^,;\s"\'()]*)*;base64,)([A-Za-z0-9+/]+=*)')
-DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI(\d+)X')
+DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI[0-9a-f]{32}N\d+X')
 
 
-def strip_data_uris(html: bytes) -> (bytes, list):
+def strip_data_uris(html: bytes) -> (bytes, dict):
     """Replace each base64 data URI payload with a placeholder; readability-extractor takes minutes on a
-    page of large inline images (SingleFile inlines every image).  Returns the HTML and the payloads."""
-    payloads = list()
+    page of large inline images (SingleFile inlines every image).  Returns the HTML and the payloads by
+    placeholder.  The placeholder holds a random token, so text in the page cannot be mistaken for one."""
+    token = secrets.token_hex(16)
+    payloads = dict()
 
     def replace(match):
-        payloads.append(match.group(2))
-        return match.group(1) + f'WROLPIDATAURI{len(payloads) - 1}X'.encode()
+        placeholder = f'WROLPIDATAURI{token}N{len(payloads)}X'
+        payloads[placeholder] = match.group(2)
+        return match.group(1) + placeholder.encode()
 
     return BASE64_DATA_URI.sub(replace, html), payloads
 
 
-def restore_data_uris(readability: dict, payloads: list) -> dict:
+def restore_data_uris(readability: dict, payloads: dict) -> dict:
     """Put the payloads removed by `strip_data_uris` back into the readability output."""
     for key, value in readability.items():
         if isinstance(value, str):
-            readability[key] = DATA_URI_PLACEHOLDER.sub(lambda m: payloads[int(m.group(1))].decode(), value)
+            readability[key] = DATA_URI_PLACEHOLDER.sub(
+                lambda m: payloads[m.group(0)].decode() if m.group(0) in payloads else m.group(0), value)
     return readability
 
 

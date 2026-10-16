@@ -1493,3 +1493,23 @@ async def test_html_to_readability_data_uris(test_directory):
                                      f'<img src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">'
     assert readability['textContent'] == 'Some text'
     assert readability['title'] == 'Title'
+
+
+@pytest.mark.asyncio
+async def test_html_to_readability_forged_placeholder():
+    """Placeholder-like text already in a page is not treated as a placeholder; it cannot index past the
+    payloads or duplicate an image into the output."""
+    png = 'iVBORw0KGgo' + 'A' * 5000
+    html = f'<p>WROLPIDATAURI0X WROLPIDATAURI99X</p><img src="data:image/png;base64,{png}">'
+
+    async def fake_run_command(cmd, *args, **kwargs):
+        page = pathlib.Path(cmd[3]).read_text()
+        stdout = json.dumps({'content': page, 'textContent': 'WROLPIDATAURI0X WROLPIDATAURI99X'}).encode()
+        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=0)
+
+    with mock.patch('modules.archive.lib.run_command', fake_run_command):
+        readability = await lib.html_to_readability(html, 'https://example.com')
+
+    assert readability['content'] == html
+    assert readability['content'].count(png) == 1
+    assert readability['textContent'] == 'WROLPIDATAURI0X WROLPIDATAURI99X'

@@ -1561,14 +1561,16 @@ async def search_domains_by_name(session: Session, name: str, limit: int = 5) ->
 
 # The prefix and payload of a base64 data URI.  Keep in sync with docker/archive/main.py.
 BASE64_DATA_URI = re.compile(rb'(data:[^,;\s"\'()]*(?:;[^,;\s"\'()]*)*;base64,)([A-Za-z0-9+/]+=*)')
-DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI[0-9a-f]{32}N\d+X')
+DATA_URI_PLACEHOLDER = re.compile(r'WROLPIDATAURI[0-9a-f]{160}N\d+X')
 
 
 def strip_data_uris(html: bytes) -> Tuple[bytes, Dict[str, bytes]]:
     """Replace each base64 data URI payload with a placeholder; readability-extractor takes minutes on a
     page of large inline images (SingleFile inlines every image).  Returns the HTML and the payloads by
     placeholder.  The placeholder holds a random token, so text in the page cannot be mistaken for one."""
-    token = secrets.token_hex(16)
+    # At least 133 characters: Readability drops a shorter base64 `src` as a lazy-load placeholder when another
+    # attribute names an image file (e.g. alt="cat.png").
+    token = secrets.token_hex(80)
     payloads = dict()
 
     def replace(match):

@@ -1513,3 +1513,17 @@ async def test_html_to_readability_forged_placeholder():
     assert readability['content'] == html
     assert readability['content'].count(png) == 1
     assert readability['textContent'] == 'WROLPIDATAURI0X WROLPIDATAURI99X'
+
+
+def test_strip_data_uris_placeholder_length():
+    """Readability's _fixLazyImages removes an <img> `src` whose base64 payload is shorter than 133 characters
+    when another attribute names an image file (e.g. alt="cat.png"), so a placeholder must be at least that
+    long or the image is lost before it can be restored."""
+    png = 'iVBORw0KGgo' + 'A' * 4000
+    html, payloads = lib.strip_data_uris(f'<img src="data:image/png;base64,{png}" alt="cat.png">'.encode())
+
+    (placeholder,) = payloads
+    assert len(placeholder) >= 133
+    assert html == f'<img src="data:image/png;base64,{placeholder}" alt="cat.png">'.encode()
+    assert lib.restore_data_uris({'content': html.decode()}, payloads)['content'] \
+           == f'<img src="data:image/png;base64,{png}" alt="cat.png">'

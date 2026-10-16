@@ -2,6 +2,7 @@ alsa-utils
 apt-transport-https
 aria2
 autoconf
+avahi-daemon
 bind9-dnsutils
 build-essential
 bzip2
@@ -50,6 +51,7 @@ libfreetype6-dev
 libgeos++-dev
 libgeos-dev
 libicu-dev
+libnss-mdns
 libproj-dev
 libreoffice
 libsqlite3-dev

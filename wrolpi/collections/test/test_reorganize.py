@@ -1,6 +1,10 @@
 """
 Tests for the collection reorganization feature.
 """
+import json
+from http import HTTPStatus
+from typing import List, Tuple
+
 import pytest
 
 from modules.archive.lib import get_archive_downloader_config
@@ -18,6 +22,7 @@ from wrolpi.collections.reorganize import (
     get_batch_reorganization_status,
     ReorganizationPreview,
 )
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
 
@@ -2787,3 +2792,99 @@ def test_preview_excludes_files_already_in_correct_location(test_session, test_d
         yt_dlp_options = dict(config._config['yt_dlp_options'])
         yt_dlp_options['file_name_format'] = original_format
         config._config['yt_dlp_options'] = yt_dlp_options
+
+
+def _channel_with_two_conflicting_videos(test_directory, video_factory, name: str) -> Tuple[int, List[int]]:
+    """A Channel whose two Videos would move to the same destination, neither with ffprobe data in the DB
+    (each has a cached .ffprobe.json, so the conflicts endpoint stores it without running ffprobe)."""
+    from datetime import datetime, timezone
+
+    channel_dir = test_directory / 'videos' / name
+    channel_dir.mkdir(parents=True, exist_ok=True)
+    with get_db_session(commit=True) as session:
+        collection = Collection(name=name, kind='channel', directory=channel_dir,
+                                file_format='%(old_format)s.%(ext)s')
+        session.add(collection)
+        session.flush()
+        channel = Channel(name=name, collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id, collection_id = channel.id, collection.id
+
+    same_date = datetime(2024, 1, 15, tzinfo=timezone.utc)
+    videos = [video_factory(channel_id=channel_id, title=title, upload_date=same_date, with_video_file=True,
+                            with_info_json={'uploader': 'TestUploader', 'id': 'dup'})
+              for title in ('video_one', 'video_two')]
+    video_ids = [i.id for i in videos]
+    with get_db_session(commit=True) as session:
+        for video_id in video_ids:
+            video = session.get(Video, video_id)
+            video.file_group.title = 'Duplicate Title'
+            video.source_id = 'dup'
+            video.ffprobe_json = None
+            video.video_path.with_suffix('.ffprobe.json').write_text(json.dumps({'streams': [], 'format': {}}))
+    return collection_id, video_ids
+
+
+@pytest.mark.asyncio
+async def test_conflicts_endpoint_waits_for_a_concurrent_writer(async_client, test_session, test_directory,
+                                                                 video_factory):
+    """The conflicts endpoint reads, then stores ffprobe data, so its write must begin as a writer."""
+    collection_id, video_ids = _channel_with_two_conflicting_videos(test_directory, video_factory, 'LockChannel')
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.get(f'/api/collections/{collection_id}/reorganize/conflicts')
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert len(response.json['conflicts']) == 1
+
+        with maker() as session:
+            assert all(session.get(Video, i).ffprobe_json is not None for i in video_ids)
+
+
+@pytest.mark.asyncio
+async def test_reorganize_endpoint_waits_for_a_concurrent_writer(async_client, test_session, test_directory):
+    """With nothing to move, reorganizing reads, then stores the new file_format, so its write must begin as a
+    writer."""
+    domain_dir = test_directory / 'archive' / 'lock.com'
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    with get_db_session(commit=True) as session:
+        collection = Collection(name='lock.com', kind='domain', directory=domain_dir, file_format='%(old)s.%(ext)s')
+        session.add(collection)
+        session.commit()
+        collection_id = collection.id
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.post(f'/api/collections/{collection_id}/reorganize')
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert response.json['job_id'] == ''
+
+        with maker() as session:
+            assert session.get(Collection, collection_id).file_format == \
+                   get_archive_downloader_config().file_name_format
+
+
+@pytest.mark.asyncio
+async def test_batch_reorganize_waits_for_a_concurrent_writer(async_client, test_session, test_directory):
+    """The batch job calls execute_reorganization with a deferred (read) session; storing the new file_format
+    must still wait for a concurrent writer."""
+    domain_dir = test_directory / 'archive' / 'batch.com'
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    with get_db_session(commit=True) as session:
+        collection = Collection(name='batch.com', kind='domain', directory=domain_dir, file_format='%(old)s.%(ext)s')
+        session.add(collection)
+        session.commit()
+        collection_id = collection.id
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file):
+            with get_db_session() as session:
+                assert execute_reorganization(collection_id, session) == ''
+
+        with maker() as session:
+            assert session.get(Collection, collection_id).file_format == \
+                   get_archive_downloader_config().file_name_format

@@ -442,10 +442,8 @@ async def get_conflicts_endpoint(request: Request, collection_id: int):
     """
     from wrolpi.collections.reorganize import get_conflict_details_with_ffprobe
 
-    session = request.ctx.session
     try:
-        conflicts = await get_conflict_details_with_ffprobe(collection_id, session)
-        session.commit()
+        conflicts = await get_conflict_details_with_ffprobe(collection_id, request.ctx.session, request.ctx.db.write)
         return json_response({'conflicts': conflicts})
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
@@ -472,9 +470,8 @@ async def execute_reorganization_endpoint(request: Request, collection_id: int):
     """
     from wrolpi.collections.reorganize import execute_reorganization
 
-    session = request.ctx.session
     try:
-        job_id = execute_reorganization(collection_id, session)
+        job_id = execute_reorganization(collection_id, request.ctx.session, request.ctx.db.write)
         if job_id:
             return json_response({
                 'job_id': job_id,

@@ -66,15 +66,16 @@ async def get_collections_endpoint(request: Request):
 @wrol_mode_check
 async def create_collection_endpoint(request: Request, body: schema.CollectionCreateRequest):
     """Create a new Collection.  Defaults to kind='playlist' (a manually-curated, ordered list)."""
-    session = request.ctx.session
     try:
-        collection = lib.create_collection(
-            session, name=body.name, description=body.description, kind=body.kind or 'playlist',
-            tag_name=body.tag_name)
+        # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).
+        with request.ctx.db.write() as session:
+            collection = lib.create_collection(
+                session, name=body.name, description=body.description, kind=body.kind or 'playlist',
+                tag_name=body.tag_name)
+            data = lib.get_collection_with_stats(session, collection.id)
     except ValidationError as e:
         return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 
-    data = lib.get_collection_with_stats(session, collection.id)
     return json_response({'collection': data}, status=HTTPStatus.CREATED)
 
 
@@ -194,19 +195,20 @@ async def put_collection_endpoint(request: Request, collection_id: int, body: sc
 
     Note: To clear a field, pass an empty string. To leave unchanged, omit the field.
     """
-    session = request.ctx.session
     try:
-        collection = lib.update_collection(
-            session,
-            collection_id=collection_id,
-            directory=body.directory,
-            tag_name=body.tag_name,
-            description=body.description,
-            name=body.name,
-        )
+        # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).
+        with request.ctx.db.write() as session:
+            lib.update_collection(
+                session,
+                collection_id=collection_id,
+                directory=body.directory,
+                tag_name=body.tag_name,
+                description=body.description,
+                name=body.name,
+            )
 
-        # Return updated collection data
-        collection_data = lib.get_collection_with_stats(session, collection_id)
+            # Return updated collection data
+            collection_data = lib.get_collection_with_stats(session, collection_id)
         return json_response({'collection': collection_data})
 
     except UnknownCollection as e:
@@ -265,14 +267,16 @@ async def tag_collection_endpoint(request: Request, collection_id: int, body: sc
 
     If no directory is specified, the collection must already have one.
     """
-    session = request.ctx.session
     try:
-        result = await lib.tag_collection(
-            session,
-            collection_id=collection_id,
-            tag_name=body.tag_name,
-            directory=body.directory
-        )
+        # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).  A file move runs
+        # in a background task with its own session, so the write lock is not held for it.
+        with request.ctx.db.write() as session:
+            result = await lib.tag_collection(
+                session,
+                collection_id=collection_id,
+                tag_name=body.tag_name,
+                directory=body.directory
+            )
         return json_response(result)
 
     except UnknownCollection as e:
@@ -331,9 +335,10 @@ async def delete_collection_endpoint(request: Request, collection_id: int):
     - Archives remain in the database but are no longer associated with a domain
     - Triggers domain config save
     """
-    session = request.ctx.session
     try:
-        collection = lib.delete_collection(session, collection_id=collection_id)
+        # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).
+        with request.ctx.db.write() as session:
+            collection = lib.delete_collection(session, collection_id=collection_id)
         from wrolpi.events import Events
         Events.send_deleted(f'Deleted {collection["kind"]} collection: {collection["name"]}')
         return response.raw('', HTTPStatus.NO_CONTENT)

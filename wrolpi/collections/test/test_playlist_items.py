@@ -189,6 +189,35 @@ async def test_item_write_endpoints_wait_for_a_concurrent_writer(async_client, t
 
 
 @pytest.mark.asyncio
+async def test_collection_write_endpoints_wait_for_a_concurrent_writer(async_client, test_session):
+    """Create, update, tag and delete each read before they write, so each must begin as a writer
+    (see `test_item_write_endpoints_wait_for_a_concurrent_writer`)."""
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session):
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.post('/api/collections', json={'name': 'Locks'})
+        assert response.status_code == HTTPStatus.CREATED, response.json
+        cid = response.json['collection']['id']
+
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.put(f'/api/collections/{cid}', json={'description': 'Waited'})
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert response.json['collection']['description'] == 'Waited'
+
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.post(f'/api/collections/{cid}/tag', json={'tag_name': 'Cooking'})
+        assert response.status_code == HTTPStatus.OK, response.json
+
+        with write_lock_held_briefly(db_file):
+            _, response = await async_client.delete(f'/api/collections/{cid}')
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+
+        _, response = await async_client.get(f'/api/collections/{cid}')
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
 async def test_reorder_and_remove_items(async_client, test_session):
     """Items can be reordered by id and removed, with positions kept contiguous."""
     _, response = await async_client.post('/api/collections', json={'name': 'Order'})

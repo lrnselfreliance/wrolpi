@@ -10,7 +10,7 @@ Example: User changes archive format from '%(title)s.%(ext)s' to '%(download_yea
 """
 import pathlib
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import Callable, ContextManager, List, Tuple, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -18,6 +18,14 @@ from sqlalchemy.orm import Session, joinedload
 from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session
 from .models import Collection
+
+# Opens a short write transaction and yields its Session; `request.ctx.db.write` in an API request.
+WriteSession = Callable[[], ContextManager[Session]]
+
+
+def _own_write_session() -> ContextManager[Session]:
+    """A write transaction on a connection of its own, for callers outside an API request."""
+    return get_db_session(commit=True)
 
 logger = logger.getChild(__name__)
 
@@ -865,6 +873,7 @@ def _detect_conflicts_with_details(
 def execute_reorganization(
         collection_id: int,
         session: Session = None,
+        write: WriteSession = None,
 ) -> str:
     """Execute reorganization, returns job_id for tracking.
 
@@ -872,7 +881,9 @@ def execute_reorganization(
 
     Args:
         collection_id: The collection to reorganize
-        session: Database session (optional)
+        session: Database session (optional), used only to read
+        write: Opens the short write transaction that stores the new file_format when nothing needs to move
+            (defaults to a connection of its own)
 
     Returns:
         job_id for tracking progress via FileWorker status
@@ -883,8 +894,8 @@ def execute_reorganization(
     from wrolpi.files.worker import file_worker
 
     if session is None:
-        with get_db_session(commit=True) as session:
-            return execute_reorganization(collection_id, session)
+        with get_db_session() as session:
+            return execute_reorganization(collection_id, session, write)
 
     collection = Collection.find_by_id(session, collection_id)
 
@@ -907,8 +918,10 @@ def execute_reorganization(
         # Still update the file_format to current config
         current_format = collection._get_current_file_format()
         if current_format:
-            collection.file_format = current_format
-            session.commit()
+            # The scan above only read; store the result in a short write transaction that begins as a
+            # writer (see `RequestDB.write`).
+            with (write or _own_write_session)() as write_session:
+                Collection.find_by_id(write_session, collection_id).file_format = current_format
 
             # Trigger config save
             if collection.kind == 'domain':
@@ -1236,6 +1249,7 @@ def get_batch_reorganization_status(batch_job_id: str) -> dict:
 async def get_conflict_details_with_ffprobe(
         collection_id: int,
         session: Session,
+        write: WriteSession,
 ) -> List[dict]:
     """Get conflict details, processing ffprobe for any videos missing it.
 
@@ -1243,9 +1257,13 @@ async def get_conflict_details_with_ffprobe(
     when resolving conflicts. The +2 audio bonus in _rank_video_quality()
     only applies if video.ffprobe_json exists.
 
+    ffprobe runs outside any write transaction; only its results are stored, in one short `write`.
+
     Args:
         collection_id: The collection to get conflicts for
-        session: Database session
+        session: Database session, used to read
+        write: Opens the write transaction that stores ffprobe data; it must commit `session`'s read first
+            (as `RequestDB.write` does), so the re-fetched preview sees the new data
 
     Returns:
         List of conflict detail dicts (empty if no conflicts)
@@ -1258,24 +1276,30 @@ async def get_conflict_details_with_ffprobe(
     if not preview.conflicts:
         return []
 
-    # Process ffprobe for videos missing it (only for channel collections)
+    from modules.videos.common import get_or_create_ffprobe_json
     from modules.videos.models import Video
 
-    videos_processed = 0
-    for conflict in preview.conflicts:
-        for file_info in conflict['conflicting_files']:
-            if file_info.get('file_group_id') and file_info.get('model_type') == 'channel':
-                video = session.query(Video).filter_by(file_group_id=file_info['file_group_id']).one_or_none()
-                if video and not video.ffprobe_json:
-                    try:
-                        await video.get_ffprobe_json()
-                        videos_processed += 1
-                    except Exception as e:
-                        logger.warning(f'Failed to process ffprobe for video {video.id}: {e}')
+    # Videos missing ffprobe data.  (A conflicting file's model_type is its FileGroup's model, 'video'.)
+    file_group_ids = [file_info['file_group_id'] for conflict in preview.conflicts
+                      for file_info in conflict['conflicting_files'] if file_info.get('file_group_id')]
+    video_paths = {video.id: video.video_path
+                   for video in session.query(Video).filter(Video.file_group_id.in_(file_group_ids))
+                   if not video.ffprobe_json and video.video_path}
 
-    # Flush ffprobe data if any was processed (preserves caller's transaction control)
-    if videos_processed > 0:
-        session.flush()
+    ffprobe_results = dict()
+    for video_id, video_path in video_paths.items():
+        try:
+            ffprobe_results[video_id] = await get_or_create_ffprobe_json(video_path)
+        except Exception as e:
+            logger.warning(f'Failed to process ffprobe for video {video_id}: {e}')
+
+    if ffprobe_results:
+        with write() as write_session:
+            for video in write_session.query(Video).filter(Video.id.in_(list(ffprobe_results))):
+                video.ffprobe_json, written = ffprobe_results[video.id]
+                if written:
+                    # Track the new cache file in the FileGroup.
+                    video.file_group.append_files(written)
         # Re-fetch preview to get updated quality rankings
         preview = get_reorganization_preview(collection_id, session)
 

@@ -100,6 +100,19 @@ for initrd in install/initrd.gz install/gtk/initrd.gz; do
   fi
 done
 
+# The graphical installer should show the WROLPi banner, not Debian's (see
+# config/includes.installer/usr/share/graphics/).
+BANNER_DIR="$(dirname "$0")/config/includes.installer/usr/share/graphics"
+mkdir -p "${TMP}/gtk"
+bsdtar -xOf "${ISO}" install/gtk/initrd.gz 2>/dev/null \
+  | bsdtar -xf - -C "${TMP}/gtk" usr/share/graphics 2>/dev/null
+for banner in logo_debian.png logo_debian_dark.png; do
+  if ! cmp -s "${BANNER_DIR}/${banner}" "${TMP}/gtk/usr/share/graphics/${banner}"; then
+    echo "ERROR: install/gtk/initrd.gz does not have the WROLPi installer banner ${banner}." >&2
+    FAILED=1
+  fi
+done
+
 if [ "${FAILED}" -ne 0 ]; then
   exit 1
 fi

@@ -65,7 +65,9 @@ Afterwards, future ISO upgrades preserve your library via the
 
 - `wrolpi` is a system account (no password, no login sudo) that owns
   `/media/wrolpi` and runs the WROLPi services, as on every other WROLPi.
-- The live session logs in automatically as `user` (live-config).
+- The live session logs in automatically as `user` (live-config), password
+  `live`.  SSH accepts that password (`sshd_config.d/50-wrolpi-password.conf`
+  overrides live-config, which turns password SSH off).
 - An installed system has the user the Debian installer asked for, with sudo,
   and no automatic login.
 

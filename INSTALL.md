@@ -38,6 +38,7 @@ Steps:
    minute or two; progress is shown on screen.
 5. Once the desktop loads, browse to https://wrolpi.local or the IP address of
    your WROLPi.  Wi-Fi hotspot and all other features work as usual.
+6. To use a terminal remotely: `ssh user@wrolpi.local`, password `live`.
 
 Notes:
 

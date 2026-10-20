@@ -69,6 +69,14 @@ if awk -F: '$3 >= 1000 && $3 < 60000 {found=1} END {exit !found}' "${TMP}/passwd
   FAILED=1
 fi
 
+# Password SSH must work in the live session.  live-config turns it off at
+# boot (1160-openssh-server); the sshd_config.d drop-in turns it back on.
+if ! unsquashfs -o $((SQUASHFS_LBA * 2048)) -cat "${ISO}" etc/ssh/sshd_config.d/50-wrolpi-password.conf 2>/dev/null \
+    | grep -q '^PasswordAuthentication yes$'; then
+  echo "ERROR: the live session would refuse password SSH (live-config disables it)." >&2
+  FAILED=1
+fi
+
 # A Live USB must come back on its own after a reboot or power loss: the boot
 # menus must boot their default entry after a timeout (0 waits forever).
 if ! extract boot/grub/config.cfg || ! grep -qE '^set timeout=[1-9]' "${TMP}/config.cfg"; then

@@ -80,6 +80,16 @@ if extract isolinux/isolinux.cfg && ! grep -qE '^timeout [1-9]' "${TMP}/isolinux
   FAILED=1
 fi
 
+# INSTALL.md and the onboarding wizard send people to wrolpi.local, which only
+# resolves if the WROLPi advertises its hostname over mDNS (avahi-daemon), and
+# only resolves on the WROLPi's own desktop with libnss-mdns.
+for pkg in avahi-daemon libnss-mdns; do
+  if ! grep -qE "^${pkg}(:[a-z0-9]+)?[[:space:]]" "${TMP}/filesystem.packages"; then
+    echo "ERROR: ${pkg} is not installed; wrolpi.local would not resolve." >&2
+    FAILED=1
+  fi
+done
+
 # The installer should default the hostname to wrolpi (wrolpi.local), via the
 # preseed live-build copies into each installer initrd.
 for initrd in install/initrd.gz install/gtk/initrd.gz; do

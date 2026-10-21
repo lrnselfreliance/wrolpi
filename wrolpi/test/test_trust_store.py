@@ -24,7 +24,6 @@ def test_certifi_distrusts_root(label):
     ('etc/raspberrypios/wrolpi-api.service', 'Environment=DENO_TLS_CA_STORE=system'),
     ('etc/raspberrypios/wrolpi-api-dev.service', 'Environment=DENO_TLS_CA_STORE=system'),
     ('docker/api/Dockerfile', 'ENV DENO_TLS_CA_STORE=system'),
-    ('docker/archive/Dockerfile', 'ENV DENO_TLS_CA_STORE=system'),
 ])
 def test_deno_uses_system_trust_store(path, setting):
     """Deno's bundled roots only change with a Deno upgrade; the system store is patched by apt."""

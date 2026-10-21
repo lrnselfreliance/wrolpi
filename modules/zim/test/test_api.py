@@ -6,6 +6,7 @@ import pytest
 from modules.zim import lib
 from modules.zim.models import Zim
 from wrolpi import flags
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.downloader import Download
 
 
@@ -314,3 +315,35 @@ async def test_zim_auto_search(test_session, async_client, zim_factory):
     request, response = await async_client.post('/api/zim/search_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['zims_estimates']) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('step', ['auto_search', 'tag', 'untag', 'subscribe', 'unsubscribe'])
+async def test_zim_writes_wait_for_a_concurrent_writer(async_client, test_session, test_zim, tag_factory, step):
+    """These requests read before they write, so each must begin as a writer: SQLite fails a deferred
+    transaction's lock upgrade instantly ("database is locked") if another connection wrote meanwhile."""
+    tag = await tag_factory()
+    test_session.commit()
+    entry = dict(tag_name=tag.name, zim_id=test_zim.id, zim_entry='home')
+    if step == 'untag':
+        await lib.add_tag(test_session, tag.name, test_zim.id, 'home')
+    if step == 'unsubscribe':
+        await lib.subscribe(test_session, 'Wikipedia (mini)', 'en')
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session):
+        # Held past any slow work a request does before it writes.
+        with write_lock_held_briefly(db_file, seconds=3):
+            if step == 'auto_search':
+                _, response = await async_client.post(f'/api/zim/{test_zim.id}/auto_search',
+                                                      content=json.dumps(dict(auto_search=False)))
+            elif step in ('tag', 'untag'):
+                _, response = await async_client.post(f'/api/zim/{step}', content=json.dumps(entry))
+            elif step == 'subscribe':
+                _, response = await async_client.post(
+                    '/api/zim/subscribe', content=json.dumps(dict(name='Wikipedia (mini)', language='en')))
+            else:
+                _, response = await async_client.delete('/api/zim/subscribe/1')
+
+    assert response.status_code in (HTTPStatus.CREATED, HTTPStatus.NO_CONTENT), response.body

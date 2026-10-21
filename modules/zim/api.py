@@ -52,9 +52,9 @@ async def delete_zims(request: Request, zim_ids: str):
 )
 @validate(schema.ZimAutoSearchRequest)
 async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.ZimAutoSearchRequest):
-    session = request.ctx.session
     zim_id = int(zim_id)
-    lib.set_zim_auto_search(session, zim_id, body.auto_search)
+    with request.ctx.db.write() as session:
+        lib.set_zim_auto_search(session, zim_id, body.auto_search)
     return response.empty()
 
 
@@ -116,9 +116,8 @@ async def get_zim_entry(_: Request, zim_id: int, zim_path: str):
 )
 @validate(schema.TagZimEntry)
 async def post_zim_tag(request: Request, body: schema.TagZimEntry):
-    session = request.ctx.session
-
-    await lib.add_tag(session, body.tag_name, body.zim_id, body.zim_entry)
+    with request.ctx.db.write() as session:
+        await lib.add_tag(session, body.tag_name, body.zim_id, body.zim_entry)
     return response.empty(HTTPStatus.CREATED)
 
 
@@ -129,9 +128,8 @@ async def post_zim_tag(request: Request, body: schema.TagZimEntry):
 )
 @validate(schema.TagZimEntry)
 async def post_zim_untag(request: Request, body: schema.TagZimEntry):
-    session = request.ctx.session
-
-    await lib.untag(session, body.tag_name, body.zim_id, body.zim_entry)
+    with request.ctx.db.write() as session:
+        await lib.untag(session, body.tag_name, body.zim_id, body.zim_entry)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -159,9 +157,8 @@ async def get_zim_subscriptions(request: Request):
 )
 @validate(schema.ZimSubscribeRequest)
 async def post_zim_subscribe(request: Request, body: schema.ZimSubscribeRequest):
-    session = request.ctx.session
-
-    await lib.subscribe(session, body.name, body.language)
+    with request.ctx.db.write() as session:
+        await lib.subscribe(session, body.name, body.language)
     if download_manager.disabled or download_manager.stopped:
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -174,9 +171,8 @@ async def post_zim_subscribe(request: Request, body: schema.ZimSubscribeRequest)
     summary='Unsubscribe to a particular Kiwix Zim',
 )
 async def delete_zim_subscription(request: Request, subscription_id: int):
-    session = request.ctx.session
-
-    await lib.unsubscribe(session, subscription_id)
+    with request.ctx.db.write() as session:
+        await lib.unsubscribe(session, subscription_id)
     Events.send_deleted(f'Zim subscription deleted')
     return response.empty(HTTPStatus.NO_CONTENT)
 

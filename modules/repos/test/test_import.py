@@ -7,6 +7,7 @@ import pytest
 from modules.repos import lib
 from modules.repos.errors import InvalidRepo, RepoConflict
 from modules.repos.models import Repository
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.downloader import Download, DownloadStatus
 from wrolpi.errors import UnknownDirectory, ValidationError
 from wrolpi.files.models import FileGroup
@@ -285,3 +286,22 @@ async def test_create_repository_directory_refused(test_session, test_directory,
     assert response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT), response.json
     assert error in response.json['error'], response.json
     assert (test_directory / 'not-empty/file.txt').read_text() == 'mine'
+
+
+@pytest.mark.asyncio
+async def test_import_waits_for_a_concurrent_writer(test_session, test_directory, async_client, test_wrolpi_config,
+                                                    user_clone, repos_download_manager):
+    """Importing reads (and runs git) before it writes, so its write must begin as a writer: SQLite fails a
+    deferred transaction's lock upgrade instantly ("database is locked") if another connection wrote meanwhile."""
+    user_clone()
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file, seconds=3):
+            body = dict(directory='code/kiwix-tools', confirm=True, frequency=0)
+            _, response = await async_client.post('/api/repos/import', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.CREATED, response.json
+
+        with maker() as session:
+            assert [i.name for i in session.query(Repository)] == ['kiwix-tools']

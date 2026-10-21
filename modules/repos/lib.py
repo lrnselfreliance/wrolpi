@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Callable, ContextManager, List, NamedTuple, Optional, Tuple
 from urllib.parse import urlparse
 
 from sqlalchemy import func, text
@@ -1037,9 +1037,14 @@ def inspect_import(session: Session, directory: str, name: str = None, tag_name:
 async def import_repository(session: Session, directory: str, url: str = None, confirm: bool = False,
                             tag_name: str = None, frequency: int = DEFAULT_REPO_FREQUENCY, mode: str = 'full',
                             branch: str = None, submodules: bool = False, name: str = None,
-                            description: str = None) -> Repository:
+                            description: str = None,
+                            write: Callable[[], ContextManager[Session]] = None) -> Repository:
     """Import the git clone in `directory` as a Repo.  It stays where it is, and from then on is a mirror of `url`
-    (which must be the clone's origin).  Local changes and commits are discarded by its updates."""
+    (which must be the clone's origin).  Local changes and commits are discarded by its updates.
+
+    `session` is used to read.  The Repo is created in `write()` (`request.ctx.db.write` in a request), a short
+    write transaction; the slow reads of the clone (git, its size) happen before it.  Without `write`, the Repo is
+    written in `session`."""
     _validate_frequency(frequency)
     info = inspect_import(session, directory, name, tag_name, url)
     source = resolve_import_directory(session, directory)
@@ -1052,26 +1057,30 @@ async def import_repository(session: Session, directory: str, url: str = None, c
     if not confirm:
         raise ValidationError('Confirm that this clone will become a mirror, and its local changes discarded')
 
-    # Like a new Repo, an imported one follows the remote's default branch unless a branch is chosen.
-    repo = _create_repository_records(session, parsed.url, tag_name, mode, branch, info['name'], description, source,
-                                      submodules)
-
-    # Everything which can refuse the import happens before the clone is changed.
+    # Everything which can refuse the import happens before the clone is changed.  These read the clone, and run
+    # before the write transaction so it is not held for them.
     if error := await asyncio.to_thread(working_tree_git_error, source):
         raise InvalidRepo(f'{directory} cannot be imported: {error}')
-    try:
-        await asyncio.to_thread(sanitize_git_config, source)
-    except ValueError as e:
-        raise InvalidRepo(f'{directory} cannot be imported: {e}')
-    await asyncio.to_thread(_git_output_sync, source, 'config', '--replace-all', 'remote.origin.url', parsed.url)
-    mark_clone(source, repo.clone_token)
+    size = await asyncio.to_thread(get_repo_size, source)
 
-    for key, value in _read_head_commit(source).items():
-        setattr(repo, key, value)
-    repo.readme_path = find_readme(source)
-    repo.readme_text = read_readme_text(source / repo.readme_path) if repo.readme_path else None
-    repo.size = await asyncio.to_thread(get_repo_size, source)
-    _create_repository_download(session, repo, frequency)
+    with (write or (lambda: contextlib.nullcontext(session)))() as session:
+        # Like a new Repo, an imported one follows the remote's default branch unless a branch is chosen.
+        repo = _create_repository_records(session, parsed.url, tag_name, mode, branch, info['name'], description,
+                                          source, submodules)
+        try:
+            await asyncio.to_thread(sanitize_git_config, source)
+        except ValueError as e:
+            raise InvalidRepo(f'{directory} cannot be imported: {e}')
+        await asyncio.to_thread(_git_output_sync, source, 'config', '--replace-all', 'remote.origin.url',
+                                parsed.url)
+        mark_clone(source, repo.clone_token)
+
+        for key, value in _read_head_commit(source).items():
+            setattr(repo, key, value)
+        repo.readme_path = find_readme(source)
+        repo.readme_text = read_readme_text(source / repo.readme_path) if repo.readme_path else None
+        repo.size = size
+        _create_repository_download(session, repo, frequency)
     return repo
 
 

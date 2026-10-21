@@ -30,20 +30,20 @@ async def get_repos(request: Request):
 @wrol_mode_check
 async def post_repo(request: Request, body: schema.RepoCreateRequest):
     lib.get_repos_config().check_imported()
-    session = request.ctx.session
-    repo = lib.create_repository(
-        session,
-        body.url,
-        tag_name=body.tag_name or None,
-        frequency=lib.DEFAULT_REPO_FREQUENCY if body.frequency is None else body.frequency,
-        mode=body.mode or 'full',
-        branch=body.branch or None,
-        name=body.name or None,
-        description=body.description or None,
-        submodules=body.submodules,
-        directory=(body.directory or '').strip() or None,
-    )
-    repo = Repository.find_by_id(session, repo.id, options=Repository.json_options())
+    with request.ctx.db.write() as session:
+        repo = lib.create_repository(
+            session,
+            body.url,
+            tag_name=body.tag_name or None,
+            frequency=lib.DEFAULT_REPO_FREQUENCY if body.frequency is None else body.frequency,
+            mode=body.mode or 'full',
+            branch=body.branch or None,
+            name=body.name or None,
+            description=body.description or None,
+            submodules=body.submodules,
+            directory=(body.directory or '').strip() or None,
+        )
+    repo = Repository.find_by_id(request.ctx.session, repo.id, options=Repository.json_options())
     return json_response(dict(repo=repo.__json__()), status=HTTPStatus.CREATED)
 
 
@@ -82,6 +82,7 @@ async def post_import(request: Request, body: schema.RepoImportRequest):
         submodules=body.submodules,
         name=body.name or None,
         description=body.description or None,
+        write=request.ctx.db.write,
     )
     repo = Repository.find_by_id(session, repo.id, options=Repository.json_options())
     return json_response(dict(repo=repo.__json__()), status=HTTPStatus.CREATED)
@@ -116,10 +117,10 @@ async def get_repo(request: Request, repo_id: int):
 @wrol_mode_check
 async def put_repo(request: Request, repo_id: int, body: schema.RepoUpdateRequest):
     lib.get_repos_config().check_imported()
-    session = request.ctx.session
-    lib.update_repository(session, repo_id, description=body.description, frequency=body.frequency,
-                          mode=body.mode, branch=body.branch, submodules=body.submodules)
-    repo = Repository.find_by_id(session, repo_id, options=Repository.json_options())
+    with request.ctx.db.write() as session:
+        lib.update_repository(session, repo_id, description=body.description, frequency=body.frequency,
+                              mode=body.mode, branch=body.branch, submodules=body.submodules)
+    repo = Repository.find_by_id(request.ctx.session, repo_id, options=Repository.json_options())
     return json_response(dict(repo=repo.__json__()))
 
 
@@ -129,7 +130,8 @@ async def put_repo(request: Request, repo_id: int, body: schema.RepoUpdateReques
 async def delete_repo(request: Request, repo_id: int):
     lib.get_repos_config().check_imported()
     delete_files = request.args.get('delete_files', '').lower() in ('1', 'true', 'yes')
-    await lib.delete_repository(request.ctx.session, repo_id, delete_files=delete_files)
+    with request.ctx.db.write() as session:
+        await lib.delete_repository(session, repo_id, delete_files=delete_files)
     return response.empty()
 
 
@@ -137,10 +139,9 @@ async def delete_repo(request: Request, repo_id: int):
 @openapi.definition(summary='Update a git Repo now')
 @wrol_mode_check
 async def post_update_repo(request: Request, repo_id: int):
-    session = request.ctx.session
-    repo = Repository.find_by_id(session, repo_id)
-    lib.request_repository_update(session, repo)
-    session.commit()
+    with request.ctx.db.write() as session:
+        repo = Repository.find_by_id(session, repo_id)
+        lib.request_repository_update(session, repo)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 

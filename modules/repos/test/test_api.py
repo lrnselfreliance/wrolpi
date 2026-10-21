@@ -5,7 +5,7 @@ import pytest
 
 from modules.repos import lib
 from modules.repos.models import Repository
-from wrolpi.conftest import await_file_worker
+from wrolpi.conftest import await_file_worker, production_like_sessions, write_lock_held_briefly
 from wrolpi.downloader import Download, DownloadFrequency, DownloadStatus
 from wrolpi.files.models import FileGroup
 
@@ -233,3 +233,42 @@ async def test_repo_changes_wait_for_config_import(test_session, test_directory,
     lib.import_repos_config()
     request, response = await async_client.put(f'/api/repos/{repo.id}', content=json.dumps(dict(description='x')))
     assert response.status_code == HTTPStatus.OK, response.json
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('step', ['create', 'change', 'delete', 'update_now'])
+async def test_repo_writes_wait_for_a_concurrent_writer(test_session, async_client, test_wrolpi_config,
+                                                        git_remote_factory, repos_download_manager, step):
+    """These requests read before they write, so each must begin as a writer: SQLite fails a deferred
+    transaction's lock upgrade instantly ("database is locked") if another connection wrote meanwhile."""
+    remote = git_remote_factory()
+    repo_id = None
+    if step != 'create':
+        repo_id = lib.create_repository(test_session, remote.url).id
+        await repos_download_manager.wait_for_all_downloads()
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        # Held past any slow work a request does before it writes.
+        with write_lock_held_briefly(db_file, seconds=3):
+            if step == 'create':
+                _, response = await async_client.post('/api/repos', content=json.dumps(dict(url=remote.url)))
+            elif step == 'change':
+                _, response = await async_client.put(f'/api/repos/{repo_id}',
+                                                     content=json.dumps(dict(description='Waited')))
+            elif step == 'delete':
+                _, response = await async_client.delete(f'/api/repos/{repo_id}')
+            else:
+                _, response = await async_client.post(f'/api/repos/{repo_id}/update')
+        assert response.status_code in (HTTPStatus.OK, HTTPStatus.CREATED, HTTPStatus.NO_CONTENT), response.json
+
+        with maker() as session:
+            repos = session.query(Repository).all()
+            if step == 'delete':
+                assert repos == []
+            elif step == 'change':
+                assert repos[0].collection.description == 'Waited'
+            else:
+                assert len(repos) == 1
+    await repos_download_manager.wait_for_all_downloads()

@@ -41,6 +41,7 @@ def which(*possible_paths: str, warn: bool = False) -> Optional[Path]:
         if path and (path := Path(path).absolute()) and is_executable(path):
             # `path` was a name or relative path.
             found = path
+            break
 
     if not found and warn and not PYTEST and not DOCKERIZED:
         logger.warning(f'Cannot find executable {possible_paths[0]}')

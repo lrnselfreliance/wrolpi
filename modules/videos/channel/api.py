@@ -80,9 +80,9 @@ def channel_post(request: Request, body: schema.ChannelPostRequest):
 @validate(schema.ChannelPutRequest)
 @wrol_mode_check
 async def channel_update(request: Request, channel_id: int, body: schema.ChannelPutRequest):
-    session = request.ctx.session
     body.directory = pathlib.Path(body.directory) if body.directory else None
-    channel = await lib.update_channel(session, data=body, channel_id=channel_id)
+    with request.ctx.db.write() as session:
+        channel = await lib.update_channel(session, data=body, channel_id=channel_id)
     save_channels_config.activate_switch()
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.id}'})
@@ -93,8 +93,8 @@ async def channel_update(request: Request, channel_id: int, body: schema.Channel
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 def channel_delete(request: Request, channel_id: int):
-    session = request.ctx.session
-    channel = lib.delete_channel(session, channel_id=channel_id)
+    with request.ctx.db.write() as session:
+        channel = lib.delete_channel(session, channel_id=channel_id)
     Events.send_deleted(f'Deleted Channel: {channel["name"]}')
     return response.raw('', HTTPStatus.NO_CONTENT)
 
@@ -125,13 +125,13 @@ def channel_refresh(request: Request, channel_id: int):
 @validate(schema.ChannelTagRequest)
 @wrol_mode_check
 async def channel_tag(request: Request, channel_id: int, body: schema.ChannelTagRequest):
-    session = request.ctx.session
     directory = None
     if body.directory:
         directory = pathlib.Path(body.directory)
         directory = get_media_directory() / directory
 
-    await lib.tag_channel(session, body.tag_name, directory, channel_id)
+    with request.ctx.db.write() as session:
+        await lib.tag_channel(session, body.tag_name, directory, channel_id)
 
     return response.raw('', HTTPStatus.NO_CONTENT)
 

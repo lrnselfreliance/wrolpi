@@ -18,7 +18,7 @@ from modules.videos.lib import save_channels_config, get_channels_config
 from modules.videos.models import Channel, Video
 from wrolpi.collections.models import Collection
 from wrolpi.common import get_relative_to_media_directory, walk
-from wrolpi.conftest import production_like_sessions
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, DownloadResult
@@ -752,3 +752,39 @@ async def test_search_channels_by_name(async_client, test_session, channel_facto
         request, response = await async_client.post('/api/search_other_estimates', json=body)
         assert response.status_code == HTTPStatus.OK
         assert response.json['others']['channel_count'] == len(await search(body)), body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('step', ['update', 'tag', 'delete'])
+async def test_channel_writes_wait_for_a_concurrent_writer(async_client, test_session, test_directory,
+                                                           channel_factory, tag_factory, step):
+    """Updating, tagging and deleting a Channel read before they write, so each must begin as a writer: SQLite
+    fails a deferred transaction's lock upgrade instantly ("database is locked") if another connection wrote
+    meanwhile."""
+    channel = channel_factory(name='Lock Channel')
+    tag = await tag_factory()
+    test_session.commit()
+    channel_id, directory = channel.id, str(channel.directory)
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        # Held past any slow work a request does before it writes.
+        with write_lock_held_briefly(db_file, seconds=3):
+            if step == 'update':
+                body = dict(name='Renamed Channel', directory=directory)
+                _, response = await async_client.put(f'/api/videos/channels/{channel_id}', json=body)
+            elif step == 'tag':
+                body = dict(tag_name=tag.name, directory=str(get_relative_to_media_directory(directory)))
+                _, response = await async_client.post(f'/api/videos/channels/{channel_id}/tag', json=body)
+            else:
+                _, response = await async_client.delete(f'/api/videos/channels/{channel_id}')
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+
+        with maker() as session:
+            channel = session.query(Channel).filter_by(id=channel_id).one_or_none()
+            if step == 'update':
+                assert channel.name == 'Renamed Channel'
+            elif step == 'tag':
+                assert channel.tag_name == tag.name
+            else:
+                assert channel is None

@@ -3,6 +3,8 @@ from http import HTTPStatus
 
 import pytest
 
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
+
 
 @pytest.mark.asyncio
 async def test_get_files_empty(async_client, test_directory):
@@ -151,3 +153,30 @@ async def test_set_and_get_map_default_location(async_client, test_directory):
     assert loc['lat'] == 40.7
     assert loc['lon'] == -111.9
     assert loc['zoom'] == 10.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('step', ['subscribe', 'unsubscribe'])
+async def test_subscription_writes_wait_for_a_concurrent_writer(async_client, test_session, test_directory, step):
+    """Subscribing and unsubscribing read before they write, so each must begin as a writer: SQLite fails a
+    deferred transaction's lock upgrade instantly ("database is locked") if another connection wrote meanwhile."""
+    if step == 'unsubscribe':
+        _, response = await async_client.post('/api/map/subscribe',
+                                              content=json.dumps({'name': 'Alaska', 'region': 'us-alaska'}))
+        assert response.status_code == HTTPStatus.CREATED
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session):
+        # Held past any slow work a request does before it writes.
+        with write_lock_held_briefly(db_file, seconds=3):
+            if step == 'subscribe':
+                _, response = await async_client.post('/api/map/subscribe',
+                                                      content=json.dumps({'name': 'Alaska', 'region': 'us-alaska'}))
+            else:
+                _, response = await async_client.delete('/api/map/subscribe/us-alaska')
+        assert response.status_code in (HTTPStatus.CREATED, HTTPStatus.NO_CONTENT), response.body
+
+        _, response = await async_client.get('/api/map/subscribe')
+        regions = [i['region'] for i in response.json['subscriptions']]
+        assert regions == (['us-alaska'] if step == 'subscribe' else [])

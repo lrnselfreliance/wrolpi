@@ -5,6 +5,8 @@ WORKDIR /app
 
 # Install Python for main.py
 ENV PYTHONUNBUFFERED=1
+# Deno trusts the system store, which apt keeps current, instead of its bundled roots.
+ENV DENO_TLS_CA_STORE=system
 RUN apt update && apt install -y python3 python3-dev python3-venv curl unzip && ln -sf python3 /usr/bin/python
 RUN python3 -m venv /app/venv
 RUN . /app/venv/bin/activate

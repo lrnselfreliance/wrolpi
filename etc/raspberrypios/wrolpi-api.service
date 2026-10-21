@@ -7,6 +7,9 @@ Conflicts=wrolpi-api-dev.service
 Environment=PYTHONUNBUFFERED=1
 # Sanic 25.x wants 'spawn' but our code uses 'fork' for multiprocessing.
 Environment=SANIC_START_METHOD_SET=1
+# Deno (single-file, yt-dlp EJS) trusts the system store, which apt keeps current, instead of its
+# bundled roots.
+Environment=DENO_TLS_CA_STORE=system
 # Required for yt-dlp to access GNOME keyring for browser cookie decryption.
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
 ExecStart=/opt/wrolpi/venv/bin/python -O -m sanic main:api_app --host 0.0.0.0 --port 8081 -w 5

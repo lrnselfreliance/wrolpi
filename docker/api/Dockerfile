@@ -1,5 +1,7 @@
 FROM python:3.13-trixie
 ENV DOCKER=true
+# Deno trusts the system store, which apt keeps current, instead of its bundled roots.
+ENV DENO_TLS_CA_STORE=system
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.

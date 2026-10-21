@@ -26,6 +26,20 @@ def test_which(test_directory):
     assert cmd.which('asdf', str(foo)) == foo
 
 
+def test_which_prefers_path(test_directory, monkeypatch):
+    """A name found in $PATH wins over a fallback path, even when the fallback exists too."""
+    on_path, fallback = test_directory / 'bin', test_directory / 'fallback'
+    for directory in (on_path, fallback):
+        directory.mkdir()
+        (directory / 'tool').touch()
+        os.chmod(directory / 'tool', 0o777)
+    monkeypatch.setenv('PATH', str(on_path))
+
+    assert cmd.which('tool', str(fallback / 'tool')) == on_path / 'tool'
+    # The fallback is used when the name is not in $PATH.
+    assert cmd.which('missing', str(fallback / 'tool')) == fallback / 'tool'
+
+
 TEST_SCRIPT = '''#!/bin/sh
 echo stdout
 echo stderr >&2

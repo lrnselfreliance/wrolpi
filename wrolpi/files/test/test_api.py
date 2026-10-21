@@ -9,6 +9,7 @@ import pytest
 
 from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
+from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.files.lib import get_mimetype
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.tags import TagFile
@@ -1636,3 +1637,35 @@ async def test_get_file_ignored_directory_not_tracked(test_session, async_client
     # Verify the ignored file is not in the database (because it was never refreshed)
     ignored_fgs = test_session.query(FileGroup).filter(FileGroup.primary_path.like('%config%')).all()
     assert len(ignored_fgs) == 0, "Files in ignored directories should not be in the database"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('step', ['tag', 'untag', 'delete_groups'])
+async def test_file_group_writes_wait_for_a_concurrent_writer(test_session, async_client, test_directory,
+                                                              example_singlefile, tag_factory, step):
+    """Tagging, untagging and deleting FileGroups read before they write, so each must begin as a writer:
+    SQLite fails a deferred transaction's lock upgrade instantly ("database is locked") if another connection
+    wrote meanwhile."""
+    file_group = FileGroup.from_paths(test_session, example_singlefile)
+    tag = await tag_factory()
+    if step == 'untag':
+        file_group.add_tag(test_session, tag.id)
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        # Held past the slow work these requests do before they write (e.g. a config save).
+        with write_lock_held_briefly(db_file, seconds=3):
+            if step == 'delete_groups':
+                body = dict(file_group_ids=[file_group.id])
+                _, response = await async_client.post('/api/files/delete_groups', content=json.dumps(body))
+            else:
+                body = dict(file_group_id=file_group.id, tag_id=tag.id)
+                _, response = await async_client.post(f'/api/files/{step}', content=json.dumps(body))
+        assert response.status_code in (HTTPStatus.CREATED, HTTPStatus.NO_CONTENT), response.body
+
+        with maker() as session:
+            if step == 'delete_groups':
+                assert session.query(FileGroup).filter_by(id=file_group.id).one_or_none() is None
+            else:
+                assert session.query(TagFile).count() == (1 if step == 'tag' else 0)

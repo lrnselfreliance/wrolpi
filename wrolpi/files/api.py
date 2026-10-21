@@ -120,17 +120,17 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
 async def delete_file_groups(request: Request, body: schema.DeleteFileGroupsRequest):
     if not body.file_group_ids:
         raise InvalidFile('file_group_ids cannot be empty')
-    session = request.ctx.session
+    # Read-then-write, so the transaction must begin as a writer (see `RequestDB.write`).
+    with request.ctx.db.write() as session:
+        if not body.force:
+            tagged = lib.get_tagged_file_groups_by_ids(session, body.file_group_ids)
+            if tagged:
+                return json_response(
+                    {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
+                    HTTPStatus.CONFLICT,
+                )
 
-    if not body.force:
-        tagged = lib.get_tagged_file_groups_by_ids(session, body.file_group_ids)
-        if tagged:
-            return json_response(
-                {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
-                HTTPStatus.CONFLICT,
-            )
-
-    affected_models = lib.delete_file_groups(session, body.file_group_ids, force=body.force)
+        affected_models = lib.delete_file_groups(session, body.file_group_ids, force=body.force)
 
     if 'video' in affected_models:
         # A Channel's tracked downloads may have changed; rewrite channels.yaml.
@@ -391,16 +391,18 @@ async def post_tag_file_group(request: Request, body: schema.TagFileGroupPost):
             HTTPStatus.BAD_REQUEST,
         )
 
-    await lib.add_file_group_tag(request.ctx.session, body.file_group_id, body.file_group_primary_path, body.tag_name,
-                                 body.tag_id)
+    with request.ctx.db.write() as session:
+        await lib.add_file_group_tag(session, body.file_group_id, body.file_group_primary_path, body.tag_name,
+                                     body.tag_id)
     return response.empty(HTTPStatus.CREATED)
 
 
 @files_bp.post('/untag')
 @validate(schema.TagFileGroupPost)
 async def post_untag_file_group(request: Request, body: schema.TagFileGroupPost):
-    await lib.remove_file_group_tag(request.ctx.session, body.file_group_id, body.file_group_primary_path,
-                                    body.tag_name, body.tag_id)
+    with request.ctx.db.write() as session:
+        await lib.remove_file_group_tag(session, body.file_group_id, body.file_group_primary_path,
+                                        body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 

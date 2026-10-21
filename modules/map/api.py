@@ -48,7 +48,8 @@ def get_subscriptions(request: Request):
 @wrol_mode_check
 async def post_subscribe(request: Request, body: schema.MapSubscribeRequest):
     try:
-        await lib.subscribe(request.ctx.session, body.name, body.region)
+        with request.ctx.db.write() as session:
+            await lib.subscribe(session, body.name, body.region)
     except ValueError as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 
@@ -61,7 +62,8 @@ async def post_subscribe(request: Request, body: schema.MapSubscribeRequest):
 @wrol_mode_check
 async def delete_subscription(request: Request, region: str):
     try:
-        await lib.unsubscribe(request.ctx.session, region)
+        with request.ctx.db.write() as session:
+            await lib.unsubscribe(session, region)
     except ValueError as e:
         return response.json({'error': str(e)}, HTTPStatus.NOT_FOUND)
 

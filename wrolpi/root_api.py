@@ -443,16 +443,16 @@ async def put_download(request: Request, download_id: int, body: schema.Download
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(request: Request, download_id: int):
-    session = request.ctx.session
-    deleted = download_manager.delete_download(session, download_id)
+    with request.ctx.db.write() as session:
+        deleted = download_manager.delete_download(session, download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
 @api_bp.post('/download/<download_id:int>/restart')
 @openapi.description('Restart a download.')
 async def restart_download(request: Request, download_id: int):
-    session = request.ctx.session
-    download_manager.restart_download(session, download_id)
+    with request.ctx.db.write() as session:
+        download_manager.restart_download(session, download_id)
     return response.empty()
 
 
@@ -498,16 +498,16 @@ async def enable_downloads(_: Request):
 @api_bp.post('/download/clear_completed')
 @openapi.description('Clear completed downloads')
 async def clear_completed(request: Request):
-    session = request.ctx.session
-    download_manager.delete_completed(session)
+    with request.ctx.db.write() as session:
+        download_manager.delete_completed(session)
     return response.empty()
 
 
 @api_bp.post('/download/clear_failed')
 @openapi.description('Clear failed downloads')
 async def clear_failed(request: Request):
-    session = request.ctx.session
-    download_manager.delete_failed(session)
+    with request.ctx.db.write() as session:
+        download_manager.delete_failed(session)
     return response.empty()
 
 
@@ -522,8 +522,8 @@ async def retry_once(request: Request):
 @api_bp.post('/download/delete_once')
 @openapi.description('Delete all once downloads')
 async def delete_once(request: Request):
-    session = request.ctx.session
-    download_manager.delete_once(session)
+    with request.ctx.db.write() as session:
+        download_manager.delete_once(session)
     return response.empty()
 
 
@@ -535,8 +535,8 @@ async def delete_once(request: Request):
 )
 @wrol_mode_check
 async def batch_delete_downloads(request: Request, body: schema.DownloadBatchRequest):
-    session = request.ctx.session
-    deleted_ids = download_manager.delete_downloads_by_ids(session, body.download_ids)
+    with request.ctx.db.write() as session:
+        deleted_ids = download_manager.delete_downloads_by_ids(session, body.download_ids)
     return json_response({'deleted_ids': deleted_ids})
 
 
@@ -548,8 +548,8 @@ async def batch_delete_downloads(request: Request, body: schema.DownloadBatchReq
 )
 @wrol_mode_check
 async def batch_retry_downloads(request: Request, body: schema.DownloadBatchRequest):
-    session = request.ctx.session
-    count = download_manager.retry_downloads_by_ids(session, body.download_ids)
+    with request.ctx.db.write() as session:
+        count = download_manager.retry_downloads_by_ids(session, body.download_ids)
     return json_response({'retried_count': count})
 
 
@@ -561,8 +561,8 @@ async def batch_retry_downloads(request: Request, body: schema.DownloadBatchRequ
 )
 @wrol_mode_check
 async def batch_clear_downloads(request: Request, body: schema.DownloadBatchRequest):
-    session = request.ctx.session
-    deleted_ids = download_manager.clear_completed_by_ids(session, body.download_ids)
+    with request.ctx.db.write() as session:
+        deleted_ids = download_manager.clear_completed_by_ids(session, body.download_ids)
     return json_response({'deleted_ids': deleted_ids})
 
 
@@ -682,8 +682,8 @@ async def get_recent_tags_request(request: Request):
     validate=True,
 )
 async def post_tag(request: Request, body: schema.TagRequest, tag_id: int = None):
-    session = request.ctx.session
-    await tags.upsert_tag(session, body.name, body.color, tag_id)
+    with request.ctx.db.write() as session:
+        await tags.upsert_tag(session, body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)
     else:
@@ -692,8 +692,8 @@ async def post_tag(request: Request, body: schema.TagRequest, tag_id: int = None
 
 @api_bp.delete('/tag/<tag_id:int>')
 async def delete_tag_request(request: Request, tag_id: int):
-    session = request.ctx.session
-    Tag.find_by_id(session, tag_id).delete()
+    with request.ctx.db.write() as session:
+        Tag.find_by_id(session, tag_id).delete()
     return response.empty()
 
 

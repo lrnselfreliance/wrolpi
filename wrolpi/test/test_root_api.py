@@ -1084,3 +1084,44 @@ async def test_mutating_request_survives_concurrent_writer(async_client, test_se
         assert [i.url for i in session.query(Download).all()] == ['https://example.com/during-refresh']
     finally:
         session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method,path,body,status', [
+    # Deleting a Download saves the skip list before it deletes, so the lock is held longer (see `hold` below).
+    ('delete', '/api/download/{failed}', None, HTTPStatus.NO_CONTENT),
+    ('post', '/api/download/{failed}/restart', None, HTTPStatus.NO_CONTENT),
+    ('post', '/api/download/clear_completed', None, HTTPStatus.NO_CONTENT),
+    ('post', '/api/download/clear_failed', None, HTTPStatus.NO_CONTENT),
+    ('post', '/api/download/delete_once', None, HTTPStatus.NO_CONTENT),
+    ('post', '/api/download/batch/delete', {'download_ids': ['{failed}']}, HTTPStatus.OK),
+    ('post', '/api/download/batch/retry', {'download_ids': ['{failed}']}, HTTPStatus.OK),
+    ('post', '/api/download/batch/clear', {'download_ids': ['{complete}']}, HTTPStatus.OK),
+    ('post', '/api/tag', {'name': 'New', 'color': '#000000'}, HTTPStatus.CREATED),
+    ('post', '/api/tag/{tag}', {'name': 'Renamed', 'color': '#ffffff'}, HTTPStatus.OK),
+    ('delete', '/api/tag/{tag}', None, HTTPStatus.NO_CONTENT),
+])
+async def test_download_and_tag_writes_wait_for_a_concurrent_writer(async_client, test_session, test_download_manager,
+                                                                    tag_factory, method, path, body, status):
+    """These requests read before they write, so each must begin as a writer: SQLite fails a deferred
+    transaction's lock upgrade instantly ("database is locked") if another connection wrote meanwhile
+    (see `test_mutating_request_survives_concurrent_writer`)."""
+    failed = Download(url='https://example.com/failed', status='failed')
+    complete = Download(url='https://example.com/complete', status='complete')
+    test_session.add_all([failed, complete])
+    tag = await tag_factory('Old')
+    test_session.commit()
+    ids = dict(failed=failed.id, complete=complete.id, tag=tag.id)
+    path = path.format(**ids)
+    if body and 'download_ids' in body:
+        body = {'download_ids': [int(i.format(**ids)) for i in body['download_ids']]}
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session):
+        # Hold the lock until the request's first write, even when it does slow work first.
+        hold = 3 if method == 'delete' and path.startswith('/api/download/') else 1
+        with write_lock_held_briefly(db_file, seconds=hold):
+            kwargs = {'content': json.dumps(body)} if body else {}
+            _, response = await getattr(async_client, method)(path, **kwargs)
+
+    assert response.status_code == status, response.body

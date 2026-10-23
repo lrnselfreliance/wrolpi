@@ -196,10 +196,11 @@ async def test_wrol_mode(async_client, simple_channel, simple_video, wrol_mode_f
 
 
 @pytest.mark.asyncio
-async def test_api_video_extras(async_client, simple_channel, video_factory):
+async def test_api_video_extras(async_client, test_session, simple_channel, video_factory):
     """Can fetch extra data about a video (comments/captions)."""
     info_json = {'duration': 5, 'epoch': 12345, 'comments': [{'some': 'comments'}]}
     video = video_factory(simple_channel.id, with_info_json=info_json, with_caption_file=True)
+    test_session.commit()
 
     request, response = await async_client.get(f'/api/videos/{video.file_group_id}/captions')
     assert response.status_code == HTTPStatus.OK

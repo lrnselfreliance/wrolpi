@@ -38,10 +38,9 @@ async def get_zims(request: Request):
     summary='Delete all Zim files',
 )
 async def delete_zims(request: Request, zim_ids: str):
-    session = request.ctx.session
-
     zim_ids = [int(i) for i in zim_ids.split(',')]
-    lib.delete_zims(session, zim_ids)
+    with request.ctx.db.write() as session:
+        lib.delete_zims(session, zim_ids)
     return response.empty()
 
 

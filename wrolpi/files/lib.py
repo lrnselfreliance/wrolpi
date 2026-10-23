@@ -145,21 +145,22 @@ def get_file_dict(session: Session, file: str) -> Dict:
     return _get_file_dict(session, media_directory / file)
 
 
-async def set_file_viewed(session: Session, file: pathlib.Path):
+async def set_file_viewed(file: pathlib.Path):
     """Change FileGroup.viewed to the current datetime.
 
-    Files in ignored directories are not tracked.
+    Files in ignored directories are not tracked.  Runs after the request that viewed the file, so it writes in a
+    session of its own, not the request's.
     """
     if is_ignored_file(file):
         return
 
-    try:
-        fg = FileGroup.find_by_path(session, file)
-    except UnknownFile:
-        fg = FileGroup.from_paths(session, file)
-        fg.do_model(session)
-    fg.set_viewed()
-    session.commit()
+    with get_db_session(commit=True) as session:
+        try:
+            fg = FileGroup.find_by_path(session, file)
+        except UnknownFile:
+            fg = FileGroup.from_paths(session, file)
+            fg.do_model(session)
+        fg.set_viewed()
 
 
 def _trackable_path(file: pathlib.Path) -> pathlib.Path | None:

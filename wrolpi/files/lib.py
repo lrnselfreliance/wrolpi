@@ -60,7 +60,8 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'get_normalized_ignored_directories', 'sanitize_ignored_directories',
            'cached_search_total', 'search_filter_cache_key', 'count_file_groups',
            'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems',
-           'backfill_null_file_group_stems', 'dedupe_file_groups_by_directory_stem']
+           'backfill_null_file_group_stems', 'dedupe_file_groups_by_directory_stem', 'merge_file_group_relations',
+           'merge_into_surviving_duplicates']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -1018,26 +1019,63 @@ def dedupe_file_groups_by_directory_stem() -> int:
         loser_ids = [m['id'] for m in members[1:]]
         with get_db_curs(commit=True) as curs:
             for loser_id in loser_ids:
-                curs.execute('''
-                             INSERT OR IGNORE INTO tag_file (tag_id, file_group_id, created_at)
-                             SELECT tag_id, ?, created_at
-                             FROM tag_file
-                             WHERE file_group_id = ?
-                             ''', (winner_id, loser_id))
-                curs.execute('''
-                             UPDATE collection_item
-                             SET file_group_id = ?
-                             WHERE file_group_id = ?
-                               AND collection_id NOT IN (SELECT collection_id
-                                                         FROM (SELECT collection_id
-                                                               FROM collection_item
-                                                               WHERE file_group_id = ?))
-                             ''', (winner_id, loser_id, winner_id))
+                merge_file_group_relations(curs, loser_id, winner_id)
                 curs.execute('DELETE FROM file_group WHERE id = ?', (loser_id,))
                 deleted += 1
     if deleted:
         refresh_logger.info(f'Collapsed {deleted} duplicate FileGroups sharing (directory, stem)')
     return deleted
+
+
+def merge_file_group_relations(curs, loser_id: int, winner_id: int):
+    """Copy the loser FileGroup's tags and collection membership onto the winner, so deleting the loser
+    (which cascades) does not lose them.  The caller deletes the loser."""
+    curs.execute('''
+                 INSERT OR IGNORE INTO tag_file (tag_id, file_group_id, created_at)
+                 SELECT tag_id, ?, created_at
+                 FROM tag_file
+                 WHERE file_group_id = ?
+                 ''', (winner_id, loser_id))
+    curs.execute('''
+                 UPDATE collection_item
+                 SET file_group_id = ?
+                 WHERE file_group_id = ?
+                   AND collection_id NOT IN (SELECT collection_id
+                                             FROM (SELECT collection_id
+                                                   FROM collection_item
+                                                   WHERE file_group_id = ?))
+                 ''', (winner_id, loser_id, winner_id))
+
+
+def merge_into_surviving_duplicates(curs, file_group_ids: List[int], deleting_ids: Set[int]) -> int:
+    """Before `file_group_ids` are deleted, move each one's tags and collection membership onto a FileGroup
+    that shares its (directory, stem) and is not in `deleting_ids`.  Returns how many FileGroups were merged.
+
+    A duplicate FileGroup (same directory and stem) is deleted by refresh; its relations belong to the survivor."""
+    params = ','.join('?' * len(file_group_ids))
+    curs.execute(f'''
+                 SELECT fg.id, fg.directory, fg.stem
+                 FROM file_group fg
+                 WHERE fg.id IN ({params})
+                   AND fg.stem IS NOT NULL
+                   AND (EXISTS (SELECT 1 FROM tag_file tf WHERE tf.file_group_id = fg.id)
+                     OR EXISTS (SELECT 1 FROM collection_item ci WHERE ci.file_group_id = fg.id))
+                 ''', file_group_ids)
+    merged = 0
+    for loser in curs.fetchall():
+        curs.execute('''
+                     SELECT id
+                     FROM file_group
+                     WHERE directory = ?
+                       AND stem = ?
+                       AND id != ?
+                     ORDER BY id DESC
+                     ''', (loser['directory'], loser['stem'], loser['id']))
+        survivor_id = next((row['id'] for row in curs.fetchall() if row['id'] not in deleting_ids), None)
+        if survivor_id is not None:
+            merge_file_group_relations(curs, loser['id'], survivor_id)
+            merged += 1
+    return merged
 
 
 async def apply_indexers(progress_callback: Callable[[int, int], None] = None):

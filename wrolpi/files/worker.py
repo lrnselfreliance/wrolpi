@@ -22,14 +22,14 @@ from sqlalchemy import text, or_
 from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.common import get_media_directory, logger, wrol_mode_enabled
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.events import Events
 from wrolpi.vars import PYTEST
 from wrolpi.files.progress import save_recently_viewed_config
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, glob_shared_stem,
     group_files_by_stem, choose_primary_file, apply_indexers,
-    get_normalized_ignored_directories, remove_files_in_ignored_directories,
+    get_normalized_ignored_directories, remove_files_in_ignored_directories, merge_into_surviving_duplicates,
 )
 from wrolpi.files.refresh import (
     FileGroupDiff, FileComparisonResult, classify_file_group_diffs, compare_file_groups,
@@ -794,6 +794,7 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
             return
 
         total = len(file_group_ids)
+        deleting_ids = set(file_group_ids)
         self.update_status(
             status='deleting',
             operation_total=total,
@@ -833,6 +834,10 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
                             session.query(Download).filter(
                                 Download.url == fg.url
                             ).delete(synchronize_session=False)
+
+                # A duplicate's tags and collection membership move to the FileGroup that survives it.
+                with session_curs(session) as curs:
+                    merge_into_surviving_duplicates(curs, batch_ids, deleting_ids)
 
                 # Delete FileGroups (TagFiles cascade-deleted automatically)
                 batch_deleted = session.query(FileGroup).filter(

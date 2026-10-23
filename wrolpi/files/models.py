@@ -836,23 +836,31 @@ class FileGroup(ModelHelper, Base):
         self.do_index()
         self.indexed = True
 
-    def unlink_tag_directory_links(self, *paths: pathlib.Path):
-        """Delete this FileGroup's links in the Tags Directory (only those of `paths`, if provided).
+    def get_tag_directory_links(self, *paths: pathlib.Path) -> List[pathlib.Path]:
+        """Return this FileGroup's links in the Tags Directory (only those of `paths`, if provided).
 
-        Call this before the source files are removed.  A link is only deleted if it is the same file as its source,
-        so a file that is not this FileGroup's link is never deleted."""
+        A link is only returned if it is the same file as its source, so the sources must still exist."""
         if not self.tag_files:
-            return
+            return []
         tags_directory = get_tags_directory()
+        links = []
         for file, link in self.get_tag_directory_paths_map().items():
             if paths and file not in paths:
                 continue
             link = tags_directory / link
             try:
                 if link.samefile(file):
-                    link.unlink()
+                    links.append(link)
             except FileNotFoundError:
                 pass
+        return links
+
+    def unlink_tag_directory_links(self, *paths: pathlib.Path):
+        """Delete this FileGroup's links in the Tags Directory (only those of `paths`, if provided).
+
+        Call this before the source files are removed.  A file that is not this FileGroup's link is never deleted."""
+        for link in self.get_tag_directory_links(*paths):
+            link.unlink(missing_ok=True)
 
     def get_tag_directory_paths_map(self) -> dict[pathlib.Path, str]:
         """Return all links that should exist for this FileGroup in the Tags Directory."""

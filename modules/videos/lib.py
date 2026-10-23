@@ -214,21 +214,22 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
         old: pathlib.Path = video.poster_path
         new = old.with_suffix('.jpg')
 
-        if old != new:
-            # The old poster is about to be removed; its Tags Directory link would be left as the only copy.
-            video.file_group.unlink_tag_directory_links(old)
-
         if old != new and new.exists():
             # Destination JPEG already exists (it may have the wrong format).
+            video.file_group.unlink_tag_directory_links(old)
             old.unlink()
             old = new
 
         if not is_valid_poster(old):
-            # Poster is not valid, convert it and place it in the new location.
+            # Poster is not valid, convert it and place it in the new location.  Conversion removes `old`, so its
+            # Tags Directory links are found now and removed only once the conversion succeeds.
+            old_links = video.file_group.get_tag_directory_links(old) if old != new else []
             try:
                 convert_image(old, new)
                 if not new.is_file() or not new.stat().st_size:
                     raise FileNotFoundError(f'Failed to convert poster: {new}')
+                for link in old_links:
+                    link.unlink(missing_ok=True)
                 logger.info(f'Converted invalid poster {repr(str(old))} to {repr(str(new))}')
                 return new, None
             except Exception as e:

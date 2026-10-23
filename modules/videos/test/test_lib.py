@@ -610,3 +610,20 @@ async def test_convert_poster_removes_tags_directory_link(async_client, test_ses
 
     assert new_poster.suffix == '.jpg'
     assert not webp_link.exists(), 'The converted poster left its link behind'
+
+
+@pytest.mark.asyncio
+async def test_valid_poster_keeps_tags_directory_link(async_client, test_session, test_directory, video_factory,
+                                                      tag_factory, await_switches):
+    """A valid JPEG poster that is not named .jpg is not converted, so its Tags Directory link is kept."""
+    tag = await tag_factory()
+    video = video_factory(with_video_file=True, with_poster_ext='jpeg', tag_names=[tag.name])
+    test_session.commit()
+    await await_switches()
+    poster_link = test_directory / 'tags' / tag.name / video.poster_path.name
+    assert poster_link.is_file()
+
+    lib.convert_or_generate_poster(video)
+
+    assert video.poster_path.is_file()
+    assert poster_link.is_file() and poster_link.samefile(video.poster_path)

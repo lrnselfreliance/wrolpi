@@ -241,6 +241,33 @@ async def test_delete_duplicate_video_tagged_duplicate(async_client, test_sessio
 
 
 @pytest.mark.asyncio
+async def test_delete_duplicate_video_leaves_no_tags_directory_orphans(async_client, test_session, test_directory,
+                                                                       channel_factory, video_factory, tag_factory,
+                                                                       await_switches):
+    """Deleting a tagged duplicate Video removes its Tags Directory links; only links to existing files remain."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+    tag = await tag_factory()
+    for title in (f'{channel.name}_20000101_ABC123456_The video title',
+                  f'{channel.name}_20000101_ABC123456_The video title '):
+        video = video_factory(channel_id=channel.id, title=title, upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+                              source_id='ABC123456', with_video_file=True, with_info_json=True, tag_names=[tag.name])
+        video.file_group.url = 'https://example.com/video'
+    test_session.commit()
+    await await_switches()
+    tags_directory = test_directory / 'tags'
+    assert len([i for i in tags_directory.rglob('*.mp4')]) == 2
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', 'ABC123456', video_path)
+    test_session.commit()
+    await await_switches()
+
+    links = [i for i in tags_directory.rglob('*') if i.is_file() and i.name != 'README.txt']
+    assert links, 'The kept Video is still linked'
+    assert all(i.stat().st_nlink > 1 for i in links), 'A link was left behind with no source file'
+
+
+@pytest.mark.asyncio
 async def test_delete_duplicate_video_smaller_copy_at_destination(async_client, test_session, channel_factory,
                                                                   video_factory):
     """The kept Video can be renamed onto the path of the smaller duplicate that was just deleted."""

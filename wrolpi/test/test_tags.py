@@ -681,6 +681,77 @@ async def test_tags_directory_all_files_deleted(test_session, test_directory, ta
 
 
 @pytest.mark.asyncio
+async def test_tags_directory_tagged_file_group_deleted(async_client, test_session, test_directory, tag_factory,
+                                                        video_bytes, image_bytes_factory, await_switches):
+    """Deleting a tagged FileGroup removes its Tags Directory links, but never a file that is not one of them."""
+    video_file = test_directory / 'video.mp4'
+    poster_file = test_directory / 'video.jpg'
+    video_file.write_bytes(video_bytes)
+    poster_file.write_bytes(image_bytes_factory())
+    fg = FileGroup.from_paths(test_session, video_file, poster_file)
+    test_session.add(fg)
+    test_session.commit()
+
+    tag = await tag_factory('favorite')
+    fg.add_tag(test_session, tag.id)
+    test_session.commit()
+    await await_switches()
+
+    video_link = test_directory / 'tags' / tag.name / 'video.mp4'
+    poster_link = test_directory / 'tags' / tag.name / 'video.jpg'
+    assert video_link.is_file() and poster_link.is_file()
+    # The poster link was replaced with a different file; it is not this FileGroup's link.
+    poster_link.unlink()
+    poster_link.write_bytes(b'not a link')
+
+    body = dict(file_group_ids=[fg.id], force=True)
+    request, response = await async_client.post('/api/files/delete_groups', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_switches()
+
+    assert not video_file.exists() and not poster_file.exists()
+    assert not video_link.exists(), 'The link to the deleted file should be removed'
+    assert poster_link.read_bytes() == b'not a link', 'A file that is not a link to the FileGroup is kept'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('delete_directory', [False, True])
+async def test_tags_directory_tagged_path_deleted(async_client, test_session, test_directory, tag_factory,
+                                                  video_bytes, image_bytes_factory, await_switches, delete_directory):
+    """Force-deleting a tagged file (or its directory) by path removes the deleted files' Tags Directory links."""
+    directory = test_directory / 'videos'
+    directory.mkdir()
+    video_file = directory / 'video.mp4'
+    poster_file = directory / 'video.jpg'
+    video_file.write_bytes(video_bytes)
+    poster_file.write_bytes(image_bytes_factory())
+    fg = FileGroup.from_paths(test_session, video_file, poster_file)
+    test_session.add(fg)
+    test_session.commit()
+
+    tag = await tag_factory('favorite')
+    fg.add_tag(test_session, tag.id)
+    test_session.commit()
+    await await_switches()
+
+    video_link = test_directory / 'tags' / tag.name / 'video.mp4'
+    poster_link = test_directory / 'tags' / tag.name / 'video.jpg'
+    assert video_link.is_file() and poster_link.is_file()
+
+    # Delete the whole directory, or only the poster.
+    body = dict(paths=['videos' if delete_directory else 'videos/video.jpg'], force=True)
+    request, response = await async_client.post('/api/files/delete', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_switches()
+
+    assert not poster_link.exists(), 'The link to the deleted file should be removed'
+    if delete_directory:
+        assert not video_link.exists(), 'The link to the deleted file should be removed'
+    else:
+        assert video_link.is_file() and video_link.samefile(video_file), 'The link of a kept file is kept'
+
+
+@pytest.mark.asyncio
 async def test_tags_directory_disabled(test_session, test_directory, tag_factory, video_factory, await_switches):
     """Test that Tag Directory is NOT synchronized when tags_directory setting is disabled."""
     tags_dir = test_directory / 'tags'

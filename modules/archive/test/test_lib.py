@@ -657,6 +657,48 @@ async def test_singlefile_saved_date_timezone(test_session, make_files_structure
 
 
 @pytest.mark.asyncio
+async def test_repair_singlefile_saved_dates(test_session, make_files_structure, refresh_files):
+    """An Archive whose download_datetime is its SingleFile saved date's local time read as UTC is corrected, once.
+    Any other download_datetime is never changed."""
+    mountain = 'Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)'
+    make_files_structure({
+        f'archive/example.com/{name}.html': f'''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: https://example.com/{name}
+ saved date: {saved_date}
+--><head><meta charset="utf-8"></head></html>'''
+        for name, saved_date in (('misread', mountain), ('downloaded', mountain),
+                                 ('utc', 'Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)'))
+    })
+    await refresh_files()
+
+    def file_groups() -> dict:
+        test_session.expire_all()
+        return {i.file_group.primary_path.stem: i.file_group for i in test_session.query(Archive)}
+
+    # What the offset-dropping parser stored, and a time that came from elsewhere (e.g. WROLPi's own download).
+    misread = datetime(2024, 11, 7, 18, 36, 23, tzinfo=timezone.utc)
+    downloaded = datetime(2024, 11, 8, 1, 36, 50, tzinfo=timezone.utc)
+    fgs = file_groups()
+    fgs['misread'].download_datetime = misread
+    fgs['downloaded'].download_datetime = downloaded
+    test_session.commit()
+
+    assert lib.repair_singlefile_saved_dates() == 1
+
+    fgs = file_groups()
+    assert fgs['misread'].download_datetime == datetime(2024, 11, 8, 1, 36, 23, tzinfo=timezone.utc)
+    assert fgs['downloaded'].download_datetime == downloaded
+    assert fgs['utc'].download_datetime == datetime(2022, 5, 16, 23, 51, 35, tzinfo=timezone.utc)
+
+    # The repair is done; it does not run again.
+    fgs['misread'].download_datetime = misread
+    test_session.commit()
+    assert lib.repair_singlefile_saved_dates() == 0
+    assert file_groups()['misread'].download_datetime == misread
+
+
+@pytest.mark.asyncio
 async def test_archive_meta(async_client, test_session, make_files_structure, refresh_files):
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en">

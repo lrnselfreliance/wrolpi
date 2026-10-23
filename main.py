@@ -423,6 +423,20 @@ async def perpetual_start_video_missing_comments_download():
         logger.debug('Waiting for downloads to be enabled before downloading comments...')
 
 
+@perpetual_signal(sleep=3600)
+async def perpetual_repair_archive_saved_dates():
+    """Correct Archive download datetimes that were misread from their SingleFile saved date.  Runs once."""
+    async with flags.refresh_complete.wait_for():
+        # Archives must be in the database.
+        pass
+
+    from modules.archive.lib import repair_singlefile_saved_dates
+    try:
+        await asyncio.to_thread(repair_singlefile_saved_dates)
+    except Exception as e:
+        logger.error('Failed to repair Archive download datetimes', exc_info=e)
+
+
 @perpetual_signal(sleep=3600)  # Check hourly
 async def perpetual_check_for_updates():
     """

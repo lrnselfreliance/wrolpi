@@ -19,20 +19,20 @@ import pytz
 from sqlalchemy import asc, func, BigInteger
 from sqlalchemy.orm import Session
 
-from modules.archive.models import Archive
+from modules.archive.models import Archive, MATCH_DATE, parse_singlefile_saved_date
 from wrolpi import dates
 from wrolpi import fts
 from wrolpi.cmd import READABILITY_BIN, run_command
 from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
-    get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name
+    get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name, chunks
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
 from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
-    search_filter_cache_key, count_file_groups
+    search_filter_cache_key, count_file_groups, get_kv_value, set_kv_value
 from wrolpi.files.models import FileGroup
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import tag_append_sub_select_where
@@ -1849,3 +1849,52 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
         session.flush()
 
     return screenshot_path
+
+
+# Bump to run `repair_singlefile_saved_dates` again.
+SAVED_DATE_REPAIR_VERSION = '1'
+SAVED_DATE_REPAIR_KEY = 'archive_saved_date_repair_version'
+
+
+def repair_singlefile_saved_dates() -> int:
+    """Correct each Archive whose download_datetime is its SingleFile "saved date" local time read as UTC.
+
+    The saved date was once parsed without its offset.  Only a download_datetime equal to that misread value, from a
+    saved date with a non-zero offset, is changed; any other download_datetime is never touched.  Runs once per
+    SAVED_DATE_REPAIR_VERSION.  Returns the number of Archives corrected."""
+    if get_kv_value(SAVED_DATE_REPAIR_KEY) == SAVED_DATE_REPAIR_VERSION:
+        return 0
+
+    with get_db_session() as session:
+        rows = session.query(FileGroup.id, FileGroup.primary_path, FileGroup.download_datetime) \
+            .join(Archive, Archive.file_group_id == FileGroup.id) \
+            .filter(FileGroup.download_datetime.isnot(None)) \
+            .all()
+
+    corrections = dict()
+    for file_group_id, path, download_datetime in rows:
+        try:
+            with open(path, 'rb') as fh:
+                head = fh.read(1000).decode(errors='ignore')
+        except OSError:
+            continue
+        if not (match := MATCH_DATE.search(head)):
+            continue
+        saved_date = match.group(1).strip()
+        try:
+            corrected = parse_singlefile_saved_date(saved_date)
+            # The value the offset-dropping parser stored.
+            misread = dates.strpdate(' '.join(saved_date.split(' ')[:5])).replace(tzinfo=pytz.timezone('GMT'))
+        except Exception:
+            continue
+        if corrected != misread and download_datetime == misread:
+            corrections[file_group_id] = corrected
+
+    for chunk in chunks(list(corrections.items()), 500):
+        with get_db_session(commit=True) as session:
+            for file_group in session.query(FileGroup).filter(FileGroup.id.in_([i for i, _ in chunk])):
+                file_group.download_datetime = corrections[file_group.id]
+
+    set_kv_value(SAVED_DATE_REPAIR_KEY, SAVED_DATE_REPAIR_VERSION)
+    logger.info(f'Corrected the download datetime of {len(corrections)} Archives from their SingleFile saved date')
+    return len(corrections)

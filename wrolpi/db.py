@@ -12,6 +12,7 @@ import functools
 import pathlib
 import sqlite3
 import threading
+import traceback
 import types
 from contextlib import contextmanager
 from typing import Tuple, List, Union, Type, Generator, Any, ContextManager
@@ -43,6 +44,15 @@ _warned_serializers = set()
 # Every unexpected query during tests, as (reason, statement).  Recorded as well as raised, so code that catches
 # broad exceptions around a serializer cannot hide one; see the `no_unexpected_queries` fixture.
 UNEXPECTED_QUERIES = list()
+
+# True while an API request runs (see `RequestDB`), and in tasks it starts.
+_in_request = contextvars.ContextVar('wrolpi_in_request', default=False)
+# True inside `RequestDB.write()` and `get_db_session(commit=True)`: blocks that declared they write, so their
+# transaction began as a writer.
+_write_intent = contextvars.ContextVar('wrolpi_write_intent', default=False)
+# Every write during tests that a request made outside a declared write, as (statement, where).  See
+# `_refuse_deferred_request_write` and the `no_deferred_request_writes` fixture.
+DEFERRED_REQUEST_WRITES = list()
 
 
 class UnexpectedQuery(RuntimeError):
@@ -89,6 +99,34 @@ def _refuse_query_while_serializing(conn, cursor, statement, parameters, context
         _warned_serializers.add(reason)
         logger.warning(f'{reason} ran SQL while serializing: a relationship or deferred column it reads was not '
                        f'loaded, or a commit expired the object: {statement}')
+
+
+_WRITE_STATEMENTS = ('INSERT', 'UPDATE', 'DELETE', 'REPLACE')
+
+
+def _refuse_deferred_request_write(conn, cursor, statement, parameters, context, executemany):
+    """During tests, record any write a request makes outside `RequestDB.write()` (or `get_db_session(commit=True)`).
+
+    The request's own transaction begins deferred.  A write in it after a read fails instantly ("database is
+    locked") when another connection wrote in between -- SQLite skips `busy_timeout` for that lock upgrade -- or,
+    when the write is only flushed by the response middleware's commit, is lost after the response was sent."""
+    if not _in_request.get() or _write_intent.get() or not statement.lstrip().upper().startswith(_WRITE_STATEMENTS):
+        return
+    frames = [i for i in traceback.extract_stack()
+              if ('/wrolpi/' in i.filename or '/modules/' in i.filename) and not i.filename.endswith('/db.py')]
+    where = ' > '.join(f'{pathlib.Path(i.filename).name}:{i.name}:{i.lineno}' for i in frames[-4:])
+    DEFERRED_REQUEST_WRITES.append((statement, where))
+
+
+@contextmanager
+def outside_request():
+    """Run a block as if no request were running: test code that does the perpetual process's work (switches) from
+    inside a request."""
+    token = _in_request.set(False)
+    try:
+        yield
+    finally:
+        _in_request.reset(token)
 
 
 def _adapt_datetime(value):
@@ -188,6 +226,8 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
         journal_state['mode'] = _configure_sqlite_connection(dbapi_conn, journal_state['mode'])
 
     event.listen(engine, 'before_cursor_execute', _refuse_query_while_serializing)
+    if PYTEST:
+        event.listen(engine, 'before_cursor_execute', _refuse_deferred_request_write)
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):
@@ -323,6 +363,7 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
             session.connection()
         finally:
             _immediate_txn.reset(token)
+    intent = _write_intent.set(True) if commit else None
     try:
         yield session
         if commit:
@@ -336,6 +377,8 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
         # so we should not rollback here - that would undo other test operations.
         if not PYTEST and session.in_transaction():
             session.rollback()
+        if intent:
+            _write_intent.reset(intent)
 
 
 @contextmanager
@@ -429,6 +472,7 @@ class RequestDB:
     def __init__(self):
         self.engine, self.session = _get_request_session()
         _refuse_non_test_engine(self.engine)
+        self._in_request = _in_request.set(True)
 
     def curs(self) -> ContextManager[sqlite3.Cursor]:
         """A raw `sqlite3.Cursor` on this request's connection (see `session_curs`).  Its writes commit or
@@ -450,12 +494,15 @@ class RequestDB:
             session.connection()
         finally:
             _immediate_txn.reset(token)
+        intent = _write_intent.set(True)
         try:
             yield session
             session.commit()
         except Exception:
             session.rollback()
             raise
+        finally:
+            _write_intent.reset(intent)
 
     def finish(self, ok: bool):
         """End the request: commit if `ok`, otherwise roll back; then release the connection."""
@@ -471,6 +518,11 @@ class RequestDB:
             # In tests the shared `test_session` fixture owns the Session's lifecycle.
             if not PYTEST:
                 self.session.close()
+            try:
+                _in_request.reset(self._in_request)
+            except ValueError:
+                # Finished in another Context than the one it began in.
+                _in_request.set(False)
 
 
 def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session) -> List[Base]:

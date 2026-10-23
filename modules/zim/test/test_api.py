@@ -347,3 +347,22 @@ async def test_zim_writes_wait_for_a_concurrent_writer(async_client, test_sessio
                 _, response = await async_client.delete('/api/zim/subscribe/1')
 
     assert response.status_code in (HTTPStatus.CREATED, HTTPStatus.NO_CONTENT), response.body
+
+
+@pytest.mark.asyncio
+async def test_delete_zim_waits_for_a_concurrent_writer(async_client, test_session, test_zim):
+    """Deleting a Zim must delete its row as well as its file, even while something else is writing.  It wrote
+    in the request's deferred transaction, so its commit in the response middleware failed ("database is
+    locked") after the file was deleted and the response was sent."""
+    zim_id, zim_path = test_zim.id, test_zim.path
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file, seconds=3):
+            _, response = await async_client.delete(f'/api/zim/{zim_id}')
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+
+        assert not zim_path.exists()
+        with maker() as session:
+            assert session.query(Zim).filter_by(id=zim_id).one_or_none() is None

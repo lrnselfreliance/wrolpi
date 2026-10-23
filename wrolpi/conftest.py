@@ -45,7 +45,7 @@ from wrolpi.common import logger, await_background_tasks as await_background_tas
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
-from wrolpi.db import create_wrolpi_engine, RequestDB, RequestSession, REQUEST_SESSION_OPTIONS
+from wrolpi.db import create_wrolpi_engine, RequestDB, RequestSession, REQUEST_SESSION_OPTIONS, outside_request
 from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
@@ -132,6 +132,20 @@ def no_unexpected_queries(request):
 
 
 @pytest.fixture(autouse=True)
+def no_deferred_request_writes(request):
+    """Fail any test during which an API request wrote outside `request.ctx.db.write()`."""
+    from wrolpi import db
+    db.DEFERRED_REQUEST_WRITES.clear()
+    yield
+    if request.node.get_closest_marker('allow_deferred_request_writes'):
+        return
+    writes = list(db.DEFERRED_REQUEST_WRITES)
+    db.DEFERRED_REQUEST_WRITES.clear()
+    assert not writes, 'A request wrote outside `request.ctx.db.write()` (see `RequestDB.write`):\n' + \
+                       '\n'.join(f'{where}: {" ".join(statement.split())[:200]}' for statement, where in writes)
+
+
+@pytest.fixture(autouse=True)
 def test_debug_logger(request):
     """Tests default to DEBUG logging. Use pytest -vvv for TRACE level."""
     level = logging.DEBUG
@@ -213,7 +227,9 @@ async def background_task_listener(request, response):
     if session := getattr(request.ctx, 'session', None):
         # The handler is done.  Background work shares the test's Session, and expires on commit like production.
         session.expire_on_commit = True
-    await await_switches_()
+    # Production runs switches in the perpetual process, not in a request.
+    with outside_request():
+        await await_switches_()
 
 
 class AutoAwaitTestClient:

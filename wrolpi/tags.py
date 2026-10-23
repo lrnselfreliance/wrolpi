@@ -406,7 +406,8 @@ class TagsConfig(ConfigFile):
         try:
             need_commit = False
 
-            with get_db_session() as session:
+            # Reads, then writes: begin as a writer (see `get_db_session`).
+            with get_db_session(commit=True) as session:
                 if config.tags:
                     # Tags have been saved to config, import them
                     tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}

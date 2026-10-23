@@ -176,6 +176,7 @@ def test_request_db_does_no_io_until_used(test_session):
     assert len(opened) == 0
 
 
+@pytest.mark.allow_deferred_request_writes
 def test_request_db_cursor_shares_the_session_connection(test_session):
     """`curs()` runs on the Session's connection and inside its transaction: one connection per request,
     and raw SQL sees the request's own ORM changes."""
@@ -232,6 +233,7 @@ def test_request_db_write_rolls_back_on_error(test_session):
     assert test_session.query(Tag).filter_by(name='discarded').count() == 0
 
 
+@pytest.mark.allow_deferred_request_writes
 def test_request_db_finish_commits_reads_and_writes(test_session):
     """`finish(ok=True)` commits whatever the request's session changed (the existing response-middleware
     contract for handlers that write through `request.ctx.session`)."""
@@ -341,3 +343,28 @@ def test_no_db_access_logs_the_query_in_production(test_session, caplog):
     warnings = [r.getMessage() for r in caplog.records if 'a production serializer ran SQL' in r.getMessage()]
     assert len(warnings) == 1
     assert 'SELECT' in warnings[0] and 'BEGIN' not in warnings[0]
+
+
+def test_deferred_request_writes_are_recorded(test_session):
+    """During tests, a write a request makes outside `RequestDB.write()` is recorded (the
+    `no_deferred_request_writes` fixture fails the test); a write inside it is not."""
+    from wrolpi import db as db_module
+    test_session.commit()
+    with production_like_sessions(test_session):
+        db = RequestDB()
+        with db.write() as session:
+            session.add(Tag(name='declared', color='#000000'))
+        assert db_module.DEFERRED_REQUEST_WRITES == []
+
+        db.session.add(Tag(name='undeclared', color='#000000'))
+        db.session.flush()
+        db.finish(ok=False)
+
+    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES]
+    db_module.DEFERRED_REQUEST_WRITES.clear()
+    assert len(statements) == 1 and statements[0].startswith('INSERT INTO tag'), statements
+
+    # Code outside a request is not checked.
+    test_session.add(Tag(name='outside', color='#000000'))
+    test_session.flush()
+    assert db_module.DEFERRED_REQUEST_WRITES == []

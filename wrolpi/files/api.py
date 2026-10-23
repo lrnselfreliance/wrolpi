@@ -54,7 +54,7 @@ async def get_file(request: Request, body: schema.FileRequest):
         raise InvalidFile()
 
     if not body.skip_tracking:
-        background_task(lib.set_file_viewed(session, get_media_directory() / body.file))
+        background_task(lib.set_file_viewed(get_media_directory() / body.file))
     return json_response({'file': file})
 
 

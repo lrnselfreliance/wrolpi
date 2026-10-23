@@ -427,6 +427,16 @@ async def delete(*paths: Union[str, pathlib.Path], force: bool = False, post_pro
             return [i.__json__() for i in tagged_file_groups]
         had_tagged = bool(tagged_file_groups)
 
+        # Remove the Tags Directory links of the files about to be deleted, while they can still be matched to
+        # their sources.  A deleted directory takes every file of a FileGroup inside it.
+        directories = [i for i in paths if i.is_dir()]
+        files = [i for i in paths if i.is_file()]
+        for file_group in tagged_file_groups:
+            if any(i == file_group.directory or i in file_group.directory.parents for i in directories):
+                file_group.unlink_tag_directory_links()
+            elif files:
+                file_group.unlink_tag_directory_links(*files)
+
     for path in paths:
         ignored_directories = get_wrolpi_config().ignored_directories
         if ignored_directories and str(path) in ignored_directories:

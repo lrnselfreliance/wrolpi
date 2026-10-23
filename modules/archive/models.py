@@ -1,6 +1,7 @@
 import json
 import pathlib
 import re
+from datetime import datetime
 from typing import Iterable, List, Optional
 
 import pytz
@@ -25,6 +26,20 @@ __all__ = ['Archive']
 
 MATCH_URL = re.compile(r'^\s+?url:\s+?(http.*)', re.MULTILINE)
 MATCH_DATE = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
+
+
+def parse_singlefile_saved_date(saved_date: str) -> datetime:
+    """Parse SingleFile's "saved date", which is the browser's local time and its offset, into UTC.
+
+    >>> parse_singlefile_saved_date('Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)')
+    datetime.datetime(2024, 11, 8, 1, 36, 23, tzinfo=<UTC>)
+    """
+    parts = saved_date.split(' ')
+    try:
+        return datetime.strptime(' '.join(parts[:6]), '%a %b %d %Y %H:%M:%S GMT%z').astimezone(pytz.UTC)
+    except ValueError:
+        # No offset; assume GMT.
+        return dates.strpdate(' '.join(parts[:5])).replace(tzinfo=pytz.timezone('GMT'))
 
 
 class Archive(Base, ModelHelper):
@@ -331,11 +346,7 @@ class Archive(Base, ModelHelper):
             if not self.file_group.download_datetime:
                 try:
                     if match := MATCH_DATE.findall(head):
-                        dt = match[0].strip()
-                        dt = ' '.join(dt.split(' ')[:5])
-                        # SingleFile uses GMT.
-                        dt = dates.strpdate(dt).replace(tzinfo=pytz.timezone('GMT'))
-                        self.file_group.download_datetime = dt
+                        self.file_group.download_datetime = parse_singlefile_saved_date(match[0].strip())
                 except Exception as e:
                     logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 

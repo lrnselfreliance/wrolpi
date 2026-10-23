@@ -2,7 +2,7 @@ import json
 import pathlib
 import re
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from unittest import mock
 
@@ -631,6 +631,29 @@ async def test_refresh_archives_index(test_session, make_files_structure, refres
     assert archive.file_group.b_text == 'The article description'  # From application/ld+json
     assert archive.file_group.d_text == 'article text contents'  # from readability txt
     assert archive.file_group.indexed is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('saved_date,expected', [
+    ('Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)', datetime(2022, 5, 16, 23, 51, 35)),
+    # The browser writes its local time; the offset must be applied, not dropped.
+    ('Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)', datetime(2024, 11, 8, 1, 36, 23)),
+    ('Tue Mar 03 2026 09:15:00 GMT+0200 (Eastern European Standard Time)', datetime(2026, 3, 3, 7, 15, 0)),
+])
+async def test_singlefile_saved_date_timezone(test_session, make_files_structure, refresh_files, saved_date, expected):
+    """An Archive's download_datetime is the SingleFile "saved date" converted to UTC."""
+    make_files_structure({
+        'archive/example.com/NA.html': f'''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: https://example.com
+ saved date: {saved_date}
+--><head><meta charset="utf-8"></head></html>''',
+    })
+
+    await refresh_files()
+
+    archive: Archive = test_session.query(Archive).one()
+    assert archive.file_group.download_datetime == expected.replace(tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio

@@ -667,6 +667,30 @@ def test_ffmpeg_video_complete_real_files(test_directory, video_file):
     assert cmd[cmd.index('-sseof') + 1] == '-30' and cmd[cmd.index('-f') + 1] == 'null' and cmd[-1] == '-'
 
 
+NULL_MUXER_DTS = b'[null @ 0x5555faf7fa70] Application provided invalid, non monotonically increasing dts to muxer' \
+                 b' in stream 0: 460 >= 460\n'
+
+
+@pytest.mark.parametrize('return_code,stderr,expected_ok,expected_errors', [
+    (0, b'', True, ''),
+    # Duplicate timestamps are reported by the null muxer, not a decoder; the stream decoded.
+    (0, NULL_MUXER_DTS, True, ''),
+    (0, NULL_MUXER_DTS * 3, True, ''),
+    # ffmpeg collapses identical messages into a summary line when stderr is not a terminal.
+    (0, NULL_MUXER_DTS + b'    Last message repeated 118 times\n', True, ''),
+    (0, NULL_MUXER_DTS + b'    Last message repeated 118 times\n[h264 @ 0x1] Invalid NAL unit size\n', False,
+     '[h264 @ 0x1] Invalid NAL unit size'),
+    (0, NULL_MUXER_DTS + b'[h264 @ 0x1] Invalid NAL unit size\n', False, '[h264 @ 0x1] Invalid NAL unit size'),
+    (0, b'[h264 @ 0x1] error while decoding MB 3 4\n', False, '[h264 @ 0x1] error while decoding MB 3 4'),
+    (1, NULL_MUXER_DTS, False, ''),
+])
+def test_tail_decode_verdict(return_code, stderr, expected_ok, expected_errors):
+    """Only decode errors, or a failed exit, mark a video incomplete."""
+    from modules.videos.common import _tail_decode_verdict
+    assert _tail_decode_verdict(return_code, stderr) == (expected_ok, expected_errors)
+    assert _tail_decode_verdict(return_code, stderr.decode()) == (expected_ok, expected_errors)
+
+
 @pytest.mark.asyncio
 async def test_ffmpeg_video_complete_async_real_files(test_directory, video_file):
     """The async variant reaches the same verdicts and returns ffmpeg's error text."""

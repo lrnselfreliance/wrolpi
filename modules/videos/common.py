@@ -164,7 +164,10 @@ def tail_decode_command(video_path: Path, seconds: int = None) -> Tuple[str | Pa
 
 
 # The null muxer complains about duplicate timestamps after the frames have decoded; it is not damage.
-TAIL_DECODE_IGNORED_ERRORS = re.compile(r'^\[null @ \w+] Application provided invalid, non monotonically increasing dts')
+# A repeat summary only counts the previous message, whose first copy is still judged.
+TAIL_DECODE_IGNORED_ERRORS = re.compile(
+    r'^\[null @ \w+] Application provided invalid, non monotonically increasing dts'
+    r'|^\s*Last message repeated \d+ times\s*$')
 
 
 def _tail_decode_verdict(return_code: int, stderr: bytes | str) -> Tuple[bool, str]:

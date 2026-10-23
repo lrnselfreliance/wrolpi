@@ -676,6 +676,10 @@ NULL_MUXER_DTS = b'[null @ 0x5555faf7fa70] Application provided invalid, non mon
     # Duplicate timestamps are reported by the null muxer, not a decoder; the stream decoded.
     (0, NULL_MUXER_DTS, True, ''),
     (0, NULL_MUXER_DTS * 3, True, ''),
+    # ffmpeg collapses identical messages into a summary line when stderr is not a terminal.
+    (0, NULL_MUXER_DTS + b'    Last message repeated 118 times\n', True, ''),
+    (0, NULL_MUXER_DTS + b'    Last message repeated 118 times\n[h264 @ 0x1] Invalid NAL unit size\n', False,
+     '[h264 @ 0x1] Invalid NAL unit size'),
     (0, NULL_MUXER_DTS + b'[h264 @ 0x1] Invalid NAL unit size\n', False, '[h264 @ 0x1] Invalid NAL unit size'),
     (0, b'[h264 @ 0x1] error while decoding MB 3 4\n', False, '[h264 @ 0x1] error while decoding MB 3 4'),
     (1, NULL_MUXER_DTS, False, ''),

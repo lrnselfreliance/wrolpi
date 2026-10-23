@@ -515,6 +515,8 @@ class Video(ModelHelper, Base):
 
         def delete_video(video_: Video):
             """Delete a Video with any of its tags."""
+            # Untagging forgets which links are this Video's, so remove them first.
+            video_.file_group.unlink_tag_directory_links()
             for tag_name_ in video_.file_group.tag_names:
                 video_.file_group.untag(session, tag_name_)
             video_.delete()

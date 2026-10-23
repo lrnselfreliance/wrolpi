@@ -214,6 +214,10 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
         old: pathlib.Path = video.poster_path
         new = old.with_suffix('.jpg')
 
+        if old != new:
+            # The old poster is about to be removed; its Tags Directory link would be left as the only copy.
+            video.file_group.unlink_tag_directory_links(old)
+
         if old != new and new.exists():
             # Destination JPEG already exists (it may have the wrong format).
             old.unlink()

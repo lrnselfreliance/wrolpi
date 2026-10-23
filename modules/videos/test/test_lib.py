@@ -593,3 +593,20 @@ def test_download_settings_codec_validation():
 
     with pytest.raises(ValidationError):
         DownloadSettings(audio_codecs=['wma'])
+
+
+@pytest.mark.asyncio
+async def test_convert_poster_removes_tags_directory_link(async_client, test_session, test_directory, video_factory,
+                                                          tag_factory, await_switches):
+    """Converting a tagged Video's poster removes the old poster's Tags Directory link."""
+    tag = await tag_factory()
+    video = video_factory(with_video_file=True, with_poster_ext='webp', tag_names=[tag.name])
+    test_session.commit()
+    await await_switches()
+    webp_link = test_directory / 'tags' / tag.name / video.poster_path.name
+    assert webp_link.is_file()
+
+    new_poster, _ = lib.convert_or_generate_poster(video)
+
+    assert new_poster.suffix == '.jpg'
+    assert not webp_link.exists(), 'The converted poster left its link behind'

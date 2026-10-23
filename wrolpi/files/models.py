@@ -19,7 +19,7 @@ from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
 from wrolpi.files.progress import save_recently_viewed_config
-from wrolpi.tags import Tag, TagFile, save_tags_config, sync_tags_directory
+from wrolpi.tags import Tag, TagFile, save_tags_config, sync_tags_directory, get_tags_directory
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -494,6 +494,7 @@ class FileGroup(ModelHelper, Base):
         if self.tag_files and not force:
             raise FileGroupIsTagged(f'Cannot delete {self} because it has tags')
 
+        self.unlink_tag_directory_links()
         for path in self.my_paths():
             path.unlink(missing_ok=True)
 
@@ -834,6 +835,24 @@ class FileGroup(ModelHelper, Base):
         logger.debug(f'no model class: {self}')
         self.do_index()
         self.indexed = True
+
+    def unlink_tag_directory_links(self, *paths: pathlib.Path):
+        """Delete this FileGroup's links in the Tags Directory (only those of `paths`, if provided).
+
+        Call this before the source files are removed.  A link is only deleted if it is the same file as its source,
+        so a file that is not this FileGroup's link is never deleted."""
+        if not self.tag_files:
+            return
+        tags_directory = get_tags_directory()
+        for file, link in self.get_tag_directory_paths_map().items():
+            if paths and file not in paths:
+                continue
+            link = tags_directory / link
+            try:
+                if link.samefile(file):
+                    link.unlink()
+            except FileNotFoundError:
+                pass
 
     def get_tag_directory_paths_map(self) -> dict[pathlib.Path, str]:
         """Return all links that should exist for this FileGroup in the Tags Directory."""

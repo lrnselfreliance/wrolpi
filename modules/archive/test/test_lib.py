@@ -2,7 +2,7 @@ import json
 import pathlib
 import re
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from unittest import mock
 
@@ -631,6 +631,131 @@ async def test_refresh_archives_index(test_session, make_files_structure, refres
     assert archive.file_group.b_text == 'The article description'  # From application/ld+json
     assert archive.file_group.d_text == 'article text contents'  # from readability txt
     assert archive.file_group.indexed is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('saved_date,expected', [
+    ('Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)', datetime(2022, 5, 16, 23, 51, 35)),
+    # The browser writes its local time; the offset must be applied, not dropped.
+    ('Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)', datetime(2024, 11, 8, 1, 36, 23)),
+    ('Tue Mar 03 2026 09:15:00 GMT+0200 (Eastern European Standard Time)', datetime(2026, 3, 3, 7, 15, 0)),
+])
+async def test_singlefile_saved_date_timezone(test_session, make_files_structure, refresh_files, saved_date, expected):
+    """An Archive's download_datetime is the SingleFile "saved date" converted to UTC."""
+    make_files_structure({
+        'archive/example.com/NA.html': f'''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: https://example.com
+ saved date: {saved_date}
+--><head><meta charset="utf-8"></head></html>''',
+    })
+
+    await refresh_files()
+
+    archive: Archive = test_session.query(Archive).one()
+    assert archive.file_group.download_datetime == expected.replace(tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_singlefile_saved_date_after_long_url(test_session, make_files_structure, refresh_files):
+    """The whole SingleFile header is read, so a long URL does not cut the saved date's offset off."""
+    url = 'https://example.com/' + 'a' * 900
+    make_files_structure({
+        'archive/example.com/NA.html': f'''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: {url}
+ saved date: Mon May 26 2025 16:10:33 GMT-0600 (Mountain Daylight Time)
+--><head><meta charset="utf-8"></head></html>''',
+    })
+
+    await refresh_files()
+
+    archive: Archive = test_session.query(Archive).one()
+    assert archive.file_group.url == url
+    assert archive.file_group.download_datetime == datetime(2025, 5, 26, 22, 10, 33, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize('saved_date,expected', [
+    ('Mon May 26 2025 16:10:33 GMT-0600 (Mountain Daylight Time)', datetime(2025, 5, 26, 22, 10, 33)),
+    ('Mon May 26 2025 16:10:33 GMT+05:30', datetime(2025, 5, 26, 10, 40, 33)),
+    # No offset at all is GMT.
+    ('Mon May 26 2025 16:10:33', datetime(2025, 5, 26, 16, 10, 33)),
+    # A cut-off offset is unknown, not GMT.
+    ('Mon May 26 2025 16:10:33 GMT-06', None),
+])
+def test_parse_singlefile_saved_date(saved_date, expected):
+    from modules.archive.models import parse_singlefile_saved_date
+    expected = expected.replace(tzinfo=timezone.utc) if expected else None
+    assert parse_singlefile_saved_date(saved_date) == expected
+
+
+@pytest.mark.asyncio
+async def test_repair_singlefile_saved_dates_unreadable(test_session, make_files_structure, refresh_files):
+    """The repair is not marked done while an Archive could not be read, so it runs again."""
+    misread = datetime(2024, 11, 7, 18, 36, 23, tzinfo=timezone.utc)
+    singlefile, = make_files_structure({
+        'archive/example.com/NA.html': '''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: https://example.com
+ saved date: Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)
+--><head><meta charset="utf-8"></head></html>''',
+    })
+    await refresh_files()
+    test_session.query(Archive).one().file_group.download_datetime = misread
+    test_session.commit()
+
+    singlefile.chmod(0o000)
+    try:
+        assert lib.repair_singlefile_saved_dates() == 0
+    finally:
+        singlefile.chmod(0o644)
+
+    assert lib.repair_singlefile_saved_dates() == 1
+    test_session.expire_all()
+    assert test_session.query(Archive).one().file_group.download_datetime == \
+           datetime(2024, 11, 8, 1, 36, 23, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_repair_singlefile_saved_dates(test_session, make_files_structure, refresh_files):
+    """An Archive whose download_datetime is its SingleFile saved date's local time read as UTC is corrected, once.
+    Any other download_datetime is never changed."""
+    mountain = 'Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)'
+    make_files_structure({
+        f'archive/example.com/{name}.html': f'''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile
+ url: https://example.com/{name}
+ saved date: {saved_date}
+--><head><meta charset="utf-8"></head></html>'''
+        for name, saved_date in (('misread', mountain), ('downloaded', mountain),
+                                 ('utc', 'Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)'))
+    })
+    await refresh_files()
+
+    def file_groups() -> dict:
+        test_session.expire_all()
+        return {i.file_group.primary_path.stem: i.file_group for i in test_session.query(Archive)}
+
+    # What the offset-dropping parser stored, and a time that came from elsewhere (e.g. WROLPi's own download).
+    misread = datetime(2024, 11, 7, 18, 36, 23, tzinfo=timezone.utc)
+    downloaded = datetime(2024, 11, 8, 1, 36, 50, tzinfo=timezone.utc)
+    fgs = file_groups()
+    fgs['misread'].download_datetime = misread
+    fgs['downloaded'].download_datetime = downloaded
+    test_session.commit()
+
+    assert lib.repair_singlefile_saved_dates() == 1
+
+    fgs = file_groups()
+    assert fgs['misread'].download_datetime == datetime(2024, 11, 8, 1, 36, 23, tzinfo=timezone.utc)
+    assert fgs['downloaded'].download_datetime == downloaded
+    assert fgs['utc'].download_datetime == datetime(2022, 5, 16, 23, 51, 35, tzinfo=timezone.utc)
+
+    # The repair is done; it does not run again.
+    fgs['misread'].download_datetime = misread
+    test_session.commit()
+    assert lib.repair_singlefile_saved_dates() == 0
+    assert file_groups()['misread'].download_datetime == misread
 
 
 @pytest.mark.asyncio

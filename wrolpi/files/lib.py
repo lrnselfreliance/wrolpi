@@ -17,7 +17,7 @@ import urllib.parse
 import zipfile
 from itertools import zip_longest
 from pathlib import Path
-from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
+from typing import Callable, List, Optional, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
 from sqlalchemy import asc, or_, text as sa_text
@@ -59,7 +59,7 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
            'get_normalized_ignored_directories', 'sanitize_ignored_directories',
            'cached_search_total', 'search_filter_cache_key', 'count_file_groups',
-           'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems',
+           'STEM_ALGORITHM_VERSION', 'ensure_file_group_stems', 'get_kv_value', 'set_kv_value',
            'backfill_null_file_group_stems', 'dedupe_file_groups_by_directory_stem', 'merge_file_group_relations',
            'merge_into_surviving_duplicates']
 
@@ -913,23 +913,33 @@ def _ensure_kv_table(curs):
     curs.execute('CREATE TABLE IF NOT EXISTS wrolpi_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
 
 
-def get_stem_algorithm_version() -> int:
-    """The grouping-algorithm version last applied to file_group.stem, or 0 if never stored."""
+def get_kv_value(key: str) -> Optional[str]:
+    """The value stored in wrolpi_kv for `key`, or None."""
     with get_db_curs() as curs:
         _ensure_kv_table(curs)
-        curs.execute('SELECT value FROM wrolpi_kv WHERE key = ?', (STEM_ALGORITHM_VERSION_KEY,))
+        curs.execute('SELECT value FROM wrolpi_kv WHERE key = ?', (key,))
         row = curs.fetchone()
-        return int(row['value']) if row else 0
+        return row['value'] if row else None
 
 
-def set_stem_algorithm_version(version: int):
+def set_kv_value(key: str, value: str):
     with get_db_curs(commit=True) as curs:
         _ensure_kv_table(curs)
         curs.execute(
             'INSERT INTO wrolpi_kv (key, value) VALUES (?, ?) '
             'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-            (STEM_ALGORITHM_VERSION_KEY, str(version)),
+            (key, value),
         )
+
+
+def get_stem_algorithm_version() -> int:
+    """The grouping-algorithm version last applied to file_group.stem, or 0 if never stored."""
+    value = get_kv_value(STEM_ALGORITHM_VERSION_KEY)
+    return int(value) if value else 0
+
+
+def set_stem_algorithm_version(version: int):
+    set_kv_value(STEM_ALGORITHM_VERSION_KEY, str(version))
 
 
 def ensure_file_group_stems():

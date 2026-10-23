@@ -50,6 +50,7 @@ from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, 
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
+from wrolpi.files.worker import file_worker
 from wrolpi.switches import await_switches as await_switches_
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
@@ -299,6 +300,10 @@ async def async_client(test_directory, test_session, clear_background_tasks) -> 
     api_app.signalize()
     attach_shared_contexts(api_app)
     initialize_configs_contexts(api_app)
+    # The FileWorker's private queue is per-process state that the shared-context reset does not touch;
+    # each test starts with no FileTasks left over from a previous test.
+    while not file_worker.private_queue.empty():
+        file_worker.private_queue.get_nowait()
 
     client = SanicASGITestClient(api_app)
     wrapped_client = AutoAwaitTestClient(client, test_session)

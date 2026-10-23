@@ -951,6 +951,48 @@ async def test_file_worker_deletes_tagged_file_groups_auto_removes_tags(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('refresh_file', [False, True])
+async def test_file_worker_duplicate_file_groups_keep_tags(
+        async_client, test_session, test_directory, make_files_structure, tag_factory, refresh_files, refresh_file
+):
+    """Refresh collapses duplicate FileGroups sharing (directory, stem) without losing the loser's tags or
+    collection membership.
+
+    The older, tagged duplicate loses to the newer one; its relations must move onto the survivor."""
+    from wrolpi.collections.models import Collection, CollectionItem
+    from wrolpi.tags import TagFile
+
+    foo, sidecar, _baseline = make_files_structure(['videos/foo.mp4', 'videos/foo.info.json', 'videos/baseline.txt'])
+    test_session.execute(text('DROP INDEX IF EXISTS file_group_directory_stem_idx'))
+    tagged = FileGroup(directory=foo.parent, primary_path=sidecar, stem='foo',
+                       files=[{'path': sidecar.name, 'mimetype': 'application/json'}])
+    test_session.add(tagged)
+    test_session.commit()
+    newer = FileGroup(directory=foo.parent, primary_path=foo, stem='foo',
+                      files=[{'path': foo.name, 'mimetype': 'video/mp4'}])
+    test_session.add(newer)
+    test_session.commit()
+    assert tagged.id < newer.id
+
+    tag = await tag_factory()
+    tagged.add_tag(test_session, tag.id)
+    collection = Collection(name='Playlist', kind='playlist')
+    test_session.add(collection)
+    test_session.flush()
+    collection.add_file_group(tagged, session=test_session)
+    test_session.commit()
+
+    # Refresh the file directly, or the whole directory.
+    await refresh_files([foo] if refresh_file else [test_directory])
+
+    test_session.expire_all()
+    remaining = test_session.query(FileGroup).filter_by(stem='foo').one()
+    assert remaining.tag_names == [tag.name]
+    assert test_session.query(TagFile).count() == 1
+    assert [i.file_group_id for i in test_session.query(CollectionItem)] == [remaining.id]
+
+
+@pytest.mark.asyncio
 async def test_file_worker_adds_deleted_file_url_to_skip_list(
         async_client, test_session, test_directory, make_files_structure,
         test_download_manager_config

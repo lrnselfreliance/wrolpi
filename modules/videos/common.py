@@ -163,8 +163,13 @@ def tail_decode_command(video_path: Path, seconds: int = None) -> Tuple[str | Pa
     return FFMPEG_BIN, '-v', 'error', '-sseof', f'-{int(seconds)}', '-i', video_path, '-f', 'null', '-'
 
 
+# The null muxer complains about duplicate timestamps after the frames have decoded; it is not damage.
+TAIL_DECODE_IGNORED_ERRORS = re.compile(r'^\[null @ \w+] Application provided invalid, non monotonically increasing dts')
+
+
 def _tail_decode_verdict(return_code: int, stderr: bytes | str) -> Tuple[bool, str]:
-    errors = (stderr.decode(errors='replace') if isinstance(stderr, bytes) else (stderr or '')).strip()
+    errors = stderr.decode(errors='replace') if isinstance(stderr, bytes) else (stderr or '')
+    errors = '\n'.join(i for i in errors.strip().splitlines() if not TAIL_DECODE_IGNORED_ERRORS.match(i))
     ok = return_code == 0 and not errors
     return ok, errors
 

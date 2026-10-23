@@ -19,7 +19,7 @@ import pytz
 from sqlalchemy import asc, func, BigInteger
 from sqlalchemy.orm import Session
 
-from modules.archive.models import Archive, MATCH_DATE, parse_singlefile_saved_date
+from modules.archive.models import Archive, MATCH_DATE, parse_singlefile_saved_date, read_singlefile_header
 from wrolpi import dates
 from wrolpi import fts
 from wrolpi.cmd import READABILITY_BIN, run_command
@@ -1861,7 +1861,8 @@ def repair_singlefile_saved_dates() -> int:
 
     The saved date was once parsed without its offset.  Only a download_datetime equal to that misread value, from a
     saved date with a non-zero offset, is changed; any other download_datetime is never touched.  Runs once per
-    SAVED_DATE_REPAIR_VERSION.  Returns the number of Archives corrected."""
+    SAVED_DATE_REPAIR_VERSION, and is not marked done while any Archive could not be read.  A missing file is a
+    deleted Archive, not a failure.  Returns the number of Archives corrected."""
     if get_kv_value(SAVED_DATE_REPAIR_KEY) == SAVED_DATE_REPAIR_VERSION:
         return 0
 
@@ -1872,13 +1873,18 @@ def repair_singlefile_saved_dates() -> int:
             .all()
 
     corrections = dict()
+    missing = failed = 0
     for file_group_id, path, download_datetime in rows:
         try:
-            with open(path, 'rb') as fh:
-                head = fh.read(1000).decode(errors='ignore')
-        except OSError:
+            head = read_singlefile_header(path)
+        except FileNotFoundError:
+            missing += 1
             continue
-        if not (match := MATCH_DATE.search(head)):
+        except OSError as e:
+            logger.warning(f'Could not read the SingleFile header of {path}', exc_info=e)
+            failed += 1
+            continue
+        if not head or not (match := MATCH_DATE.search(head)):
             continue
         saved_date = match.group(1).strip()
         try:
@@ -1887,7 +1893,7 @@ def repair_singlefile_saved_dates() -> int:
             misread = dates.strpdate(' '.join(saved_date.split(' ')[:5])).replace(tzinfo=pytz.timezone('GMT'))
         except Exception:
             continue
-        if corrected != misread and download_datetime == misread:
+        if corrected and corrected != misread and download_datetime == misread:
             corrections[file_group_id] = corrected
 
     for chunk in chunks(list(corrections.items()), 500):
@@ -1895,6 +1901,10 @@ def repair_singlefile_saved_dates() -> int:
             for file_group in session.query(FileGroup).filter(FileGroup.id.in_([i for i, _ in chunk])):
                 file_group.download_datetime = corrections[file_group.id]
 
-    set_kv_value(SAVED_DATE_REPAIR_KEY, SAVED_DATE_REPAIR_VERSION)
-    logger.info(f'Corrected the download datetime of {len(corrections)} Archives from their SingleFile saved date')
+    logger.info(f'Corrected the download datetime of {len(corrections)} Archives from their SingleFile saved date'
+                f' ({missing} missing)')
+    if failed:
+        logger.warning(f'Could not read {failed} Archives; their download datetimes will be repaired later')
+    else:
+        set_kv_value(SAVED_DATE_REPAIR_KEY, SAVED_DATE_REPAIR_VERSION)
     return len(corrections)

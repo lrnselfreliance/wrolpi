@@ -28,18 +28,39 @@ MATCH_URL = re.compile(r'^\s+?url:\s+?(http.*)', re.MULTILINE)
 MATCH_DATE = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
 
 
-def parse_singlefile_saved_date(saved_date: str) -> datetime:
+# A SingleFile header holds the page's URL, which may be very long.
+SINGLEFILE_HEADER_MAX_BYTES = 64 * 1024
+
+
+def read_singlefile_header(path: pathlib.Path) -> Optional[str]:
+    """Return the start of a SingleFile, through the end of its header comment, or None if the header comment
+    does not end within SINGLEFILE_HEADER_MAX_BYTES.  A partial header could cut off its URL or saved date."""
+    head = b''
+    with path.open('rb') as fh:
+        # Read bytes because a compressed (SingleFileZ) singlefile has a binary ZIP tail.
+        while len(head) < SINGLEFILE_HEADER_MAX_BYTES and (chunk := fh.read(1000)):
+            head += chunk
+            if b'-->' in head:
+                return head.decode(errors='ignore')
+    return None
+
+
+def parse_singlefile_saved_date(saved_date: str) -> Optional[datetime]:
     """Parse SingleFile's "saved date", which is the browser's local time and its offset, into UTC.
+
+    Returns None if the offset is malformed; the instant is unknown.
 
     >>> parse_singlefile_saved_date('Thu Nov 07 2024 18:36:23 GMT-0700 (Mountain Standard Time)')
     datetime.datetime(2024, 11, 8, 1, 36, 23, tzinfo=<UTC>)
     """
     parts = saved_date.split(' ')
+    if len(parts) < 6:
+        # No offset; assume GMT.
+        return dates.strpdate(' '.join(parts[:5])).replace(tzinfo=pytz.timezone('GMT'))
     try:
         return datetime.strptime(' '.join(parts[:6]), '%a %b %d %Y %H:%M:%S GMT%z').astimezone(pytz.UTC)
     except ValueError:
-        # No offset; assume GMT.
-        return dates.strpdate(' '.join(parts[:5])).replace(tzinfo=pytz.timezone('GMT'))
+        return None
 
 
 class Archive(Base, ModelHelper):
@@ -329,26 +350,24 @@ class Archive(Base, ModelHelper):
             # This data has already been read.
             return
 
-        with path.open('rb') as fh:
-            # Read bytes because a compressed (SingleFileZ) singlefile has a binary ZIP tail.
-            head = fh.read(1000).decode(errors='ignore')
-            if 'Page saved with SingleFile' not in head:
-                logger.error(f'Could not find SingleFile header in {self}')
-                return
+        head = read_singlefile_header(path)
+        if not head or 'Page saved with SingleFile' not in head:
+            logger.error(f'Could not find SingleFile header in {self}')
+            return
 
-            if not self.file_group.url:
-                try:
-                    if match := MATCH_URL.findall(head):
-                        self.file_group.url = match[0].strip()
-                except Exception as e:
-                    logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
+        if not self.file_group.url:
+            try:
+                if match := MATCH_URL.findall(head):
+                    self.file_group.url = match[0].strip()
+            except Exception as e:
+                logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
 
-            if not self.file_group.download_datetime:
-                try:
-                    if match := MATCH_DATE.findall(head):
-                        self.file_group.download_datetime = parse_singlefile_saved_date(match[0].strip())
-                except Exception as e:
-                    logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
+        if not self.file_group.download_datetime:
+            try:
+                if match := MATCH_DATE.findall(head):
+                    self.file_group.download_datetime = parse_singlefile_saved_date(match[0].strip())
+            except Exception as e:
+                logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 
     def apply_domain(self):
         """Get the domain collection from the URL."""

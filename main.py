@@ -429,6 +429,9 @@ async def perpetual_repair_archive_saved_dates():
     async with flags.refresh_complete.wait_for():
         # Archives must be in the database.
         pass
+    async with flags.media_mounted.wait_for():
+        # Their files must be readable; `refresh_complete` is restored from the database before the drive is checked.
+        pass
 
     from modules.archive.lib import repair_singlefile_saved_dates
     try:

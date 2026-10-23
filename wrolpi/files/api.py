@@ -361,7 +361,7 @@ async def post_rename(request: Request, body: schema.Rename):
         raise FileConflict(f'File already exists: {new_path}')
 
     try:
-        await lib.rename(request.ctx.session, path, body.new_name, send_events=True)
+        await lib.rename(request.ctx.session, path, body.new_name, send_events=True, write=request.ctx.db.write)
     except Exception as e:
         logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
         cause = str(e).split('\n', 1)[0]

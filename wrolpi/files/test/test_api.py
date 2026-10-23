@@ -8,6 +8,7 @@ from unittest import mock
 import pytest
 
 from modules.videos import Video
+from wrolpi.collections.models import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
 from wrolpi.files.lib import get_mimetype
@@ -1669,3 +1670,32 @@ async def test_file_group_writes_wait_for_a_concurrent_writer(test_session, asyn
                 assert session.query(FileGroup).filter_by(id=file_group.id).one_or_none() is None
             else:
                 assert session.query(TagFile).count() == (1 if step == 'tag' else 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('rename', ['old', 'old/Chan'])
+async def test_rename_directory_with_collection_waits_for_a_concurrent_writer(
+        test_session, test_directory, make_files_structure, async_client, refresh_files, rename):
+    """Renaming a directory which is (or contains) a Collection's directory moves the files and updates the
+    Collection, even while something else is writing.
+
+    A plain directory's files are moved first, then the Collections inside it are updated; a deferred
+    transaction opened before the move could not write after it ("database is locked"), which left the files
+    moved but the Collection pointing at the old directory."""
+    make_files_structure({'old/Chan/notes.txt': 'notes'})
+    await refresh_files()
+    test_session.add(Collection(name='Chan', kind='channel', directory=test_directory / 'old/Chan'))
+    test_session.commit()
+    db_file = test_session.get_bind().url.database
+    new_name = 'new' if rename == 'old' else 'Renamed'
+    expected = test_directory / ('new/Chan' if rename == 'old' else 'old/Renamed')
+
+    with production_like_sessions(test_session) as maker:
+        with write_lock_held_briefly(db_file, seconds=3):
+            _, response = await async_client.post('/api/files/rename',
+                                                  content=json.dumps(dict(path=rename, new_name=new_name)))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+
+        assert (expected / 'notes.txt').is_file()
+        with maker() as session:
+            assert session.query(Collection).one().directory == expected

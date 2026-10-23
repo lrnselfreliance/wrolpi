@@ -909,15 +909,20 @@ async def fetch_channel_source_id(channel_id: int):
     # If we can download from a channel, we must have its source_id.
     try:
         with get_db_session() as session:
-            from modules.videos.channel.lib import get_channel
             channel = Channel.find_by_id(session, channel_id)
+            source_id, url = channel.source_id, channel.url
+        if source_id:
+            return
 
-            channel.source_id = channel.source_id or get_channel_source_id(channel.url)
-            if not channel.source_id:
-                channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
-            else:
-                session.commit()
-                save_channels_config.activate_switch()
+        # Fetched outside any transaction: this asks the remote site.
+        source_id = get_channel_source_id(url)
+        if not source_id:
+            channel_import_logger.warning(f'Unable to fetch source_id for {url}')
+            return
+
+        with get_db_session(commit=True) as session:
+            Channel.find_by_id(session, channel_id).source_id = source_id
+        save_channels_config.activate_switch()
     except Exception as e:
         logger.error(f'Failed to get Channel source id of id={channel_id}', exc_info=e)
 

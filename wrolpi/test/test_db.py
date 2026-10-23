@@ -368,3 +368,28 @@ def test_deferred_request_writes_are_recorded(test_session):
     test_session.add(Tag(name='outside', color='#000000'))
     test_session.flush()
     assert db_module.DEFERRED_REQUEST_WRITES == []
+
+
+@pytest.mark.asyncio
+async def test_task_started_in_a_write_does_not_inherit_its_intent(test_session):
+    """A task started inside `RequestDB.write()` copies the request's Context, but not its declared write: the
+    task's own undeclared writes are recorded."""
+    from wrolpi import db as db_module
+    from wrolpi.common import background_task
+
+    async def undeclared_write():
+        with get_db_session() as session:
+            session.add(Tag(name='from a task', color='#000000'))
+            session.flush()
+
+    test_session.commit()
+    with production_like_sessions(test_session):
+        db = RequestDB()
+        with db.write():
+            task = background_task(undeclared_write())
+        await task
+        db.finish(ok=True)
+
+    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES]
+    db_module.DEFERRED_REQUEST_WRITES.clear()
+    assert len(statements) == 1 and statements[0].startswith('INSERT INTO tag'), statements

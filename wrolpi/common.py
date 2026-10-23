@@ -2680,6 +2680,10 @@ def background_task(coro) -> Task:
     coro_name = getattr(coro, '__qualname__', None) or getattr(coro, '__name__', None) or str(coro)
 
     async def error_logger():
+        # The task copied its creator's Context.  A write the creator declared (`get_db_session(commit=True)`,
+        # `RequestDB.write()`) is not the task's: the task's own writes must declare themselves.
+        from wrolpi.db import _write_intent  # wrolpi.db imports wrolpi.common.
+        _write_intent.set(False)
         try:
             await coro
         except Exception as e:

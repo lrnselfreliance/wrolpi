@@ -14,6 +14,11 @@ logger = logger.getChild(__name__)
 __all__ = ['PlaylistsConfig', 'playlists_config', 'save_playlists_config', 'get_playlists_config']
 
 
+def _item_key(item) -> tuple:
+    """What a playlist item points to; a playlist has at most one item per key (see CollectionItem's constraints)."""
+    return item.item_kind, item.file_group_id, item.zim_id, item.zim_entry, item.url
+
+
 @dataclass
 class PlaylistsConfigValidator:
     """Validator for the playlists config file."""
@@ -97,7 +102,8 @@ class PlaylistsConfig(ConfigFile):
 
                     collection = session.query(Collection).filter_by(
                         name=name, kind='playlist').one_or_none()
-                    if not collection:
+                    new = not collection
+                    if new:
                         collection = Collection(name=name, kind='playlist')
                         session.add(collection)
                     collection.description = data.get('description')
@@ -110,12 +116,7 @@ class PlaylistsConfig(ConfigFile):
                     collection.tag = Tag.get_by_name(session, tag_name) if tag_name else None
                     session.flush([collection])
 
-                    # Rebuild items to match the config's order exactly.
-                    for item in list(collection.items):
-                        session.delete(item)
-                    session.flush()
-
-                    position = 1
+                    file_items = []
                     for item_data in (data.get('items') or []):
                         item = None
                         if 'file' in item_data:
@@ -143,9 +144,30 @@ class PlaylistsConfig(ConfigFile):
                                                   url=item_data['url'])
                         if item is not None:
                             item.title = item_data.get('title')
-                            item.position = position
-                            position += 1
-                            session.add(item)
+                            file_items.append(item)
+
+                    if decision == IMPORT or new:
+                        # Rebuild items to match the config's order exactly.
+                        for item in list(collection.items):
+                            session.delete(item)
+                        session.flush()
+                        items = file_items
+                    else:
+                        # Without deletes, keep the database's items in their order; add the file's other items
+                        # after the item that precedes them in the file.
+                        items = sorted(collection.items, key=lambda i: i.position)
+                        existing = {_item_key(i): i for i in items}
+                        previous = None
+                        for item in file_items:
+                            if found := existing.get(_item_key(item)):
+                                previous = found
+                                continue
+                            items.insert(items.index(previous) + 1 if previous else 0, item)
+                            previous = item
+
+                    for position, item in enumerate(items, start=1):
+                        item.position = position
+                        session.add(item)
 
                     session.flush()
                     imported_names.add(name)

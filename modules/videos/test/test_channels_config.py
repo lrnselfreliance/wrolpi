@@ -14,7 +14,7 @@ import yaml
 
 from modules.videos.lib import get_channels_config
 from modules.videos.models import Channel
-from wrolpi.conftest import config_was_imported
+from wrolpi.conftest import config_was_imported, config_versions_lost
 
 
 @pytest.mark.asyncio
@@ -319,6 +319,7 @@ class TestChannelsConfigEdgeCases:
         # Clear the file_format to simulate factory reset
         channel.collection.file_format = None
         test_session.commit()
+        config_versions_lost(test_session)
 
         # Re-import
         config.initialize()

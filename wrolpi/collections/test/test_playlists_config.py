@@ -4,6 +4,7 @@ from copy import deepcopy
 from http import HTTPStatus
 
 import pytest
+import yaml
 
 from wrolpi.collections.config import get_playlists_config
 from wrolpi.collections.models import Collection
@@ -370,3 +371,24 @@ async def test_playlist_changes_wait_for_config_import(test_session, test_direct
     playlists_config.import_config()
     request, response = await async_client.post('/api/collections', content=json.dumps(dict(name='New')))
     assert response.status_code == HTTPStatus.CREATED, response.json
+
+
+@pytest.mark.asyncio
+async def test_import_without_deletes_keeps_database_items(test_session, test_directory, playlists_config):
+    """Without a database version (e.g. the first startup after an upgrade) a playlist's items in the database are
+    kept in their order, and the file's other items are added after the item that precedes them in the file."""
+    collection = Collection(name='Mix', kind='playlist')
+    test_session.add(collection)
+    test_session.flush([collection])
+    collection.add_url(test_session, '/a', title='A')
+    collection.add_url(test_session, '/c', title='C')  # Added after the file was saved.
+    test_session.commit()
+    playlists_config.get_file().write_text(yaml.dump(dict(version=1, playlists=[
+        dict(name='Mix', items=[dict(url='/b', title='B'), dict(url='/a', title='A')]),
+    ])))
+
+    playlists_config.import_config()
+
+    test_session.expire_all()
+    collection = test_session.query(Collection).filter_by(name='Mix', kind='playlist').one()
+    assert [i.url for i in collection.items] == ['/b', '/a', '/c']

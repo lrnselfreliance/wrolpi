@@ -11,10 +11,13 @@ So an import can tell which side is newer by comparing two integers (see `Config
 * file > database: the file is newer (a restored or wiped database, a copied config); import it the same way.
 * file < database: the database changed and was not saved yet (e.g. WROLPi restarted first).  Save the database
   instead of importing the older file, which would undo those changes.
-* no database row: not known yet (a config never imported by this code).  Import without deleting.
+* no database row: not known yet (a config never imported by this code, or an import that did not finish).
+  Import without deleting, and leave the version unknown: the database may have rows the file does not list.  Then
+  save them into the file; that save records its version (`ConfigFile.record_saved_version`).
 
 Integers only: a Raspberry Pi has no clock that survives a reboot, so timestamps cannot order these.
 """
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Dict, FrozenSet, List, Optional, Set, Type
@@ -79,6 +82,9 @@ def _owners(obj, changed: bool) -> Set[str]:
     return names
 
 
+_COLLECTION_KINDS = 'config_version_collection_kinds'
+
+
 @event.listens_for(Session, 'after_flush')
 def _count_config_changes(session: Session, flush_context):
     """Add one to the database version of each config whose rows this flush changed, in the same transaction.
@@ -88,12 +94,16 @@ def _count_config_changes(session: Session, flush_context):
     if not OWNERSHIPS:
         return
     names = set()
-    for obj in session.new:
-        names |= _owners(obj, changed=False)
-    for obj in session.deleted:
-        names |= _owners(obj, changed=False)
-    for obj in session.dirty:
-        names |= _owners(obj, changed=True)
+    session.info[_COLLECTION_KINDS] = dict()
+    try:
+        for obj in session.new:
+            names |= _owners(obj, changed=False)
+        for obj in session.deleted:
+            names |= _owners(obj, changed=False)
+        for obj in session.dirty:
+            names |= _owners(obj, changed=True)
+    finally:
+        del session.info[_COLLECTION_KINDS]
     if names:
         count_config_change(session, *names)
 
@@ -117,20 +127,41 @@ def count_config_change_curs(curs, *names: str):
             raise
 
 
-def collection_kind(obj) -> Optional[str]:
-    """The kind of the Collection `obj` (e.g. a Download) belongs to, read on its flush's connection."""
-    if not getattr(obj, 'collection_id', None):
-        return None
+def collection_kinds(obj) -> Set[str]:
+    """The kinds of the Collections `obj` (e.g. a Download) belongs to, and belonged to before this flush (moving
+    it out of a Collection changes that Collection's config too), read on its flush's connection."""
+    ids = {i for i in inspect(obj).attrs.collection_id.history.deleted if i}
+    if obj.collection_id:
+        ids.add(obj.collection_id)
+    if not ids:
+        return set()
     session = Session.object_session(obj)
-    row = session.connection().execute(
-        text('SELECT kind FROM collection WHERE id = :id'), {'id': obj.collection_id}).first()
-    return row[0] if row else None
+    # A Collection's kind never changes: look each up once per flush (a playlist import writes thousands of items).
+    kinds = session.info.get(_COLLECTION_KINDS, dict())
+    if missing := ids - kinds.keys():
+        rows = session.connection().execute(
+            text('SELECT id, kind FROM collection WHERE id IN (SELECT value FROM json_each(:ids))'),
+            {'ids': json.dumps(sorted(missing))})
+        kinds.update(dict.fromkeys(missing))
+        kinds.update(rows.all())
+    return {kinds[i] for i in ids} - {None}
 
 
 def get_config_version(session: Session, name: str) -> Optional[int]:
     row = session.connection().execute(
         text('SELECT version FROM config_version WHERE name = :name'), {'name': name}).first()
     return row[0] if row else None
+
+
+def delete_config_version(session: Session, name: str):
+    session.connection().execute(text('DELETE FROM config_version WHERE name = :name'), {'name': name})
+
+
+def create_config_version(session: Session, name: str, version: int):
+    """Record `version` unless the database already has one."""
+    session.connection().execute(
+        text('INSERT INTO config_version (name, version) VALUES (:name, :version) ON CONFLICT (name) DO NOTHING'),
+        {'name': name, 'version': version})
 
 
 def set_config_version(session: Session, name: str, version: int):

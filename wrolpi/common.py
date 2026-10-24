@@ -741,6 +741,9 @@ class ConfigFile:
                     Events.send_config_save_failed(message)
                 raise e
 
+        if self.is_versioned_by_database() and file == self.get_file():
+            self.record_saved_version(config['version'])
+
     def write_config_data(self, config: dict, config_file: pathlib.Path):
         write_config_data(config, config_file, width=self.width)
 
@@ -802,18 +805,29 @@ class ConfigFile:
         from wrolpi.config_version import versioned_config_names
         return self.file_name in versioned_config_names()
 
+    # What the last `import_decision` allowed; `record_import_version` records the version that follows from it.
+    last_import_decision: str = None
+
     def import_decision(self) -> str:
         """After reading the file (`ConfigFile.import_config`), decide what importing it may do: IMPORT,
-        IMPORT_WITHOUT_DELETES, or SAVE (the database is newer; call `save_database_instead` and import nothing)."""
-        from wrolpi.config_version import IMPORT, decide, get_config_version
+        IMPORT_WITHOUT_DELETES, or SAVE (the database is newer; call `save_database_instead` and import nothing).
+
+        On IMPORT the database's version is removed until `record_import_version`: the import's own writes must not
+        count, or an import that fails partway would leave the database "newer" than the file it did not finish
+        applying, and the next startup would save that partial database over the file."""
+        from wrolpi.config_version import IMPORT, decide, delete_config_version, get_config_version
         from wrolpi.db import get_db_session
-        if self.force_import:
-            self.force_import = False
-            return IMPORT
-        with get_db_session() as session:
+        with get_db_session(commit=True) as session:
             db_version = get_config_version(session, self.file_name)
-        decision = decide(self.version or 0, db_version)
+            if self.force_import:
+                self.force_import = False
+                decision = IMPORT
+            else:
+                decision = decide(self.version or 0, db_version)
+            if decision == IMPORT:
+                delete_config_version(session, self.file_name)
         logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
+        self.last_import_decision = decision
         return decision
 
     def save_database_instead(self):
@@ -824,18 +838,34 @@ class ConfigFile:
 
     def record_import_version(self):
         """The database now matches this config's file: record the file's version.  Call last, after every write
-        the import makes."""
-        from wrolpi.config_version import set_config_version
+        the import makes.
+
+        Not after IMPORT_WITHOUT_DELETES: the database may keep rows the file does not list (changes that were never
+        saved), so recording the file's version would let the next import delete them.  Save them into the file
+        instead; that save records the version (`record_saved_version`).  A save after a partial import is refused,
+        so the version stays unknown until an import applies the whole file."""
+        from wrolpi.config_version import IMPORT, set_config_version
         from wrolpi.db import get_db_session
+        if self.last_import_decision != IMPORT:
+            self.background_dump.activate_switch()
+            return
         with get_db_session(commit=True) as session:
             set_config_version(session, self.file_name, self.version or 0)
 
     def db_version_for_dump(self, session) -> int:
         """The version `dump_config` writes: the database's, read in the same transaction as the rows it saves.
-        Before the database has one (this config was never imported by this code), the file's next version."""
+        Before the database has one, the file's next version (`save` records it)."""
         from wrolpi.config_version import get_config_version
         db_version = get_config_version(session, self.file_name)
         return db_version if db_version is not None else (self.version or 0) + 1
+
+    def record_saved_version(self, version: int):
+        """The file was just written from the database.  If the database's version was unknown (see
+        `record_import_version`), the two are now in step: record it, so changes from here on count against it."""
+        from wrolpi.config_version import create_config_version
+        from wrolpi.db import get_db_session
+        with get_db_session(commit=True) as session:
+            create_config_version(session, self.file_name, version)
 
     def update(self, config: dict, overwrite: bool = False):
         """Update any values of this config.  Save the config to its file."""

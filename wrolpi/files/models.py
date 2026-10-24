@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, deferred, relationship, Session, selectinload
 from wrolpi.common import loaded, Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.config_version import register_ownership
+from wrolpi.config_version import count_config_change, register_ownership
 from wrolpi.db import get_db_session, serializer
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
@@ -252,6 +252,8 @@ class FileGroup(ModelHelper, Base):
             session.flush(self.tag_files)
 
         if deleted_tags := (existing_tag_ids - tag_ids):
+            # A bulk delete is not flushed: count it.
+            count_config_change(session, 'tags.yaml')
             session.query(TagFile).filter(
                 TagFile.file_group_id == self.id,
                 TagFile.tag_id.in_(deleted_tags),

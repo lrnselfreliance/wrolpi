@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, joinedload, selectinlo
 from wrolpi import flags
 from wrolpi.common import loaded, Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
-from wrolpi.config_version import register_ownership
+from wrolpi.config_version import collection_kinds, count_config_change, register_ownership
 from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
@@ -735,6 +735,9 @@ class Collection(ModelHelper, Base):
         ).delete(synchronize_session=False)
 
         logger.debug(f'Removed {deleted} FileGroups from Collection {self.id}')
+        if deleted and self.kind == 'playlist':
+            # A bulk delete is not flushed: count it.
+            count_config_change(session, 'playlists.yaml')
 
         # Resequence positions to close gaps (optional, but keeps positions clean)
         items = session.query(CollectionItem).filter_by(
@@ -1317,5 +1320,5 @@ class CollectionItem(ModelHelper, Base):
 for _kind, _config in (('channel', 'channels.yaml'), ('domain', 'domains.yaml'), ('playlist', 'playlists.yaml'),
                        ('repo', 'repos.yaml')):
     register_ownership(_config, Collection, row=lambda collection, kind=_kind: collection.kind == kind)
-# Only playlists have items.
-register_ownership('playlists.yaml', CollectionItem)
+# Only a playlist's items are saved (author and subject Collections have items too).
+register_ownership('playlists.yaml', CollectionItem, row=lambda item: 'playlist' in collection_kinds(item))

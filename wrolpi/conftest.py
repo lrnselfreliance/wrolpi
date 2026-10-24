@@ -141,6 +141,14 @@ def config_was_imported(session, *file_names: str):
     session.commit()
 
 
+def config_versions_lost(session):
+    """A test that deletes rows to simulate a lost database must lose the database's config versions too (a real
+    lost database has none); otherwise deleting the rows counts as a database change newer than the file."""
+    from wrolpi.config_version import ConfigVersion
+    session.query(ConfigVersion).delete()
+    session.commit()
+
+
 @pytest.fixture(autouse=True)
 def no_deferred_request_writes(request):
     """Fail any test during which an API request wrote outside `request.ctx.db.write()`."""

@@ -5,6 +5,7 @@ import pytest
 
 from modules.repos import lib
 from modules.repos.conftest import TEST_GIT_ENV
+from wrolpi.conftest import config_versions_lost
 from wrolpi.downloader import Download, DownloadStatus
 
 
@@ -395,6 +396,7 @@ async def test_clone_token_survives_the_config(test_session, async_client, git_r
     # Lose the database, restore it from the config.
     lib._delete_repository(test_session, repo)
     test_session.commit()
+    config_versions_lost(test_session)
     config.import_config()
     test_session.expire_all()
     restored = test_session.query(lib.Repository).one()

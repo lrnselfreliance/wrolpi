@@ -9,6 +9,7 @@ import yaml
 
 from modules.repos import lib
 from modules.repos.models import Repository
+from wrolpi.conftest import config_versions_lost
 from wrolpi.downloader import Download, DownloadFrequency, DownloadStatus
 
 
@@ -146,6 +147,7 @@ async def test_never_config(test_session, test_directory, async_client, test_wro
     for download in test_session.query(Download).all():
         test_session.delete(download)
     test_session.commit()
+    config_versions_lost(test_session)
     subprocess.run(['rm', '-rf', str(test_directory / 'repos/missing')], check=True)
 
     config.import_config()

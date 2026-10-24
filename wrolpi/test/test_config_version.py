@@ -91,8 +91,9 @@ async def test_unsaved_database_change_is_saved_not_undone(test_session, test_ta
     assert set(saved['tags']) == {'old', 'new'} and saved['version'] == 4
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize('file_version', [3, 9])
-def test_current_file_imports_with_deletes(test_session, test_tags_config, file_version):
+async def test_current_file_imports_with_deletes(test_session, test_tags_config, file_version, async_client):
     """A file as new as the database (or newer) is the truth: what it no longer lists is deleted.  The database
     records the file's version."""
     test_session.add_all([Tag(name='kept', color='#000000'), Tag(name='removed', color='#000000')])
@@ -107,19 +108,50 @@ def test_current_file_imports_with_deletes(test_session, test_tags_config, file_
     assert db_version(test_session) == file_version
 
 
-def test_unknown_database_version_imports_without_deletes(test_session, test_tags_config):
-    """A config this code never imported (no database row) imports without deleting, then records its version."""
+@pytest.mark.asyncio
+async def test_unknown_database_version_imports_without_deletes(test_session, test_tags_config, await_switches):
+    """A config this code never imported (no database row) imports without deleting.  The database may keep rows
+    the file does not list, so the file's version is not recorded (the next import would delete them); they are
+    saved into the file instead, and that save records the version."""
     test_session.add_all([Tag(name='kept', color='#000000'), Tag(name='unlisted', color='#000000')])
     test_session.commit()
     write_tags_config(test_tags_config, 7, ['kept', 'added'])
 
     import_tags_config()
-
     assert {i.name for i in test_session.query(Tag)} == {'kept', 'unlisted', 'added'}
-    assert db_version(test_session) == 7
+    assert db_version(test_session) is None
+
+    await await_switches()
+    saved = yaml.safe_load(test_tags_config.read_text())
+    assert set(saved['tags']) == {'kept', 'unlisted', 'added'} and saved['version'] == 8
+    assert db_version(test_session) == 8
 
 
-def test_import_button_imports_an_older_file(test_session, test_tags_config):
+@pytest.mark.asyncio
+async def test_failed_import_leaves_version_unknown(test_session, test_tags_config, monkeypatch, async_client):
+    """An import's own writes do not count: one that fails partway leaves the version unknown, not newer than the
+    file it did not finish applying (which would save that partial database over the file)."""
+    from wrolpi.tags import TagsConfig
+
+    test_session.add(Tag(name='kept', color='#000000'))
+    test_session.commit()
+    set_config_version(test_session, 'tags.yaml', 3)
+    test_session.commit()
+    write_tags_config(test_tags_config, 3, ['kept', 'added'])
+
+    def fail(self):
+        raise RuntimeError('Import failed')
+
+    monkeypatch.setattr(TagsConfig, 'record_import_version', fail)
+    with pytest.raises(RuntimeError):
+        import_tags_config()
+
+    assert {i.name for i in test_session.query(Tag)} == {'kept', 'added'}
+    assert db_version(test_session) is None
+
+
+@pytest.mark.asyncio
+async def test_import_button_imports_an_older_file(test_session, test_tags_config, async_client):
     """The Import button applies the file whatever its version: the user chose it."""
     test_session.add_all([Tag(name='kept', color='#000000'), Tag(name='removed', color='#000000')])
     test_session.commit()
@@ -136,6 +168,7 @@ def test_import_button_imports_an_older_file(test_session, test_tags_config):
 @pytest.mark.asyncio
 async def test_raw_writes_count(test_session, test_directory, make_files_structure, async_client):
     """Writes that bypass the ORM flush count their changes explicitly."""
+    from wrolpi.downloader import Download, DownloadManager, DownloadStatus
     from wrolpi.files.lib import _bulk_delete_tag_files, _bulk_insert_tag_files
 
     make_files_structure(['a.txt'])
@@ -150,6 +183,23 @@ async def test_raw_writes_count(test_session, test_directory, make_files_structu
     assert db_version(test_session) == 2
     _bulk_delete_tag_files([(tag.id, file_group.id)])
     assert db_version(test_session) == 3
+
+    # Untagging deletes in bulk.
+    file_group.add_tag(test_session, tag.id)
+    test_session.commit()
+    assert db_version(test_session) == 4
+    file_group.untag(test_session, tag.id)
+    test_session.commit()
+    assert db_version(test_session) == 5
+
+    # Retrying Downloads updates their status in bulk.
+    test_session.add(Download(url='https://example.com/1', status=DownloadStatus.failed))
+    test_session.commit()
+    set_config_version(test_session, 'download_manager.yaml', 1)
+    test_session.commit()
+    DownloadManager.retry_downloads(test_session)
+    test_session.commit()
+    assert db_version(test_session, 'download_manager.yaml') == 2
 
 
 def test_downloads_count_for_their_collections_config_only(test_session):
@@ -170,3 +220,59 @@ def test_downloads_count_for_their_collections_config_only(test_session):
     assert db_version(test_session, 'channels.yaml') == 2
     assert db_version(test_session, 'download_manager.yaml') == 2
     assert db_version(test_session, 'repos.yaml') == 1
+
+
+def test_download_leaving_a_collection_counts_for_its_config(test_session):
+    """Moving a Download out of a Channel changes channels.yaml: otherwise its next import would put it back."""
+    from wrolpi.downloader import Download
+
+    channel = Collection(name='Channel', kind='channel')
+    test_session.add(channel)
+    test_session.commit()
+    download = Download(url='https://example.com/channel', frequency=86400, collection_id=channel.id)
+    test_session.add(download)
+    test_session.commit()
+    set_config_version(test_session, 'channels.yaml', 1)
+    test_session.commit()
+
+    download.collection_id = None
+    test_session.commit()
+
+    assert db_version(test_session, 'channels.yaml') == 2
+
+
+def test_deleting_once_downloads_counts_for_download_manager_only(test_session, test_download_manager):
+    """Deleting a once-download (no Collection) does not change channels.yaml or repos.yaml: counting it would make
+    their next import save instead of import."""
+    from wrolpi.downloader import Download
+
+    download = Download(url='https://example.com/once')
+    test_session.add(download)
+    test_session.commit()
+    for name in ('channels.yaml', 'repos.yaml', 'download_manager.yaml'):
+        set_config_version(test_session, name, 1)
+    test_session.commit()
+
+    test_download_manager.delete_downloads_by_ids(test_session, [download.id])
+
+    assert db_version(test_session, 'download_manager.yaml') == 2
+    assert db_version(test_session, 'channels.yaml') == 1
+    assert db_version(test_session, 'repos.yaml') == 1
+
+
+def test_only_playlist_items_count_for_playlists(test_session):
+    """Author and subject Collections have items too; only a playlist's are saved by playlists.yaml."""
+    author = Collection(name='Author', kind='author')
+    playlist = Collection(name='Mix', kind='playlist')
+    test_session.add_all([author, playlist])
+    test_session.commit()
+    set_config_version(test_session, 'playlists.yaml', 1)
+    test_session.commit()
+
+    author.add_url(test_session, '/map?x=1', title='Spot')
+    test_session.commit()
+    assert db_version(test_session, 'playlists.yaml') == 1
+
+    playlist.add_url(test_session, '/map?x=1', title='Spot')
+    test_session.commit()
+    assert db_version(test_session, 'playlists.yaml') == 2

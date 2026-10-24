@@ -7,6 +7,7 @@ import pytest
 
 from wrolpi.collections.config import get_playlists_config
 from wrolpi.collections.models import Collection
+from wrolpi.conftest import config_was_imported
 
 
 @pytest.fixture
@@ -233,6 +234,7 @@ async def test_import_still_deletes_playlists_removed_from_config(
         '      - url: /map?lat=1&lon=2&z=3\n'
     )
 
+    config_was_imported(test_session, 'playlists.yaml')
     playlists_config.import_config()
 
     test_session.expire_all()

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
+from wrolpi.config_version import IMPORT, SAVE
 from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
@@ -69,6 +70,12 @@ class PlaylistsConfig(ConfigFile):
             return
 
         super().import_config(file, send_events)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
+
         playlists_data = self._config.get('playlists', [])
 
         # An empty playlists list never deletes DB records (mirrors ChannelsConfig).  Deleting all
@@ -144,12 +151,14 @@ class PlaylistsConfig(ConfigFile):
                     imported_names.add(name)
 
                 # Delete playlists that are no longer present in the config.
-                for collection in session.query(Collection).filter_by(kind='playlist').all():
+                for collection in session.query(Collection).filter_by(kind='playlist').all() \
+                        if decision == IMPORT else []:
                     if collection.name not in imported_names:
                         logger.info(f'Deleting playlist {collection.name!r} (no longer in config)')
                         session.delete(collection)
 
             logger.info(f'Imported {len(imported_names)} playlists from {file_str}')
+            self.record_import_version()
             self.successful_import = True
         except Exception as e:
             self.successful_import = False
@@ -217,7 +226,8 @@ class PlaylistsConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
         # Materialize the restored playlists on disk.
         from .sync import sync_playlists_directory
         sync_playlists_directory.activate_switch()
@@ -226,20 +236,9 @@ class PlaylistsConfig(ConfigFile):
         """Dump all playlists (with their ordered items) to the config file."""
         from .models import Collection
 
-        # playlists.yaml is derived from the database (the source of truth here), so the dump should
-        # always win.  Sync our in-memory version up to the on-disk version first, otherwise a Sanic
-        # worker (or freshly-restarted process) that hasn't re-imported would refuse to overwrite a
-        # newer on-disk config.
-        target = file or self.get_file()
-        try:
-            if target.exists():
-                disk_version = (self.read_config_file(target) or {}).get('version') or 0
-                if disk_version > (self._config.get('version') or 0):
-                    self._config['version'] = disk_version
-        except Exception as e:
-            logger.warning(f'Could not read existing playlists config version: {e}')
-
         with get_db_session() as session:
+            # The database's version (see wrolpi.config_version); it is never older than a file it saved.
+            version = self.db_version_for_dump(session)
             playlists = session.query(Collection).filter_by(kind='playlist') \
                 .order_by(Collection.name).all()
             data = []
@@ -255,6 +254,7 @@ class PlaylistsConfig(ConfigFile):
                 entry['items'] = [c for c in (i.to_config() for i in collection.items) if c]
                 data.append(entry)
             self._config['playlists'] = data
+            self._config['version'] = version
 
         logger.info(f'Dumping {len(data)} playlists to config')
         self.save(file, send_events, overwrite)

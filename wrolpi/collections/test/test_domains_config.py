@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from modules.archive.lib import DomainsConfig, domains_config
 from wrolpi.collections import Collection
+from wrolpi.conftest import config_was_imported
 
 
 class TestDomainsConfig:
@@ -144,6 +145,7 @@ class TestDomainsConfig:
         config_file.write_text(yaml.dump(config_data))
 
         config = DomainsConfig()
+        config_was_imported(test_session, 'domains.yaml')
         config.import_config(file=config_file)
 
         # test.org should be deleted
@@ -317,6 +319,7 @@ async def test_import_keeps_domains_with_archives(test_session: Session, test_di
     test_session.commit()
     assert test_session.query(Archive).count() == 2
 
+    config_was_imported(test_session, 'domains.yaml')
     domains_config.import_config()
     test_session.expire_all()
     assert {i.name for i in test_session.query(Collection)} == {'kept.com', 'empty.com', 'new.com'}

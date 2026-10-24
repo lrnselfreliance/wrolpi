@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, joinedload, selectinlo
 from wrolpi import flags
 from wrolpi.common import loaded, Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
+from wrolpi.config_version import register_ownership
 from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
@@ -1310,3 +1311,11 @@ class CollectionItem(ModelHelper, Base):
         if self.title:
             data['title'] = self.title
         return data
+
+
+# Each kind of Collection is saved by its own config.
+for _kind, _config in (('channel', 'channels.yaml'), ('domain', 'domains.yaml'), ('playlist', 'playlists.yaml'),
+                       ('repo', 'repos.yaml')):
+    register_ownership(_config, Collection, row=lambda collection, kind=_kind: collection.kind == kind)
+# Only playlists have items.
+register_ownership('playlists.yaml', CollectionItem)

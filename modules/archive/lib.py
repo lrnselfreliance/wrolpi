@@ -27,6 +27,7 @@ from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
     get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name, chunks
+from wrolpi.config_version import IMPORT, SAVE
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -104,6 +105,11 @@ class DomainsConfig(ConfigFile):
 
         ConfigFile.import_config(self, file, send_events)
 
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
+
         collections_data = self._config.get('collections', [])
 
         # Empty collections list = never delete DB records
@@ -158,7 +164,7 @@ class DomainsConfig(ConfigFile):
                 # create their domain (e.g. one downloaded before this import), and deleting it would delete them.
                 with_archives = {i for i, in session.query(Archive.collection_id).distinct()}
                 all_domain_collections = session.query(Collection).filter_by(kind='domain').all()
-                for collection in all_domain_collections:
+                for collection in all_domain_collections if decision == IMPORT else []:
                     if collection.name in imported_domains:
                         continue
                     if collection.id in with_archives:
@@ -169,6 +175,7 @@ class DomainsConfig(ConfigFile):
                     session.delete(collection)
 
             logger.info(f'Successfully imported {len(imported_domains)} domain collections from {file_str}')
+            self.record_import_version()
             self.successful_import = True
 
         except Exception as e:
@@ -184,6 +191,7 @@ class DomainsConfig(ConfigFile):
         logger.info('Dumping domain collections to config')
 
         with get_db_session() as session:
+            version = self.db_version_for_dump(session)
             # Get only domain collections, ordered by name
             collections = session.query(Collection).filter_by(kind='domain').order_by(Collection.name).all()
 
@@ -195,6 +203,7 @@ class DomainsConfig(ConfigFile):
             return
 
         self._config['collections'] = collections_data
+        self._config['version'] = version
 
         logger.info(f'Dumping {len(collections_data)} domain collections to config')
         self.save(file, send_events, overwrite)
@@ -261,7 +270,8 @@ class DomainsConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
 
 
 # Global instance

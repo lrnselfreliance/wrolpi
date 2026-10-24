@@ -723,7 +723,9 @@ class ConfigFile:
                     logger_.debug(f'Copied backup config: {rel_path} -> {backup_file}')
 
                 # Write the config in-memory to the file.  Track version changes to avoid overriding newer config.
-                self._config['version'] = (self._config['version'] or 0) + 1
+                # A database config's version is the database's, which `dump_config` set (see wrolpi.config_version).
+                if not self.is_versioned_by_database():
+                    self._config['version'] = (self._config['version'] or 0) + 1
                 config = deepcopy(self._config)
                 self.write_config_data(config, file)
 
@@ -781,6 +783,59 @@ class ConfigFile:
         """Dump database data, copy it to this the in-memory config, then write it to the config file."""
         # Copy the data as-is by default.  Other classes will overwrite this and dump the database before saving.
         self.save(file, send_events, overwrite)
+
+    # A database config's file and the database each carry a version; see wrolpi.config_version.
+
+    # The Import button sets this: the user chose to apply the file, whatever its version.
+    force_import: bool = False
+
+    def import_forced(self, send_events=False):
+        """Import this config's file whatever its version: the user chose it (the Import button, a backup)."""
+        self.force_import = True
+        try:
+            self.import_config(send_events=send_events)
+        finally:
+            # An import that returned before `import_decision` must not force a later one.
+            self.force_import = False
+
+    def is_versioned_by_database(self) -> bool:
+        from wrolpi.config_version import versioned_config_names
+        return self.file_name in versioned_config_names()
+
+    def import_decision(self) -> str:
+        """After reading the file (`ConfigFile.import_config`), decide what importing it may do: IMPORT,
+        IMPORT_WITHOUT_DELETES, or SAVE (the database is newer; call `save_database_instead` and import nothing)."""
+        from wrolpi.config_version import IMPORT, decide, get_config_version
+        from wrolpi.db import get_db_session
+        if self.force_import:
+            self.force_import = False
+            return IMPORT
+        with get_db_session() as session:
+            db_version = get_config_version(session, self.file_name)
+        decision = decide(self.version or 0, db_version)
+        logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
+        return decision
+
+    def save_database_instead(self):
+        """The database has changes this config's file does not (see `import_decision`); save them."""
+        logger_.warning(f'{self.file_name} is older than the database; saving the database instead of importing it')
+        self.successful_import = True
+        self.dump_config()
+
+    def record_import_version(self):
+        """The database now matches this config's file: record the file's version.  Call last, after every write
+        the import makes."""
+        from wrolpi.config_version import set_config_version
+        from wrolpi.db import get_db_session
+        with get_db_session(commit=True) as session:
+            set_config_version(session, self.file_name, self.version or 0)
+
+    def db_version_for_dump(self, session) -> int:
+        """The version `dump_config` writes: the database's, read in the same transaction as the rows it saves.
+        Before the database has one (this config was never imported by this code), the file's next version."""
+        from wrolpi.config_version import get_config_version
+        db_version = get_config_version(session, self.file_name)
+        return db_version if db_version is not None else (self.version or 0) + 1
 
     def update(self, config: dict, overwrite: bool = False):
         """Update any values of this config.  Save the config to its file."""

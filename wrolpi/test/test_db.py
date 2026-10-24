@@ -360,7 +360,9 @@ def test_deferred_request_writes_are_recorded(test_session):
         db.session.flush()
         db.finish(ok=False)
 
-    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES]
+    # A Tag is saved by tags.yaml, so its flush also counts the change (wrolpi.config_version).
+    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES
+                  if 'config_version' not in statement]
     db_module.DEFERRED_REQUEST_WRITES.clear()
     assert len(statements) == 1 and statements[0].startswith('INSERT INTO tag'), statements
 
@@ -390,6 +392,8 @@ async def test_task_started_in_a_write_does_not_inherit_its_intent(test_session)
         await task
         db.finish(ok=True)
 
-    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES]
+    # A Tag is saved by tags.yaml, so its flush also counts the change (wrolpi.config_version).
+    statements = [statement for statement, _ in db_module.DEFERRED_REQUEST_WRITES
+                  if 'config_version' not in statement]
     db_module.DEFERRED_REQUEST_WRITES.clear()
     assert len(statements) == 1 and statements[0].startswith('INSERT INTO tag'), statements

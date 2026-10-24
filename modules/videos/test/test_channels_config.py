@@ -14,6 +14,7 @@ import yaml
 
 from modules.videos.lib import get_channels_config
 from modules.videos.models import Channel
+from wrolpi.conftest import config_was_imported
 
 
 @pytest.mark.asyncio
@@ -187,6 +188,7 @@ class TestChannelsConfigEdgeCases:
 
         # Reinitialize and import
         config.initialize()
+        config_was_imported(test_session, 'channels.yaml')
         config.import_config()
         assert config.successful_import is True
 

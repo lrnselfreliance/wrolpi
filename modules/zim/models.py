@@ -13,6 +13,7 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import loaded, Base, logger, get_relative_to_media_directory, ModelHelper
+from wrolpi.config_version import register_ownership
 from wrolpi.dates import TZDateTime
 from wrolpi.db import session_curs, serializer
 from wrolpi.downloader import Download, download_manager
@@ -378,6 +379,9 @@ class TagZimEntry(Base):
         return session.query(TagZimEntry) \
             .filter_by(tag_id=tag_id, zim_id=zim_id, zim_entry=zim_entry) \
             .one_or_none()
+
+
+register_ownership('tags.yaml', TagZimEntry)
 
 
 class ZimSubscription(Base):

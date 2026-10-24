@@ -31,6 +31,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     get_wrolpi_config, \
     unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory, strip_surrogates
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
+from wrolpi.config_version import count_config_change_curs
 from wrolpi.db import get_db_session, get_db_curs, values_clause, session_curs
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
@@ -1067,6 +1068,8 @@ def merge_file_group_relations(curs, loser_id: int, winner_id: int):
                                                    FROM collection_item
                                                    WHERE file_group_id = ?))
                  ''', (winner_id, loser_id, winner_id))
+    # Raw SQL: count these changes for the configs that save TagFiles and playlist items (wrolpi.config_version).
+    count_config_change_curs(curs, 'tags.yaml', 'playlists.yaml')
 
 
 def merge_into_surviving_duplicates(curs, file_group_ids: List[int], deleting_ids: Set[int]) -> int:
@@ -2416,6 +2419,7 @@ def _bulk_insert_tag_files(tag_files: List[Tuple[int, int]]):
                 ON CONFLICT (tag_id, file_group_id) DO NOTHING
             '''
             curs.execute(stmt, params)
+            count_config_change_curs(curs, 'tags.yaml')
             logger.debug(f'Bulk inserted {len(chunk)} TagFiles')
 
 
@@ -2441,6 +2445,7 @@ def _bulk_delete_tag_files(tag_files: List[Tuple[int, int]]):
             '''
             curs.execute(stmt, params)
             logger.debug(f'Bulk deleted {curs.rowcount} TagFiles')
+            count_config_change_curs(curs, 'tags.yaml')
 
 
 async def _process_bulk_tag_job(job: dict):

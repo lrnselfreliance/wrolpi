@@ -18,6 +18,7 @@ from wrolpi import dates, flags
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config, trim_file_name
+from wrolpi.config_version import IMPORT, SAVE, register_ownership
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, session_curs
 from wrolpi.downloader import Download, download_manager
@@ -293,7 +294,13 @@ class ChannelsConfig(ConfigFile):
             self.successful_import = True
             return
 
-        super().import_config()
+        super().import_config(file)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
+
         try:
             channels = self.channels
             # Empty channels list = never delete DB records
@@ -395,7 +402,7 @@ class ChannelsConfig(ConfigFile):
             with get_db_session(commit=True) as session:
                 # Delete any Channels that were deleted from the config, along with their Collections.
                 orphaned_collection_ids = []
-                for channel in session.query(Channel):
+                for channel in session.query(Channel) if decision == IMPORT else []:
                     if channel.id not in updated_channel_ids:
                         logger.warning(f'Deleting {channel} because it is not in the config.')
                         orphaned_collection_ids.append(channel.collection_id)
@@ -435,6 +442,7 @@ class ChannelsConfig(ConfigFile):
             with get_db_session() as session:
                 link_channel_and_downloads(session)
 
+            self.record_import_version()
             self.successful_import = True
         except Exception as e:
             self.successful_import = False
@@ -450,6 +458,7 @@ class ChannelsConfig(ConfigFile):
         channel_import_logger.info('Dumping channels to config')
 
         with get_db_session() as session:
+            version = self.db_version_for_dump(session)
             # Get all channels, ordered by collection name
             channels = session.query(Channel).join(Collection).order_by(Collection.name).all()
 
@@ -457,6 +466,7 @@ class ChannelsConfig(ConfigFile):
             channels_data = [channel.config_view() for channel in channels]
 
             self._config['channels'] = channels_data
+            self._config['version'] = version
 
         channel_import_logger.info(f'Dumping {len(channels_data)} channels to config')
         self.save(file, send_events, overwrite)
@@ -515,10 +525,12 @@ class ChannelsConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()
+register_ownership(ChannelsConfig.file_name, Channel)
 TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 

@@ -34,6 +34,7 @@ from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
+from wrolpi.config_version import IMPORT, SAVE, collection_kind, count_config_change, register_ownership
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, session_curs, serializer
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
@@ -1751,6 +1752,8 @@ class DownloadManager:
             delete = delete.where(Download.status == status)
         values = [i for i, in query.all()]
         session.execute(delete)
+        # A Core delete is not flushed, so count it for download_manager.yaml (wrolpi.config_version).
+        count_config_change(session, DownloadManagerConfig.file_name)
         return values
 
     def delete_completed(self, session: Session) -> List[int]:
@@ -1782,6 +1785,8 @@ class DownloadManager:
             return []
         deleted_ids = [i for i, in session.query(Download.id).filter(Download.id.in_(download_ids)).all()]
         session.execute(Download.__table__.delete().where(Download.id.in_(deleted_ids)))
+        # A Core delete is not flushed.  These may include a Channel's or a Repo's Download.
+        count_config_change(session, DownloadManagerConfig.file_name, 'channels.yaml', 'repos.yaml')
         session.commit()
         save_downloads_config.activate_switch()
         return deleted_ids
@@ -2074,6 +2079,7 @@ class DownloadManagerConfig(ConfigFile):
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         try:
             with get_db_session() as session:
+                version = self.db_version_for_dump(session)
                 downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
                 new_downloads = []
                 for download in downloads:
@@ -2094,7 +2100,8 @@ class DownloadManagerConfig(ConfigFile):
                         url=download.url,
                     )
                     new_downloads.append(new_download)
-                get_download_manager_config().update({'downloads': new_downloads}, overwrite=overwrite)
+                get_download_manager_config().update({'downloads': new_downloads, 'version': version},
+                                                     overwrite=overwrite)
         except Exception as e:
             message = f'Failed to save {self.get_relative_file()} config'
             logger.error(message, exc_info=e)
@@ -2111,6 +2118,11 @@ class DownloadManagerConfig(ConfigFile):
             return
 
         super().import_config(file)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
 
         downloads_data = self.downloads
         # Empty downloads list = never delete DB records
@@ -2155,7 +2167,7 @@ class DownloadManagerConfig(ConfigFile):
                         # absence does not mean the user removed them.  Keep them: their `last_download_attempt`
                         # is what the daily download limits count, and that count must survive a restart.
                         continue
-                    else:
+                    elif decision == IMPORT:
                         logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
                         session.delete(existing)
 
@@ -2205,6 +2217,7 @@ class DownloadManagerConfig(ConfigFile):
 
                 if need_commit:
                     session.commit()
+                self.record_import_version()
                 self.successful_import = True
             except Exception as e:
                 self.successful_import = False
@@ -2287,10 +2300,18 @@ class DownloadManagerConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
+register_ownership(DownloadManagerConfig.file_name, Download)
+# channels.yaml and repos.yaml each save their own Collections' Downloads (the URL and how often it runs).  Only
+# the config of that Collection's kind owns one: counting another config's change would make that config's next
+# import save instead of import.
+for _kind, _config in (('channel', 'channels.yaml'), ('repo', 'repos.yaml')):
+    register_ownership(_config, Download, columns={'url', 'frequency', 'collection_id'},
+                       row=lambda download, kind=_kind: collection_kind(download) == kind)
 TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None
 
 

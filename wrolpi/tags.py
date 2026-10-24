@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, relationship, Session
 from wrolpi import dates, flags
 from wrolpi.common import loaded, ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
+from wrolpi.config_version import IMPORT, SAVE, register_ownership
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
 from wrolpi.downloader import save_downloads_config
@@ -337,6 +338,7 @@ class TagsConfig(ConfigFile):
             media_directory = get_media_directory()
 
             with get_db_session() as session:
+                version = self.db_version_for_dump(session)
                 tags = dict()
                 tag_rows = session.query(Tag)
                 for tag in tag_rows:
@@ -382,6 +384,7 @@ class TagsConfig(ConfigFile):
                     'tag_files': tag_files,
                     'tag_zims': tag_zims,
                     'tags': tags,
+                    'version': version,
                 })
         except Exception as e:
             message = f'Failed to save {self.get_relative_file()} config'
@@ -402,6 +405,11 @@ class TagsConfig(ConfigFile):
         config = get_tags_config()
         logger.info('Importing tags config')
         super().import_config(file)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
 
         try:
             need_commit = False
@@ -550,7 +558,7 @@ class TagsConfig(ConfigFile):
                             self.import_skipped += 1
 
                 # Delete missing Tags last in case they are used above.
-                if config.tags:
+                if config.tags and decision == IMPORT:
                     config_tag_names = set(config.tags.keys())
                     for tag in session.query(Tag):
                         if tag.name not in config_tag_names:
@@ -564,6 +572,7 @@ class TagsConfig(ConfigFile):
                 if need_commit:
                     session.commit()
 
+            self.record_import_version()
             self.successful_import = True
             logger.info('Importing tags config complete')
         except Exception as e:
@@ -680,10 +689,13 @@ class TagsConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig()
+register_ownership(TagsConfig.file_name, Tag)
+register_ownership(TagsConfig.file_name, TagFile)
 TEST_TAGS_CONFIG: TagsConfig = None  # noqa
 
 

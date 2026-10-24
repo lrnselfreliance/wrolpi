@@ -1562,7 +1562,9 @@ class ReposConfig(ConfigFile):
 
 
 repos_config = ReposConfig()
-register_ownership(ReposConfig.file_name, Repository)
+# Only the columns repos.yaml saves (not a fetch's commit, size, ...); its Collection saves the rest.
+register_ownership(ReposConfig.file_name, Repository,
+                   columns={'url', 'mode', 'branch', 'submodules', 'clone_token', 'collection_id'})
 
 
 def get_repos_config() -> ReposConfig:

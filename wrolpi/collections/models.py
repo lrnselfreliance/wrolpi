@@ -1316,9 +1316,11 @@ class CollectionItem(ModelHelper, Base):
         return data
 
 
-# Each kind of Collection is saved by its own config.
+# Each kind of Collection is saved by its own config, which saves these columns (not item_count, total_size, ...).
+COLLECTION_CONFIG_COLUMNS = {'name', 'kind', 'description', 'directory', 'tag_id', 'file_format'}
 for _kind, _config in (('channel', 'channels.yaml'), ('domain', 'domains.yaml'), ('playlist', 'playlists.yaml'),
                        ('repo', 'repos.yaml')):
-    register_ownership(_config, Collection, row=lambda collection, kind=_kind: collection.kind == kind)
+    register_ownership(_config, Collection, columns=COLLECTION_CONFIG_COLUMNS,
+                       row=lambda collection, kind=_kind: collection.kind == kind)
 # Only a playlist's items are saved (author and subject Collections have items too).
 register_ownership('playlists.yaml', CollectionItem, row=lambda item: 'playlist' in collection_kinds(item))

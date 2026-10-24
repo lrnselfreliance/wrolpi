@@ -530,7 +530,10 @@ class ChannelsConfig(ConfigFile):
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()
-register_ownership(ChannelsConfig.file_name, Channel)
+# Only the columns channels.yaml saves (not a refresh's counts, info_json, ...); its Collection saves the rest.
+register_ownership(ChannelsConfig.file_name, Channel,
+                   columns={'url', 'source_id', 'generate_posters', 'calculate_duration', 'download_missing_data',
+                            'collection_id'})
 TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 

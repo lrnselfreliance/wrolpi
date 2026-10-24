@@ -4,6 +4,7 @@ import yaml
 
 from wrolpi.collections.models import Collection
 from wrolpi.config_version import get_config_version, set_config_version
+from wrolpi.dates import now
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import Tag, get_tags_config, import_tags_config
 
@@ -276,3 +277,60 @@ def test_only_playlist_items_count_for_playlists(test_session):
     playlist.add_url(test_session, '/map?x=1', title='Spot')
     test_session.commit()
     assert db_version(test_session, 'playlists.yaml') == 2
+
+
+def test_unsaved_columns_do_not_count(test_session):
+    """Columns a config does not save (a fetch's commit, a refresh's counts, a download attempt) do not count:
+    counting them would make that config's next import save instead of import."""
+    from modules.repos.models import Repository
+    from modules.videos.models import Channel
+    from wrolpi.downloader import Download
+
+    channel_collection = Collection(name='Channel', kind='channel')
+    repo_collection = Collection(name='Repo', kind='repo')
+    test_session.add_all([channel_collection, repo_collection])
+    test_session.flush()
+    channel = Channel(collection_id=channel_collection.id)
+    repo = Repository(url='https://example.com/repo.git', collection_id=repo_collection.id)
+    download = Download(url='https://example.com/channel', frequency=86400, collection_id=channel_collection.id)
+    test_session.add_all([channel, repo, download])
+    test_session.commit()
+    names = ('channels.yaml', 'repos.yaml', 'download_manager.yaml')
+    for name in names:
+        set_config_version(test_session, name, 1)
+    test_session.commit()
+
+    repo.head_sha = 'abc123'
+    repo.last_fetch = now()
+    channel.video_count = 10
+    channel.refreshed = True
+    channel_collection.item_count = 10
+    repo_collection.total_size = 1000
+    download.attempts = 1
+    download.error = 'Failed'
+    download.last_download_attempt = now()
+    test_session.commit()
+    assert {i: db_version(test_session, i) for i in names} == dict.fromkeys(names, 1)
+
+    # Saved columns still count.
+    repo.branch = 'dev'
+    channel.generate_posters = True
+    download.status = 'failed'
+    test_session.commit()
+    assert {i: db_version(test_session, i) for i in names} == dict.fromkeys(names, 2)
+
+
+def test_domain_downloads_count_for_domains(test_session):
+    """domains.yaml saves each domain's Downloads (url, frequency)."""
+    from wrolpi.downloader import Download
+
+    domain = Collection(name='example.com', kind='domain')
+    test_session.add(domain)
+    test_session.commit()
+    set_config_version(test_session, 'domains.yaml', 1)
+    test_session.commit()
+
+    test_session.add(Download(url='https://example.com/feed', frequency=86400, collection_id=domain.id))
+    test_session.commit()
+
+    assert db_version(test_session, 'domains.yaml') == 2

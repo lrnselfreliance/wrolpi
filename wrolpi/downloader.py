@@ -2310,11 +2310,14 @@ class DownloadManagerConfig(ConfigFile):
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
-register_ownership(DownloadManagerConfig.file_name, Download)
-# channels.yaml and repos.yaml each save their own Collections' Downloads (the URL and how often it runs).  Only
-# the config of that Collection's kind owns one: counting another config's change would make that config's next
-# import save instead of import.
-DOWNLOAD_COLLECTION_CONFIGS = (('channel', 'channels.yaml'), ('repo', 'repos.yaml'))
+# Each config owns only the columns it saves: counting another change would make its next import save instead of
+# import.  (`attempts`, `error`, ... change on every attempt.)
+register_ownership(DownloadManagerConfig.file_name, Download,
+                   columns={'destination', 'downloader', 'frequency', 'last_successful_download', 'next_download',
+                            'settings', 'status', 'sub_downloader', 'tag_names', 'url'})
+# channels.yaml, domains.yaml and repos.yaml each save their own Collections' Downloads (the URL and how often it
+# runs).  Only the config of that Collection's kind owns one.
+DOWNLOAD_COLLECTION_CONFIGS = (('channel', 'channels.yaml'), ('domain', 'domains.yaml'), ('repo', 'repos.yaml'))
 for _kind, _config in DOWNLOAD_COLLECTION_CONFIGS:
     register_ownership(_config, Download, columns={'url', 'frequency', 'collection_id'},
                        row=lambda download, kind=_kind: kind in collection_kinds(download))

@@ -25,6 +25,7 @@ from wrolpi.cmd import GIT_BIN, run_command
 from wrolpi.collections.models import Collection
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger, \
     escape_file_name, background_task, get_wrolpi_config
+from wrolpi.config_version import IMPORT, SAVE, register_ownership
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, DownloadFrequency, download_manager, save_downloads_config
 from wrolpi.errors import UnknownDirectory, ValidationError
@@ -1408,6 +1409,12 @@ class ReposConfig(ConfigFile):
             return
 
         super().import_config(file, send_events)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
+
         repos_data = self._config.get('repos', [])
 
         # An empty repos list never deletes DB records.  Deleting all repos is done through the API.
@@ -1428,12 +1435,13 @@ class ReposConfig(ConfigFile):
                         continue
                     imported_ids.add(repo.id)
 
-                for repo in session.query(Repository).all():
+                for repo in session.query(Repository).all() if decision == IMPORT else []:
                     if repo.id not in imported_ids:
                         logger.info(f'Deleting repo {repo.name!r} (no longer in config)')
                         _delete_repository(session, repo)
 
             logger.info(f'Imported {len(imported_ids)} repos from {file_str}')
+            self.record_import_version()
             self.successful_import = True
         except Exception as e:
             self.successful_import = False
@@ -1486,6 +1494,7 @@ class ReposConfig(ConfigFile):
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump all Repos to the config file."""
         with get_db_session() as session:
+            version = self.db_version_for_dump(session)
             repos = session.query(Repository).options(*Repository.json_options()) \
                 .join(Collection, Collection.id == Repository.collection_id) \
                 .order_by(func.lower(Collection.name)).all()
@@ -1508,6 +1517,7 @@ class ReposConfig(ConfigFile):
                 data.append(entry)
 
         self._config['repos'] = data
+        self._config['version'] = version
         logger.info(f'Dumping {len(data)} repos to config')
         self.save(file, send_events, overwrite)
 
@@ -1546,11 +1556,15 @@ class ReposConfig(ConfigFile):
                           if i.get('url') and repo_url_key(i['url']) not in current_keys)
             self.write_config_data(dict(repos=merged, version=current_data.get('version', 0) + 1), config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
         save_downloads_config.activate_switch()
 
 
 repos_config = ReposConfig()
+# Only the columns repos.yaml saves (not a fetch's commit, size, ...); its Collection saves the rest.
+register_ownership(ReposConfig.file_name, Repository,
+                   columns={'url', 'mode', 'branch', 'submodules', 'clone_token', 'collection_id'})
 
 
 def get_repos_config() -> ReposConfig:

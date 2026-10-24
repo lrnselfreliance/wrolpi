@@ -24,6 +24,7 @@ import pytz
 
 from wrolpi import dates
 from wrolpi.common import ConfigFile, logger, get_media_directory, get_paths_in_media_directory
+from wrolpi.config_version import SAVE
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, NoPrimaryFile
 from wrolpi.events import Events
@@ -151,6 +152,7 @@ class RecentlyViewedConfig(ConfigFile):
             from wrolpi.files.models import FileGroup
             media_directory = get_media_directory()
             with get_db_session() as session:
+                version = self.db_version_for_dump(session)
                 file_groups = session.query(FileGroup) \
                     .filter(FileGroup.viewed.isnot(None)) \
                     .order_by(FileGroup.viewed.desc(), FileGroup.id) \
@@ -171,7 +173,7 @@ class RecentlyViewedConfig(ConfigFile):
                     if file_group.position:
                         entry['position'] = file_group.position
                     files.append(entry)
-            self.update({'files': files}, overwrite=overwrite)
+            self.update({'files': files, 'version': version}, overwrite=overwrite)
         except Exception as e:
             message = f'Failed to save {self.get_relative_file()} config'
             logger.error(message, exc_info=e)
@@ -182,6 +184,9 @@ class RecentlyViewedConfig(ConfigFile):
         """Apply the config to the database.  Progress written after the config (e.g. while WROLPi was starting)
         is kept; a newer plain view keeps its `viewed`, but takes the config's position."""
         super().import_config(file, send_events)
+        if self.import_decision() == SAVE:
+            self.save_database_instead()
+            return
         try:
             # wrolpi.files.models imports this module.
             from wrolpi.files.lib import glob_shared_stem
@@ -238,6 +243,7 @@ class RecentlyViewedConfig(ConfigFile):
                     applied += 1
 
             logger.info(f'Imported {applied} of {len(entries)} recently viewed files')
+            self.record_import_version()
             self.successful_import = True
         except Exception as e:
             self.successful_import = False

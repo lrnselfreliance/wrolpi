@@ -9,7 +9,7 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from wrolpi.collections import Collection
-from wrolpi.conftest import probe_write_lock_is_held, production_like_sessions
+from wrolpi.conftest import config_was_imported, probe_write_lock_is_held, production_like_sessions
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config, get_relative_to_media_directory
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
@@ -254,7 +254,8 @@ async def test_import_channel_downloads(await_switches, test_session, channel_fa
     [i.delete(add_to_skip_list=False) for i in test_session.query(Download).all()]
     # Write config with Channel Downloads now that the delete() has removed them from the config.
     get_channels_config().channels = channels_backup
-    import_channels_config()
+    # Deleting the Downloads made the database newer than the file, so restoring from the file is the user's choice.
+    get_channels_config().import_forced()
     channel1, channel2 = test_session.query(Channel).order_by(Channel.url).all()
     assert test_session.query(Download).count() == 3
     assert channel1.url == 'https://example.com/channel1'
@@ -353,6 +354,7 @@ async def test_import_channel_deletes_orphaned_collections(await_switches, test_
     await await_switches()
 
     # Import config - this should delete channel2 AND its Collection
+    config_was_imported(test_session, 'channels.yaml')
     import_channels_config()
 
     # Verify only one Channel remains

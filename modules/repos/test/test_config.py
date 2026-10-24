@@ -3,6 +3,7 @@ import pytest
 from modules.repos import lib
 from modules.repos.models import Repository
 from wrolpi.collections.models import Collection
+from wrolpi.conftest import config_versions_lost
 from wrolpi.downloader import Download, DownloadFrequency
 
 
@@ -31,9 +32,12 @@ async def test_dump_and_import(test_session, test_directory, async_client, test_
     for repo in test_session.query(Repository).all():
         lib._delete_repository(test_session, repo)
     test_session.commit()
+    config_versions_lost(test_session)
     assert test_session.query(Collection).count() == 0
 
     config.import_config()
+    # Imported without deletes; the database is saved, which records its version.
+    await await_switches()
     test_session.expire_all()
     repos = {i.name: i for i in test_session.query(Repository)}
     assert repos['kiwix-tools'].directory == test_directory / 'repos/software/kiwix-tools'

@@ -802,7 +802,7 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
             operation_percent=0,
         )
 
-        from wrolpi.downloader import Download, download_manager
+        from wrolpi.downloader import Download, count_download_changes, download_manager
         from wrolpi.files.models import FileGroup
         from wrolpi.tags import TagFile, save_tags_config, sync_tags_directory
 
@@ -830,7 +830,9 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
                 for fg in file_groups:
                     if fg.url:
                         all_urls.append(fg.url)
-                        if Download.get_by_url(session, fg.url):
+                        if download := Download.get_by_url(session, fg.url):
+                            # A bulk delete is not flushed: count it.
+                            count_download_changes(session, [download.id])
                             session.query(Download).filter(
                                 Download.url == fg.url
                             ).delete(synchronize_session=False)

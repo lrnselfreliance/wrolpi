@@ -9,6 +9,7 @@ Tests cover:
 import pytest
 import yaml
 
+from wrolpi.conftest import config_was_imported
 from wrolpi.downloader import Download, get_download_manager_config
 
 
@@ -242,6 +243,7 @@ class TestDownloadManagerConfigEdgeCases:
 
         # Reinitialize and import
         config.initialize()
+        config_was_imported(test_session, 'download_manager.yaml')
         config.import_config()
         assert config.successful_import is True
 
@@ -425,6 +427,7 @@ async def test_import_config_preserves_completed_once_downloads(test_session, te
         yaml.dump(config_data, f)
 
     config.initialize()
+    config_was_imported(test_session, 'download_manager.yaml')
     config.import_config()
     assert config.successful_import is True
 

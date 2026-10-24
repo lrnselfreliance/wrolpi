@@ -24,9 +24,9 @@ from zoneinfo import ZoneInfo
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON, text
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Mapped, Session, relationship
+from sqlalchemy.orm import Mapped, Session, column_property, relationship
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -34,6 +34,7 @@ from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
+from wrolpi.config_version import IMPORT, SAVE, collection_kinds, count_config_change, register_ownership
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, session_curs, serializer
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
@@ -268,7 +269,9 @@ class Download(ModelHelper, Base):  # noqa
     tag_names = Column(JSON)  # a list of Tag names.
 
     # A Download may be associated with a Collection (downloads for channels, domains, etc.).
-    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='SET NULL'))
+    # The previous value is loaded on change: leaving a Collection changes that Collection's config too.
+    collection_id = column_property(Column(Integer, ForeignKey('collection.id', ondelete='SET NULL')),
+                                    active_history=True)
     collection = relationship('Collection', primaryjoin='Download.collection_id==Collection.id',
                               back_populates='downloads')
 
@@ -1317,9 +1320,12 @@ class DownloadManager:
         @param reset_attempts: Will set `download.attempts` to 0 if True.
         """
         values = dict(status=DownloadStatus.new, attempts=0) if reset_attempts else dict(status=DownloadStatus.new)
-        session.query(Download) \
+        retried = session.query(Download) \
             .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
             .update(values, synchronize_session=False)
+        if retried:
+            # A bulk update is not flushed: count it.  `status` is saved only by download_manager.yaml.
+            count_config_change(session, DownloadManagerConfig.file_name)
 
     def retry_downloads_on_startup(self):
         """Startup is not a request: retry incomplete Downloads in a short write transaction of its own."""
@@ -1751,6 +1757,8 @@ class DownloadManager:
             delete = delete.where(Download.status == status)
         values = [i for i, in query.all()]
         session.execute(delete)
+        # A Core delete is not flushed, so count it for download_manager.yaml (wrolpi.config_version).
+        count_config_change(session, DownloadManagerConfig.file_name)
         return values
 
     def delete_completed(self, session: Session) -> List[int]:
@@ -1781,6 +1789,8 @@ class DownloadManager:
         if not download_ids:
             return []
         deleted_ids = [i for i, in session.query(Download.id).filter(Download.id.in_(download_ids)).all()]
+        # A Core delete is not flushed: count it.
+        count_download_changes(session, deleted_ids)
         session.execute(Download.__table__.delete().where(Download.id.in_(deleted_ids)))
         session.commit()
         save_downloads_config.activate_switch()
@@ -2074,6 +2084,7 @@ class DownloadManagerConfig(ConfigFile):
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         try:
             with get_db_session() as session:
+                version = self.db_version_for_dump(session)
                 downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
                 new_downloads = []
                 for download in downloads:
@@ -2094,7 +2105,8 @@ class DownloadManagerConfig(ConfigFile):
                         url=download.url,
                     )
                     new_downloads.append(new_download)
-                get_download_manager_config().update({'downloads': new_downloads}, overwrite=overwrite)
+                get_download_manager_config().update({'downloads': new_downloads, 'version': version},
+                                                     overwrite=overwrite)
         except Exception as e:
             message = f'Failed to save {self.get_relative_file()} config'
             logger.error(message, exc_info=e)
@@ -2111,6 +2123,11 @@ class DownloadManagerConfig(ConfigFile):
             return
 
         super().import_config(file)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
 
         downloads_data = self.downloads
         # Empty downloads list = never delete DB records
@@ -2155,7 +2172,7 @@ class DownloadManagerConfig(ConfigFile):
                         # absence does not mean the user removed them.  Keep them: their `last_download_attempt`
                         # is what the daily download limits count, and that count must survive a restart.
                         continue
-                    else:
+                    elif decision == IMPORT:
                         logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
                         session.delete(existing)
 
@@ -2205,6 +2222,7 @@ class DownloadManagerConfig(ConfigFile):
 
                 if need_commit:
                     session.commit()
+                self.record_import_version()
                 self.successful_import = True
             except Exception as e:
                 self.successful_import = False
@@ -2287,10 +2305,35 @@ class DownloadManagerConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
+# Each config owns only the columns it saves: counting another change would make its next import save instead of
+# import.  (`attempts`, `error`, ... change on every attempt.)
+register_ownership(DownloadManagerConfig.file_name, Download,
+                   columns={'destination', 'downloader', 'frequency', 'last_successful_download', 'next_download',
+                            'settings', 'status', 'sub_downloader', 'tag_names', 'url'})
+# channels.yaml, domains.yaml and repos.yaml each save their own Collections' Downloads (the URL and how often it
+# runs).  Only the config of that Collection's kind owns one.
+DOWNLOAD_COLLECTION_CONFIGS = (('channel', 'channels.yaml'), ('domain', 'domains.yaml'), ('repo', 'repos.yaml'))
+for _kind, _config in DOWNLOAD_COLLECTION_CONFIGS:
+    register_ownership(_config, Download, columns={'url', 'frequency', 'collection_id'},
+                       row=lambda download, kind=_kind: kind in collection_kinds(download))
+
+
+def count_download_changes(session: Session, download_ids: List[int]):
+    """Count a write that bypasses the flush (Core or bulk) to these Downloads, before it runs: for
+    download_manager.yaml, and for the config of each Collection kind they belong to."""
+    if not download_ids:
+        return
+    kinds = {i for i, in session.execute(
+        text('SELECT DISTINCT c.kind FROM download d JOIN collection c ON c.id = d.collection_id '
+             'WHERE d.id IN (SELECT value FROM json_each(:ids))'),
+        {'ids': json.dumps(list(download_ids))})}
+    count_config_change(session, DownloadManagerConfig.file_name,
+                        *(config for kind, config in DOWNLOAD_COLLECTION_CONFIGS if kind in kinds))
 TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None
 
 

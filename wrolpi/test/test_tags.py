@@ -6,6 +6,7 @@ import yaml
 
 from wrolpi import tags
 from wrolpi.common import is_hardlinked, walk, get_wrolpi_config
+from wrolpi.conftest import config_was_imported
 from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, UsedTag
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile, Tag
@@ -382,6 +383,7 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     assert len(config.tags) == 1
 
     # Import the config.  Only unused Tags not in the config are deleted.
+    config_was_imported(test_session, 'tags.yaml')
     tags.import_tags_config()
     assert {i.name for i in test_session.query(tags.Tag)} == {
         tag1.name,  # tag1 is used by FileGroup.

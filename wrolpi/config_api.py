@@ -49,7 +49,8 @@ def post_config_update(request: Request, body: config_schema.ConfigUpdateRequest
 def post_config_import(_: Request, body: config_schema.ConfigsRequest):
     config = get_config_by_file_name(body.file_name)
     try:
-        config.import_config(send_events=True)
+        # The user chose to apply the file, whatever its version.
+        config.import_forced(send_events=True)
     except Exception as e:
         logger.error(f'Failed to import config: {body.file_name}', exc_info=e)
         raise InvalidConfig(f'Failed to import config {body.file_name}')

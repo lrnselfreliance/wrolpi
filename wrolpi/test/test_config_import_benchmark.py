@@ -164,7 +164,8 @@ async def import_all(results: list, prefix: str):
 
 
 def wipe_config_rows(session):
-    for table in ('tag_file', 'collection_item', 'channel', 'repository', 'download', 'collection', 'tag'):
+    for table in ('tag_file', 'collection_item', 'channel', 'repository', 'download', 'collection', 'tag',
+                  'config_version'):
         session.execute(text(f'DELETE FROM {table}'))
     session.execute(text('UPDATE file_group SET viewed = NULL, progress = NULL, position = NULL'))
     session.commit()

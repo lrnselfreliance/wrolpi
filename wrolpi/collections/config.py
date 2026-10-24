@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
+from wrolpi.config_version import IMPORT, SAVE
 from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
@@ -11,6 +12,11 @@ from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
 logger = logger.getChild(__name__)
 
 __all__ = ['PlaylistsConfig', 'playlists_config', 'save_playlists_config', 'get_playlists_config']
+
+
+def _item_key(item) -> tuple:
+    """What a playlist item points to; a playlist has at most one item per key (see CollectionItem's constraints)."""
+    return item.item_kind, item.file_group_id, item.zim_id, item.zim_entry, item.url
 
 
 @dataclass
@@ -69,6 +75,12 @@ class PlaylistsConfig(ConfigFile):
             return
 
         super().import_config(file, send_events)
+
+        decision = self.import_decision()
+        if decision == SAVE:
+            self.save_database_instead()
+            return
+
         playlists_data = self._config.get('playlists', [])
 
         # An empty playlists list never deletes DB records (mirrors ChannelsConfig).  Deleting all
@@ -90,7 +102,8 @@ class PlaylistsConfig(ConfigFile):
 
                     collection = session.query(Collection).filter_by(
                         name=name, kind='playlist').one_or_none()
-                    if not collection:
+                    new = not collection
+                    if new:
                         collection = Collection(name=name, kind='playlist')
                         session.add(collection)
                     collection.description = data.get('description')
@@ -103,12 +116,7 @@ class PlaylistsConfig(ConfigFile):
                     collection.tag = Tag.get_by_name(session, tag_name) if tag_name else None
                     session.flush([collection])
 
-                    # Rebuild items to match the config's order exactly.
-                    for item in list(collection.items):
-                        session.delete(item)
-                    session.flush()
-
-                    position = 1
+                    file_items = []
                     for item_data in (data.get('items') or []):
                         item = None
                         if 'file' in item_data:
@@ -136,20 +144,43 @@ class PlaylistsConfig(ConfigFile):
                                                   url=item_data['url'])
                         if item is not None:
                             item.title = item_data.get('title')
-                            item.position = position
-                            position += 1
-                            session.add(item)
+                            file_items.append(item)
+
+                    if decision == IMPORT or new:
+                        # Rebuild items to match the config's order exactly.
+                        for item in list(collection.items):
+                            session.delete(item)
+                        session.flush()
+                        items = file_items
+                    else:
+                        # Without deletes, keep the database's items in their order; add the file's other items
+                        # after the item that precedes them in the file.
+                        items = sorted(collection.items, key=lambda i: i.position)
+                        existing = {_item_key(i): i for i in items}
+                        previous = None
+                        for item in file_items:
+                            if found := existing.get(_item_key(item)):
+                                previous = found
+                                continue
+                            items.insert(items.index(previous) + 1 if previous else 0, item)
+                            previous = item
+
+                    for position, item in enumerate(items, start=1):
+                        item.position = position
+                        session.add(item)
 
                     session.flush()
                     imported_names.add(name)
 
                 # Delete playlists that are no longer present in the config.
-                for collection in session.query(Collection).filter_by(kind='playlist').all():
+                for collection in session.query(Collection).filter_by(kind='playlist').all() \
+                        if decision == IMPORT else []:
                     if collection.name not in imported_names:
                         logger.info(f'Deleting playlist {collection.name!r} (no longer in config)')
                         session.delete(collection)
 
             logger.info(f'Imported {len(imported_names)} playlists from {file_str}')
+            self.record_import_version()
             self.successful_import = True
         except Exception as e:
             self.successful_import = False
@@ -217,7 +248,8 @@ class PlaylistsConfig(ConfigFile):
             config_file.parent.mkdir(parents=True, exist_ok=True)
             self.write_config_data(merged_data, config_file)
 
-        self.import_config(send_events=send_events)
+        # Importing a backup is the user's choice: apply it whatever the versions.
+        self.import_forced(send_events=send_events)
         # Materialize the restored playlists on disk.
         from .sync import sync_playlists_directory
         sync_playlists_directory.activate_switch()
@@ -226,20 +258,9 @@ class PlaylistsConfig(ConfigFile):
         """Dump all playlists (with their ordered items) to the config file."""
         from .models import Collection
 
-        # playlists.yaml is derived from the database (the source of truth here), so the dump should
-        # always win.  Sync our in-memory version up to the on-disk version first, otherwise a Sanic
-        # worker (or freshly-restarted process) that hasn't re-imported would refuse to overwrite a
-        # newer on-disk config.
-        target = file or self.get_file()
-        try:
-            if target.exists():
-                disk_version = (self.read_config_file(target) or {}).get('version') or 0
-                if disk_version > (self._config.get('version') or 0):
-                    self._config['version'] = disk_version
-        except Exception as e:
-            logger.warning(f'Could not read existing playlists config version: {e}')
-
         with get_db_session() as session:
+            # The database's version (see wrolpi.config_version); it is never older than a file it saved.
+            version = self.db_version_for_dump(session)
             playlists = session.query(Collection).filter_by(kind='playlist') \
                 .order_by(Collection.name).all()
             data = []
@@ -255,6 +276,7 @@ class PlaylistsConfig(ConfigFile):
                 entry['items'] = [c for c in (i.to_config() for i in collection.items) if c]
                 data.append(entry)
             self._config['playlists'] = data
+            self._config['version'] = version
 
         logger.info(f'Dumping {len(data)} playlists to config')
         self.save(file, send_events, overwrite)

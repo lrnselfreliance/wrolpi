@@ -131,6 +131,24 @@ def no_unexpected_queries(request):
                         '\n'.join(f'{reason}: {" ".join(statement.split())[:300]}' for reason, statement in queries)
 
 
+def config_was_imported(session, *file_names: str):
+    """Record that these database configs were imported before, as on any WROLPi after its first startup with
+    wrolpi.config_version, so their next import deletes what the file no longer lists.  (Version 0 is no newer than
+    any file.)  Call it after the test's own database changes: a change counts as newer than the file."""
+    from wrolpi.config_version import set_config_version
+    for file_name in file_names:
+        set_config_version(session, file_name, 0)
+    session.commit()
+
+
+def config_versions_lost(session):
+    """A test that deletes rows to simulate a lost database must lose the database's config versions too (a real
+    lost database has none); otherwise deleting the rows counts as a database change newer than the file."""
+    from wrolpi.config_version import ConfigVersion
+    session.query(ConfigVersion).delete()
+    session.commit()
+
+
 @pytest.fixture(autouse=True)
 def no_deferred_request_writes(request):
     """Fail any test during which an API request wrote outside `request.ctx.db.write()`."""

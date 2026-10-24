@@ -723,7 +723,9 @@ class ConfigFile:
                     logger_.debug(f'Copied backup config: {rel_path} -> {backup_file}')
 
                 # Write the config in-memory to the file.  Track version changes to avoid overriding newer config.
-                self._config['version'] = (self._config['version'] or 0) + 1
+                # A database config's version is the database's, which `dump_config` set (see wrolpi.config_version).
+                if not self.is_versioned_by_database():
+                    self._config['version'] = (self._config['version'] or 0) + 1
                 config = deepcopy(self._config)
                 self.write_config_data(config, file)
 
@@ -738,6 +740,9 @@ class ConfigFile:
                 if send_events:
                     Events.send_config_save_failed(message)
                 raise e
+
+        if self.is_versioned_by_database() and file == self.get_file():
+            self.record_saved_version(config['version'])
 
     def write_config_data(self, config: dict, config_file: pathlib.Path):
         write_config_data(config, config_file, width=self.width)
@@ -781,6 +786,86 @@ class ConfigFile:
         """Dump database data, copy it to this the in-memory config, then write it to the config file."""
         # Copy the data as-is by default.  Other classes will overwrite this and dump the database before saving.
         self.save(file, send_events, overwrite)
+
+    # A database config's file and the database each carry a version; see wrolpi.config_version.
+
+    # The Import button sets this: the user chose to apply the file, whatever its version.
+    force_import: bool = False
+
+    def import_forced(self, send_events=False):
+        """Import this config's file whatever its version: the user chose it (the Import button, a backup)."""
+        self.force_import = True
+        try:
+            self.import_config(send_events=send_events)
+        finally:
+            # An import that returned before `import_decision` must not force a later one.
+            self.force_import = False
+
+    def is_versioned_by_database(self) -> bool:
+        from wrolpi.config_version import versioned_config_names
+        return self.file_name in versioned_config_names()
+
+    # What the last `import_decision` allowed; `record_import_version` records the version that follows from it.
+    last_import_decision: str = None
+
+    def import_decision(self) -> str:
+        """After reading the file (`ConfigFile.import_config`), decide what importing it may do: IMPORT,
+        IMPORT_WITHOUT_DELETES, or SAVE (the database is newer; call `save_database_instead` and import nothing).
+
+        On IMPORT the database's version is removed until `record_import_version`: the import's own writes must not
+        count, or an import that fails partway would leave the database "newer" than the file it did not finish
+        applying, and the next startup would save that partial database over the file."""
+        from wrolpi.config_version import IMPORT, decide, delete_config_version, get_config_version
+        from wrolpi.db import get_db_session
+        with get_db_session(commit=True) as session:
+            db_version = get_config_version(session, self.file_name)
+            if self.force_import:
+                self.force_import = False
+                decision = IMPORT
+            else:
+                decision = decide(self.version or 0, db_version)
+            if decision == IMPORT:
+                delete_config_version(session, self.file_name)
+        logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
+        self.last_import_decision = decision
+        return decision
+
+    def save_database_instead(self):
+        """The database has changes this config's file does not (see `import_decision`); save them."""
+        logger_.warning(f'{self.file_name} is older than the database; saving the database instead of importing it')
+        self.successful_import = True
+        self.dump_config()
+
+    def record_import_version(self):
+        """The database now matches this config's file: record the file's version.  Call last, after every write
+        the import makes.
+
+        Not after IMPORT_WITHOUT_DELETES: the database may keep rows the file does not list (changes that were never
+        saved), so recording the file's version would let the next import delete them.  Save them into the file
+        instead; that save records the version (`record_saved_version`).  A save after a partial import is refused,
+        so the version stays unknown until an import applies the whole file."""
+        from wrolpi.config_version import IMPORT, set_config_version
+        from wrolpi.db import get_db_session
+        if self.last_import_decision != IMPORT:
+            self.background_dump.activate_switch()
+            return
+        with get_db_session(commit=True) as session:
+            set_config_version(session, self.file_name, self.version or 0)
+
+    def db_version_for_dump(self, session) -> int:
+        """The version `dump_config` writes: the database's, read in the same transaction as the rows it saves.
+        Before the database has one, the file's next version (`save` records it)."""
+        from wrolpi.config_version import get_config_version
+        db_version = get_config_version(session, self.file_name)
+        return db_version if db_version is not None else (self.version or 0) + 1
+
+    def record_saved_version(self, version: int):
+        """The file was just written from the database.  If the database's version was unknown (see
+        `record_import_version`), the two are now in step: record it, so changes from here on count against it."""
+        from wrolpi.config_version import create_config_version
+        from wrolpi.db import get_db_session
+        with get_db_session(commit=True) as session:
+            create_config_version(session, self.file_name, version)
 
     def update(self, config: dict, overwrite: bool = False):
         """Update any values of this config.  Save the config to its file."""

@@ -11,6 +11,7 @@ import yaml
 
 from modules.archive.lib import get_domains_config
 from wrolpi.collections import Collection
+from wrolpi.conftest import config_was_imported
 
 
 @pytest.mark.asyncio
@@ -205,6 +206,7 @@ class TestDomainsConfigEdgeCases:
 
         # Reinitialize and import
         config.initialize()
+        config_was_imported(test_session, 'domains.yaml')
         config.import_config()
         assert config.successful_import is True
 

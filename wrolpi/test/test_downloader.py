@@ -1054,7 +1054,7 @@ def test_download_settings_accepts_valid_download_order(order):
 
 
 @pytest.mark.asyncio
-async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
+async def test_downloads_config(test_session, test_directory, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):
     # Can import with an empty config.
     await import_downloads_config()
@@ -1128,8 +1128,8 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
             frequency=None,
             next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='test_downloader',
-            # The destination was imported from the config.
-            destination=pathlib.Path('a different directory'),
+            # The destination was imported from the config, relative to the media directory.
+            destination=test_directory / 'a different directory',
             sub_downloader=None,
             tag_names=None,  # Tags were removed.
         ),

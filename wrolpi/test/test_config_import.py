@@ -290,3 +290,97 @@ async def test_relative_destination(test_session, test_directory, saved_download
     with statements() as collected:
         config.import_config()
     assert writes(collected) == []
+
+
+def edit_kiwix(path, **values):
+    def change(data):
+        for download in data['downloads']:
+            if download['url'] == KIWIX_URL:
+                download.update(values)
+
+    edit_config(path, change)
+
+
+@pytest.mark.asyncio
+async def test_zim_subscription_follows_a_language_change(test_session, saved_downloads):
+    """A Kiwix URL changed to another language moves the existing subscription (its name is unique) to the new
+    Download, with the new language; the old Download is removed."""
+    french = KIWIX_URL.replace('_en_', '_fr_')
+    edit_kiwix(saved_downloads, url=french)
+
+    config = get_download_manager_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    subscription = test_session.query(ZimSubscription).one()
+    assert (subscription.name, subscription.language, subscription.download.url) == ('Wikisource', 'fr', french)
+    assert KIWIX_URL not in urls(test_session)
+
+
+@pytest.mark.asyncio
+async def test_zim_subscription_download_keeps_its_state(test_session, saved_downloads):
+    """Changing a subscribed Download in the file writes only the file's values: its attempts are kept, and the
+    next import is in step."""
+    test_session.query(Download).filter_by(url=KIWIX_URL).update(dict(attempts=3))
+    test_session.commit()
+    edit_kiwix(saved_downloads, frequency=604800)
+
+    config = get_download_manager_config()
+    config.import_config()
+
+    test_session.expire_all()
+    download = Download.get_by_url(test_session, KIWIX_URL)
+    assert (download.frequency, download.attempts) == (604800, 3)
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_unsubscribed_download_drops_its_subscription(test_session, saved_downloads):
+    """A Kiwix Download the file keeps, but no longer as recurring, loses its subscription; the next import is in
+    step."""
+    edit_kiwix(saved_downloads, frequency=None)
+
+    config = get_download_manager_config()
+    config.import_config()
+
+    assert test_session.query(ZimSubscription).count() == 0
+    assert KIWIX_URL in urls(test_session)
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_kiwix_url_is_imported(test_session, saved_downloads):
+    """A recurring Kiwix URL that names no known subscription is imported as a plain Download; it does not fail the
+    other Downloads."""
+    unknown = 'https://download.kiwix.org/zim/other/unknown.zim'
+    edit_config(saved_downloads, lambda data: data['downloads'].extend([
+        dict(url=unknown, downloader='kiwix_zim', frequency=604800, status='new', last_successful_download=None,
+             next_download=None),
+        dict(url='https://example.com/added', downloader='archive', status='new', last_successful_download=None,
+             next_download=None),
+    ]))
+
+    config = get_download_manager_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    assert {unknown, 'https://example.com/added'} <= urls(test_session)
+    assert test_session.query(ZimSubscription).count() == 1
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_nothing_to_write_skips_prepare(test_session, saved_downloads, monkeypatch):
+    """An import with no differences does not start any preparation."""
+    prepared = []
+    monkeypatch.setattr(DownloadManagerConfig, 'prepare', lambda self, diffs: prepared.append(diffs))
+
+    get_download_manager_config().import_config()
+
+    assert prepared == []

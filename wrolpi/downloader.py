@@ -2062,19 +2062,28 @@ def _utc(value) -> Optional[datetime]:
     return (value if value.tzinfo else value.replace(tzinfo=pytz.utc)).astimezone(pytz.utc)
 
 
-def is_zim_subscription_download(url: str, frequency: Optional[int]) -> bool:
-    """A recurring Kiwix Download belongs to a ZimSubscription."""
-    return bool(frequency) and url.startswith('https://download.kiwix.org/')
+def zim_subscription_for(url: str, frequency: Optional[int]) -> Optional[Tuple[str, str]]:
+    """The (name, language) of the ZimSubscription a recurring Kiwix Download belongs to.  None for any other
+    Download, including a Kiwix URL that names no known subscription."""
+    from modules.zim.lib import zim_download_url_to_name
+    if not frequency or not url.startswith('https://download.kiwix.org/'):
+        return None
+    try:
+        return zim_download_url_to_name(url)
+    except Exception as e:
+        logger.warning(f'Download {url} is not a known Zim subscription: {e}')
+        return None
 
 
 class DownloadsSection(ConfigSection):
     """download_manager.yaml's Downloads, keyed by URL.  A recurring Kiwix Download's ZimSubscription is derived
-    from it: `subscribed` compares whether the subscription exists, so a missing one is restored."""
+    from it: `subscription` compares the subscription's (name, language), so a missing, stale or unwanted one is
+    corrected."""
     name = 'downloads'
 
     @staticmethod
     def _row(url, destination, downloader, frequency, last_successful_download, next_download, settings, status,
-             sub_downloader, tag_names, subscribed, defaults: dict) -> dict:
+             sub_downloader, tag_names, subscription, defaults: dict) -> dict:
         return dict(
             destination=str(destination) if destination else None,
             downloader=downloader,
@@ -2086,7 +2095,7 @@ class DownloadsSection(ConfigSection):
             status=status or DownloadStatus.new,
             sub_downloader=sub_downloader,
             tag_names=list(tag_names) if tag_names else None,
-            subscribed=subscribed,
+            subscription=tuple(subscription) if subscription else None,
         )
 
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
@@ -2106,11 +2115,19 @@ class DownloadsSection(ConfigSection):
                 rows[url] = self._row(
                     url, destination, data['downloader'], data.get('frequency'),
                     data.get('last_successful_download'), data.get('next_download'), settings, data.get('status'),
-                    data.get('sub_downloader'), tag_names, is_zim_subscription_download(url, data.get('frequency')),
+                    data.get('sub_downloader'), tag_names, zim_subscription_for(url, data.get('frequency')),
                     defaults)
             except Exception as e:
                 logger.error(f'Skipping invalid Download in config: {data}', exc_info=e)
                 invalid.add(url)
+        # A subscription's name is unique: the first Download listed for it gets it.
+        names = set()
+        for url, row in rows.items():
+            if row['subscription'] and row['subscription'][0] in names:
+                logger.warning(f'Download {url} is a second Download for Zim subscription {row["subscription"][0]}')
+                row['subscription'] = None
+            elif row['subscription']:
+                names.add(row['subscription'][0])
         return rows, invalid
 
     def db_rows(self, session: Session) -> Dict[str, dict]:
@@ -2119,15 +2136,13 @@ class DownloadsSection(ConfigSection):
         query = session.query(
             Download.url, Download.destination, Download.downloader, Download.frequency,
             Download.last_successful_download, Download.next_download, Download.settings, Download.status,
-            Download.sub_downloader, Download.tag_names, ZimSubscription.id,
+            Download.sub_downloader, Download.tag_names, ZimSubscription.name, ZimSubscription.language,
         ).outerjoin(ZimSubscription, ZimSubscription.download_id == Download.id) \
             .filter(*Download.saved_by_config_filter())
-        return {url: self._row(url, *values, subscribed=subscription_id is not None, defaults=defaults)
-                for url, *values, subscription_id in query}
+        return {url: self._row(url, *values, subscription=(name, language) if name else None, defaults=defaults)
+                for url, *values, name, language in query}
 
     def upsert(self, session: Session, rows: Dict[str, dict]):
-        from modules.zim.lib import zim_download_url_to_name
-        from modules.zim.models import ZimSubscription
         existing = dict()
         for urls in chunks(rows):
             existing.update({i.url: i for i in session.query(Download).filter(Download.url.in_(urls))})
@@ -2150,14 +2165,37 @@ class DownloadsSection(ConfigSection):
             for name, value in values[url].items():
                 setattr(download, name, value)
         session.flush()
+        self._sync_subscriptions(session, rows)
 
+    @staticmethod
+    def _sync_subscriptions(session: Session, rows: Dict[str, dict]):
+        """Give each written Download the ZimSubscription its row names, and no other.  A subscription of that name
+        on another Download (the URL changed) is moved to this one.  The Download's own columns are the file's."""
+        from modules.zim.models import ZimSubscription
+        ids = dict()
+        for urls in chunks(rows):
+            ids.update(session.query(Download.url, Download.id).filter(Download.url.in_(urls)))
+        by_download = dict()
+        for download_ids in chunks(ids.values()):
+            by_download.update({i.download_id: i for i in
+                                session.query(ZimSubscription).filter(ZimSubscription.download_id.in_(download_ids))})
         for url, row in rows.items():
-            if row['subscribed']:
-                name, language = zim_download_url_to_name(url)
-                subscription = session.query(ZimSubscription).filter_by(name=name).one_or_none() \
-                               or ZimSubscription(name=name, language=language)
-                subscription.change_download(session, url, row['frequency'])
+            download_id = ids[url]
+            current = by_download.get(download_id)
+            if current is not None and current.download_id != download_id:
+                current = None  # Moved to an earlier row's Download.
+            if current is not None and (not row['subscription'] or current.name != row['subscription'][0]):
+                session.delete(current)
+                session.flush()
+                current = None
+            if row['subscription']:
+                name, language = row['subscription']
+                subscription = current or session.query(ZimSubscription).filter_by(name=name).one_or_none() \
+                               or ZimSubscription(name=name)
+                subscription.language = language
+                subscription.download_id = download_id
                 session.add(subscription)
+        session.flush()
 
     def delete(self, session: Session, keys: Set[str]):
         for urls in chunks(keys):

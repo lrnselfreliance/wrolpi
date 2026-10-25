@@ -406,6 +406,32 @@ async def test_invalid_tag(async_client, test_session, test_directory):
     with pytest.raises(UnknownTag):
         await tags.upsert_tag(test_session, 'Tag ID does not exist', '#fff', 1)
 
+    with pytest.raises(InvalidTag):
+        await tags.upsert_tag(test_session, '   ', '#fff')
+    with pytest.raises(InvalidTag):
+        tags.Tag.get_or_create_tag(test_session, ' \t')
+
+
+@pytest.mark.asyncio
+async def test_tag_name_whitespace_stripped(test_session, test_directory, tag_factory):
+    """Leading and trailing whitespace is never part of a Tag's name."""
+    await tags.upsert_tag(test_session, ' one  ', '#fff')
+    tag = tags.Tag.find_by_name(test_session, 'one')
+    assert tag.name == 'one'
+
+    # Renaming strips too.
+    await tags.upsert_tag(test_session, '\ttwo\n', '#fff', tag.id)
+    assert tag.name == 'two'
+
+    # A padded name finds the existing Tag rather than creating a near-duplicate.
+    assert tags.Tag.get_or_create_tag(test_session, 'two ').id == tag.id
+    assert tags.Tag.get_or_create_tag(test_session, ' three ').name == 'three'
+    assert {i.name for i in test_session.query(tags.Tag)} == {'two', 'three'}
+
+    # A padded name conflicts with an existing Tag.
+    with pytest.raises(InvalidTag):
+        await tags.upsert_tag(test_session, 'three ', '#fff', tag.id)
+
 
 @pytest.mark.asyncio
 async def test_tags_directory(test_session, test_directory, tag_factory, video_factory, example_pdf, await_switches,

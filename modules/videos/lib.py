@@ -6,11 +6,11 @@ import pathlib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Generator, Type, List
+from typing import Dict, Generator, Type, List, Set
 from typing import Tuple, Optional
 
 import pytz
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from yt_dlp import YoutubeDL
 
 from modules.videos.models import Video
@@ -18,7 +18,10 @@ from wrolpi import dates, flags
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config, trim_file_name
-from wrolpi.config_version import IMPORT, SAVE, register_ownership
+from wrolpi.collections import Collection
+from wrolpi.collections.models import validate_collection_directory
+from wrolpi.config_import import ConfigSection, chunks, media_relative
+from wrolpi.config_version import register_ownership
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, session_curs
 from wrolpi.downloader import Download, download_manager
@@ -26,6 +29,7 @@ from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
+from wrolpi.tags import Tag, unknown_tag_names
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, ConfigError, \
@@ -257,6 +261,187 @@ class ChannelDictValidator:
     url: str = None
 
 
+def _channel_key(data: dict) -> str:
+    """A Channel's key: its directory, relative to the media directory."""
+    if not isinstance(data, dict) or not data.get('directory'):
+        raise ValueError('A Channel requires a directory')
+    return media_relative(validate_collection_directory(data['directory']))
+
+
+# The key of a channel Collection without a Channel or a directory.
+ORPHAN_KEY = '\0orphan:'
+# Missing from an entry: the Channel keeps the database's value.
+CHANNEL_KEPT_IF_MISSING = ('source_id', 'generate_posters', 'calculate_duration', 'download_missing_data')
+CHANNEL_COMPARED = ('name', 'url', 'tag_name', 'file_format') + CHANNEL_KEPT_IF_MISSING
+
+
+def _channel_row(name, url, source_id, tag_name, file_format, generate_posters, calculate_duration,
+                 download_missing_data) -> dict:
+    return dict(name=name, url=url or None, source_id=source_id or None, tag_name=tag_name or None,
+                file_format=file_format or None, generate_posters=generate_posters,
+                calculate_duration=calculate_duration, download_missing_data=download_missing_data)
+
+
+class ChannelsSection(ConfigSection):
+    """channels.yaml's Channels (a Collection with kind 'channel' and its Channel), keyed by directory.  A channel
+    Collection without a Channel is in the database's rows too: listed, it gets its Channel; not listed, it is
+    deleted."""
+    name = 'channels'
+
+    def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
+        rows, invalid = dict(), set()
+        for position, data in enumerate(config.get('channels') or []):
+            try:
+                key = _channel_key(data)
+            except Exception as e:
+                channel_import_logger.error(f'Skipping invalid Channel in config: {data!r}', exc_info=e)
+                # Counted as skipped; never a directory.  (The entry's name keeps its Channel, see `prepare`.)
+                invalid.add(f'\0{position}')
+                continue
+            if key in rows or key in invalid:
+                raise RuntimeError('Refusing to import channels config because it contains duplicate directories!')
+            if not data.get('name'):
+                channel_import_logger.error(f'Channel {key!r} is required to have "name", skipping')
+                invalid.add(key)
+                continue
+            rows[key] = _channel_row(data['name'], data.get('url'), data.get('source_id'), data.get('tag_name'),
+                                     data.get('file_format'), data.get('generate_posters'),
+                                     data.get('calculate_duration'), data.get('download_missing_data'))
+        return rows, invalid
+
+    def db_rows(self, session: Session) -> Dict[str, dict]:
+        query = session.query(Collection.directory, Collection.name, Channel.url, Channel.source_id, Tag.name,
+                              Collection.file_format, Channel.generate_posters, Channel.calculate_duration,
+                              Channel.download_missing_data, Collection.id, Channel.id) \
+            .select_from(Collection) \
+            .outerjoin(Channel, Channel.collection_id == Collection.id) \
+            .outerjoin(Tag, Tag.id == Collection.tag_id) \
+            .filter(Collection.kind == 'channel')
+        rows = dict()
+        for directory, *values, collection_id, channel_id in query:
+            if directory:
+                key = media_relative(directory)
+            elif channel_id is None:
+                # An orphan without a directory: no entry can list it (`ORPHAN_KEY`).
+                key = f'{ORPHAN_KEY}{collection_id}'
+            else:
+                continue
+            rows[key] = row = _channel_row(*values)
+            if channel_id is None:
+                row['orphan'] = True
+        return rows
+
+    def same(self, file_row: dict, db_row: dict) -> bool:
+        if db_row.get('orphan') or file_row.get('directory'):
+            return False
+        return all(file_row[i] == db_row[i] for i in CHANNEL_COMPARED
+                   if not (i in CHANNEL_KEPT_IF_MISSING and file_row[i] is None))
+
+    def upsert(self, session: Session, rows: Dict[str, dict]):
+        media_directory = get_media_directory()
+        collections = {media_relative(i.directory): i for i in session.query(Collection).filter(
+            Collection.kind == 'channel', Collection.directory.in_([str(media_directory / i) for i in rows]))}
+        channels = {i.collection_id: i for i in session.query(Channel).filter(
+            Channel.collection_id.in_([i.id for i in collections.values()]))}
+        tags = {i.name: i for i in
+                session.query(Tag).filter(Tag.name.in_(list({i['tag_name'] for i in rows.values()} - {None})))}
+        for key, row in rows.items():
+            if not (collection := collections.get(key)):
+                collection = Collection(kind='channel')
+                session.add(collection)
+            # A moved Channel's new directory (see `ChannelsConfig.prepare`).
+            collection.directory = media_directory / row.get('directory', key)
+            collection.name = row['name']
+            collection.tag = tags.get(row['tag_name'])
+            collection.file_format = row['file_format']
+            if not (channel := channels.get(collection.id) if collection.id else None):
+                channel = Channel(collection=collection)
+                session.add(channel)
+            channel.url = row['url']
+            for name in CHANNEL_KEPT_IF_MISSING:
+                if row[name] is not None:
+                    setattr(channel, name, row[name])
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[str]):
+        media_directory = get_media_directory()
+        orphan_ids = [int(i.removeprefix(ORPHAN_KEY)) for i in keys if i.startswith(ORPHAN_KEY)]
+        collections = session.query(Collection).filter(
+            Collection.kind == 'channel',
+            Collection.directory.in_([str(media_directory / i) for i in keys if not i.startswith(ORPHAN_KEY)])
+            | Collection.id.in_(orphan_ids)).all()
+        channels = {i.collection_id: i for i in session.query(Channel).filter(
+            Channel.collection_id.in_([i.id for i in collections]))}
+        for collection in collections:
+            if channel := channels.get(collection.id):
+                logger.warning(f'Deleting {channel} because it is not in the config.')
+                channel.delete_with_videos(commit=False)
+            else:
+                logger.warning(f'Deleting orphaned Collection {collection.name} (id={collection.id})')
+                session.delete(collection)
+        session.flush()
+
+
+class ChannelDownloadsSection(ConfigSection):
+    """The Downloads listed under each Channel, keyed by (Channel directory, URL).  An existing Download keeps its own
+    frequency (download_manager.yaml's); the file's is used to create one."""
+    name = 'downloads'
+
+    def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
+        rows = dict()
+        for data in config.get('channels') or []:
+            try:
+                key = _channel_key(data)
+            except Exception:
+                continue
+            for download in data.get('downloads') or []:
+                if isinstance(download, dict) and download.get('url'):
+                    rows[(key, download['url'])] = dict(frequency=download.get('frequency'))
+                else:
+                    channel_import_logger.error(f'Skipping invalid Download of Channel {key!r}: {download!r}')
+        return rows, set()
+
+    def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
+        # A Channel listed with an empty list of Downloads has none (see `ChannelsConfig.prepare` for entries without
+        # a list).
+        return bool(config.get('channels'))
+
+    def db_rows(self, session: Session) -> Dict[tuple, dict]:
+        query = session.query(Collection.directory, Download.url, Download.frequency) \
+            .join(Collection, Collection.id == Download.collection_id) \
+            .filter(Collection.kind == 'channel', Collection.directory.isnot(None))
+        return {(media_relative(directory), url): dict(frequency=frequency) for directory, url, frequency in query}
+
+    def same(self, file_row: dict, db_row: dict) -> bool:
+        return True
+
+    def upsert(self, session: Session, rows: Dict[tuple, dict]):
+        media_directory = get_media_directory()
+        channels = {media_relative(i.directory): i for i in session.query(Channel).join(Collection).filter(
+            Collection.directory.in_([str(media_directory / i) for i, _ in rows]))}
+        for (key, url), row in rows.items():
+            if not (channel := channels.get(key)):
+                channel_import_logger.warning(f'Cannot find Channel {key!r} for Download {url}')
+                continue
+            if existing := Download.get_by_url(session, url):
+                existing.collection_id = channel.collection_id
+            elif row['frequency']:
+                channel.get_or_create_download(session, url, row['frequency'], reset_attempts=True, commit=False)
+            else:
+                logger.error(f'Refusing to create Download for Channel without frequency: {url}')
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[tuple]):
+        media_directory = get_media_directory()
+        query = session.query(Download, Collection.directory) \
+            .join(Collection, Collection.id == Download.collection_id) \
+            .filter(Collection.kind == 'channel', Download.url.in_([url for _, url in keys]))
+        for download, directory in query.all():
+            if (media_relative(directory), download.url) in keys:
+                logger.warning(f'Deleting {download} because it is no longer in its Channel')
+                download.delete(add_to_skip_list=False, commit=False)
+
+
 @dataclass
 class ChannelsConfigValidator:
     version: int = None
@@ -265,6 +450,7 @@ class ChannelsConfigValidator:
 
 class ChannelsConfig(ConfigFile):
     file_name = 'channels.yaml'
+    sections = (ChannelsSection(), ChannelDownloadsSection())
     default_config = dict(
         channels=[dict(
             name='WROLPi',
@@ -285,172 +471,90 @@ class ChannelsConfig(ConfigFile):
         self.update({'channels': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
-        """Import channels from config file into database using batch operations."""
-        file = file or self.get_file()
+        self._config_outdated = False
+        super().import_config(file, send_events)
 
-        # If config file doesn't exist, mark import as successful (nothing to import)
-        if not file.is_file():
-            channel_import_logger.info('No channels config file, skipping import')
-            self.successful_import = True
-            return
+    def prepare(self, diffs: dict):
+        channels, downloads = diffs['channels'], diffs['downloads']
+        db_rows = self.import_db_rows['channels']
 
-        super().import_config(file)
+        # A Tag that no longer exists (it was removed) is dropped, and the config is saved without it.
+        rows = [*channels.added.values(), *channels.changed.values()]
+        unknown = unknown_tag_names({i['tag_name'] for i in rows if i['tag_name']})
+        for row in rows:
+            if row['tag_name'] in unknown:
+                channel_import_logger.warning(f'Removing unknown Tag {row["tag_name"]!r} from a Channel')
+                row['tag_name'] = None
+                self._config_outdated = True
 
-        decision = self.import_decision()
-        if decision == SAVE:
-            self.save_database_instead()
-            return
+        # A Channel whose directory changed (its name did not) is moved, not deleted and re-created.
+        removed_by_name = dict()
+        for key in channels.removed:
+            removed_by_name.setdefault(db_rows[key]['name'], []).append(key)
+        for key, row in list(channels.added.items()):
+            if len(old := removed_by_name.get(row['name']) or []) == 1:
+                channels.removed.discard(old[0])
+                del channels.added[key]
+                channels.changed[old[0]] = dict(row, directory=key)
 
-        try:
-            channels = self.channels
-            # Empty channels list = never delete DB records
-            if not channels:
-                channel_import_logger.info('No channels in config, preserving existing DB channels')
-                self.successful_import = True
-                return
+        # An invalid entry keeps its Channel (found by the entry's name when its directory is invalid), and the
+        # Channel's Downloads; so does an entry without a list of Downloads (an old config).
+        entries = [i for i in self._config.get('channels') or [] if isinstance(i, dict)]
+        invalid_names = {i.get('name') for i in entries if i.get('name')} - {i['name'] for i in self._channel_rows()}
+        for key in [i for i in channels.removed if db_rows[i]['name'] in invalid_names]:
+            channels.removed.discard(key)
+        kept = set(db_rows) - set(self._channel_rows_by_key()) - channels.removed
+        kept |= {key for key, data in self._channel_entries() if 'downloads' not in data}
+        downloads.removed = {i for i in downloads.removed if i[0] not in kept}
 
-            channel_directories = [i['directory'] for i in channels]
-            if len(channel_directories) != len(set(channel_directories)):
-                raise RuntimeError('Refusing to import channels config because it contains duplicate directories!')
+    def _channel_entries(self) -> List[Tuple[str, dict]]:
+        """The valid entries of the file, keyed by directory."""
+        entries = list()
+        for data in self._config.get('channels') or []:
+            try:
+                entries.append((_channel_key(data), data))
+            except Exception:
+                pass
+        return entries
 
-            # Validate all channels have required options
-            for data in channels:
-                directory = get_media_directory() / data['directory']
-                for option in (i for i in REQUIRED_OPTIONS if i not in data):
-                    raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
+    def _channel_rows_by_key(self) -> dict:
+        return ChannelsSection().file_rows(self._config)[0]
 
-            updated_channel_ids = set()
+    def _channel_rows(self) -> list:
+        return list(self._channel_rows_by_key().values())
 
-            with get_db_session(commit=True) as session:
-                # Prepare data with kind='channel' for all entries
-                channel_data_list = []
-                for data in channels:
-                    data = data.copy()
-                    data['kind'] = 'channel'
-                    channel_data_list.append(data)
-
-                # Batch create/update Collections
-                from wrolpi.collections import Collection
-                collections = Collection.batch_from_config(session, channel_data_list)
-
-                # Pre-fetch existing Channels by collection_id in ONE query
-                collection_ids = [c.id for c in collections]
-                existing_channels_list = session.query(Channel).filter(
-                    Channel.collection_id.in_(collection_ids)
-                ).all()
-                existing_channels = {ch.collection_id: ch for ch in existing_channels_list}
-
-                # Pre-fetch all tags for channel update in ONE query
-                tag_names = {d.get('tag_name') for d in channels if d.get('tag_name')}
-                tags_by_name = {}
-                if tag_names:
-                    from wrolpi.tags import Tag
-                    tags = session.query(Tag).filter(Tag.name.in_(tag_names)).all()
-                    tags_by_name = {t.name: t for t in tags}
-
-                # Pre-fetch existing downloads for update in ONE query
-                download_urls = set()
-                for data in channels:
-                    for dl in data.get('downloads', []):
-                        if isinstance(dl, dict):
-                            download_urls.add(dl['url'])
-                existing_downloads = {}
-                if download_urls:
-                    from wrolpi.downloader import Download
-                    downloads = session.query(Download).filter(Download.url.in_(download_urls)).all()
-                    existing_downloads = {d.url: d for d in downloads}
-
-                # Process channels
-                new_channels = []
-                for collection, data in zip(collections, channel_data_list):
-                    channel = existing_channels.get(collection.id)
-
-                    if not channel:
-                        # Create new Channel
-                        channel = Channel(
-                            collection_id=collection.id,
-                            url=data.get('url'),
-                            source_id=data.get('source_id'),
-                        )
-                        new_channels.append(channel)
-                        existing_channels[collection.id] = channel
-
-                # Batch add new channels
-                if new_channels:
-                    session.add_all(new_channels)
-                    session.flush()
-
-                # Now update all channels (both new and existing)
-                for collection, data in zip(collections, channel_data_list):
-                    channel = existing_channels[collection.id]
-                    # Call batch_update with pre-fetched data
-                    channel.batch_update(data, tags_by_name, existing_downloads)
-                    updated_channel_ids.add(channel.id)
-
-                    # Background task for missing source_id
-                    if not channel.source_id and channel.url and flags.have_internet.is_set():
-                        if download_manager.can_download and channel.download_missing_data:
-                            channel_import_logger.info(f'Fetching channel source id for {channel}')
-                            background_task(fetch_channel_source_id(channel.id))
-
-                    channel_import_logger.debug(f'Updated {repr(channel.name)}'
-                                                f' url={channel.url}'
-                                                f' source_id={channel.source_id}'
-                                                f' directory={channel.directory}'
-                                                )
-
-            with get_db_session(commit=True) as session:
-                # Delete any Channels that were deleted from the config, along with their Collections.
-                orphaned_collection_ids = []
-                for channel in session.query(Channel) if decision == IMPORT else []:
-                    if channel.id not in updated_channel_ids:
-                        logger.warning(f'Deleting {channel} because it is not in the config.')
-                        orphaned_collection_ids.append(channel.collection_id)
-                        channel.delete_with_videos()
-
-                # Delete orphaned Collections (kind='channel') that no longer have a Channel.
-                # This prevents Collections from appearing in the UI with null channel_id.
-                from wrolpi.collections import Collection
-                for collection_id in orphaned_collection_ids:
-                    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-                    if collection:
-                        logger.warning(f'Deleting orphaned Collection {collection.name} (id={collection.id})')
-                        session.delete(collection)
-
-            # Also clean up any pre-existing orphaned Collections (kind='channel')
-            # that have no associated Channel. This handles orphans created before
-            # this cleanup logic was added.
-            with get_db_session(commit=True) as session:
-                from wrolpi.collections import Collection
-                # Find all Collections with kind='channel' that no Channel references
-                orphaned_collections = session.query(Collection).outerjoin(
-                    Channel, Channel.collection_id == Collection.id
-                ).filter(
-                    Collection.kind == 'channel',
-                    Channel.id.is_(None)
-                ).all()
-
-                for collection in orphaned_collections:
-                    logger.warning(f'Deleting pre-existing orphaned Collection {collection.name} (id={collection.id})')
-                    session.delete(collection)
-
-            # Assign Videos to Channels using bulk SQL
-            from modules.videos import claim_videos_for_channels
-            claim_videos_for_channels(list(updated_channel_ids))
-
-            # Create any missing Downloads. Associate Downloads with any necessary Channels.
+    def after_import(self, diffs: dict):
+        """Claim the Videos of new and changed Channels, find their missing source ids, and link Downloads."""
+        changed = {row.get('directory', key) for key, row in
+                   {**diffs['channels'].added, **diffs['channels'].changed}.items()}
+        if changed:
+            media_directory = get_media_directory()
             with get_db_session() as session:
-                link_channel_and_downloads(session)
+                updated = session.query(Channel.id, Channel.url, Channel.source_id, Channel.download_missing_data) \
+                    .join(Collection, Collection.id == Channel.collection_id) \
+                    .filter(Collection.directory.in_([str(media_directory / i) for i in changed])).all()
+            from modules.videos import claim_videos_for_channels
+            claim_videos_for_channels([i.id for i in updated])
+            for id_, url, source_id, download_missing_data in updated:
+                if not source_id and url and download_missing_data and flags.have_internet.is_set() \
+                        and download_manager.can_download:
+                    channel_import_logger.info(f'Fetching channel source id for Channel id={id_}')
+                    background_task(fetch_channel_source_id(id_))
 
-            self.record_import_version()
-            self.successful_import = True
-        except Exception as e:
-            self.successful_import = False
-            message = f'Failed to import {self.get_relative_file()} config!'
-            if send_events:
-                channel_import_logger.warning(message, exc_info=e)
-                Events.send_config_import_failed(message)
-            raise
+        if self.import_skipped:
+            # Linking changes channels.yaml, which cannot be saved while it has skipped entries: the database would be
+            # newer than the file, and the next startup would save over them.
+            channel_import_logger.warning('Not linking Downloads to Channels while channels.yaml has skipped entries')
+        else:
+            with get_db_session() as session:
+                links = channel_download_links(session)
+            if links:
+                with get_db_session(commit=True) as session:
+                    _link_downloads(session, links)
+                self._config_outdated = True
+
+        if self._config_outdated:
+            self.background_dump.activate_switch()
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump all channels from database to config file."""
@@ -953,67 +1057,45 @@ def import_channels_config():
     channel_import_logger.info('Importing channels config completed')
 
 
-def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel, download_: Type[Base] = Download):
-    """Associate any Download related to a Channel via its Collection.
+def channel_download_links(session: Session) -> Dict[int, int]:
+    """The recurring Downloads without a Collection which belong to a Channel: {Download id: Collection id}.
 
-    Downloads are linked to Collections (via collection_id) rather than directly to Channels.
-    This function finds Channels and links their Downloads to the Channel's Collection.
-    """
-
-    def get_destination(d):
-        """Get destination from download.destination column or settings['destination']."""
-        if d.destination:
-            return str(d.destination)
-        return (d.settings or dict()).get('destination')
-
-    # Only Downloads with a frequency can be a Collection Download.
-    downloads = list(session.query(download_).filter(download_.frequency.isnot(None)).all())
-    # Download.url is unique and cannot be null.
-    downloads_by_url = {i.url: i for i in downloads}
-    # Many Downloads may share the same destination (from either column or settings).
-    downloads_with_destination = [(d, get_destination(d)) for d in downloads if get_destination(d)]
-    channels = session.query(channel_).all()
-
-    need_commit = False
+    A Download belongs to the Channel whose directory is its destination, whose URL (or RSS feed) is its URL, or whose
+    source id is the channel id of its info json."""
+    channels = session.query(Channel).options(joinedload(Channel.collection)).all()
+    by_directory = {str(i.directory): i.collection_id for i in channels if i.directory}
+    by_url = {i.url: i.collection_id for i in channels if i.url}
     for channel in channels:
-        directory = str(channel.directory)
-        for download, destination in downloads_with_destination:
-            if destination == directory and not download.collection_id:
-                download.collection_id = channel.collection_id
-                need_commit = True
+        if rss_url := channel.get_rss_url():
+            by_url.setdefault(rss_url, channel.collection_id)
+    by_source_id = {i.source_id: i.collection_id for i in channels if i.source_id}
 
-        download = downloads_by_url.get(channel.url)
-        if download and not download.collection_id:
-            download.collection_id = channel.collection_id
-            need_commit = True
+    links = dict()
+    downloads = session.query(Download.id, Download.url, Download.destination, Download.settings, Download.info_json) \
+        .filter(Download.frequency.isnot(None), Download.collection_id.is_(None))
+    for id_, url, destination, settings, info_json in downloads:
+        destination = str(destination) if destination else (settings or dict()).get('destination')
+        collection_id = (by_directory.get(destination) if destination else None) or by_url.get(url)
+        if not collection_id:
+            info_json = info_json or dict()
+            if source_id := info_json.get('channel_id') or info_json.get('id'):
+                collection_id = by_source_id.get(source_id)
+        if collection_id:
+            links[id_] = collection_id
+    return links
 
-        # Get any Downloads for a Channel's RSS feed.
-        rss_url = channel.get_rss_url()
-        if rss_url and (download := downloads_by_url.get(rss_url)):
-            if not download.collection_id:
-                download.collection_id = channel.collection_id
-                need_commit = True
 
-    # Associate any Download which shares a Channel's URL.
-    for download in downloads:
-        channel = channel_.get_by_url(session, download.url)
-        if channel and not download.collection_id:
-            download.collection_id = channel.collection_id
-            need_commit = True
+def _link_downloads(session: Session, links: Dict[int, int]):
+    for ids in chunks(list(links), 500):
+        for download in session.query(Download).filter(Download.id.in_(ids)):
+            download.collection_id = links[download.id]
+    session.flush()
 
-    # Associate any Download which has info_json channel_id matching a Channel's source_id.
-    for download in downloads:
-        if download.collection_id:
-            continue
-        info_json = download.info_json or {}
-        channel_source_id = info_json.get('channel_id') or info_json.get('id')
-        if channel_source_id:
-            channel = channel_.get_by_source_id(session, channel_source_id)
-            if channel:
-                download.collection_id = channel.collection_id
-                need_commit = True
 
-    if need_commit:
+def link_channel_and_downloads(session: Session):
+    """Associate any Download related to a Channel via its Collection (see `channel_download_links`)."""
+    if links := channel_download_links(session):
+        _link_downloads(session, links)
         session.commit()
 
 

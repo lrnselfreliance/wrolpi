@@ -250,7 +250,8 @@ class Collection(ModelHelper, Base):
     def get_or_create_download(self, session: Session, url: str, frequency: int,
                                reset_attempts: bool = False,
                                downloader_name: str = None,
-                               sub_downloader_name: str = None) -> 'Download':
+                               sub_downloader_name: str = None,
+                               commit: bool = True) -> 'Download':
         """Get or create a Download for this Collection.
 
         Args:
@@ -260,6 +261,7 @@ class Collection(ModelHelper, Base):
             reset_attempts: Reset download attempts if True
             downloader_name: Name of the downloader to use
             sub_downloader_name: Name of the sub-downloader for child downloads
+            commit: Commit a new Download (False: the caller's write commits)
 
         Returns:
             The Download instance
@@ -283,6 +285,7 @@ class Collection(ModelHelper, Base):
                 sub_downloader_name=sub_downloader_name,
                 destination=str(self.directory) if self.directory else None,
                 reset_attempts=reset_attempts,
+                commit=commit,
             )
         if reset_attempts:
             download.attempts = 0

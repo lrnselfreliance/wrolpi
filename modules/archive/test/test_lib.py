@@ -1277,6 +1277,30 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
     assert download4.collection_id is None  # no frequency = no link
 
 
+def test_link_domain_and_downloads_by_destination(test_session, test_directory, test_download_manager):
+    """A Download whose destination column is in a domain's directory is linked to that domain (the destination was
+    moved out of the settings)."""
+    from wrolpi.downloader import Download
+    from modules.archive.lib import link_domain_and_downloads
+
+    collection = Collection(name='example.com', kind='domain', directory=test_directory / 'archive/example.com')
+    test_session.add(collection)
+    exact = Download(url='https://other.com/rss', downloader='rss', sub_downloader='archive', frequency=86400,
+                     destination=test_directory / 'archive/example.com')
+    below = Download(url='https://other.com/rss2', downloader='rss', sub_downloader='archive', frequency=86400,
+                     destination=test_directory / 'archive/example.com/2025/01')
+    similar = Download(url='https://other.com/rss3', downloader='rss', sub_downloader='archive', frequency=86400,
+                       destination=test_directory / 'archive/example.com.au')
+    test_session.add_all([exact, below, similar])
+    test_session.commit()
+
+    link_domain_and_downloads(test_session)
+
+    assert exact.collection_id == collection.id
+    assert below.collection_id == collection.id
+    assert similar.collection_id is None
+
+
 @skip_ci
 @pytest.mark.asyncio
 async def test_archive_download_uses_domain_collection_directory(async_client, test_session, test_directory, fake_now,

@@ -1043,8 +1043,8 @@ class DownloadManager:
                            sub_downloader_name: str = None, reset_attempts: bool = False,
                            destination: str | pathlib.Path = None, tag_names: List[str] = None,
                            settings: Dict = None, collection_id: int = None,
-                           override_skip: bool = False) -> Download:
-        """Schedule a recurring download."""
+                           override_skip: bool = False, commit: bool = True) -> Download:
+        """Schedule a recurring download.  `commit`: False only flushes (the caller's write commits)."""
         if not frequency or not isinstance(frequency, int):
             raise ValueError('Recurring download must have a frequency!')
 
@@ -1065,7 +1065,10 @@ class DownloadManager:
         if channel := Channel.get_by_url(session, url=download.url):
             download.collection_id = channel.collection_id
 
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush([download])
 
         return download
 

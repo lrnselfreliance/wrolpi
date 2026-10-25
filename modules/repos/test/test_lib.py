@@ -277,11 +277,11 @@ async def test_repo_directory_traversal(test_session, test_directory, async_clie
         lib.create_repository(test_session, 'https://github.com/a/b', directory=test_directory)
     test_session.rollback()
 
-    # The config can not move an existing Repo outside the media directory.
+    # The config can not move an existing Repo outside the media directory: the entry is invalid (and skipped).
     lib.create_repository(test_session, 'https://github.com/a/b')
-    with pytest.raises(InvalidRepo):
-        lib.ReposConfig._import_repo(test_session, dict(url='https://github.com/a/b', directory='../outside'))
-    test_session.rollback()
+    entry = dict(url='https://github.com/a/b', directory='../outside')
+    rows, invalid = lib.ReposSection().file_rows(dict(repos=[entry]))
+    assert (rows, invalid) == (dict(), {lib.repo_url_key('https://github.com/a/b')})
     assert test_session.query(Repository).one().directory == test_directory / 'repos/b'
 
 

@@ -63,7 +63,9 @@ async def test_search_index_follows_changes(test_session, test_directory, async_
     assert lib.count_repos(test_session, 'first') == 0
     assert lib.count_repos(test_session, 'second') == 1
 
-    lib.ReposConfig._import_repo(test_session, dict(url='https://github.com/a/b', name='renamed'))
+    section = lib.ReposSection()
+    rows, _ = section.file_rows(dict(repos=[dict(url='https://github.com/a/b', name='renamed')]))
+    section.upsert(test_session, rows)
     test_session.commit()
     assert lib.count_repos(test_session, 'renamed') == 1
 

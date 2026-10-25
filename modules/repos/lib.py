@@ -14,10 +14,10 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, ContextManager, List, NamedTuple, Optional, Tuple
+from typing import Callable, ContextManager, Dict, List, NamedTuple, Optional, Set, Tuple
 from urllib.parse import urlparse
 
-from sqlalchemy import func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from wrolpi import fts
@@ -25,7 +25,8 @@ from wrolpi.cmd import GIT_BIN, run_command
 from wrolpi.collections.models import Collection
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger, \
     escape_file_name, background_task, get_wrolpi_config
-from wrolpi.config_version import IMPORT, SAVE, register_ownership
+from wrolpi.config_import import ConfigSection, media_relative
+from wrolpi.config_version import register_ownership
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, DownloadFrequency, download_manager, save_downloads_config
 from wrolpi.errors import UnknownDirectory, ValidationError
@@ -45,7 +46,7 @@ __all__ = ['ParsedRepoURL', 'parse_repo_url', 'repo_url_key', 'git_command', 'gi
            'find_readme', 'repos_destination_root', 'validate_repos_destination', 'is_valid_branch',
            'submodule_url_error', 'HostAddresses', 'resolve_repo_addresses', 'pin_config', 'is_public_address',
            'submodule_fetch_config', 'read_readme_text', 'search_repos', 'count_repos', 'search_repos_by_name',
-           'get_repo_log', 'get_repo_root', 'repo_archive_name', 'stream_repo_archive', 'ReposConfig',
+           'get_repo_log', 'get_repo_root', 'repo_archive_name', 'stream_repo_archive', 'ReposConfig', 'ReposSection',
            'repos_config', 'get_repos_config', 'save_repos_config', 'import_repos_config', 'DEFAULT_REPO_FREQUENCY']
 
 DEFAULT_REPO_FREQUENCY = DownloadFrequency.weekly.value
@@ -734,9 +735,11 @@ def create_repository(session: Session, url: str, tag_name: str = None, frequenc
     return repo
 
 
-def _set_repository_download(session: Session, repo: Repository, frequency: int, clone: bool = False):
+def _set_repository_download(session: Session, repo: Repository, frequency: int, clone: bool = False,
+                             commit: bool = True):
     """Create (or change) the recurring Download which keeps the Repo up to date.  A Repo which is never updated
-    (`frequency` is NEVER) has none; with `clone`, it is cloned once if its clone is missing."""
+    (`frequency` is NEVER) has none; with `clone`, it is cloned once if its clone is missing.  `commit`: False
+    leaves committing to the caller's write."""
     if not frequency:
         if download := repo.download:
             # A deleted object stays in loaded collections; remove it so the Repo reads as never updated.
@@ -747,7 +750,8 @@ def _set_repository_download(session: Session, repo: Repository, frequency: int,
         return
 
     once = repo.once_download
-    download = repo.collection.get_or_create_download(session, repo.url, frequency, downloader_name='git')
+    download = repo.collection.get_or_create_download(session, repo.url, frequency, downloader_name='git',
+                                                      commit=commit)
     # The Download may already exist (e.g. imported from download_manager.yaml, or the Repo's one-time Download).
     download.frequency = frequency
     if once:
@@ -766,8 +770,9 @@ def _create_repository_download(session: Session, repo: Repository, frequency: i
 
 def _create_repository_records(session: Session, url: str, tag_name: str, mode: str, branch: Optional[str],
                                name: Optional[str], description: Optional[str], directory: Optional[pathlib.Path],
-                               submodules: bool, clone_token: str = None) -> Repository:
-    """Create (but do not commit) a Repo's Collection and Repository, in their directory."""
+                               submodules: bool, clone_token: str = None, check_url: bool = True) -> Repository:
+    """Create (but do not commit) a Repo's Collection and Repository, in their directory.  `check_url`: refuse a URL
+    another Repo has (the config import already knows it is new)."""
     parsed = parse_repo_url(url)
     _validate_mode(mode)
     branch = branch or parsed.branch or None
@@ -776,7 +781,7 @@ def _create_repository_records(session: Session, url: str, tag_name: str, mode: 
     if name in ('', '.', '..'):
         raise InvalidRepo(f'Invalid repo name: {name!r}')
 
-    if get_repository_by_url(session, parsed.url):
+    if check_url and get_repository_by_url(session, parsed.url):
         raise RepoConflict(f'A repo with this URL already exists: {parsed.url}')
     if session.query(Collection).filter_by(kind='repo', name=name).one_or_none():
         suggestion = f'{parsed.owner.replace("/", "-")}-{name}' if parsed.owner else f'{parsed.host}-{name}'
@@ -1368,6 +1373,107 @@ def get_repo_size(directory: pathlib.Path) -> int:
     return total
 
 
+def _repo_row(url, name, description, directory, tag_name, mode, branch, submodules, frequency, clone_token) -> dict:
+    return dict(
+        url=url,
+        name=name,
+        description=description or None,
+        directory=media_relative(directory) if directory else None,
+        tag_name=tag_name or None,
+        mode=mode,
+        branch=branch or None,
+        submodules=bool(submodules),
+        frequency=frequency or NEVER,
+        clone_token=clone_token or None,
+    )
+
+
+class ReposSection(ConfigSection):
+    """repos.yaml's Repos (a Collection with kind 'repo', its Repository, and its recurring Download), keyed by
+    `repo_url_key`, so another URL of the same Repo is that Repo.  An invalid entry is skipped, and kept."""
+    name = 'repos'
+
+    def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
+        media_directory = get_media_directory()
+        rows, invalid = dict(), set()
+        for position, data in enumerate(config.get('repos') or []):
+            url = data.get('url')
+            if not url:
+                logger.error(f'Repo config entry has no url, skipping: {data}')
+                # Counted as skipped; never a Repo's key.
+                invalid.add(f'\0{position}')
+                continue
+            key = repo_url_key(url)
+            try:
+                if key in rows:
+                    raise InvalidRepo(f'Another entry has the same repo: {url}')
+                parsed = parse_repo_url(url)
+                mode = data.get('mode') or 'full'
+                _validate_mode(mode)
+                frequency = data.get('frequency')
+                frequency = NEVER if frequency in (NEVER_CONFIG, NEVER) else (frequency or DEFAULT_REPO_FREQUENCY)
+                _validate_frequency(frequency)
+                directory = media_directory / data['directory'] if data.get('directory') else None
+                if directory:
+                    _validate_directory(directory)
+                branch = data.get('branch') or parsed.branch or None
+                _validate_branch(branch)
+                rows[key] = _repo_row(parsed.url, data.get('name') or parsed.name, data.get('description'),
+                                      directory, data.get('tag_name'), mode, branch, data.get('submodules'),
+                                      frequency, data.get('clone_token'))
+            except Exception as e:
+                logger.error(f'Skipping invalid repo in config: {data}', exc_info=e)
+                invalid.add(key)
+        return rows, invalid
+
+    def db_rows(self, session: Session) -> Dict[str, dict]:
+        # The recurring Download (see `Repository.download`).
+        frequency = select(Download.frequency) \
+            .where(Download.collection_id == Collection.id, Download.frequency > 0) \
+            .limit(1).scalar_subquery()
+        query = session.query(Repository.url, Collection.name, Collection.description, Collection.directory,
+                              Tag.name, Repository.mode, Repository.branch, Repository.submodules, frequency,
+                              Repository.clone_token) \
+            .join(Collection, Collection.id == Repository.collection_id) \
+            .outerjoin(Tag, Tag.id == Collection.tag_id)
+        return {repo_url_key(url): _repo_row(url, *values) for url, *values in query}
+
+    def same(self, file_row: dict, db_row: dict) -> bool:
+        # The key is the URL.  A file without a directory or clone token keeps the database's.
+        return all(value == db_row[name] for name, value in file_row.items()
+                   if name != 'url' and not (name in ('directory', 'clone_token') and value is None))
+
+    def upsert(self, session: Session, rows: Dict[str, dict]):
+        media_directory = get_media_directory()
+        existing = {repo_url_key(i.url): i for i in session.query(Repository)}
+        for key, row in rows.items():
+            directory = media_directory / row['directory'] if row['directory'] else None
+            if not (repo := existing.get(key)):
+                repo = _create_repository_records(session, row['url'], row['tag_name'], row['mode'], row['branch'],
+                                                  row['name'], row['description'], directory, row['submodules'],
+                                                  row['clone_token'], check_url=False)
+                _set_repository_download(session, repo, row['frequency'], clone=True, commit=False)
+                continue
+            collection = repo.collection
+            collection.name = row['name']
+            repo.update_search_name()
+            collection.description = row['description']
+            collection.tag = Tag.get_or_create_tag(session, row['tag_name']) if row['tag_name'] else None
+            if directory:
+                collection.directory = directory
+            repo.mode, repo.branch, repo.submodules = row['mode'], row['branch'], row['submodules']
+            if row['clone_token']:
+                repo.clone_token = row['clone_token']
+            _set_repository_download(session, repo, row['frequency'], commit=False)
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[str]):
+        for repo in session.query(Repository):
+            if repo_url_key(repo.url) in keys:
+                logger.info(f'Deleting repo {repo.name!r} (no longer in config)')
+                _delete_repository(session, repo)
+
+
 @dataclass
 class ReposConfigValidator:
     version: int = 0
@@ -1389,6 +1495,7 @@ class ReposConfig(ConfigFile):
             frequency: 604800
     """
     file_name = 'repos.yaml'
+    sections = (ReposSection(),)
     validator = ReposConfigValidator
     default_config = dict(version=0, repos=[])
     width = 120
@@ -1396,100 +1503,6 @@ class ReposConfig(ConfigFile):
     @property
     def repos(self) -> List[dict]:
         return self._config.get('repos', [])
-
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        """Import Repos from the config into the database."""
-        file = file or self.get_file()
-        file_str = str(self.get_relative_file())
-
-        # A missing config is not an empty config; never delete Repos because a file is lost.
-        if not file.is_file():
-            logger.info(f'No repos config file, skipping import: {file_str}')
-            self.successful_import = True
-            return
-
-        super().import_config(file, send_events)
-
-        decision = self.import_decision()
-        if decision == SAVE:
-            self.save_database_instead()
-            return
-
-        repos_data = self._config.get('repos', [])
-
-        # An empty repos list never deletes DB records.  Deleting all repos is done through the API.
-        if not repos_data:
-            logger.info(f'No repos in config, preserving existing DB repos: {file_str}')
-            self.successful_import = True
-            return
-
-        try:
-            with get_db_session(commit=True) as session:
-                imported_ids = set()
-                for data in repos_data:
-                    try:
-                        repo = self._import_repo(session, data)
-                    except Exception as e:
-                        logger.error(f'Failed to import repo from config: {data}', exc_info=e)
-                        self.import_skipped += 1
-                        continue
-                    imported_ids.add(repo.id)
-
-                for repo in session.query(Repository).all() if decision == IMPORT else []:
-                    if repo.id not in imported_ids:
-                        logger.info(f'Deleting repo {repo.name!r} (no longer in config)')
-                        _delete_repository(session, repo)
-
-            logger.info(f'Imported {len(imported_ids)} repos from {file_str}')
-            self.record_import_version()
-            self.successful_import = True
-        except Exception as e:
-            self.successful_import = False
-            message = f'Failed to import {file_str} config!'
-            logger.error(message, exc_info=e)
-            if send_events:
-                Events.send_config_import_failed(message)
-            raise
-
-    @staticmethod
-    def _import_repo(session: Session, data: dict) -> Repository:
-        parsed = parse_repo_url(data['url'])
-        name = data.get('name') or parsed.name
-        mode = data.get('mode') or 'full'
-        _validate_mode(mode)
-        frequency = data.get('frequency')
-        frequency = NEVER if frequency in (NEVER_CONFIG, NEVER) else (frequency or DEFAULT_REPO_FREQUENCY)
-        _validate_frequency(frequency)
-        directory = data.get('directory')
-        directory = get_media_directory() / directory if directory else None
-        if directory:
-            _validate_directory(directory)
-        tag_name = data.get('tag_name')
-
-        repo = get_repository_by_url(session, parsed.url)
-        if not repo:
-            return create_repository(session, parsed.url, tag_name=tag_name, frequency=frequency, mode=mode,
-                                     branch=data.get('branch'), name=name, description=data.get('description'),
-                                     directory=directory, submodules=bool(data.get('submodules')),
-                                     clone_token=data.get('clone_token'))
-
-        collection = repo.collection
-        collection.name = name
-        repo.update_search_name()
-        collection.description = data.get('description')
-        collection.tag = Tag.get_or_create_tag(session, tag_name) if tag_name else None
-        if directory:
-            collection.directory = directory
-        repo.mode = mode
-        repo.submodules = bool(data.get('submodules'))
-        if data.get('clone_token'):
-            repo.clone_token = data['clone_token']
-        branch = data.get('branch') or None
-        _validate_branch(branch)
-        repo.branch = branch
-        _set_repository_download(session, repo, frequency)
-        session.flush()
-        return repo
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump all Repos to the config file."""

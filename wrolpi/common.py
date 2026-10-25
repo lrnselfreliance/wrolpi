@@ -494,6 +494,10 @@ DB_CONFIG_FILE_NAMES ={'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_m
                         'playlists.yaml', 'repos.yaml'}
 
 
+class _DatabaseChanged(Exception):
+    """The database changed a config's rows between an import's snapshot and its write."""
+
+
 class ConfigFile:
     """
     This is used to keep the DB and config files in sync.  Importing the config reads the config from file, then
@@ -759,8 +763,15 @@ class ConfigFile:
     def get_relative_file(self):
         return get_relative_to_media_directory(self.get_file())
 
+    # A database config that imports by diffing (see wrolpi.config_import) lists a `ConfigSection` for each kind of
+    # row it saves, parents first.  Its `import_config` is the fixed sequence in `import_sections`.
+    sections: tuple = ()
+
     def import_config(self, file: pathlib.Path = None, send_events=False):
         """Read config file data, apply it to the in-memory config and database."""
+        if self.sections:
+            return self.import_sections(file, send_events)
+
         file = file or self.get_file()
         file_str = str(get_relative_to_media_directory(file))
         # Caller will set to successful if it works.
@@ -781,6 +792,109 @@ class ConfigFile:
             # self.successful_import = True
         else:
             logger_.error(f'Failed to import {file_str} because it does not exist.')
+
+    def import_sections(self, file: pathlib.Path = None, send_events=False):
+        """Import a config with `sections`: read and validate the file once, decide what its version allows (see
+        wrolpi.config_version), diff each section against a snapshot of the database, prepare with no transaction
+        open, then write only the differences, and the file's version, in one short write."""
+        from wrolpi.events import Events
+        file = file or self.get_file()
+        file_str = str(get_relative_to_media_directory(file))
+        forced, self.force_import = self.force_import, False
+        self.successful_import = False
+        self.import_skipped = 0
+        try:
+            if not file.is_file():
+                # A missing config is not an empty one: import nothing, delete nothing.
+                logger_.info(f'No config file, skipping import: {file_str}')
+                self.successful_import = True
+                return
+
+            data = self.read_config_file(file) if file.stat().st_size else None
+            if not data or not self.validate(data):
+                raise InvalidConfig(f'Config is {"invalid" if data else "empty"}: {file_str}')
+            self._config.update({k: v for k, v in data.items() if k in self.default_config})
+
+            # Another writer may change the database between the snapshot and the write; then decide again.
+            for _ in range(3):
+                if self._import_sections_once(forced):
+                    break
+            else:
+                raise RuntimeError(f'The database kept changing while importing {file_str}')
+            self.successful_import = True
+        except Exception as e:
+            self.successful_import = False
+            message = f'Failed to import {file_str}'
+            logger_.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_import_failed(message)
+            raise
+
+    def _import_sections_once(self, forced: bool) -> bool:
+        """One pass of `import_sections`.  Returns False when the database's version changed before the write."""
+        from wrolpi.config_import import diff_section
+        from wrolpi.config_version import IMPORT, SAVE, get_config_version, set_config_version
+        from wrolpi.db import get_db_session
+
+        decision, db_version = self.version_decision(forced)
+        if decision == SAVE:
+            self.save_database_instead()
+            return True
+
+        file_rows = {i.name: i.file_rows(self._config) for i in self.sections}
+        with get_db_session() as session:
+            db_rows = {i.name: i.db_rows(session) for i in self.sections}
+        diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT)
+                 for i in self.sections}
+        if any(diffs.values()):
+            self.prepare(diffs)
+
+        file_version = self.version or 0
+        if any(diffs.values()) or (decision == IMPORT and db_version != file_version):
+            try:
+                with get_db_session(commit=True) as session:
+                    try:
+                        if get_config_version(session, self.file_name) != db_version:
+                            raise _DatabaseChanged()
+                        for section in self.sections:
+                            if rows := {**diffs[section.name].added, **diffs[section.name].changed}:
+                                section.upsert(session, rows)
+                        for section in reversed(self.sections):
+                            if diffs[section.name].removed:
+                                section.delete(session, diffs[section.name].removed)
+                        if decision == IMPORT:
+                            # After the writes above, which counted as changes.
+                            session.flush()
+                            set_config_version(session, self.file_name, file_version)
+                    except BaseException:
+                        # None of it, and release the write lock now.
+                        session.rollback()
+                        raise
+            except _DatabaseChanged:
+                logger_.info(f'{self.file_name} changed in the database while importing; deciding again')
+                return False
+
+        self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
+        changed = {name: diff for name, diff in diffs.items() if diff}
+        logger_.info(f'Imported {self.file_name} ({decision}): '
+                     + (', '.join(f'{name}: {len(diff.added)} added, {len(diff.changed)} changed, '
+                                  f'{len(diff.removed)} removed' for name, diff in changed.items()) or 'no changes'))
+        self.after_import(diffs)
+        if decision != IMPORT:
+            # The database may have rows the file does not list; save them (see `record_import_version`).
+            self.background_dump.activate_switch()
+        return True
+
+    def prepare(self, diffs: dict):
+        """Slow work the write needs (files, network), run with no transaction open, and only when there are
+        differences.  `diffs` maps each section's name to its `SectionDiff`.
+
+        It must be safe to repeat and to abandon: when the database changes before the write, the import decides
+        again (up to three passes), and the diffs it was given may never be written (the write fails, or the next
+        pass saves the database instead)."""
+
+    def after_import(self, diffs: dict):
+        """Run after the write: activate switches, send events, start background tasks."""
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump database data, copy it to this the in-memory config, then write it to the config file."""
@@ -829,6 +943,17 @@ class ConfigFile:
         logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
         self.last_import_decision = decision
         return decision
+
+    def version_decision(self, forced: bool = False) -> Tuple[str, Optional[int]]:
+        """What importing this config's file (already read) may do, and the database version that decided it.  For
+        `import_sections`, which records the version in its own write (`import_decision` is for the others)."""
+        from wrolpi.config_version import IMPORT, decide, get_config_version
+        from wrolpi.db import get_db_session
+        with get_db_session() as session:
+            db_version = get_config_version(session, self.file_name)
+        decision = IMPORT if forced else decide(self.version or 0, db_version)
+        logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
+        return decision, db_version
 
     def save_database_instead(self):
         """The database has changes this config's file does not (see `import_decision`); save them."""

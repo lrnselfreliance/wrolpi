@@ -17,14 +17,14 @@ from enum import Enum
 from http import HTTPStatus
 from itertools import filterfalse
 from typing import List, Dict, Generator, Iterable, Coroutine, Any
-from typing import Tuple, Optional, Callable, Awaitable
+from typing import Tuple, Optional, Callable, Awaitable, Set
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON, text
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON, insert, or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Mapped, Session, column_property, relationship
 
@@ -34,7 +34,8 @@ from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
-from wrolpi.config_version import IMPORT, SAVE, collection_kinds, count_config_change, register_ownership
+from wrolpi.config_import import ConfigSection, chunks
+from wrolpi.config_version import collection_kinds, count_config_change, register_ownership
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, session_curs, serializer
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
@@ -412,6 +413,13 @@ class Download(ModelHelper, Base):  # noqa
         if download := cls.get_by_id(session, id_):
             return download
         raise UnknownDownload(f'Cannot find Download with id: {id_}')
+
+    @staticmethod
+    def saved_by_config_filter() -> tuple:
+        """Filters the Downloads download_manager.yaml saves.  A completed once-download is not saved (its
+        `last_download_attempt` counts toward the daily download limits), so it is never removed by an import."""
+        return or_(Download.last_successful_download.is_(None),
+                   Download.frequency.isnot(None) & (Download.frequency != 0)),
 
     @staticmethod
     def get_by_url(session: Session, url: str) -> Optional['Download']:
@@ -2040,8 +2048,167 @@ class DownloadManagerConfigValidator:
     skip_urls: list[str] = field(default_factory=list)
 
 
+def inheritable_video_defaults() -> dict:
+    from modules.videos.lib import _extract_global_inheritable, get_videos_downloader_config
+    return _extract_global_inheritable(get_videos_downloader_config())
+
+
+def _utc(value) -> Optional[datetime]:
+    """A config's datetime (or ISO string), in UTC; one without a timezone is assumed to be UTC."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return (value if value.tzinfo else value.replace(tzinfo=pytz.utc)).astimezone(pytz.utc)
+
+
+def zim_subscription_for(url: str, frequency: Optional[int]) -> Optional[Tuple[str, str]]:
+    """The (name, language) of the ZimSubscription a recurring Kiwix Download belongs to.  None for any other
+    Download, including a Kiwix URL that names no known subscription."""
+    from modules.zim.lib import zim_download_url_to_name
+    if not frequency or not url.startswith('https://download.kiwix.org/'):
+        return None
+    try:
+        return zim_download_url_to_name(url)
+    except Exception as e:
+        logger.warning(f'Download {url} is not a known Zim subscription: {e}')
+        return None
+
+
+class DownloadsSection(ConfigSection):
+    """download_manager.yaml's Downloads, keyed by URL.  A recurring Kiwix Download's ZimSubscription is derived
+    from it: `subscription` compares the subscription's (name, language), so a missing, stale or unwanted one is
+    corrected."""
+    name = 'downloads'
+
+    @staticmethod
+    def _row(url, destination, downloader, frequency, last_successful_download, next_download, settings, status,
+             sub_downloader, tag_names, subscription, defaults: dict) -> dict:
+        return dict(
+            destination=str(destination) if destination else None,
+            downloader=downloader,
+            frequency=frequency or None,
+            last_successful_download=_utc(last_successful_download),
+            next_download=_utc(next_download),
+            # Settings equal to the global defaults are inherited, and not saved.
+            settings=DownloadManagerConfig._filter_settings_for_yaml(settings, defaults) or None,
+            status=status or DownloadStatus.new,
+            sub_downloader=sub_downloader,
+            tag_names=list(tag_names) if tag_names else None,
+            subscription=tuple(subscription) if subscription else None,
+        )
+
+    def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
+        defaults = inheritable_video_defaults()
+        rows, invalid = dict(), set()
+        for data in config.get('downloads') or []:
+            url = data.get('url')
+            try:
+                settings = dict(data.get('settings') or {})
+                # An old config kept `destination` and `tag_names` in the settings.
+                destination = data.get('destination') or settings.pop('destination', None)
+                tag_names = data.get('tag_names') or settings.pop('tag_names', None)
+                settings.pop('destination', None)
+                settings.pop('tag_names', None)
+                # Stored absolute (relative to the media directory), as the database compares it.
+                destination = get_absolute_media_path(destination) if destination else None
+                rows[url] = self._row(
+                    url, destination, data['downloader'], data.get('frequency'),
+                    data.get('last_successful_download'), data.get('next_download'), settings, data.get('status'),
+                    data.get('sub_downloader'), tag_names, zim_subscription_for(url, data.get('frequency')),
+                    defaults)
+            except Exception as e:
+                logger.error(f'Skipping invalid Download in config: {data}', exc_info=e)
+                invalid.add(url)
+        # A subscription's name is unique: the first Download listed for it gets it.
+        names = set()
+        for url, row in rows.items():
+            if row['subscription'] and row['subscription'][0] in names:
+                logger.warning(f'Download {url} is a second Download for Zim subscription {row["subscription"][0]}')
+                row['subscription'] = None
+            elif row['subscription']:
+                names.add(row['subscription'][0])
+        return rows, invalid
+
+    def db_rows(self, session: Session) -> Dict[str, dict]:
+        from modules.zim.models import ZimSubscription
+        defaults = inheritable_video_defaults()
+        query = session.query(
+            Download.url, Download.destination, Download.downloader, Download.frequency,
+            Download.last_successful_download, Download.next_download, Download.settings, Download.status,
+            Download.sub_downloader, Download.tag_names, ZimSubscription.name, ZimSubscription.language,
+        ).outerjoin(ZimSubscription, ZimSubscription.download_id == Download.id) \
+            .filter(*Download.saved_by_config_filter())
+        return {url: self._row(url, *values, subscription=(name, language) if name else None, defaults=defaults)
+                for url, *values, name, language in query}
+
+    def upsert(self, session: Session, rows: Dict[str, dict]):
+        existing = dict()
+        for urls in chunks(rows):
+            existing.update({i.url: i for i in session.query(Download).filter(Download.url.in_(urls))})
+        values = {url: dict(
+            destination=row['destination'],
+            downloader=row['downloader'],
+            frequency=row['frequency'],
+            last_successful_download=row['last_successful_download'],
+            next_download=row['next_download'],
+            settings=row['settings'] or dict(),
+            status=row['status'],
+            sub_downloader=row['sub_downloader'],
+            tag_names=row['tag_names'],
+        ) for url, row in rows.items()}
+        if new := [dict(url=url, **i) for url, i in values.items() if url not in existing]:
+            # One statement for all new Downloads (a rebuilt database has thousands).  Not flushed: count it.
+            session.execute(insert(Download), new)
+            count_config_change(session, DownloadManagerConfig.file_name)
+        for url, download in existing.items():
+            for name, value in values[url].items():
+                setattr(download, name, value)
+        session.flush()
+        self._sync_subscriptions(session, rows)
+
+    @staticmethod
+    def _sync_subscriptions(session: Session, rows: Dict[str, dict]):
+        """Give each written Download the ZimSubscription its row names, and no other.  A subscription of that name
+        on another Download (the URL changed) is moved to this one.  The Download's own columns are the file's."""
+        from modules.zim.models import ZimSubscription
+        ids = dict()
+        for urls in chunks(rows):
+            ids.update(session.query(Download.url, Download.id).filter(Download.url.in_(urls)))
+        by_download = dict()
+        for download_ids in chunks(ids.values()):
+            by_download.update({i.download_id: i for i in
+                                session.query(ZimSubscription).filter(ZimSubscription.download_id.in_(download_ids))})
+        for url, row in rows.items():
+            download_id = ids[url]
+            current = by_download.get(download_id)
+            if current is not None and current.download_id != download_id:
+                current = None  # Moved to an earlier row's Download.
+            if current is not None and (not row['subscription'] or current.name != row['subscription'][0]):
+                session.delete(current)
+                session.flush()
+                current = None
+            if row['subscription']:
+                name, language = row['subscription']
+                subscription = current or session.query(ZimSubscription).filter_by(name=name).one_or_none() \
+                               or ZimSubscription(name=name)
+                subscription.language = language
+                subscription.download_id = download_id
+                session.add(subscription)
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[str]):
+        for urls in chunks(keys):
+            # Re-checked: a once-download may have completed since the snapshot; it is no longer saved.
+            for download in session.query(Download).filter(Download.url.in_(urls),
+                                                           *Download.saved_by_config_filter()):
+                logger.warning(f'Deleting Download {download.url} because it is no longer in the config')
+                session.delete(download)
+
+
 class DownloadManagerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
+    sections = (DownloadsSection(),)
     default_config = dict(
         downloads=[],
         skip_urls=[],
@@ -2066,14 +2233,13 @@ class DownloadManagerConfig(ConfigFile):
         self.update({'downloads': value})
 
     @staticmethod
-    def _filter_settings_for_yaml(settings: dict) -> dict:
+    def _filter_settings_for_yaml(settings: dict, global_defaults: dict = None) -> dict:
         """Remove inheritable video settings that match current global defaults.
         Keeps YAML minimal — only overrides are persisted."""
         if not settings:
             return settings
-        from modules.videos.lib import INHERITABLE_VIDEO_SETTINGS, _extract_global_inheritable, \
-            get_videos_downloader_config
-        global_defaults = _extract_global_inheritable(get_videos_downloader_config())
+        from modules.videos.lib import INHERITABLE_VIDEO_SETTINGS
+        global_defaults = global_defaults if global_defaults is not None else inheritable_video_defaults()
         filtered = {}
         for k, v in settings.items():
             if k in INHERITABLE_VIDEO_SETTINGS and v == global_defaults.get(k):
@@ -2087,10 +2253,7 @@ class DownloadManagerConfig(ConfigFile):
                 version = self.db_version_for_dump(session)
                 downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
                 new_downloads = []
-                for download in downloads:
-                    if download.last_successful_download and not download.frequency:
-                        # This once-download has completed, do not save it.
-                        continue
+                for download in downloads.filter(*Download.saved_by_config_filter()):
                     destination = download.destination
                     new_download = dict(
                         destination=str(destination) if destination else None,
@@ -2112,127 +2275,6 @@ class DownloadManagerConfig(ConfigFile):
             logger.error(message, exc_info=e)
             if send_events:
                 Events.send_config_save_failed(message)
-
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        file = file or self.get_file()
-
-        # If config file doesn't exist, mark import as successful (nothing to import)
-        if not file.is_file():
-            logger.info('No downloads config file, skipping import')
-            self.successful_import = True
-            return
-
-        super().import_config(file)
-
-        decision = self.import_decision()
-        if decision == SAVE:
-            self.save_database_instead()
-            return
-
-        downloads_data = self.downloads
-        # Empty downloads list = never delete DB records
-        if not downloads_data:
-            logger.info(f'No downloads in config, preserving existing DB downloads')
-            self.successful_import = True
-            return
-
-        with get_db_session(commit=True) as session:
-            from modules.zim.lib import zim_download_url_to_name
-            from modules.zim.models import ZimSubscription
-
-            try:
-                logger.warning('Importing downloads in config')
-
-                downloads_by_url = {i['url']: i for i in downloads_data}
-                existing_downloads: List[Download] = list(session.query(Download))
-                for existing in existing_downloads:
-                    download = downloads_by_url.pop(existing.url, None)
-                    if download:
-                        # Download in config already exists, update the DB record.
-                        # The config is the source of truth.
-                        existing.downloader = download['downloader']
-                        existing.destination = download['destination']
-                        existing.frequency = download['frequency']
-                        existing.last_successful_download = download.get('last_successful_download')
-                        existing.next_download = download.get('next_download')
-                        existing.status = download['status']
-                        existing.sub_downloader = download['sub_downloader']
-                        existing.settings = download.get('settings') or dict()
-                        if 'destination' in existing.settings:
-                            # `destination` may be from old config, or from ChannelDownloader.
-                            destination = existing.settings.pop('destination')
-                            existing.destination = existing.destination or destination
-                        if 'tag_names' in existing.settings:
-                            # `tag_names` may be from old config, or from ChannelDownloader.
-                            tag_names = existing.settings.pop('tag_names')
-                            existing.tag_names = existing.tag_names or tag_names
-                        existing.flush()
-                    elif existing.is_complete and not existing.frequency:
-                        # Completed once-downloads are never written to the config (see `dump_config`), so their
-                        # absence does not mean the user removed them.  Keep them: their `last_download_attempt`
-                        # is what the daily download limits count, and that count must survive a restart.
-                        continue
-                    elif decision == IMPORT:
-                        logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
-                        session.delete(existing)
-
-                for download in downloads_by_url.values():
-                    # These downloads are new, import them.
-                    download = Download(
-                        destination=download['destination'],
-                        downloader=download['downloader'],
-                        frequency=download['frequency'],
-                        last_successful_download=download.get('last_successful_download'),
-                        next_download=download.get('next_download'),
-                        settings=download['settings'] or dict(),
-                        status=download['status'],
-                        sub_downloader=download['sub_downloader'],
-                        tag_names=download['tag_names'],
-                        url=(url := download['url']),
-                    )
-                    session.add(download)
-                    logger.info(f'Adding new download {url}')
-
-                session.commit()
-                self.successful_import = True
-            except Exception as e:
-                self.successful_import = False
-                message = f'Failed to import {self.file_name}'
-                logger.error(message, exc_info=e)
-                if send_events:
-                    Events.send_config_import_failed(message)
-                raise
-
-            try:
-                # Claim any Kiwix subscriptions for ZimSubscription(s).
-                downloads: List[Download] = session.query(Download)
-                need_commit = False
-                for download in downloads:
-                    if not download.url.startswith('https://download.kiwix.org/') or not download.frequency:
-                        # ZimSubscription requires download.kiwix.org AND a frequency.
-                        continue
-
-                    name, language = zim_download_url_to_name(download.url)
-                    subscription = session.query(ZimSubscription).filter_by(name=name, language=language).one_or_none()
-                    if not subscription:
-                        subscription = ZimSubscription(name=name, language=language)
-                    subscription.change_download(session, download.url, download.frequency)
-                    session.add(subscription)
-                    need_commit = True
-
-                if need_commit:
-                    session.commit()
-                self.record_import_version()
-                self.successful_import = True
-            except Exception as e:
-                self.successful_import = False
-                message = 'Failed to restore ZimSubscriptions'
-                logger.error(message, exc_info=e)
-                if send_events:
-                    Events.send_config_import_failed(message)
-                raise
-
-            self.successful_import = True
 
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         backup_file = self._get_backup_file(backup_date)

@@ -1403,11 +1403,17 @@ class ReposSection(ConfigSection):
                 # Counted as skipped; never a Repo's key.
                 invalid.add(f'\0{position}')
                 continue
-            key = repo_url_key(url)
+            try:
+                parsed = parse_repo_url(url)
+            except Exception as e:
+                logger.error(f'Skipping invalid repo in config: {data}', exc_info=e)
+                invalid.add(repo_url_key(url))
+                continue
+            # The URL that is stored: a forge's branch URL is its Repo's URL (and a branch).
+            key = repo_url_key(parsed.url)
             try:
                 if key in rows:
                     raise InvalidRepo(f'Another entry has the same repo: {url}')
-                parsed = parse_repo_url(url)
                 mode = data.get('mode') or 'full'
                 _validate_mode(mode)
                 frequency = data.get('frequency')

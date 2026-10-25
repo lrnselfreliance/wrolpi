@@ -117,3 +117,35 @@ async def test_failed_import_creates_nothing(test_session, saved_repos, monkeypa
         lib.get_repos_config().import_config()
 
     assert set(repos(test_session)) == {ONE, TWO}
+
+
+@pytest.mark.asyncio
+async def test_branch_url_is_its_repo(test_session, saved_repos):
+    """A forge's branch URL (GitHub `/tree/<branch>`, GitLab `/-/tree/<branch>`) is its Repo, with that branch;
+    the next import writes nothing."""
+    edit_repo(saved_repos, TWO, url=f'{TWO}/tree/main', branch=None)
+    edit_config(saved_repos, lambda data: data['repos'].append(
+        dict(url='https://gitlab.com/group/sub/project/-/tree/dev')))
+
+    config = lib.get_repos_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    found = repos(test_session)
+    assert set(found) == {ONE, TWO, 'https://gitlab.com/group/sub/project'}
+    assert (found[TWO].branch, found['https://gitlab.com/group/sub/project'].branch) == ('main', 'dev')
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_branch_url_entry_is_kept(test_session, saved_repos):
+    """An invalid entry named by its Repo's branch URL keeps that Repo."""
+    edit_repo(saved_repos, TWO, url=f'{TWO}/tree/main', mode='bogus')
+
+    config = lib.get_repos_config()
+    config.import_config()
+
+    assert config.import_skipped == 1
+    assert set(repos(test_session)) == {ONE, TWO}

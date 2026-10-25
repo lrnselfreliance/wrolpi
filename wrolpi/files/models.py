@@ -905,6 +905,20 @@ def _tagged_file_group_moved(file_group: FileGroup) -> bool:
 register_ownership('tags.yaml', FileGroup, columns={'primary_path'}, row=_tagged_file_group_moved)
 
 
+def _playlist_file_group_moved(file_group: FileGroup) -> bool:
+    """An existing FileGroup in a playlist changed path (playlists.yaml saves file items by path)."""
+    if not inspect(file_group).attrs.primary_path.history.deleted:
+        return False
+    session = Session.object_session(file_group)
+    return session.connection().execute(
+        text('SELECT 1 FROM collection_item JOIN collection ON collection.id = collection_item.collection_id'
+             " WHERE collection_item.file_group_id = :id AND collection.kind = 'playlist' LIMIT 1"),
+        {'id': file_group.id}).first() is not None
+
+
+register_ownership('playlists.yaml', FileGroup, columns={'primary_path'}, row=_playlist_file_group_moved)
+
+
 class Directory(ModelHelper, Base):
     """A representation of a file directory in the media directory."""
     __tablename__ = 'directory'

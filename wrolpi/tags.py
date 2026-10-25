@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, load_only
 from wrolpi import dates, flags
 from wrolpi.common import loaded, ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
-from wrolpi.config_import import ConfigSection, SectionDiff, chunks
+from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relative
 from wrolpi.config_version import count_config_change, register_ownership
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
@@ -307,12 +307,6 @@ def _utc_or_none(value) -> Optional[datetime]:
     return value.astimezone(pytz.UTC) if value.tzinfo else value.replace(tzinfo=pytz.UTC)
 
 
-def _relative_path(path) -> str:
-    """A path as the config names it: relative to the media directory."""
-    path = pathlib.Path(path)
-    return str(path.relative_to(get_media_directory()) if path.is_absolute() else path)
-
-
 def without_tag_names(download_tag_names: Optional[List[str]], settings: Optional[dict], names: Set[str]) \
         -> Tuple[Optional[List[str]], Optional[dict]]:
     """A Download's tag_names and settings without these Tag names, in the settings' tag_names and channel_tag_name
@@ -398,7 +392,7 @@ class TagFilesSection(ConfigSection):
         for item in config.get('tag_files') or []:
             try:
                 tag_name, path, *rest = item
-                key = (tag_name, _relative_path(path))
+                key = (tag_name, media_relative(path))
             except Exception as e:
                 logger.error(f'Skipping invalid tagged file in config: {item}', exc_info=e)
                 continue
@@ -497,7 +491,7 @@ class TagZimsSection(ConfigSection):
         for item in config.get('tag_zims') or []:
             try:
                 tag_name, zim_path, zim_entry, *rest = item
-                key = (tag_name, _relative_path(zim_path), zim_entry)
+                key = (tag_name, media_relative(zim_path), zim_entry)
             except Exception as e:
                 logger.error(f'Skipping invalid tagged Zim entry in config: {item}', exc_info=e)
                 continue

@@ -1,12 +1,15 @@
 import pathlib
 import shutil
 from dataclasses import dataclass, field
-from typing import List
+from typing import Dict, List, Optional, Set, Tuple
+
+from sqlalchemy import insert
+from sqlalchemy.orm import Session
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
-from wrolpi.config_version import IMPORT, SAVE, count_config_change
+from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relative
+from wrolpi.config_version import count_config_change
 from wrolpi.db import get_db_session
-from wrolpi.events import Events
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
 from wrolpi.tags import TagFile, TagsConfig, save_tags_config
 
@@ -15,9 +18,195 @@ logger = logger.getChild(__name__)
 __all__ = ['PlaylistsConfig', 'playlists_config', 'save_playlists_config', 'get_playlists_config']
 
 
-def _item_key(item) -> tuple:
-    """What a playlist item points to; a playlist has at most one item per key (see CollectionItem's constraints)."""
-    return item.item_kind, item.file_group_id, item.zim_id, item.zim_entry, item.url
+def _playlist_tag_names(rows) -> Set[str]:
+    return {i['tag_name'] for i in rows if i['tag_name']}
+
+
+class PlaylistsSection(ConfigSection):
+    """playlists.yaml's playlists (Collections with kind 'playlist'), keyed by name."""
+    name = 'playlists'
+
+    def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
+        rows, invalid = dict(), set()
+        for data in config.get('playlists') or []:
+            name = data.get('name')
+            if not name:
+                logger.error(f'Playlist config entry has no name, skipping: {data}')
+                continue
+            try:
+                rows[name] = dict(
+                    description=data.get('description') or None,
+                    # Optional custom directory (media-relative); None when not customized.
+                    directory=media_relative(data['directory']) if data.get('directory') else None,
+                    tag_name=data.get('tag_name') or None,
+                )
+            except Exception as e:
+                logger.error(f'Skipping invalid playlist in config: {name}', exc_info=e)
+                invalid.add(name)
+        return rows, invalid
+
+    def db_rows(self, session: Session) -> Dict[str, dict]:
+        from wrolpi.tags import Tag
+        from .models import Collection
+        query = session.query(Collection.name, Collection.description, Collection.directory, Tag.name) \
+            .outerjoin(Tag, Tag.id == Collection.tag_id) \
+            .filter(Collection.kind == 'playlist')
+        return {name: dict(description=description or None,
+                           directory=media_relative(directory) if directory else None,
+                           tag_name=tag_name)
+                for name, description, directory, tag_name in query}
+
+    def upsert(self, session: Session, rows: Dict[str, dict]):
+        from wrolpi.tags import Tag
+        from .models import Collection
+        existing = {i.name: i for i in
+                    session.query(Collection).filter(Collection.kind == 'playlist', Collection.name.in_(list(rows)))}
+        tags = {i.name: i for i in session.query(Tag).filter(Tag.name.in_(list(_playlist_tag_names(rows.values()))))}
+        for name, row in rows.items():
+            if not (collection := existing.get(name)):
+                collection = Collection(name=name, kind='playlist')
+                session.add(collection)
+            collection.description = row['description']
+            collection.directory = (get_media_directory() / row['directory']) if row['directory'] else None
+            collection.tag = tags.get(row['tag_name'])
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[str]):
+        from .models import Collection
+        for collection in session.query(Collection).filter(Collection.kind == 'playlist',
+                                                           Collection.name.in_(list(keys))):
+            logger.info(f'Deleting playlist {collection.name!r} (no longer in config)')
+            session.delete(collection)
+
+
+class PlaylistItemsSection(ConfigSection):
+    """playlists.yaml's playlist items, keyed by (playlist name, kind, reference, Zim entry): a file's or Zim's
+    media-relative path, or a URL.  A playlist has at most one item per reference (CollectionItem's constraints), so
+    moving an item changes only its position, and it keeps its row."""
+    name = 'items'
+
+    @staticmethod
+    def item_key(name: str, data: dict) -> Optional[tuple]:
+        if 'file' in data:
+            return name, 'file', media_relative(data['file']), None
+        elif 'zim' in data:
+            if not data.get('entry'):
+                raise ValueError('A zim item requires an entry')
+            return name, 'zim', media_relative(data['zim']), data['entry']
+        elif 'url' in data:
+            return name, 'url', data['url'], None
+        raise ValueError('An item requires a file, zim, or url')
+
+    def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
+        rows, invalid = dict(), set()
+        for data in config.get('playlists') or []:
+            if not (name := data.get('name')):
+                continue
+            # Positions follow the file's order; an item skipped now keeps its place for a later import.
+            for position, item in enumerate(data.get('items') or [], start=1):
+                try:
+                    key = self.item_key(name, item)
+                except Exception as e:
+                    logger.error(f'Skipping invalid item of playlist {name!r}: {item}', exc_info=e)
+                    key = None
+                if key is None or key in rows:
+                    if key:
+                        logger.warning(f'Skipping duplicate item of playlist {name!r}: {item}')
+                    # Counted as skipped (the config is not saved over it); a kind of None is never an item's key.
+                    invalid.add((name, None, position, None))
+                    continue
+                rows[key] = dict(position=position, title=item.get('title'))
+        return rows, invalid
+
+    def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
+        # A listed playlist without items has none: only an empty or missing playlists list removes nothing.
+        return any(i.get('name') for i in config.get('playlists') or [])
+
+    @staticmethod
+    def _query(session: Session, *columns):
+        from modules.zim.models import Zim
+        from wrolpi.files.models import FileGroup
+        from .models import Collection, CollectionItem
+        return session.query(*columns, Collection.name, CollectionItem.item_kind, FileGroup.primary_path, Zim.path,
+                             CollectionItem.zim_entry, CollectionItem.url) \
+            .join(Collection, Collection.id == CollectionItem.collection_id) \
+            .outerjoin(FileGroup, FileGroup.id == CollectionItem.file_group_id) \
+            .outerjoin(Zim, Zim.id == CollectionItem.zim_id) \
+            .filter(Collection.kind == 'playlist')
+
+    @staticmethod
+    def _db_key(name, item_kind, primary_path, zim_path, zim_entry, url) -> Optional[tuple]:
+        if item_kind == 'file' and primary_path:
+            return name, 'file', media_relative(primary_path), None
+        elif item_kind == 'zim' and zim_path:
+            return name, 'zim', media_relative(zim_path), zim_entry
+        elif item_kind == 'url':
+            return name, 'url', url, None
+        # Not saved (see `CollectionItem.to_config`), so never "removed".
+        return None
+
+    def db_rows(self, session: Session) -> Dict[tuple, dict]:
+        from .models import CollectionItem
+        rows = dict()
+        for position, title, *values in self._query(session, CollectionItem.position, CollectionItem.title):
+            if key := self._db_key(*values):
+                rows[key] = dict(position=position, title=title)
+        return rows
+
+    def upsert(self, session: Session, rows: Dict[tuple, dict]):
+        from modules.zim.models import Zim
+        from wrolpi.files.models import FileGroup
+        from .models import Collection, CollectionItem
+        media_directory = get_media_directory()
+        collection_ids = dict(session.query(Collection.name, Collection.id).filter(
+            Collection.kind == 'playlist', Collection.name.in_(list({i[0] for i in rows}))))
+        file_group_ids = dict()
+        for paths in chunks({str(media_directory / i[2]) for i in rows if i[1] == 'file'}):
+            file_group_ids.update((media_relative(path), id_) for path, id_ in
+                                  session.query(FileGroup.primary_path, FileGroup.id)
+                                  .filter(FileGroup.primary_path.in_(paths)))
+        zim_ids = {media_relative(path): id_ for id_, path in session.query(Zim.id, Zim.path)} \
+            if any(i[1] == 'zim' for i in rows) else dict()
+        existing = {(i.collection_id, i.item_kind, i.file_group_id, i.zim_id, i.zim_entry, i.url): i for i in
+                    session.query(CollectionItem).filter(CollectionItem.collection_id.in_(collection_ids.values()))}
+
+        new = list()
+        for key, row in rows.items():
+            name, kind, reference, zim_entry = key
+            values = dict(collection_id=collection_ids.get(name), item_kind=kind, file_group_id=None, zim_id=None,
+                          zim_entry=None, url=None)
+            if kind == 'file':
+                values['file_group_id'] = file_group_ids.get(reference)
+            elif kind == 'zim':
+                values.update(zim_id=zim_ids.get(reference), zim_entry=zim_entry)
+            else:
+                values['url'] = reference
+            if not values['collection_id'] or (kind == 'file' and not values['file_group_id']) \
+                    or (kind == 'zim' and not values['zim_id']):
+                logger.warning(f'Playlist {name!r}: cannot find {reference!r}, skipping')
+                continue
+            if item := existing.get(tuple(values.values())):
+                item.position, item.title = row['position'], row['title']
+            else:
+                new.append(dict(values, position=row['position'], title=row['title']))
+        if new:
+            # One statement for all new items (a rebuilt database has thousands).  Not flushed: count it.
+            session.execute(insert(CollectionItem), new)
+            count_config_change(session, PlaylistsConfig.file_name)
+        session.flush()
+
+    def delete(self, session: Session, keys: Set[tuple]):
+        from .models import CollectionItem
+        for item, *values in self._query(session, CollectionItem) \
+                .filter(CollectionItem.collection_id.in_(self._collection_ids(session, keys))):
+            if self._db_key(*values) in keys:
+                session.delete(item)
+
+    @staticmethod
+    def _collection_ids(session: Session, keys) -> List[int]:
+        from .models import Collection
+        return [i for i, in session.query(Collection.id).filter(
+            Collection.kind == 'playlist', Collection.name.in_(list({i[0] for i in keys})))]
 
 
 @dataclass
@@ -48,6 +237,7 @@ class PlaylistsConfig(ConfigFile):
                 title: "The spot"
     """
     file_name = 'playlists.yaml'
+    sections = (PlaylistsSection(), PlaylistItemsSection())
     validator = PlaylistsConfigValidator
     default_config = dict(version=0, playlists=[])
     width = 120
@@ -56,140 +246,83 @@ class PlaylistsConfig(ConfigFile):
     def playlists(self) -> List[dict]:
         return self._config.get('playlists', [])
 
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        """Import playlists (and their ordered items) from the config into the database."""
+    def prepare(self, diffs: dict):
+        self._drop_unknown_tags(diffs['playlists'])
+        self._drop_missing_items(diffs['items'])
+        if not self.import_deletes:
+            self._merge_items(diffs['items'])
+
+    def _drop_unknown_tags(self, diff: SectionDiff):
+        """A Tag that no longer exists (it was removed) is dropped, and the config is saved without it.  Only once
+        tags.yaml was imported; until then its Tags may be missing."""
+        from wrolpi.tags import Tag, get_tags_config
+        rows = [*diff.added.values(), *diff.changed.values()]
+        if not (names := _playlist_tag_names(rows)) or not get_tags_config().successful_import:
+            return
+        with get_db_session() as session:
+            unknown = names - {i for i, in session.query(Tag.name).filter(Tag.name.in_(list(names)))}
+        for row in rows:
+            if row['tag_name'] in unknown:
+                logger.warning(f'Removing unknown Tag {row["tag_name"]!r} from a playlist')
+                row['tag_name'] = None
+                self._config_outdated = True
+
+    def _drop_missing_items(self, diff: SectionDiff):
+        """An added item whose file or Zim is not in the database (not indexed yet, after a rebuild) is skipped
+        before the write; a later import (after the refresh) adds it."""
         from modules.zim.models import Zim
         from wrolpi.files.models import FileGroup
-        from wrolpi.tags import Tag
+        media_directory = get_media_directory()
+        files = {i[2] for i in diff.added if i[1] == 'file'}
+        zims = {i[2] for i in diff.added if i[1] == 'zim'}
+        known = set()
+        with get_db_session() as session:
+            for paths in chunks({str(media_directory / i) for i in files}):
+                known.update(('file', media_relative(i)) for i, in
+                             session.query(FileGroup.primary_path).filter(FileGroup.primary_path.in_(paths)))
+            if zims:
+                known.update(('zim', media_relative(i)) for i, in session.query(Zim.path))
+        for key in list(diff.added):
+            if key[1] in ('file', 'zim') and (key[1], key[2]) not in known:
+                logger.warning(f'Playlist {key[0]!r}: {key[1]} not indexed, skipping {key[2]!r}')
+                del diff.added[key]
+                self.import_skipped += 1
 
-        from .models import Collection, CollectionItem
-
-        file = file or self.get_file()
-        file_str = str(self.get_relative_file())
-
-        # A missing config is NOT an empty config (mirrors ChannelsConfig).  Deleting here would
-        # cascade: the sync prunes the on-disk playlist dirs and the next dump writes an empty
-        # config -- a single lost file would permanently destroy every playlist.
-        if not file.is_file():
-            logger.info(f'No playlists config file, skipping import: {file_str}')
-            self.successful_import = True
+    def _merge_items(self, diff: SectionDiff):
+        """Without deletes, a playlist's items in the database keep their order, and the file's other items are
+        added after the item that precedes them in the file.  Only titles are taken from the file's other items."""
+        section = PlaylistItemsSection()
+        if not (names := {i[0] for i in (*diff.added, *diff.changed)}):
             return
+        with get_db_session() as session:
+            db_rows = section.db_rows(session)
+        file_rows, _ = section.file_rows(self._config)
+        for name in names:
+            merged = sorted((i for i in db_rows if i[0] == name), key=lambda i: db_rows[i]['position'])
+            previous = None
+            for key in sorted((i for i in file_rows if i[0] == name), key=lambda i: file_rows[i]['position']):
+                if key in db_rows:
+                    previous = key
+                elif key in diff.added:
+                    merged.insert(merged.index(previous) + 1 if previous else 0, key)
+                    previous = key
+            for position, key in enumerate(merged, start=1):
+                if key in diff.added:
+                    diff.added[key]['position'] = position
+                    continue
+                row = dict(position=position, title=(diff.changed.get(key) or db_rows[key])['title'])
+                if row == db_rows[key]:
+                    diff.changed.pop(key, None)
+                else:
+                    diff.changed[key] = row
 
+    def import_config(self, file: pathlib.Path = None, send_events=False):
+        self._config_outdated = False
         super().import_config(file, send_events)
 
-        decision = self.import_decision()
-        if decision == SAVE:
-            self.save_database_instead()
-            return
-
-        playlists_data = self._config.get('playlists', [])
-
-        # An empty playlists list never deletes DB records (mirrors ChannelsConfig).  Deleting all
-        # playlists is done through the API, which dumps the resulting (empty) config itself.
-        if not playlists_data:
-            logger.info(f'No playlists in config, preserving existing DB playlists: {file_str}')
-            self.successful_import = True
-            return
-
-        try:
-            with get_db_session(commit=True) as session:
-                imported_names = set()
-                for data in playlists_data:
-                    name = data.get('name')
-                    if not name:
-                        logger.error(f'Playlist config entry has no name, skipping: {data}')
-                        self.import_skipped += 1
-                        continue
-
-                    collection = session.query(Collection).filter_by(
-                        name=name, kind='playlist').one_or_none()
-                    new = not collection
-                    if new:
-                        collection = Collection(name=name, kind='playlist')
-                        session.add(collection)
-                    collection.description = data.get('description')
-
-                    # Optional custom directory (media-relative); None when not customized.
-                    directory = data.get('directory')
-                    collection.directory = (get_media_directory() / directory) if directory else None
-
-                    tag_name = data.get('tag_name')
-                    collection.tag = Tag.get_by_name(session, tag_name) if tag_name else None
-                    session.flush([collection])
-
-                    file_items = []
-                    for item_data in (data.get('items') or []):
-                        item = None
-                        if 'file' in item_data:
-                            path = get_media_directory() / item_data['file']
-                            fg = session.query(FileGroup).filter_by(primary_path=str(path)).one_or_none()
-                            if fg:
-                                item = CollectionItem(collection_id=collection.id, item_kind='file',
-                                                      file_group_id=fg.id)
-                            else:
-                                logger.warning(f'Playlist {name!r}: file not indexed, skipping '
-                                               f'{item_data["file"]!r}')
-                                self.import_skipped += 1
-                        elif 'zim' in item_data:
-                            zpath = get_media_directory() / item_data['zim']
-                            zim = session.query(Zim).filter_by(path=str(zpath)).one_or_none()
-                            if zim:
-                                item = CollectionItem(collection_id=collection.id, item_kind='zim',
-                                                      zim_id=zim.id, zim_entry=item_data.get('entry'))
-                            else:
-                                logger.warning(f'Playlist {name!r}: zim not found, skipping '
-                                               f'{item_data["zim"]!r}')
-                                self.import_skipped += 1
-                        elif 'url' in item_data:
-                            item = CollectionItem(collection_id=collection.id, item_kind='url',
-                                                  url=item_data['url'])
-                        if item is not None:
-                            item.title = item_data.get('title')
-                            file_items.append(item)
-
-                    if decision == IMPORT or new:
-                        # Rebuild items to match the config's order exactly.
-                        for item in list(collection.items):
-                            session.delete(item)
-                        session.flush()
-                        items = file_items
-                    else:
-                        # Without deletes, keep the database's items in their order; add the file's other items
-                        # after the item that precedes them in the file.
-                        items = sorted(collection.items, key=lambda i: i.position)
-                        existing = {_item_key(i): i for i in items}
-                        previous = None
-                        for item in file_items:
-                            if found := existing.get(_item_key(item)):
-                                previous = found
-                                continue
-                            items.insert(items.index(previous) + 1 if previous else 0, item)
-                            previous = item
-
-                    for position, item in enumerate(items, start=1):
-                        item.position = position
-                        session.add(item)
-
-                    session.flush()
-                    imported_names.add(name)
-
-                # Delete playlists that are no longer present in the config.
-                for collection in session.query(Collection).filter_by(kind='playlist').all() \
-                        if decision == IMPORT else []:
-                    if collection.name not in imported_names:
-                        logger.info(f'Deleting playlist {collection.name!r} (no longer in config)')
-                        session.delete(collection)
-
-            logger.info(f'Imported {len(imported_names)} playlists from {file_str}')
-            self.record_import_version()
-            self.successful_import = True
-        except Exception as e:
-            self.successful_import = False
-            message = f'Failed to import {file_str} config!'
-            logger.error(message, exc_info=e)
-            if send_events:
-                Events.send_config_import_failed(message)
-            raise
+    def after_import(self, diffs: dict):
+        if self._config_outdated:
+            self.background_dump.activate_switch()
 
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         """Preview which playlists a backup import would add/remove (keyed by playlist name)."""
@@ -302,7 +435,7 @@ def file_groups_moved(session, file_group_ids):
 
     playlists.yaml references file items by path, so it must be re-saved (and the playlist
     directories re-synced) or the next import will not find the file and will drop the item.
-    tags.yaml saves tagged files by path too; the move (often raw SQL) is counted as its change.
+    tags.yaml saves tagged files by path too.  The move (often raw SQL) is counted as each config's change.
 
     `file_group_ids` may be an iterable of ids or a select of ids."""
     from .models import Collection, CollectionItem
@@ -316,6 +449,7 @@ def file_groups_moved(session, file_group_ids):
         .filter(Collection.kind == 'playlist', CollectionItem.file_group_id.in_(file_group_ids)) \
         .first()
     if in_playlist:
+        count_config_change(session, PlaylistsConfig.file_name)
         save_playlists_config.activate_switch()
         from .sync import sync_playlists_directory
         sync_playlists_directory.activate_switch()

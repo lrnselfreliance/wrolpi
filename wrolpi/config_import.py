@@ -6,10 +6,13 @@ Rows are compared as plain data keyed the way the file names them (a URL, a name
 ORM objects and the read can finish before any slow preparation starts.
 """
 import operator
+import pathlib
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Hashable, Iterable, List, Set, Tuple
 
 from sqlalchemy.orm import Session
+
+from wrolpi.common import get_media_directory
 
 
 @dataclass
@@ -46,6 +49,11 @@ class ConfigSection:
         deleted since the snapshot."""
         raise NotImplementedError()
 
+    def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
+        """Whether the file lists this section at all; an empty section cannot be told apart from a lost or blanked
+        file, so it removes nothing."""
+        return bool(file_rows or invalid_keys)
+
     def same(self, file_row: dict, db_row: dict) -> bool:
         """Whether a file row is already in the database."""
         return file_row == db_row
@@ -57,18 +65,28 @@ class ConfigSection:
 
 
 def diff_section(file_rows: Dict[Hashable, dict], invalid_keys: Set[Hashable], db_rows: Dict[Hashable, dict],
-                 deletes: bool, same: Callable[[dict, dict], bool] = operator.eq) -> SectionDiff:
+                 deletes: bool, same: Callable[[dict, dict], bool] = operator.eq, present: bool = None) \
+        -> SectionDiff:
     """Compare a section's file rows with its database rows.  `deletes`: rows the file no longer lists are removed.
-    An empty section never removes anything: it cannot be told apart from a lost or blanked file."""
+    A section that is not `present` (by default, an empty one) never removes anything: it cannot be told apart from
+    a lost or blanked file."""
     diff = SectionDiff()
     for key, row in file_rows.items():
         if key not in db_rows:
             diff.added[key] = row
         elif not same(row, db_rows[key]):
             diff.changed[key] = row
-    if deletes and (file_rows or invalid_keys):
+    if present is None:
+        present = bool(file_rows or invalid_keys)
+    if deletes and present:
         diff.removed = db_rows.keys() - file_rows.keys() - invalid_keys
     return diff
+
+
+def media_relative(path) -> str:
+    """A path as a config names it: relative to the media directory."""
+    path = pathlib.Path(path)
+    return str(path.relative_to(get_media_directory()) if path.is_absolute() else path)
 
 
 def chunks(items: Iterable[Any], size: int = 500) -> Iterable[List[Any]]:

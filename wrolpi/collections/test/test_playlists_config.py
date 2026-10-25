@@ -392,3 +392,25 @@ async def test_import_without_deletes_keeps_database_items(test_session, test_di
     test_session.expire_all()
     collection = test_session.query(Collection).filter_by(name='Mix', kind='playlist').one()
     assert [i.url for i in collection.items] == ['/b', '/a', '/c']
+
+
+@pytest.mark.asyncio
+async def test_import_without_deletes_keeps_database_order(test_session, test_directory, playlists_config):
+    """Without a database version, a file that only reorders a playlist's items (and lacks one the database has)
+    leaves the database's order as it is."""
+    collection = Collection(name='Mix', kind='playlist')
+    test_session.add(collection)
+    test_session.flush([collection])
+    collection.add_url(test_session, '/a', title='A')
+    collection.add_url(test_session, '/x', title='X')  # Added after the file was saved.
+    collection.add_url(test_session, '/b', title='B')
+    test_session.commit()
+    playlists_config.get_file().write_text(yaml.dump(dict(version=1, playlists=[
+        dict(name='Mix', items=[dict(url='/b', title='B'), dict(url='/a', title='A')]),
+    ])))
+
+    playlists_config.import_config()
+
+    test_session.expire_all()
+    collection = test_session.query(Collection).filter_by(name='Mix', kind='playlist').one()
+    assert [(i.url, i.position) for i in collection.items] == [('/a', 1), ('/x', 2), ('/b', 3)]

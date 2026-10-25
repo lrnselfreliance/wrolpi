@@ -215,3 +215,36 @@ async def test_refresh_changing_primary_file_counts(test_session, test_directory
     test_session.expire_all()
     assert test_session.query(FileGroup).one().primary_path != test_directory / 'video.mp4'
     assert get_config_version(test_session, 'playlists.yaml') > 0
+
+
+@pytest.mark.asyncio
+async def test_empty_items_are_removed(test_session, saved_playlists):
+    """A listed playlist with no items has its items removed, even when no playlist in the file has an item (only
+    an empty or missing playlists list deletes nothing)."""
+    def change(data):
+        for playlist in data['playlists']:
+            playlist['items'] = []
+
+    edit_config(saved_playlists, change)
+    config = get_playlists_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    assert items(test_session, 'One') == []
+    assert items(test_session, 'Two') == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_items_are_skipped(test_session, saved_playlists):
+    """An item that cannot be read (a Zim item without an entry), or that repeats another, is counted as skipped,
+    so the config is not saved over it."""
+    def change(playlist):
+        playlist['items'].append(dict(zim='other.zim'))
+        playlist['items'].append(dict(url='/one'))
+
+    edit_playlist(saved_playlists, 'One', change)
+    config = get_playlists_config()
+    config.import_config()
+
+    assert config.import_skipped == 2
+    assert items(test_session) == ONE

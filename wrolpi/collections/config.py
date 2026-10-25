@@ -108,12 +108,19 @@ class PlaylistItemsSection(ConfigSection):
                     key = self.item_key(name, item)
                 except Exception as e:
                     logger.error(f'Skipping invalid item of playlist {name!r}: {item}', exc_info=e)
-                    continue
-                if key in rows:
-                    logger.warning(f'Skipping duplicate item of playlist {name!r}: {item}')
+                    key = None
+                if key is None or key in rows:
+                    if key:
+                        logger.warning(f'Skipping duplicate item of playlist {name!r}: {item}')
+                    # Counted as skipped (the config is not saved over it); a kind of None is never an item's key.
+                    invalid.add((name, None, position, None))
                     continue
                 rows[key] = dict(position=position, title=item.get('title'))
         return rows, invalid
+
+    def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
+        # A listed playlist without items has none: only an empty or missing playlists list removes nothing.
+        return any(i.get('name') for i in config.get('playlists') or [])
 
     @staticmethod
     def _query(session: Session, *columns):
@@ -283,14 +290,14 @@ class PlaylistsConfig(ConfigFile):
 
     def _merge_items(self, diff: SectionDiff):
         """Without deletes, a playlist's items in the database keep their order, and the file's other items are
-        added after the item that precedes them in the file."""
+        added after the item that precedes them in the file.  Only titles are taken from the file's other items."""
         section = PlaylistItemsSection()
-        if not diff.added:
+        if not (names := {i[0] for i in (*diff.added, *diff.changed)}):
             return
         with get_db_session() as session:
             db_rows = section.db_rows(session)
         file_rows, _ = section.file_rows(self._config)
-        for name in {i[0] for i in diff.added}:
+        for name in names:
             merged = sorted((i for i in db_rows if i[0] == name), key=lambda i: db_rows[i]['position'])
             previous = None
             for key in sorted((i for i in file_rows if i[0] == name), key=lambda i: file_rows[i]['position']):
@@ -302,9 +309,12 @@ class PlaylistsConfig(ConfigFile):
             for position, key in enumerate(merged, start=1):
                 if key in diff.added:
                     diff.added[key]['position'] = position
-                elif db_rows[key]['position'] != position or key in diff.changed:
-                    title = (diff.changed.get(key) or db_rows[key])['title']
-                    diff.changed[key] = dict(position=position, title=title)
+                    continue
+                row = dict(position=position, title=(diff.changed.get(key) or db_rows[key])['title'])
+                if row == db_rows[key]:
+                    diff.changed.pop(key, None)
+                else:
+                    diff.changed[key] = row
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         self._config_outdated = False

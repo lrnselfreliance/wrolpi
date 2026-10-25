@@ -844,7 +844,8 @@ class ConfigFile:
         file_rows = {i.name: i.file_rows(self._config) for i in self.sections}
         with get_db_session() as session:
             db_rows = {i.name: i.db_rows(session) for i in self.sections}
-        diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT, same=i.same)
+        diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT, same=i.same,
+                                      present=i.present(self._config, *file_rows[i.name]))
                  for i in self.sections}
         # `prepare` may skip rows it cannot apply.
         self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())

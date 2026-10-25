@@ -342,7 +342,9 @@ def test_strip_tag_names_migration_merges_tags(test_directory):
         conn.commit()
 
     (config_directory / 'tags.yaml').write_text(yaml.dump(dict(
-        tags={' one': dict(color=None), 'one ': dict(color='#222222'), 'unchanged': dict(color='#777777')},
+        # Sorted, ' two ' comes before 'two\t'; the database's color (by id) is kept anyway.
+        tags={' one': dict(color=None), 'one ': dict(color='#222222'), ' two ': dict(color='#555555'),
+              'two\t': dict(color='#444444'), 'unchanged': dict(color='#777777')},
         tag_files=[[' one', '10.mp4', None], ['one ', '10.mp4', None], ['unchanged', '10.mp4', None]],
         tag_zims=[],
         version=3,
@@ -366,7 +368,8 @@ def test_strip_tag_names_migration_merges_tags(test_directory):
         assert json.loads(settings) == {'channel_tag_name': ['two'], 'video_resolutions': ['720p']}
 
     tags_config = yaml.safe_load((config_directory / 'tags.yaml').read_text())
-    assert tags_config['tags'] == {'one': dict(color='#222222'), 'unchanged': dict(color='#777777')}
+    assert tags_config['tags'] == {'one': dict(color='#222222'), 'two': dict(color='#444444'),
+                                   'unchanged': dict(color='#777777')}
     assert tags_config['tag_files'] == [['one', '10.mp4', None], ['unchanged', '10.mp4', None]]
     assert tags_config['version'] == 3
     channels_config = yaml.safe_load((config_directory / 'channels.yaml').read_text())

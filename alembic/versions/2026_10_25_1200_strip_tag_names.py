@@ -77,7 +77,9 @@ def _strip_rows(rows: list, key_length: int) -> list:
     return result
 
 
-def _strip_tags_config(config: dict) -> dict:
+def _strip_tags_config(config: dict, colors: dict) -> dict:
+    """`colors`: each renamed Tag's color in the database, which the file must match (an import copies the file's
+    color into the database)."""
     config = dict(config)
     if isinstance(config.get('tags'), dict):
         tags = dict()
@@ -88,6 +90,8 @@ def _strip_tags_config(config: dict) -> dict:
             elif isinstance(attrs, dict) and attrs.get('color') and not (tags[stripped] or dict()).get('color'):
                 # The first color of the merged Tags.
                 tags[stripped] = {**(tags[stripped] or dict()), 'color': attrs['color']}
+        for name in tags.keys() & colors.keys():
+            tags[name] = {**(tags[name] or dict()), 'color': colors[name]}
         config['tags'] = tags
     if isinstance(config.get('tag_files'), list):
         config['tag_files'] = _strip_rows(config['tag_files'], 2)
@@ -96,7 +100,7 @@ def _strip_tags_config(config: dict) -> dict:
     return config
 
 
-def strip_tag_names_in_configs():
+def strip_tag_names_in_configs(colors: dict):
     config_directory = get_media_directory() / 'config'
     for file_name in CONFIG_FILES:
         file = config_directory / file_name
@@ -110,15 +114,16 @@ def strip_tag_names_in_configs():
             continue
         if not isinstance(config, dict):
             continue
-        stripped = _strip_tags_config(config) if file_name == 'tags.yaml' else config
+        stripped = _strip_tags_config(config, colors) if file_name == 'tags.yaml' else config
         stripped = _strip_nested(stripped)
         if stripped != config:
             logger.warning(f'Stripping whitespace from Tag names in {file}')
             write_config_data(stripped, file, width=500 if file_name == 'tags.yaml' else 90)
 
 
-def strip_tag_names_in_db(connection):
-    groups = dict()
+def strip_tag_names_in_db(connection) -> dict:
+    """Returns the color of each renamed Tag, by its new name."""
+    groups, colors = dict(), dict()
     for id_, name, color in connection.exec_driver_sql('SELECT id, name, color FROM tag ORDER BY id').fetchall():
         groups.setdefault(_strip(name), list()).append((id_, name, color))
 
@@ -127,7 +132,7 @@ def strip_tag_names_in_db(connection):
             continue
         # Keep the Tag already named this, if any, otherwise the oldest.
         survivor_id = next((id_ for id_, name, _ in tags if name == stripped), tags[0][0])
-        color = next((color for _, _, color in tags if color), None)
+        color = colors[stripped] = next((color for _, _, color in tags if color), None)
         for id_, name, _ in tags:
             if id_ == survivor_id:
                 continue
@@ -157,11 +162,12 @@ def strip_tag_names_in_db(connection):
                 'UPDATE download SET tag_names = ?, settings = ? WHERE id = ?',
                 (json.dumps(new_tag_names) if new_tag_names is not None else None,
                  json.dumps(new_settings) if new_settings is not None else None, id_))
+    return colors
 
 
 def upgrade():
-    strip_tag_names_in_db(op.get_bind())
-    strip_tag_names_in_configs()
+    colors = strip_tag_names_in_db(op.get_bind())
+    strip_tag_names_in_configs(colors)
 
 
 def downgrade():

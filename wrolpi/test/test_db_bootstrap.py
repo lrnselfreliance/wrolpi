@@ -302,6 +302,81 @@ def test_markdown_mimetype_migration_retags_existing_rows(test_directory):
     }
 
 
+def test_strip_tag_names_migration_merges_tags(test_directory):
+    """Whitespace is stripped from Tag names; Tags with the same stripped name are merged (keeping the first color,
+    by id) in the database and in the configs which name them."""
+    import json
+    import sqlite3
+    import yaml
+    from alembic.config import Config
+    from alembic import command
+    from wrolpi.db import get_db_uri, get_db_file
+    from wrolpi.vars import PROJECT_DIR
+
+    config_directory = test_directory / 'config'
+    config_directory.mkdir(parents=True, exist_ok=True)
+    config = Config(str(PROJECT_DIR / 'alembic.ini'))
+    config.set_main_option('sqlalchemy.url', get_db_uri())
+    command.upgrade(config, '2026_10_24_1200')
+
+    db_file = get_db_file()
+    with sqlite3.connect(db_file) as conn:
+        conn.executemany('INSERT INTO tag (id, name, color) VALUES (?,?,?)', (
+            # Merged: the first has no color, so the second's is kept.
+            (1, ' one', None), (2, 'one ', '#222222'), (3, 'one', '#333333'),
+            # Merged: both have colors, so the first is kept.
+            (4, 'two\t', '#444444'), (5, ' two ', '#555555'),
+            (6, 'three ', None),
+            (7, 'unchanged', '#777777'),
+        ))
+        for id_ in (10, 11):
+            conn.execute('INSERT INTO file_group (id, directory, primary_path, files, stem, indexed)'
+                         ' VALUES (?,?,?,?,?,0)',
+                         (id_, str(test_directory), str(test_directory / f'{id_}.mp4'), '[]', str(id_)))
+        conn.executemany('INSERT INTO tag_file (tag_id, file_group_id) VALUES (?,?)',
+                         ((1, 10), (2, 10), (3, 11), (5, 11), (6, 10), (7, 10)))
+        conn.execute("INSERT INTO collection (id, name, kind, tag_id, item_count, total_size) VALUES (20, 'channel', 'channel', 1, 0, 0)")
+        conn.execute('INSERT INTO download (url, tag_names, settings) VALUES (?,?,?)', (
+            'https://example.com/feed', json.dumps(['one ', 'one', 'three ']),
+            json.dumps({'channel_tag_name': [' two'], 'video_resolutions': ['720p']})))
+        conn.commit()
+
+    (config_directory / 'tags.yaml').write_text(yaml.dump(dict(
+        # Sorted, ' two ' comes before 'two\t'; the database's color (by id) is kept anyway.
+        tags={' one': dict(color=None), 'one ': dict(color='#222222'), ' two ': dict(color='#555555'),
+              'two\t': dict(color='#444444'), 'unchanged': dict(color='#777777')},
+        tag_files=[[' one', '10.mp4', None], ['one ', '10.mp4', None], ['unchanged', '10.mp4', None]],
+        tag_zims=[],
+        version=3,
+    )))
+    (config_directory / 'channels.yaml').write_text(yaml.dump(dict(
+        channels=[dict(name='channel', directory='videos/channel', tag_name=' one')], version=2)))
+    # A config which names no padded Tag is not rewritten.
+    domains = 'domains: []\nversion: 1\n'
+    (config_directory / 'domains.yaml').write_text(domains)
+
+    command.upgrade(config, 'head')
+
+    with sqlite3.connect(db_file) as conn:
+        assert sorted(conn.execute('SELECT id, name, color FROM tag')) == [
+            (3, 'one', '#222222'), (4, 'two', '#444444'), (6, 'three', None), (7, 'unchanged', '#777777')]
+        assert sorted(conn.execute('SELECT tag_id, file_group_id FROM tag_file')) == [
+            (3, 10), (3, 11), (4, 11), (6, 10), (7, 10)]
+        assert conn.execute('SELECT tag_id FROM collection').fetchone()[0] == 3
+        tag_names, settings = conn.execute('SELECT tag_names, settings FROM download').fetchone()
+        assert json.loads(tag_names) == ['one', 'three']
+        assert json.loads(settings) == {'channel_tag_name': ['two'], 'video_resolutions': ['720p']}
+
+    tags_config = yaml.safe_load((config_directory / 'tags.yaml').read_text())
+    assert tags_config['tags'] == {'one': dict(color='#222222'), 'two': dict(color='#444444'),
+                                   'unchanged': dict(color='#777777')}
+    assert tags_config['tag_files'] == [['one', '10.mp4', None], ['unchanged', '10.mp4', None]]
+    assert tags_config['version'] == 3
+    channels_config = yaml.safe_load((config_directory / 'channels.yaml').read_text())
+    assert channels_config['channels'][0]['tag_name'] == 'one'
+    assert (config_directory / 'domains.yaml').read_text() == domains
+
+
 def test_migrations_match_models(test_directory):
     """`alembic check`: a database migrated to head matches the SQLAlchemy models (tables, columns,
     indexes).  Fails when a model gains an index or column without a migration, or vice versa."""

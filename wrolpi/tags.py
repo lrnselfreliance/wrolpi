@@ -166,7 +166,9 @@ class Tag(ModelHelper, Base):
 
         # Replace forward-slash (linux directories) with Unicode Big Solidus (U+29F8)
         name = name.replace('/', '⧸')
-        name = INVALID_FILE_CHARS.sub('', name)
+        name = INVALID_FILE_CHARS.sub('', name).strip()
+        if not name:
+            raise InvalidTag('Tag name cannot be empty')
 
         if (other := self.get_by_name(session, name)) and other.id != self.id:
             raise InvalidTag('Tag name already taken')
@@ -266,6 +268,7 @@ class Tag(ModelHelper, Base):
         @warning: does not commit"""
         if name and id_:
             raise RuntimeError('Tag name and id cannot be used together')
+        name = name.strip() if name else name
 
         if tag := session.query(Tag).filter(Tag.id == id_).one_or_none():
             return tag

@@ -24,7 +24,7 @@ from wrolpi.config_import import ConfigSection, chunks, media_relative
 from wrolpi.config_version import register_ownership
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, session_curs
-from wrolpi.downloader import Download, download_manager
+from wrolpi.downloader import Download, download_manager, save_downloads_config
 from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
@@ -388,18 +388,20 @@ class ChannelDownloadsSection(ConfigSection):
     name = 'downloads'
 
     def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
-        rows = dict()
+        rows, invalid = dict(), set()
         for data in config.get('channels') or []:
             try:
                 key = _channel_key(data)
             except Exception:
                 continue
-            for download in data.get('downloads') or []:
+            for position, download in enumerate(data.get('downloads') or []):
                 if isinstance(download, dict) and download.get('url'):
                     rows[(key, download['url'])] = dict(frequency=download.get('frequency'))
                 else:
                     channel_import_logger.error(f'Skipping invalid Download of Channel {key!r}: {download!r}')
-        return rows, set()
+                    # Counted as skipped; the Channel keeps its Downloads (see `ChannelsConfig.prepare`).
+                    invalid.add((key, download if isinstance(download, str) else f'\0{position}'))
+        return rows, invalid
 
     def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
         # A Channel listed with an empty list of Downloads has none (see `ChannelsConfig.prepare` for entries without
@@ -491,21 +493,43 @@ class ChannelsConfig(ConfigFile):
         removed_by_name = dict()
         for key in channels.removed:
             removed_by_name.setdefault(db_rows[key]['name'], []).append(key)
+        moves = dict()
         for key, row in list(channels.added.items()):
             if len(old := removed_by_name.get(row['name']) or []) == 1:
                 channels.removed.discard(old[0])
                 del channels.added[key]
                 channels.changed[old[0]] = dict(row, directory=key)
+                moves[old[0]] = key
 
         # An invalid entry keeps its Channel (found by the entry's name when its directory is invalid), and the
-        # Channel's Downloads; so does an entry without a list of Downloads (an old config).
+        # Channel's Downloads; so does an entry without a list of Downloads (an old config), or with an unreadable
+        # Download.
         entries = [i for i in self._config.get('channels') or [] if isinstance(i, dict)]
         invalid_names = {i.get('name') for i in entries if i.get('name')} - {i['name'] for i in self._channel_rows()}
         for key in [i for i in channels.removed if db_rows[i]['name'] in invalid_names]:
             channels.removed.discard(key)
-        kept = set(db_rows) - set(self._channel_rows_by_key()) - channels.removed
+        kept = set(db_rows) - set(self._channel_rows_by_key()) - channels.removed - set(moves)
         kept |= {key for key, data in self._channel_entries() if 'downloads' not in data}
+        kept |= {directory for directory, _ in ChannelDownloadsSection().file_rows(self._config)[1]}
+
+        # A moved Channel's Downloads are deleted after the move, under its new directory; one its new entry lists
+        # is the same Download.
+        for directory, url in [i for i in downloads.removed if i[0] in moves]:
+            downloads.removed.discard((directory, url))
+            if (moves[directory], url) in downloads.added:
+                del downloads.added[(moves[directory], url)]
+            else:
+                downloads.removed.add((moves[directory], url))
         downloads.removed = {i for i in downloads.removed if i[0] not in kept}
+
+        # A new Download needs a frequency.
+        if missing := {url for (_, url), row in downloads.added.items() if not row['frequency']}:
+            with get_db_session() as session:
+                missing -= {i for i, in session.query(Download.url).filter(Download.url.in_(list(missing)))}
+            for key in [i for i in downloads.added if i[1] in missing]:
+                channel_import_logger.error(f'Refusing to create Download for Channel without frequency: {key[1]}')
+                del downloads.added[key]
+                self.import_skipped += 1
 
     def _channel_entries(self) -> List[Tuple[str, dict]]:
         """The valid entries of the file, keyed by directory."""
@@ -535,7 +559,8 @@ class ChannelsConfig(ConfigFile):
                     .filter(Collection.directory.in_([str(media_directory / i) for i in changed])).all()
             from modules.videos import claim_videos_for_channels
             claim_videos_for_channels([i.id for i in updated])
-            for id_, url, source_id, download_missing_data in updated:
+            # A fetched source id changes channels.yaml, which cannot be saved while it has skipped entries.
+            for id_, url, source_id, download_missing_data in [] if self.import_skipped else updated:
                 if not source_id and url and download_missing_data and flags.have_internet.is_set() \
                         and download_manager.can_download:
                     channel_import_logger.info(f'Fetching channel source id for Channel id={id_}')
@@ -555,6 +580,9 @@ class ChannelsConfig(ConfigFile):
 
         if self._config_outdated:
             self.background_dump.activate_switch()
+        if diffs['downloads']:
+            # The import's Downloads changed download_manager.yaml; saved after the import's write commits.
+            save_downloads_config.activate_switch()
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump all channels from database to config file."""
@@ -1041,7 +1069,9 @@ async def fetch_channel_source_id(channel_id: int):
 
         with get_db_session(commit=True) as session:
             Channel.find_by_id(session, channel_id).source_id = source_id
-        save_channels_config.activate_switch()
+        # Dumped with the database's version (see wrolpi.config_version).
+        if config := get_channels_config():
+            config.background_dump.activate_switch()
     except Exception as e:
         logger.error(f'Failed to get Channel source id of id={channel_id}', exc_info=e)
 

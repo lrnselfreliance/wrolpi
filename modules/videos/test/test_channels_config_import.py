@@ -204,3 +204,83 @@ async def test_no_links_while_entries_are_skipped(test_session, saved_channels, 
     test_session.expire_all()
     assert Download.get_by_url(test_session, 'https://example.com/two').collection_id is None
     assert get_config_version(test_session, 'channels.yaml') == yaml.safe_load(saved_channels.read_text())['version']
+
+
+@pytest.mark.asyncio
+async def test_moved_channel_downloads(test_session, saved_channels):
+    """A moved Channel keeps the Downloads its new entry lists, and loses the ones it does not, in the same import;
+    the next import writes nothing."""
+    edit_channel(saved_channels, 'one', directory='videos/moved/one', downloads=[])
+    edit_channel(saved_channels, 'two', directory='videos/moved/two',
+                 downloads=[dict(url='https://example.com/two/feed', frequency=86400)])
+    config = get_channels_config()
+    config.import_config()
+
+    test_session.expire_all()
+    assert {i.url for i in test_session.query(Download)} == {'https://example.com/two/feed'}
+    assert directory_of(test_session, 'one') == 'videos/moved/one'
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_download_keeps_the_channel_downloads(test_session, saved_channels):
+    """An unreadable Download of a Channel is counted as skipped, and the Channel's Downloads are kept."""
+    edit_channel(saved_channels, 'one', downloads=[dict(uri='https://example.com/one')])
+
+    config = get_channels_config()
+    config.import_config()
+
+    assert config.import_skipped == 1
+    test_session.expire_all()
+    assert {i.url for i in test_session.query(Download)} == {'https://example.com/one'}
+
+
+@pytest.mark.asyncio
+async def test_new_download_without_frequency_is_skipped(test_session, saved_channels):
+    """A new Download without a frequency cannot be created: it is skipped (counted), and the next import writes
+    nothing."""
+    edit_channel(saved_channels, 'two', downloads=[dict(url='https://example.com/two/feed')])
+
+    config = get_channels_config()
+    with statements() as collected:
+        config.import_config()
+
+    assert config.import_skipped == 1
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_no_source_id_fetch_while_entries_are_skipped(test_session, saved_channels, monkeypatch):
+    """Fetching a Channel's source id changes channels.yaml; while an entry is skipped it is not fetched."""
+    from wrolpi import flags
+    scheduled = []
+    monkeypatch.setattr(lib, 'background_task', lambda coro: scheduled.append(coro.close()))
+    monkeypatch.setattr(flags.have_internet, 'is_set', lambda: True)
+    monkeypatch.setattr(type(lib.download_manager), 'can_download', property(lambda self: True))
+    edit_config(saved_channels, lambda data: data['channels'].extend([
+        dict(name='three', directory='videos/three', url='https://example.com/three', download_missing_data=True),
+        dict(directory='videos/nameless'),
+    ]))
+
+    get_channels_config().import_config()
+
+    assert set(channels(test_session)) == {'one', 'two', 'three'}
+    assert scheduled == []
+
+
+@pytest.mark.asyncio
+async def test_import_does_not_save_during_its_write(test_session, saved_channels, test_download_manager_config,
+                                                     monkeypatch):
+    """Deleting a Download inside the import's write neither skips its URL nor starts a config save (which would read
+    the database before the import commits)."""
+    from wrolpi.downloader import get_download_manager_config
+    saves = []
+    monkeypatch.setattr(lib.save_channels_config, 'activate_switch', lambda *a, **kw: saves.append('channels'))
+    edit_channel(saved_channels, 'one', downloads=[])
+
+    get_channels_config().import_config()
+
+    assert saves == []
+    assert 'https://example.com/one' not in (get_download_manager_config().skip_urls or [])

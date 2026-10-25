@@ -378,9 +378,10 @@ class Download(ModelHelper, Base):  # noqa
         download_manager.add_to_skip_list(self.url)
 
     def delete(self, add_to_skip_list: bool = True, commit: bool = True):
-        """`commit`: False only flushes (the caller's write commits)."""
+        """`commit`: False only flushes; the caller's write commits, and saves the configs afterward (a save now
+        would read the database before that commit), and does not change the skip list."""
         # Do not download this automatically again.  This saves the config.
-        if add_to_skip_list:
+        if add_to_skip_list and commit:
             self.add_to_skip_list()
 
         session = Session.object_session(self)
@@ -390,10 +391,10 @@ class Download(ModelHelper, Base):  # noqa
         collection_kind = collection.kind if collection else None
 
         session.delete(self)
-        if commit:
-            session.commit()
-        else:
+        if not commit:
             session.flush([self])
+            return
+        session.commit()
 
         # Save appropriate config based on collection kind.  Channels/domains own their configs;
         # other kinds have no generic collections config to save.

@@ -5,8 +5,9 @@ A config declares a `ConfigSection` for each kind of row it saves (tags.yaml has
 Rows are compared as plain data keyed the way the file names them (a URL, a name, a path), so the snapshot needs no
 ORM objects and the read can finish before any slow preparation starts.
 """
+import operator
 from dataclasses import dataclass, field
-from typing import Any, Dict, Hashable, Iterable, List, Set, Tuple
+from typing import Any, Callable, Dict, Hashable, Iterable, List, Set, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -45,6 +46,10 @@ class ConfigSection:
         deleted since the snapshot."""
         raise NotImplementedError()
 
+    def same(self, file_row: dict, db_row: dict) -> bool:
+        """Whether a file row is already in the database."""
+        return file_row == db_row
+
     def delete(self, session: Session, keys: Set[Hashable]):
         """Delete the rows with these keys.  A row deleted since the snapshot, or no longer saved by the config, is
         left alone."""
@@ -52,14 +57,14 @@ class ConfigSection:
 
 
 def diff_section(file_rows: Dict[Hashable, dict], invalid_keys: Set[Hashable], db_rows: Dict[Hashable, dict],
-                 deletes: bool) -> SectionDiff:
+                 deletes: bool, same: Callable[[dict, dict], bool] = operator.eq) -> SectionDiff:
     """Compare a section's file rows with its database rows.  `deletes`: rows the file no longer lists are removed.
     An empty section never removes anything: it cannot be told apart from a lost or blanked file."""
     diff = SectionDiff()
     for key, row in file_rows.items():
         if key not in db_rows:
             diff.added[key] = row
-        elif db_rows[key] != row:
+        elif not same(row, db_rows[key]):
             diff.changed[key] = row
     if deletes and (file_rows or invalid_keys):
         diff.removed = db_rows.keys() - file_rows.keys() - invalid_keys

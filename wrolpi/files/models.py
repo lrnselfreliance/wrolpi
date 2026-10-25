@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index, Integer, JSON, or_, Text
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Float, Index, Integer, JSON, or_, Text, inspect, text
 from sqlalchemy import types
 from sqlalchemy.orm import Mapped, deferred, relationship, Session, selectinload
 
@@ -890,6 +890,19 @@ def update_effective_datetime(mapper, connection, target):
 
 # recently_viewed.yaml saves only how far each viewed file was read or watched.
 register_ownership('recently_viewed.yaml', FileGroup, columns={'viewed', 'progress', 'position'})
+
+
+def _tagged_file_group_moved(file_group: FileGroup) -> bool:
+    """An existing FileGroup with TagFiles changed path (tags.yaml saves tagged files by path).  A new FileGroup,
+    or a deleted one (its TagFiles go with it), did not move."""
+    if not inspect(file_group).attrs.primary_path.history.deleted:
+        return False
+    session = Session.object_session(file_group)
+    return session.connection().execute(
+        text('SELECT 1 FROM tag_file WHERE file_group_id = :id LIMIT 1'), {'id': file_group.id}).first() is not None
+
+
+register_ownership('tags.yaml', FileGroup, columns={'primary_path'}, row=_tagged_file_group_moved)
 
 
 class Directory(ModelHelper, Base):

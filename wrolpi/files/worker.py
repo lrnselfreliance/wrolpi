@@ -22,6 +22,7 @@ from sqlalchemy import text, or_
 from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.common import get_media_directory, logger, wrol_mode_enabled
+from wrolpi.config_version import count_config_change_curs
 from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.events import Events
 from wrolpi.vars import PYTEST
@@ -746,6 +747,18 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
 
                 # Bulk UPDATE using UPDATE...FROM over a JSON array of [id, new_path] pairs
                 if valid_updates:
+                    updates = json.dumps([[fg_id, new_path] for fg_id, new_path in valid_updates])
+                    # tags.yaml saves tagged files by path: a tagged FileGroup's new path is its change.
+                    curs.execute(
+                        '''SELECT 1
+                           FROM tag_file
+                                    JOIN file_group ON file_group.id = tag_file.file_group_id
+                                    JOIN json_each(:updates) AS v ON file_group.id = json_extract(v.value, '$[0]')
+                           WHERE file_group.primary_path != json_extract(v.value, '$[1]')
+                           LIMIT 1''',
+                        {'updates': updates})
+                    if curs.fetchone():
+                        count_config_change_curs(curs, 'tags.yaml')
                     curs.execute(
                         '''UPDATE file_group
                            SET primary_path = v.new_path
@@ -754,7 +767,7 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
                                  FROM json_each(:updates)) AS v
                            WHERE file_group.id = v.id
                              AND file_group.primary_path != v.new_path''',
-                        {'updates': json.dumps([[fg_id, new_path] for fg_id, new_path in valid_updates])}
+                        {'updates': updates}
                     )
 
         # Collect all file paths from the diffs (fast operation, no progress tracking needed)

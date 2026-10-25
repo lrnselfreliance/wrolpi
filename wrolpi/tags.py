@@ -182,22 +182,23 @@ class Tag(ModelHelper, Base):
         if Session.object_session(self):
             self.flush()
 
+        # Rename old name referenced in any Downloads, in the caller's transaction.  (A background task's writes
+        # would not be committed with it.)
+        from wrolpi.downloader import Download
+        to_flush = list()
+        for download in session.query(Download):
+            tag_names, settings = with_tag_name_renamed(download.tag_names, download.settings, old_name, name)
+            if tag_names != download.tag_names or settings != download.settings:
+                download.tag_names, download.settings = tag_names, settings
+                to_flush.append(download)
+
+        if to_flush:
+            session.flush(to_flush)
+            save_downloads_config.activate_switch()
+
         from modules.videos.errors import ChannelDirectoryConflict
 
         async def _():
-            # Rename old name referenced in any Downloads.
-            from wrolpi.downloader import Download
-            to_flush = list()
-            for download in session.query(Download):
-                tag_names, settings = with_tag_name_renamed(download.tag_names, download.settings, old_name, name)
-                if tag_names != download.tag_names or settings != download.settings:
-                    download.tag_names, download.settings = tag_names, settings
-                    to_flush.append(download)
-
-            if to_flush:
-                session.flush(to_flush)
-                save_downloads_config.activate_switch()
-
             # Only move channels if tag is being renamed (not created)
             if old_name:
                 # Get channels through Collections

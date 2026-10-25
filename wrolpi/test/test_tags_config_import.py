@@ -256,3 +256,50 @@ async def test_refresh_changing_primary_file_counts(test_session, test_directory
     test_session.expire_all()
     assert test_session.query(FileGroup).one().primary_path != test_directory / 'video.mp4'
     assert get_config_version(test_session, 'tags.yaml') > 0
+
+
+@pytest.mark.asyncio
+async def test_removed_tag_is_removed_from_downloads(test_session, saved_tags, test_download_manager_config):
+    """A removed Tag's name is removed from every Download that would apply it (its tag_names, and the tag_names and
+    channel_tag_name it passes on); download_manager.yaml is then newer than its file, so it is saved."""
+    from wrolpi.config_version import set_config_version
+    from wrolpi.downloader import Download
+    test_session.add(Download(url='https://example.com/channel', downloader='video_channel', frequency=86400,
+                              tag_names=['one', 'two'],
+                              settings=dict(tag_names=['one'], channel_tag_name=['one'], video_resolutions=['720p'])))
+    test_session.commit()
+    set_config_version(test_session, 'download_manager.yaml', 1)
+    test_session.commit()
+    edit_config(saved_tags, lambda data: data['tags'].pop('one'))
+
+    tags.get_tags_config().import_config()
+
+    test_session.expire_all()
+    download = Download.get_by_url(test_session, 'https://example.com/channel')
+    assert download.tag_names == ['two']
+    assert download.settings == dict(tag_names=[], channel_tag_name=[], video_resolutions=['720p'])
+    assert get_config_version(test_session, 'download_manager.yaml') > 1
+
+
+@pytest.mark.asyncio
+async def test_zim_entry_migrates_by_name_and_date(test_session, test_directory, test_tags_config, zim_factory,
+                                                   tag_factory, await_switches):
+    """The newest Zim of the same name is chosen by the date in its name, wherever it is, and a Zim whose name
+    merely starts with the same name is not the same Zim."""
+    (test_directory / 'a').mkdir()
+    (test_directory / 'b').mkdir()
+    old = zim_factory('wikipedia_en_all_maxi_2020-01.zim')
+    newest = zim_factory('a/wikipedia_en_all_maxi_2020-03.zim')
+    zim_factory('b/wikipedia_en_all_maxi_2020-02.zim')
+    zim_factory('wikipedia_en_all_maxi_extra_2021-01.zim')
+    await tag_factory('one')
+    old.tag_entry(test_session, 'one', 'home')
+    test_session.commit()
+    tags.get_tags_config().dump_config()
+    await await_switches()
+    old.delete()
+
+    tags.get_tags_config().import_config()
+
+    test_session.expire_all()
+    assert [(i.tag.name, i.zim_id) for i in test_session.query(TagZimEntry)] == [('one', newest.id)]

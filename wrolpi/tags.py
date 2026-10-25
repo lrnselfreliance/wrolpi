@@ -9,7 +9,7 @@ import pytz
 from cachetools.keys import hashkey
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, event, UniqueConstraint, insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapped, relationship, Session
+from sqlalchemy.orm import Mapped, relationship, Session, load_only
 
 from wrolpi import dates, flags
 from wrolpi.common import loaded, ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
@@ -313,6 +313,32 @@ def _relative_path(path) -> str:
     return str(path.relative_to(get_media_directory()) if path.is_absolute() else path)
 
 
+def without_tag_names(download_tag_names: Optional[List[str]], settings: Optional[dict], names: Set[str]) \
+        -> Tuple[Optional[List[str]], Optional[dict]]:
+    """A Download's tag_names and settings without these Tag names, in the settings' tag_names and channel_tag_name
+    (passed on to the Downloads and Channels it creates) too.  New objects, so an ORM change to the JSON is seen."""
+    if download_tag_names:
+        download_tag_names = [i for i in download_tag_names if i not in names]
+    if settings:
+        settings = {key: [i for i in value if i not in names] if key in ('tag_names', 'channel_tag_name') and value
+                    else value for key, value in settings.items()}
+    return download_tag_names, settings
+
+
+def remove_tag_names_from_downloads(session: Session, names: Set[str]):
+    """Remove these Tag names from every Download that would apply them; applying a Tag that does not exist fails
+    the download.  (Changes download_manager.yaml.)"""
+    from wrolpi.downloader import Download
+    changed = False
+    for download in session.query(Download).options(load_only(Download.id, Download.tag_names, Download.settings)):
+        tag_names, settings = without_tag_names(download.tag_names, download.settings, names)
+        if tag_names != download.tag_names or settings != download.settings:
+            download.tag_names, download.settings = tag_names, settings
+            changed = True
+    if changed:
+        save_downloads_config.activate_switch()
+
+
 def _tag_ids(session: Session, names) -> Dict[str, int]:
     tag_ids = dict()
     for chunk in chunks(names):
@@ -351,6 +377,7 @@ class TagsSection(ConfigSection):
         """A removed Tag is deleted with its tagged files and Zim entries.  A Collection using it keeps its
         directory, and loses only the Tag (its config is then saved)."""
         from wrolpi.collections import Collection
+        remove_tag_names_from_downloads(session, set(keys))
         for tag in session.query(Tag).filter(Tag.name.in_(list(keys))):
             for collection in session.query(Collection).filter(Collection.tag_id == tag.id):
                 logger.warning(f'Removing Tag {repr(tag.name)} from {collection}')
@@ -695,8 +722,17 @@ class TagsConfig(ConfigFile):
             return
         media_directory = get_media_directory()
         with get_db_session() as session:
-            zim_paths = sorted(i for i, in session.query(Zim.path))
+            zim_paths = [i for i, in session.query(Zim.path)]
         known = {str(i.relative_to(media_directory)) for i in zim_paths}
+        # {name: (date, path)} of the newest Zim of each name, like `migrate_outdated_zim_tags`.
+        newest = dict()
+        for path in zim_paths:
+            try:
+                name, date = zim_lib.parse_name(path)
+            except ValueError:
+                continue
+            if name not in newest or date > newest[name][0]:
+                newest[name] = (date, path)
 
         for key, row in list(diff.added.items()):
             tag_name, zim_path, zim_entry = key
@@ -707,12 +743,11 @@ class TagsConfig(ConfigFile):
                 name, _ = zim_lib.parse_name(media_directory / zim_path)
             except ValueError:
                 name = None
-            newest = [i for i in zim_paths if name and i.name.startswith(name)]
-            if not newest:
+            if name not in newest:
                 logger.warning(f'Cannot find Zim for {repr(zim_path)}')
                 self.import_skipped += 1
                 continue
-            new_key = (tag_name, str(newest[-1].relative_to(media_directory)), zim_entry)
+            new_key = (tag_name, str(newest[name][1].relative_to(media_directory)), zim_entry)
             logger.warning(f'Migrating Zim entry tag {repr(tag_name)} from {zim_path} to {new_key[1]}')
             self._config_outdated = True
             diff.removed.discard(new_key)

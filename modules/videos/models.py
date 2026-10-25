@@ -731,8 +731,9 @@ class Channel(ModelHelper, Base):
 
         raise FileNotFoundError(f'Cannot create Channel info json because directory is not defined: {self}')
 
-    def delete_with_videos(self):
-        """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel and its Collection."""
+    def delete_with_videos(self, commit: bool = True):
+        """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel and its
+        Collection.  `commit`: False leaves committing to the caller's write."""
         session = Session.object_session(self)
 
         # Disown the videos.
@@ -742,7 +743,7 @@ class Channel(ModelHelper, Base):
 
         for download in self.downloads:
             download: Download
-            download.delete()
+            download.delete(commit=commit)
 
         # Get the Collection before deleting the Channel
         collection = self.collection
@@ -1139,11 +1140,12 @@ class Channel(ModelHelper, Base):
                 raise RuntimeError(f'More than one info_json entry matches {video_source_id}')
 
     def get_or_create_download(self, session: Session, url: str, frequency: int,
-                               reset_attempts: bool = False) -> Download:
+                               reset_attempts: bool = False, commit: bool = True) -> Download:
         """Get a Download record, if it does not exist, create it.  Create a Download if necessary
         which goes into this Channel's directory.
 
-        Delegates to Collection.get_or_create_download() with Channel-specific downloaders.
+        Delegates to Collection.get_or_create_download() with Channel-specific downloaders.  `commit`: False leaves
+        committing a new Download to the caller's write.
         """
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
@@ -1151,7 +1153,8 @@ class Channel(ModelHelper, Base):
             session, url, frequency,
             reset_attempts=reset_attempts,
             downloader_name=ChannelDownloader.name,
-            sub_downloader_name=VideoDownloader.name
+            sub_downloader_name=VideoDownloader.name,
+            commit=commit,
         )
 
     def get_rss_url(self) -> str | None:

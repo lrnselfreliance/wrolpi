@@ -189,15 +189,9 @@ class Tag(ModelHelper, Base):
             from wrolpi.downloader import Download
             to_flush = list()
             for download in session.query(Download):
-                if download.tag_names:
-                    download.tag_names = [i if i != old_name else name for i in download.tag_names]
-                    to_flush.append(download)
-                if download.settings and 'channel_tag_name' in download.settings:
-                    settings = download.settings
-                    tag_name = settings.pop('channel_tag_name')
-                    tag_name = [i for i in tag_name if i != old_name]
-                    settings['channel_tag_name'] = tag_name
-                    download.settings = settings
+                tag_names, settings = with_tag_name_renamed(download.tag_names, download.settings, old_name, name)
+                if tag_names != download.tag_names or settings != download.settings:
+                    download.tag_names, download.settings = tag_names, settings
                     to_flush.append(download)
 
             if to_flush:
@@ -319,6 +313,19 @@ def without_tag_names(download_tag_names: Optional[List[str]], settings: Optiona
     if settings:
         settings = {key: [i for i in value if i not in names] if key in ('tag_names', 'channel_tag_name') and value
                     else value for key, value in settings.items()}
+    return download_tag_names, settings
+
+
+def with_tag_name_renamed(download_tag_names: Optional[List[str]], settings: Optional[dict], old_name: str,
+                          new_name: str) -> Tuple[Optional[List[str]], Optional[dict]]:
+    """A Download's tag_names and settings with a Tag's old name replaced, in the settings' tag_names and
+    channel_tag_name too.  New objects, so an ORM change to the JSON is seen."""
+    if download_tag_names:
+        download_tag_names = [new_name if i == old_name else i for i in download_tag_names]
+    if settings:
+        settings = {key: [new_name if i == old_name else i for i in value]
+                    if key in ('tag_names', 'channel_tag_name') and value else value
+                    for key, value in settings.items()}
     return download_tag_names, settings
 
 

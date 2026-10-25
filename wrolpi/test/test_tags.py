@@ -596,6 +596,30 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
 
 
 @pytest.mark.asyncio
+async def test_tag_rename_downloads(test_session, tag_factory, await_background_tasks):
+    """Renaming a Tag renames it everywhere a Download applies it, including the settings passed on to the
+    Downloads (and Channels) it creates."""
+    from wrolpi.downloader import Download
+    tag, other = await tag_factory('one'), await tag_factory('two')
+    download = Download(url='https://example.com/playlist', downloader='video_channel', tag_names=['one', 'two'],
+                        settings=dict(tag_names=['two', 'one'], channel_tag_name=['one'], video_resolutions=['720p']))
+    untouched = Download(url='https://example.com/other', downloader='video_channel', tag_names=['two'],
+                         settings=dict(tag_names=['two'], channel_tag_name=['two']))
+    test_session.add_all([download, untouched])
+    test_session.commit()
+
+    await tag.update_tag(test_session, 'New Name', None)
+    await await_background_tasks()
+    test_session.commit()
+
+    assert download.tag_names == ['New Name', 'two']
+    assert download.settings == dict(tag_names=['two', 'New Name'], channel_tag_name=['New Name'],
+                                     video_resolutions=['720p'])
+    assert untouched.tag_names == ['two']
+    assert untouched.settings == dict(tag_names=['two'], channel_tag_name=['two'])
+
+
+@pytest.mark.asyncio
 async def test_tags_directory_file_replaced(test_session, test_directory, tag_factory, video_bytes, await_switches):
     """Tags directory hardlinks should update when source file is replaced."""
     from wrolpi import tags as tags_module

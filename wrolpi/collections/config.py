@@ -11,6 +11,7 @@ from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relat
 from wrolpi.config_version import count_config_change
 from wrolpi.db import get_db_session
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
+from wrolpi.files.progress import RecentlyViewedConfig, save_recently_viewed_config
 from wrolpi.tags import TagFile, TagsConfig, save_tags_config
 
 logger = logger.getChild(__name__)
@@ -435,9 +436,11 @@ def file_groups_moved(session, file_group_ids):
 
     playlists.yaml references file items by path, so it must be re-saved (and the playlist
     directories re-synced) or the next import will not find the file and will drop the item.
-    tags.yaml saves tagged files by path too.  The move (often raw SQL) is counted as each config's change.
+    tags.yaml and recently_viewed.yaml save files by path too.  The move (often raw SQL) is counted as each config's
+    change.
 
     `file_group_ids` may be an iterable of ids or a select of ids."""
+    from wrolpi.files.models import FileGroup
     from .models import Collection, CollectionItem
 
     if session.query(TagFile.file_group_id).filter(TagFile.file_group_id.in_(file_group_ids)).first():
@@ -448,6 +451,10 @@ def file_groups_moved(session, file_group_ids):
         .join(Collection, Collection.id == CollectionItem.collection_id) \
         .filter(Collection.kind == 'playlist', CollectionItem.file_group_id.in_(file_group_ids)) \
         .first()
+    if session.query(FileGroup.id).filter(FileGroup.id.in_(file_group_ids), FileGroup.viewed.isnot(None)).first():
+        count_config_change(session, RecentlyViewedConfig.file_name)
+        save_recently_viewed_config.activate_switch()
+
     if in_playlist:
         count_config_change(session, PlaylistsConfig.file_name)
         save_playlists_config.activate_switch()

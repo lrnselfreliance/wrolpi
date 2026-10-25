@@ -772,6 +772,17 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
                         {'updates': updates})
                     if curs.fetchone():
                         count_config_change_curs(curs, 'playlists.yaml')
+                    # recently_viewed.yaml saves viewed files by path too.
+                    curs.execute(
+                        '''SELECT 1
+                           FROM file_group
+                                    JOIN json_each(:updates) AS v ON file_group.id = json_extract(v.value, '$[0]')
+                           WHERE file_group.viewed IS NOT NULL
+                             AND file_group.primary_path != json_extract(v.value, '$[1]')
+                           LIMIT 1''',
+                        {'updates': updates})
+                    if curs.fetchone():
+                        count_config_change_curs(curs, 'recently_viewed.yaml')
                     curs.execute(
                         '''UPDATE file_group
                            SET primary_path = v.new_path

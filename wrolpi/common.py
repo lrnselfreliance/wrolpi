@@ -848,6 +848,7 @@ class ConfigFile:
                  for i in self.sections}
         # `prepare` may skip rows it cannot apply.
         self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
+        self.import_deletes = decision == IMPORT
         if any(diffs.values()):
             self.prepare(diffs)
 
@@ -889,7 +890,8 @@ class ConfigFile:
     def prepare(self, diffs: dict):
         """Slow work the write needs (files, network), run with no transaction open, and only when there are
         differences.  `diffs` maps each section's name to its `SectionDiff`; it may drop rows it cannot apply
-        (count them in `import_skipped`), or add what it found to a row for `upsert`.
+        (count them in `import_skipped`), or add what it found to a row for `upsert`.  `import_deletes`: whether
+        this import deletes what the file no longer lists.
 
         It must be safe to repeat and to abandon: when the database changes before the write, the import decides
         again (up to three passes), and the diffs it was given may never be written (the write fails, or the next

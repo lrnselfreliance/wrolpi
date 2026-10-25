@@ -6,10 +6,13 @@ Rows are compared as plain data keyed the way the file names them (a URL, a name
 ORM objects and the read can finish before any slow preparation starts.
 """
 import operator
+import pathlib
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Hashable, Iterable, List, Set, Tuple
 
 from sqlalchemy.orm import Session
+
+from wrolpi.common import get_media_directory
 
 
 @dataclass
@@ -69,6 +72,12 @@ def diff_section(file_rows: Dict[Hashable, dict], invalid_keys: Set[Hashable], d
     if deletes and (file_rows or invalid_keys):
         diff.removed = db_rows.keys() - file_rows.keys() - invalid_keys
     return diff
+
+
+def media_relative(path) -> str:
+    """A path as a config names it: relative to the media directory."""
+    path = pathlib.Path(path)
+    return str(path.relative_to(get_media_directory()) if path.is_absolute() else path)
 
 
 def chunks(items: Iterable[Any], size: int = 500) -> Iterable[List[Any]]:

@@ -759,6 +759,19 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
                         {'updates': updates})
                     if curs.fetchone():
                         count_config_change_curs(curs, 'tags.yaml')
+                    # playlists.yaml saves file items by path too.
+                    curs.execute(
+                        '''SELECT 1
+                           FROM collection_item
+                                    JOIN collection ON collection.id = collection_item.collection_id
+                                    JOIN file_group ON file_group.id = collection_item.file_group_id
+                                    JOIN json_each(:updates) AS v ON file_group.id = json_extract(v.value, '$[0]')
+                           WHERE collection.kind = 'playlist'
+                             AND file_group.primary_path != json_extract(v.value, '$[1]')
+                           LIMIT 1''',
+                        {'updates': updates})
+                    if curs.fetchone():
+                        count_config_change_curs(curs, 'playlists.yaml')
                     curs.execute(
                         '''UPDATE file_group
                            SET primary_path = v.new_path

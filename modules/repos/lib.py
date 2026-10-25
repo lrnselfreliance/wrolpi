@@ -1397,9 +1397,9 @@ class ReposSection(ConfigSection):
         media_directory = get_media_directory()
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('repos') or []):
-            url = data.get('url')
-            if not url:
-                logger.error(f'Repo config entry has no url, skipping: {data}')
+            url = data.get('url') if isinstance(data, dict) else None
+            if not url or not isinstance(url, str):
+                logger.error(f'Repo config entry has no url, skipping: {data!r}')
                 # Counted as skipped; never a Repo's key.
                 invalid.add(f'\0{position}')
                 continue

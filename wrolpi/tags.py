@@ -397,12 +397,16 @@ class TagFilesSection(ConfigSection):
     def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
         tag_names = set(config.get('tags') or dict())
         rows, invalid = dict(), set()
-        for item in config.get('tag_files') or []:
+        for position, item in enumerate(config.get('tag_files') or []):
             try:
-                tag_name, path, *rest = item
+                tag_name, path, *rest = item if isinstance(item, list) else ()
+                if not isinstance(tag_name, str):
+                    raise ValueError('A Tag name must be text')
                 key = (tag_name, media_relative(path))
             except Exception as e:
-                logger.error(f'Skipping invalid tagged file in config: {item}', exc_info=e)
+                logger.error(f'Skipping invalid tagged file in config: {item!r}', exc_info=e)
+                # Counted as skipped; never a tagged file's key.
+                invalid.add((f'\0{position}',))
                 continue
             if tag_names and tag_name not in tag_names:
                 logger.warning(f'Cannot find Tag for {repr(key[1])}')
@@ -496,12 +500,16 @@ class TagZimsSection(ConfigSection):
     def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
         tag_names = set(config.get('tags') or dict())
         rows, invalid = dict(), set()
-        for item in config.get('tag_zims') or []:
+        for position, item in enumerate(config.get('tag_zims') or []):
             try:
-                tag_name, zim_path, zim_entry, *rest = item
+                tag_name, zim_path, zim_entry, *rest = item if isinstance(item, list) else ()
+                if not isinstance(tag_name, str) or not isinstance(zim_entry, str):
+                    raise ValueError('A Tag name and a Zim entry must be text')
                 key = (tag_name, media_relative(zim_path), zim_entry)
             except Exception as e:
-                logger.error(f'Skipping invalid tagged Zim entry in config: {item}', exc_info=e)
+                logger.error(f'Skipping invalid tagged Zim entry in config: {item!r}', exc_info=e)
+                # Counted as skipped; never a tagged Zim entry's key.
+                invalid.add((f'\0{position}',))
                 continue
             if tag_names and tag_name not in tag_names:
                 logger.warning(f'Cannot find Tag for {repr(key[1])}')

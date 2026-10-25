@@ -2109,8 +2109,13 @@ class DownloadsSection(ConfigSection):
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
         defaults = inheritable_video_defaults()
         rows, invalid = dict(), set()
-        for data in config.get('downloads') or []:
-            url = data.get('url')
+        for position, data in enumerate(config.get('downloads') or []):
+            url = data.get('url') if isinstance(data, dict) else None
+            if not url or not isinstance(url, str):
+                logger.error(f'Download config entry has no url, skipping: {data!r}')
+                # Counted as skipped; never a Download's URL.
+                invalid.add(f'\0{position}')
+                continue
             try:
                 settings = dict(data.get('settings') or {})
                 # An old config kept `destination` and `tag_names` in the settings.

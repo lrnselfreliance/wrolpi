@@ -394,7 +394,13 @@ class ChannelDownloadsSection(ConfigSection):
                 key = _channel_key(data)
             except Exception:
                 continue
-            for position, download in enumerate(data.get('downloads') or []):
+            downloads = data.get('downloads') or []
+            if not isinstance(downloads, list):
+                channel_import_logger.error(f'Skipping the Downloads of Channel {key!r}, they are not a list')
+                # Counted as skipped; the Channel keeps its Downloads (see `ChannelsConfig.prepare`).
+                invalid.add((key, '\0downloads'))
+                continue
+            for position, download in enumerate(downloads):
                 if isinstance(download, dict) and download.get('url'):
                     rows[(key, download['url'])] = dict(frequency=download.get('frequency'))
                 else:

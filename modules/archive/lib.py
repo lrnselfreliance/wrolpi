@@ -65,7 +65,7 @@ class DomainsSection(ConfigSection):
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('collections') or []):
             name = data.get('name') if isinstance(data, dict) else None
-            if not name:
+            if not name or not isinstance(name, str):
                 logger.error(f'Domain collection at index {position} has no name, skipping: {data!r}')
                 # Counted as skipped; never a domain's name.
                 invalid.add(f'\0{position}')

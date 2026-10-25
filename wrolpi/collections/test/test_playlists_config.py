@@ -414,3 +414,23 @@ async def test_import_without_deletes_keeps_database_order(test_session, test_di
     test_session.expire_all()
     collection = test_session.query(Collection).filter_by(name='Mix', kind='playlist').one()
     assert [(i.url, i.position) for i in collection.items] == [('/a', 1), ('/x', 2), ('/b', 3)]
+
+
+@pytest.mark.asyncio
+async def test_import_skips_malformed_entries(test_session, test_directory, playlists_config):
+    """A playlist entry or item that is not a mapping is skipped and counted; the rest of the file still imports."""
+    _make_playlist(test_session)
+
+    file = playlists_config.get_file()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text('version: 1\nplaylists:\n- not a mapping\n- name: Survives\n  items:\n  - also not a mapping\n'
+                    '  - url: /map?lat=1&lon=2&z=3\n    title: spot\n- name: New\n')
+
+    playlists_config.import_config()
+
+    assert playlists_config.successful_import is True
+    assert playlists_config.import_skipped == 2
+    test_session.expire_all()
+    playlists = {i.name: i for i in test_session.query(Collection).filter_by(kind='playlist')}
+    assert set(playlists) == {'Survives', 'New'}
+    assert len(playlists['Survives'].items) == 1

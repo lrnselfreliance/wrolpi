@@ -23,16 +23,24 @@ def _playlist_tag_names(rows) -> Set[str]:
     return {i['tag_name'] for i in rows if i['tag_name']}
 
 
+def _playlist_name(data) -> Optional[str]:
+    """The name of a playlist entry, or None when the entry is malformed."""
+    name = data.get('name') if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
 class PlaylistsSection(ConfigSection):
     """playlists.yaml's playlists (Collections with kind 'playlist'), keyed by name."""
     name = 'playlists'
 
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
         rows, invalid = dict(), set()
-        for data in config.get('playlists') or []:
-            name = data.get('name')
+        for position, data in enumerate(config.get('playlists') or []):
+            name = _playlist_name(data)
             if not name:
-                logger.error(f'Playlist config entry has no name, skipping: {data}')
+                logger.error(f'Playlist config entry has no name, skipping: {data!r}')
+                # Counted as skipped; never a playlist's name.
+                invalid.add(f'\0{position}')
                 continue
             try:
                 rows[name] = dict(
@@ -88,23 +96,32 @@ class PlaylistItemsSection(ConfigSection):
 
     @staticmethod
     def item_key(name: str, data: dict) -> Optional[tuple]:
+        if not isinstance(data, dict):
+            raise ValueError('An item must be a mapping')
         if 'file' in data:
             return name, 'file', media_relative(data['file']), None
         elif 'zim' in data:
-            if not data.get('entry'):
+            if not data.get('entry') or not isinstance(data['entry'], str):
                 raise ValueError('A zim item requires an entry')
             return name, 'zim', media_relative(data['zim']), data['entry']
         elif 'url' in data:
+            if not isinstance(data['url'], str):
+                raise ValueError('An item\'s url must be text')
             return name, 'url', data['url'], None
         raise ValueError('An item requires a file, zim, or url')
 
     def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
         rows, invalid = dict(), set()
         for data in config.get('playlists') or []:
-            if not (name := data.get('name')):
+            if not (name := _playlist_name(data)):
+                continue
+            items = data.get('items') or []
+            if not isinstance(items, list):
+                logger.error(f'Skipping the items of playlist {name!r}, they are not a list: {items!r}')
+                invalid.add((name, None, 0, None))
                 continue
             # Positions follow the file's order; an item skipped now keeps its place for a later import.
-            for position, item in enumerate(data.get('items') or [], start=1):
+            for position, item in enumerate(items, start=1):
                 try:
                     key = self.item_key(name, item)
                 except Exception as e:
@@ -121,7 +138,7 @@ class PlaylistItemsSection(ConfigSection):
 
     def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
         # A listed playlist without items has none: only an empty or missing playlists list removes nothing.
-        return any(i.get('name') for i in config.get('playlists') or [])
+        return any(map(_playlist_name, config.get('playlists') or []))
 
     @staticmethod
     def _query(session: Session, *columns):

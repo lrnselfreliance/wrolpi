@@ -4,10 +4,11 @@ from dataclasses import dataclass, field
 from typing import List
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
-from wrolpi.config_version import IMPORT, SAVE
+from wrolpi.config_version import IMPORT, SAVE, count_config_change
 from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
+from wrolpi.tags import TagFile, TagsConfig, save_tags_config
 
 logger = logger.getChild(__name__)
 
@@ -301,9 +302,14 @@ def file_groups_moved(session, file_group_ids):
 
     playlists.yaml references file items by path, so it must be re-saved (and the playlist
     directories re-synced) or the next import will not find the file and will drop the item.
+    tags.yaml saves tagged files by path too; the move (often raw SQL) is counted as its change.
 
     `file_group_ids` may be an iterable of ids or a select of ids."""
     from .models import Collection, CollectionItem
+
+    if session.query(TagFile.file_group_id).filter(TagFile.file_group_id.in_(file_group_ids)).first():
+        count_config_change(session, TagsConfig.file_name)
+        save_tags_config.activate_switch()
 
     in_playlist = session.query(CollectionItem.id) \
         .join(Collection, Collection.id == CollectionItem.collection_id) \

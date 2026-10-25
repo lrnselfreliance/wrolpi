@@ -384,3 +384,35 @@ async def test_nothing_to_write_skips_prepare(test_session, saved_downloads, mon
     get_download_manager_config().import_config()
 
     assert prepared == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_tag_names_are_dropped(test_session, saved_downloads, test_tags_config, tag_factory,
+                                             await_switches):
+    """Once tags.yaml is imported, a Tag name the file gives a Download that no Tag has (the Tag was removed) is
+    dropped, and the file is saved without it: the next import writes nothing."""
+    from wrolpi.tags import get_tags_config
+    await tag_factory('one')
+    test_session.commit()
+    get_tags_config().dump_config()
+    get_tags_config().import_config()
+    assert get_tags_config().successful_import is True
+
+    def change(data):
+        for download in data['downloads']:
+            if download['url'] == 'https://example.com/recurring':
+                download['tag_names'] = ['one', 'gone']
+                download['settings'] = dict(download.get('settings') or {}, channel_tag_name=['gone'])
+
+    edit_config(saved_downloads, change)
+    config = get_download_manager_config()
+    config.import_config()
+    await await_switches()
+
+    test_session.expire_all()
+    download = Download.get_by_url(test_session, 'https://example.com/recurring')
+    assert download.tag_names == ['one']
+    assert download.settings['channel_tag_name'] == []
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []

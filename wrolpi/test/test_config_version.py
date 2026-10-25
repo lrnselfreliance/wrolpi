@@ -129,26 +129,30 @@ async def test_unknown_database_version_imports_without_deletes(test_session, te
 
 
 @pytest.mark.asyncio
-async def test_failed_import_leaves_version_unknown(test_session, test_tags_config, monkeypatch, async_client):
-    """An import's own writes do not count: one that fails partway leaves the version unknown, not newer than the
-    file it did not finish applying (which would save that partial database over the file)."""
-    from wrolpi.tags import TagsConfig
+async def test_failed_import_changes_nothing(test_session, test_tags_config, monkeypatch, async_client):
+    """An import that fails partway writes nothing: neither its rows nor the file's version (which would mark a
+    partial database as up to date)."""
+    from wrolpi.tags import TagsConfig, TagZimsSection
 
     test_session.add(Tag(name='kept', color='#000000'))
     test_session.commit()
     set_config_version(test_session, 'tags.yaml', 3)
     test_session.commit()
-    write_tags_config(test_tags_config, 3, ['kept', 'added'])
+    write_tags_config(test_tags_config, 4, ['kept', 'added'])
 
-    def fail(self):
+    def fail(*args, **kwargs):
         raise RuntimeError('Import failed')
 
-    monkeypatch.setattr(TagsConfig, 'record_import_version', fail)
+    # Fails after the Tags were written.
+    monkeypatch.setattr(TagZimsSection, 'upsert', fail)
+    monkeypatch.setattr(TagZimsSection, 'file_rows', lambda self, config: ({('kept', 'a.zim', 'home'): {}}, set()))
+    monkeypatch.setattr(TagsConfig, 'prepare', lambda self, diffs: None)
     with pytest.raises(RuntimeError):
         import_tags_config()
 
-    assert {i.name for i in test_session.query(Tag)} == {'kept', 'added'}
-    assert db_version(test_session) is None
+    test_session.expire_all()
+    assert {i.name for i in test_session.query(Tag)} == {'kept'}
+    assert db_version(test_session) == 3
 
 
 @pytest.mark.asyncio

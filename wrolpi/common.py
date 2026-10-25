@@ -844,8 +844,10 @@ class ConfigFile:
         file_rows = {i.name: i.file_rows(self._config) for i in self.sections}
         with get_db_session() as session:
             db_rows = {i.name: i.db_rows(session) for i in self.sections}
-        diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT)
+        diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT, same=i.same)
                  for i in self.sections}
+        # `prepare` may skip rows it cannot apply.
+        self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
         if any(diffs.values()):
             self.prepare(diffs)
 
@@ -874,7 +876,6 @@ class ConfigFile:
                 logger_.info(f'{self.file_name} changed in the database while importing; deciding again')
                 return False
 
-        self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
         changed = {name: diff for name, diff in diffs.items() if diff}
         logger_.info(f'Imported {self.file_name} ({decision}): '
                      + (', '.join(f'{name}: {len(diff.added)} added, {len(diff.changed)} changed, '
@@ -887,7 +888,8 @@ class ConfigFile:
 
     def prepare(self, diffs: dict):
         """Slow work the write needs (files, network), run with no transaction open, and only when there are
-        differences.  `diffs` maps each section's name to its `SectionDiff`.
+        differences.  `diffs` maps each section's name to its `SectionDiff`; it may drop rows it cannot apply
+        (count them in `import_skipped`), or add what it found to a row for `upsert`.
 
         It must be safe to repeat and to abandon: when the database changes before the write, the import decides
         again (up to three passes), and the diffs it was given may never be written (the write fails, or the next

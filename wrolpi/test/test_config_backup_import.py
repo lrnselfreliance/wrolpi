@@ -603,9 +603,6 @@ class TestBackupAPIEndpoints:
         assert 'preview' in response.json
         assert len(response.json['preview']['add']) == 1
 
-    # tags.import_config reads, then writes, in a deferred session; splitting its reads (and directory walk) from a
-    # short write is its own change.
-    @pytest.mark.allow_deferred_request_writes
     async def test_import_endpoint(self, async_client, test_directory, test_tags_config, test_session):
         from wrolpi.tags import get_tags_config
         config = get_tags_config()

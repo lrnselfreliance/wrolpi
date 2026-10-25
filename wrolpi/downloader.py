@@ -2232,6 +2232,36 @@ class DownloadManagerConfig(ConfigFile):
     def downloads(self, value: List[dict]):
         self.update({'downloads': value})
 
+    def prepare(self, diffs: dict):
+        """Drop Tag names that no Tag has (the Tag was removed) from the Downloads to write: applying one fails the
+        download.  Only once tags.yaml was imported; until then its Tags may be missing."""
+        from wrolpi.tags import Tag, get_tags_config, without_tag_names
+        if not get_tags_config().successful_import:
+            return
+        rows = [*diffs['downloads'].added.values(), *diffs['downloads'].changed.values()]
+        names = set()
+        for row in rows:
+            names.update(row['tag_names'] or [])
+            for key in ('tag_names', 'channel_tag_name'):
+                names.update((row['settings'] or dict()).get(key) or [])
+        if not names:
+            return
+        with get_db_session() as session:
+            unknown = names - {i for i, in session.query(Tag.name).filter(Tag.name.in_(list(names)))}
+        if not unknown:
+            return
+        logger.warning(f'Removing unknown Tags from Downloads: {sorted(unknown)}')
+        for row in rows:
+            tag_names, row['settings'] = without_tag_names(row['tag_names'], row['settings'], unknown)
+            row['tag_names'] = tag_names or None
+        # The file is saved without them.
+        self._config_outdated = True
+
+    def after_import(self, diffs: dict):
+        if getattr(self, '_config_outdated', False):
+            self._config_outdated = False
+            self.background_dump.activate_switch()
+
     @staticmethod
     def _filter_settings_for_yaml(settings: dict, global_defaults: dict = None) -> dict:
         """Remove inheritable video settings that match current global defaults.

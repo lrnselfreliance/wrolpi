@@ -7,9 +7,6 @@ from wrolpi.tags import Tag
 
 
 @pytest.mark.asyncio
-# tags.import_config reads, then writes, in a deferred session; splitting its reads (and directory walk) from a
-# short write is its own change.
-@pytest.mark.allow_deferred_request_writes
 async def test_configs_crud(async_client, test_session, test_tags_config, tag_factory, test_wrolpi_config,
                             test_channels_config, await_switches):
     """Configs can be imported or saved on demand."""

@@ -349,7 +349,7 @@ async def test_import_tags_config_missing_file(test_session, test_directory, tes
 @pytest.mark.asyncio
 async def test_import_tags_delete_missing(test_session, test_directory, test_tags_config, make_files_structure,
                                           tag_factory, test_zim, await_switches):
-    """Tags not in the config are deleted on import.  Tags that are used will not be deleted."""
+    """Tags not in the config are deleted on import, with the files and Zim entries they tag."""
     from modules.zim import lib as zim_lib
 
     # Create some tags, use tag1.
@@ -382,23 +382,17 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     assert len(config.tag_zims) == 1
     assert len(config.tags) == 1
 
-    # Import the config.  Only unused Tags not in the config are deleted.
+    # Import the config.  Every Tag not in the config is deleted, used or not.
     config_was_imported(test_session, 'tags.yaml')
     tags.import_tags_config()
-    assert {i.name for i in test_session.query(tags.Tag)} == {
-        tag1.name,  # tag1 is used by FileGroup.
-        # tag2.name,  tag2 is unused, and deleted.
-        tag3.name,  # tag3 was not deleted.
-        tag4.name,  # tag4 is used by ZimEntry.
-    }
+    assert {i.name for i in test_session.query(tags.Tag)} == {tag3.name}
 
-    # DB is written to config with only those Tags left.
+    # DB is written to config with only tag3 left.
     tags.save_tags_config.activate_switch()
     await await_switches()
-    # Tags that are used are restored.
-    assert len(config.tag_files) == 1
-    assert len(config.tag_zims) == 1
-    assert len(config.tags) == 3
+    assert len(config.tag_files) == 0
+    assert len(config.tag_zims) == 0
+    assert len(config.tags) == 1
 
 
 @pytest.mark.asyncio

@@ -156,3 +156,32 @@ async def test_refresh_changing_primary_file_counts(test_session, test_directory
     test_session.expire_all()
     assert test_session.query(FileGroup).one().primary_path != test_directory / 'video.mp4'
     assert get_config_version(test_session, 'recently_viewed.yaml') > 0
+
+
+@pytest.mark.asyncio
+async def test_without_deletes_newer_history_outside_the_window_is_kept(test_session, test_directory, async_client,
+                                                                        make_files_structure, monkeypatch):
+    """Without a database version, a newer view in the database wins even when it fell out of the newest views: its
+    progress is kept, or (a plain view) its `viewed` is kept and the config's position is taken."""
+    monkeypatch.setattr('wrolpi.files.progress.RECENTLY_VIEWED_LIMIT', 2)
+    now = dates.now()
+    file_groups = {name: FileGroup.from_paths(test_session, *make_files_structure([name]))
+                   for name in ('progress.txt', 'plain.txt', 'b.txt', 'c.txt')}
+    file_groups['progress.txt'].viewed, file_groups['progress.txt'].progress = now - timedelta(hours=3), 0.8
+    file_groups['plain.txt'].viewed = now - timedelta(hours=3)
+    file_groups['b.txt'].viewed, file_groups['c.txt'].viewed = now - timedelta(hours=2), now - timedelta(hours=1)
+    test_session.commit()
+    config = get_recently_viewed_config()
+    config.get_file().parent.mkdir(exist_ok=True)
+    config.get_file().write_text(yaml.dump(dict(version=1, files=[
+        dict(path='progress.txt', viewed=(now - timedelta(days=1)).isoformat(), progress=0.1),
+        dict(path='plain.txt', viewed=(now - timedelta(days=1)).isoformat(), progress=0.5,
+             position=dict(kind='time', seconds=60)),
+    ])))
+
+    config.import_config()
+
+    found = viewed(test_session)
+    assert (found['progress.txt'].viewed, found['progress.txt'].progress) == (now - timedelta(hours=3), 0.8)
+    assert (found['plain.txt'].viewed, found['plain.txt'].progress, found['plain.txt'].position) == \
+           (now - timedelta(hours=3), 0.5, dict(kind='time', seconds=60.0))

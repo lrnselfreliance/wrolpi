@@ -278,28 +278,33 @@ class RecentlyViewedConfig(ConfigFile):
             diff.removed = {i for i in diff.removed
                             if oldest and db_rows[i]['viewed'] >= oldest and i not in malformed}
 
-        # Without deletes (no database version), progress written after the config is kept; a newer plain view keeps
-        # its `viewed`, but it is not a newer place to resume.
-        if not self.import_deletes:
-            for key, row in list(diff.changed.items()):
-                if db_rows[key]['viewed'] >= row['viewed']:
-                    if db_rows[key]['progress'] is not None:
-                        del diff.changed[key]
-                    else:
-                        diff.changed[key] = dict(row, viewed=db_rows[key]['viewed'])
-
-        # The files of new entries which are not yet in the database; a deleted file's history goes with it.
+        # New entries which are in the database (outside the newest views), and which are not.
         from wrolpi.files.lib import glob_shared_stem
         from wrolpi.files.models import FileGroup
         media_directory = get_media_directory()
-        known = set()
+        known = dict()
         with get_db_session() as session:
             for paths in chunks([str(media_directory / i) for i in diff.added], 500):
-                known.update(str(i) for i, in
-                             session.query(FileGroup.primary_path).filter(FileGroup.primary_path.in_(paths)))
+                known.update((str(path.relative_to(media_directory)), _viewed_row(*values)) for path, *values in
+                             session.query(FileGroup.primary_path, FileGroup.viewed, FileGroup.progress,
+                                           FileGroup.position).filter(FileGroup.primary_path.in_(paths)))
+
+        # Without deletes (no database version), progress written after the config is kept; a newer plain view keeps
+        # its `viewed`, but it is not a newer place to resume.  This applies to a file that fell out of the newest
+        # views too.
+        if not self.import_deletes:
+            for rows, current in ((diff.changed, db_rows), (diff.added, known)):
+                for key, row in list(rows.items()):
+                    if key in current and current[key]['viewed'] and current[key]['viewed'] >= row['viewed']:
+                        if current[key]['progress'] is not None:
+                            del rows[key]
+                        else:
+                            rows[key] = dict(row, viewed=current[key]['viewed'])
+
+        # The files of new entries which are not yet in the database; a deleted file's history goes with it.
         for key, row in list(diff.added.items()):
             absolute_path = media_directory / key
-            if str(absolute_path) in known:
+            if key in known:
                 continue
             if absolute_path.is_file():
                 row['files'] = glob_shared_stem(absolute_path)

@@ -1,3 +1,5 @@
+import asyncio
+
 from sanic import response, Blueprint
 from sanic.request import Request
 from sanic_ext.extensions.openapi import openapi
@@ -46,11 +48,11 @@ def post_config_update(request: Request, body: config_schema.ConfigUpdateRequest
     body=config_schema.ConfigsRequest,
     validate=True,
 )
-def post_config_import(_: Request, body: config_schema.ConfigsRequest):
+async def post_config_import(_: Request, body: config_schema.ConfigsRequest):
     config = get_config_by_file_name(body.file_name)
     try:
         # The user chose to apply the file, whatever its version.
-        config.import_forced(send_events=True)
+        await asyncio.to_thread(config.import_forced, send_events=True)
     except Exception as e:
         logger.error(f'Failed to import config: {body.file_name}', exc_info=e)
         raise InvalidConfig(f'Failed to import config {body.file_name}')
@@ -64,10 +66,10 @@ def post_config_import(_: Request, body: config_schema.ConfigsRequest):
     body=config_schema.ConfigsRequest,
     validate=True,
 )
-def post_config_dump(_: Request, body: config_schema.ConfigsRequest):
+async def post_config_dump(_: Request, body: config_schema.ConfigsRequest):
     config = get_config_by_file_name(body.file_name)
     try:
-        config.dump_config(send_events=True, overwrite=body.overwrite)
+        await asyncio.to_thread(config.dump_config, send_events=True, overwrite=body.overwrite)
     except Exception as e:
         logger.error(f'Failed to dump config: {body.file_name}', exc_info=e)
         raise InvalidConfig(f'Failed to dump config {body.file_name}')
@@ -114,7 +116,7 @@ def post_config_backup_preview(_: Request, body: config_schema.ConfigBackupPrevi
     body=config_schema.ConfigBackupImportRequest,
     validate=True,
 )
-def post_config_backup_import(_: Request, body: config_schema.ConfigBackupImportRequest):
+async def post_config_backup_import(_: Request, body: config_schema.ConfigBackupImportRequest):
     if body.mode not in ('merge', 'overwrite'):
         raise InvalidConfig('mode must be "merge" or "overwrite"')
     config = get_config_by_file_name(body.file_name)
@@ -124,7 +126,7 @@ def post_config_backup_import(_: Request, body: config_schema.ConfigBackupImport
     if not backup_file.is_file():
         raise InvalidConfig(f'Backup file not found for date {body.backup_date}')
     try:
-        config.import_backup(body.backup_date, body.mode, send_events=True)
+        await asyncio.to_thread(config.import_backup, body.backup_date, body.mode, send_events=True)
     except Exception as e:
         logger.error(f'Failed to import backup: {body.file_name} {body.backup_date}', exc_info=e)
         raise InvalidConfig(f'Failed to import backup {body.file_name}')

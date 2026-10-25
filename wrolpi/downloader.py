@@ -2431,14 +2431,6 @@ class DownloadCacheConfig(ConfigFile):
     )
     validator = DownloadCacheConfigValidator
 
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        file = file or self.get_file()
-        if not file.is_file():
-            self.successful_import = True
-            return
-        super().import_config(file, send_events)
-        self.successful_import = True
-
     @property
     def video_durations(self) -> List[list]:
         return self._config['video_durations'] or list()

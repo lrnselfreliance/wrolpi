@@ -105,7 +105,6 @@ def import_catalog_config():
     config = get_catalog_config()
     if config.get_file().is_file():
         config.import_config()
-        config.successful_import = True
     seed_catalog_defaults(config)
 
 

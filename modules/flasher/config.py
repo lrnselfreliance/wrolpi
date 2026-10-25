@@ -26,11 +26,6 @@ class FlasherConfig(ConfigFile):
     )
     validator = FlasherConfigValidator
 
-    def import_config(self, file=None, send_events=False):
-        super().import_config(file, send_events)
-        # YAML-only config (no database); a successful read is a successful import.
-        self.successful_import = True
-
     @property
     def configurations(self) -> List[dict]:
         return list(self._config.get('configurations', []))

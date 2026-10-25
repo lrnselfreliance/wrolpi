@@ -157,3 +157,77 @@ async def test_downloads_are_linked(test_session, saved_domains, await_switches)
     }
     assert len([i for i in collected if 'FROM collection' in i and 'WHERE collection.name' in i]) == 0
     assert 'https://other.org/feed.xml' in saved_domains.read_text()
+
+
+def add_invalid_entry(path):
+    edit_config(path, lambda data: data['collections'].append(dict(name='nodot', kind='domain')))
+
+
+@pytest.mark.asyncio
+async def test_reset_with_a_skipped_entry_converges(test_session, saved_domains, await_switches):
+    """A skipped entry stops the config from being saved; a domain reset by this import is not reset again by the
+    next one (which writes nothing)."""
+    edit_config(saved_domains, lambda data: data.update(
+        collections=[i for i in data['collections'] if i['name'] != 'archived.net']))
+    add_invalid_entry(saved_domains)
+
+    config = get_domains_config()
+    config.import_config()
+    await await_switches()
+    assert domains(test_session)['archived.net'].description is None
+
+    with statements() as collected:
+        config.import_config()
+    assert config.import_skipped == 1
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_tag_with_a_skipped_entry_converges(test_session, saved_domains, test_tags_config,
+                                                          await_switches):
+    """A dropped Tag the config cannot be saved without (an entry was skipped) is not dropped again."""
+    from wrolpi.tags import get_tags_config
+    get_tags_config().dump_config()
+    get_tags_config().import_config()
+    edit_domain(saved_domains, 'other.org', tag_name='gone')
+    add_invalid_entry(saved_domains)
+
+    config = get_domains_config()
+    config.import_config()
+    await await_switches()
+
+    with statements() as collected:
+        config.import_config()
+    assert writes(collected) == []
+
+
+@pytest.mark.asyncio
+async def test_no_links_while_entries_are_skipped(test_session, saved_domains, await_switches):
+    """Linking changes domains.yaml; while an entry is skipped the config cannot be saved, so Downloads are not
+    linked (the database would be newer than the file, and the next startup would save over the skipped entry)."""
+    test_session.add(Download(url='https://other.org/feed.xml', downloader='rss', sub_downloader='archive',
+                              frequency=86400))
+    test_session.commit()
+    add_invalid_entry(saved_domains)
+
+    import_domains_config()
+    await await_switches()
+
+    test_session.expire_all()
+    assert test_session.query(Download).one().collection_id is None
+    assert get_config_version(test_session, 'domains.yaml') == yaml.safe_load(saved_domains.read_text())['version']
+    assert 'nodot' in saved_domains.read_text()
+
+
+@pytest.mark.asyncio
+async def test_entry_that_is_not_a_mapping_is_skipped(test_session, saved_domains):
+    """An entry that is not a mapping is skipped (counted); the rest of the file is imported."""
+    edit_config(saved_domains, lambda data: data['collections'].extend(['example.net', None]))
+    edit_domain(saved_domains, 'other.org', description='Changed')
+
+    config = get_domains_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    assert config.import_skipped == 2
+    assert domains(test_session)['other.org'].description == 'Changed'

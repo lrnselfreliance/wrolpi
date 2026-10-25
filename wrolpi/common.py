@@ -850,8 +850,15 @@ class ConfigFile:
         # `prepare` may skip rows it cannot apply.
         self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
         self.import_deletes = decision == IMPORT
+        self.import_db_rows = db_rows
         if any(diffs.values()):
             self.prepare(diffs)
+            # A row `prepare` brought in line with the database (e.g. it dropped a Tag the file names but no longer
+            # exists) is not written.
+            for section in self.sections:
+                changed = diffs[section.name].changed
+                for key in [i for i in changed if section.same(changed[i], db_rows[section.name][i])]:
+                    del changed[key]
 
         file_version = self.version or 0
         if any(diffs.values()) or (decision == IMPORT and db_version != file_version):
@@ -892,7 +899,7 @@ class ConfigFile:
         """Slow work the write needs (files, network), run with no transaction open, and only when there are
         differences.  `diffs` maps each section's name to its `SectionDiff`; it may drop rows it cannot apply
         (count them in `import_skipped`), or add what it found to a row for `upsert`.  `import_deletes`: whether
-        this import deletes what the file no longer lists.
+        this import deletes what the file no longer lists.  `import_db_rows`: each section's database rows.
 
         It must be safe to repeat and to abandon: when the database changes before the write, the import decides
         again (up to three passes), and the diffs it was given may never be written (the write fails, or the next

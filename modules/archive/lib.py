@@ -64,8 +64,9 @@ class DomainsSection(ConfigSection):
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('collections') or []):
-            if not (name := data.get('name')):
-                logger.error(f'Domain collection at index {position} has no name, skipping')
+            name = data.get('name') if isinstance(data, dict) else None
+            if not name:
+                logger.error(f'Domain collection at index {position} has no name, skipping: {data!r}')
                 # Counted as skipped; never a domain's name.
                 invalid.add(f'\0{position}')
                 continue
@@ -169,8 +170,22 @@ class DomainsConfig(ConfigFile):
         return self._config.get('collections', [])
 
     def prepare(self, diffs: dict):
-        """A Tag that no longer exists (it was removed) is dropped, and the config is saved without it."""
+        """A Tag that no longer exists (it was removed) is dropped, and the config is saved without it.  A removed
+        domain with Archives which is already reset (see `DomainsSection.delete`) is left as it is; one which is not
+        is reset, and the config is saved with it."""
         diff = diffs['domains']
+        if diff.removed:
+            with get_db_session() as session:
+                with_archives = {name for name, in session.query(Collection.name).join(
+                    Archive, Archive.collection_id == Collection.id).filter(
+                    Collection.kind == 'domain', Collection.name.in_(list(diff.removed))).distinct()}
+            reset = _domain_row(None, None, None, None)
+            for name in with_archives:
+                if self.import_db_rows['domains'][name] == reset:
+                    diff.removed.discard(name)
+                else:
+                    self._config_outdated = True
+
         rows = [*diff.added.values(), *diff.changed.values()]
         unknown = unknown_tag_names({i['tag_name'] for i in rows if i['tag_name']})
         for row in rows:
@@ -184,8 +199,7 @@ class DomainsConfig(ConfigFile):
         super().import_config(file, send_events)
 
     def after_import(self, diffs: dict):
-        # A removed domain with Archives was reset, not deleted; the config lists it again.
-        if self._config_outdated or diffs['domains'].removed:
+        if self._config_outdated:
             self.background_dump.activate_switch()
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
@@ -301,6 +315,11 @@ def import_domains_config():
     when there is something to link)."""
     logger.info('Importing domains config')
     domains_config.import_config()
+    if domains_config.import_skipped:
+        # Linking changes domains.yaml, which cannot be saved while it has skipped entries: the database would be
+        # newer than the file, and the next startup would save over them.
+        logger.warning('Not linking Downloads to domains while domains.yaml has skipped entries')
+        return
 
     with get_db_session() as session:
         links = domain_download_links(session)

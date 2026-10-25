@@ -138,7 +138,7 @@ async def test_bookmarks_move_guards(async_client, test_directory):
            [outer['id'], inner['id'], leaf['id']]
 
 
-def test_bookmarks_config_import(test_directory, test_wrolpi_config):
+async def test_bookmarks_config_import(async_client, test_directory, test_wrolpi_config):
     """A hand-edited bookmarks.yaml is imported as-is, including nested directories."""
     config_file = test_directory / 'config/bookmarks.yaml'
     config_file.parent.mkdir(exist_ok=True)

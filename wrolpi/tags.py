@@ -333,6 +333,14 @@ def remove_tag_names_from_downloads(session: Session, names: Set[str]):
         save_downloads_config.activate_switch()
 
 
+def unknown_tag_names(names: Set[str]) -> Set[str]:
+    """The names no Tag has (the Tag was removed).  None until tags.yaml was imported: its Tags may be missing."""
+    if not names or not get_tags_config().successful_import:
+        return set()
+    with get_db_session() as session:
+        return names - {i for i, in session.query(Tag.name).filter(Tag.name.in_(list(names)))}
+
+
 def _tag_ids(session: Session, names) -> Dict[str, int]:
     tag_ids = dict()
     for chunk in chunks(names):

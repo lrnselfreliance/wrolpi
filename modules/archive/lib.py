@@ -28,7 +28,7 @@ from wrolpi.common import get_media_directory, get_relative_to_media_directory, 
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
     get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name, chunks
 from wrolpi.collections.models import validate_collection_directory
-from wrolpi.config_import import ConfigSection, media_relative
+from wrolpi.config_import import ConfigSection, Unreadable, media_relative
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, session_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -65,10 +65,10 @@ class DomainsSection(ConfigSection):
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('collections') or []):
             name = data.get('name') if isinstance(data, dict) else None
-            if not name:
+            if not name or not isinstance(name, str):
                 logger.error(f'Domain collection at index {position} has no name, skipping: {data!r}')
-                # Counted as skipped; never a domain's name.
-                invalid.add(f'\0{position}')
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             try:
                 if not Collection.is_valid_domain_name(name):

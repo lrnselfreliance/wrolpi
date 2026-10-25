@@ -7,7 +7,7 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
-from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relative
+from wrolpi.config_import import ConfigSection, SectionDiff, Unreadable, chunks, media_relative
 from wrolpi.config_version import count_config_change
 from wrolpi.db import get_db_session
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
@@ -23,16 +23,28 @@ def _playlist_tag_names(rows) -> Set[str]:
     return {i['tag_name'] for i in rows if i['tag_name']}
 
 
+# The position in an invalid item key that stands for all of a playlist's items (its `items` is not a list).
+ITEMS_UNREADABLE = 0
+
+
+def _playlist_name(data) -> Optional[str]:
+    """The name of a playlist entry, or None when the entry is malformed."""
+    name = data.get('name') if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
 class PlaylistsSection(ConfigSection):
     """playlists.yaml's playlists (Collections with kind 'playlist'), keyed by name."""
     name = 'playlists'
 
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
         rows, invalid = dict(), set()
-        for data in config.get('playlists') or []:
-            name = data.get('name')
+        for position, data in enumerate(config.get('playlists') or []):
+            name = _playlist_name(data)
             if not name:
-                logger.error(f'Playlist config entry has no name, skipping: {data}')
+                logger.error(f'Playlist config entry has no name, skipping: {data!r}')
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             try:
                 rows[name] = dict(
@@ -88,23 +100,32 @@ class PlaylistItemsSection(ConfigSection):
 
     @staticmethod
     def item_key(name: str, data: dict) -> Optional[tuple]:
+        if not isinstance(data, dict):
+            raise ValueError('An item must be a mapping')
         if 'file' in data:
             return name, 'file', media_relative(data['file']), None
         elif 'zim' in data:
-            if not data.get('entry'):
+            if not data.get('entry') or not isinstance(data['entry'], str):
                 raise ValueError('A zim item requires an entry')
             return name, 'zim', media_relative(data['zim']), data['entry']
         elif 'url' in data:
+            if not isinstance(data['url'], str):
+                raise ValueError('An item\'s url must be text')
             return name, 'url', data['url'], None
         raise ValueError('An item requires a file, zim, or url')
 
     def file_rows(self, config: dict) -> Tuple[Dict[tuple, dict], Set[tuple]]:
         rows, invalid = dict(), set()
         for data in config.get('playlists') or []:
-            if not (name := data.get('name')):
+            if not (name := _playlist_name(data)):
+                continue
+            items = data.get('items') or []
+            if not isinstance(items, list):
+                logger.error(f'Skipping the items of playlist {name!r}, they are not a list: {items!r}')
+                invalid.add((name, None, ITEMS_UNREADABLE, None))
                 continue
             # Positions follow the file's order; an item skipped now keeps its place for a later import.
-            for position, item in enumerate(data.get('items') or [], start=1):
+            for position, item in enumerate(items, start=1):
                 try:
                     key = self.item_key(name, item)
                 except Exception as e:
@@ -121,7 +142,7 @@ class PlaylistItemsSection(ConfigSection):
 
     def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
         # A listed playlist without items has none: only an empty or missing playlists list removes nothing.
-        return any(i.get('name') for i in config.get('playlists') or [])
+        return any(map(_playlist_name, config.get('playlists') or []))
 
     @staticmethod
     def _query(session: Session, *columns):
@@ -250,6 +271,7 @@ class PlaylistsConfig(ConfigFile):
     def prepare(self, diffs: dict):
         self._drop_unknown_tags(diffs['playlists'])
         self._drop_missing_items(diffs['items'])
+        self._keep_unreadable_items(diffs['items'])
         if not self.import_deletes:
             self._merge_items(diffs['items'])
 
@@ -267,6 +289,12 @@ class PlaylistsConfig(ConfigFile):
                 logger.warning(f'Removing unknown Tag {row["tag_name"]!r} from a playlist')
                 row['tag_name'] = None
                 self._config_outdated = True
+
+    def _keep_unreadable_items(self, diff: SectionDiff):
+        """A playlist whose items cannot be read keeps the items it has."""
+        _, invalid = PlaylistItemsSection().file_rows(self._config)
+        if names := {i[0] for i in invalid if i[2] == ITEMS_UNREADABLE}:
+            diff.removed = {i for i in diff.removed if i[0] not in names}
 
     def _drop_missing_items(self, diff: SectionDiff):
         """An added item whose file or Zim is not in the database (not indexed yet, after a rebuild) is skipped

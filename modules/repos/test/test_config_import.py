@@ -103,6 +103,34 @@ async def test_invalid_entry_is_kept(test_session, saved_repos):
 
 
 @pytest.mark.asyncio
+async def test_malformed_entry_is_skipped(test_session, saved_repos):
+    """An entry that is not a mapping is skipped and counted; the rest of the file still imports."""
+    edit_repo(saved_repos, ONE, description='Changed')
+    edit_config(saved_repos, lambda data: data['repos'].insert(0, 'not a mapping'))
+
+    config = lib.get_repos_config()
+    config.import_config()
+
+    assert config.successful_import is True
+    assert config.import_skipped == 1
+    found = repos(test_session)
+    assert set(found) == {ONE, TWO}
+    assert found[ONE].collection.description == 'Changed'
+
+
+@pytest.mark.asyncio
+async def test_only_malformed_entries_delete_nothing(test_session, saved_repos):
+    """A file whose entries are all unreadable deletes no Repo (like an empty list)."""
+    edit_config(saved_repos, lambda data: data.update(repos=['not a mapping', dict(url=['a', 'list'])]))
+
+    config = lib.get_repos_config()
+    config.import_config()
+
+    assert config.import_skipped == 2
+    assert set(repos(test_session)) == {ONE, TWO}
+
+
+@pytest.mark.asyncio
 async def test_failed_import_creates_nothing(test_session, saved_repos, monkeypatch):
     """A new Repo is created in the import's one write: a failure later in the write leaves nothing (each new Repo
     was committed on its own)."""

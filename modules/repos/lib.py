@@ -25,7 +25,7 @@ from wrolpi.cmd import GIT_BIN, run_command
 from wrolpi.collections.models import Collection
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger, \
     escape_file_name, background_task, get_wrolpi_config
-from wrolpi.config_import import ConfigSection, media_relative
+from wrolpi.config_import import ConfigSection, Unreadable, media_relative
 from wrolpi.config_version import register_ownership
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, DownloadFrequency, download_manager, save_downloads_config
@@ -1397,11 +1397,11 @@ class ReposSection(ConfigSection):
         media_directory = get_media_directory()
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('repos') or []):
-            url = data.get('url')
-            if not url:
-                logger.error(f'Repo config entry has no url, skipping: {data}')
-                # Counted as skipped; never a Repo's key.
-                invalid.add(f'\0{position}')
+            url = data.get('url') if isinstance(data, dict) else None
+            if not url or not isinstance(url, str):
+                logger.error(f'Repo config entry has no url, skipping: {data!r}')
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             try:
                 parsed = parse_repo_url(url)

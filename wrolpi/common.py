@@ -772,26 +772,33 @@ class ConfigFile:
         if self.sections:
             return self.import_sections(file, send_events)
 
+        # A config without sections keeps no database rows: read and validate its file, nothing more.
+        from wrolpi.events import Events
         file = file or self.get_file()
         file_str = str(get_relative_to_media_directory(file))
-        # Caller will set to successful if it works.
         self.successful_import = False
-        # Subclasses count entries they cannot import; a fresh import starts clean.
         self.import_skipped = 0
-        if file.is_file():
-            if not self.is_valid(file):
-                raise InvalidConfig(f'Config is invalid: {file_str}')
-
-            data = self.read_config_file(file)
-            new_data, extra_data = partition(lambda i: i[0] in self.default_config, data.items())
-            new_data, extra_data = dict(new_data), dict(extra_data)
-            if extra_data:
-                logger_.warning(f'Ignoring extra config data ({file_str}): {extra_data}')
-            self._config.update(new_data)
-            # Import call above this will set successful_import.
-            # self.successful_import = True
-        else:
-            logger_.error(f'Failed to import {file_str} because it does not exist.')
+        try:
+            if file.is_file():
+                data = self.read_config_file(file) if file.stat().st_size else None
+                if not data or not self.validate(data):
+                    raise InvalidConfig(f'Config is {"invalid" if data else "empty"}: {file_str}')
+                new_data, extra_data = partition(lambda i: i[0] in self.default_config, data.items())
+                new_data, extra_data = dict(new_data), dict(extra_data)
+                if extra_data:
+                    logger_.warning(f'Ignoring extra config data ({file_str}): {extra_data}')
+                self._config.update(new_data)
+            else:
+                # The defaults apply; the first save creates the file.
+                logger_.info(f'No config file, using the defaults: {file_str}')
+            self.successful_import = True
+        except Exception as e:
+            self.successful_import = False
+            message = f'Failed to import {file_str}'
+            logger_.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_import_failed(message)
+            raise
 
     def import_sections(self, file: pathlib.Path = None, send_events=False):
         """Import a config with `sections`: read and validate the file once, decide what its version allows (see
@@ -891,7 +898,7 @@ class ConfigFile:
                                   f'{len(diff.removed)} removed' for name, diff in changed.items()) or 'no changes'))
         self.after_import(diffs)
         if decision != IMPORT:
-            # The database may have rows the file does not list; save them (see `record_import_version`).
+            # The database may have rows the file does not list; save them (see `record_saved_version`).
             self.background_dump.activate_switch()
         return True
 
@@ -924,41 +931,16 @@ class ConfigFile:
         try:
             self.import_config(send_events=send_events)
         finally:
-            # An import that returned before `import_decision` must not force a later one.
+            # An import that returned before reading `force_import` must not force a later one.
             self.force_import = False
 
     def is_versioned_by_database(self) -> bool:
         from wrolpi.config_version import versioned_config_names
         return self.file_name in versioned_config_names()
 
-    # What the last `import_decision` allowed; `record_import_version` records the version that follows from it.
-    last_import_decision: str = None
-
-    def import_decision(self) -> str:
-        """After reading the file (`ConfigFile.import_config`), decide what importing it may do: IMPORT,
-        IMPORT_WITHOUT_DELETES, or SAVE (the database is newer; call `save_database_instead` and import nothing).
-
-        On IMPORT the database's version is removed until `record_import_version`: the import's own writes must not
-        count, or an import that fails partway would leave the database "newer" than the file it did not finish
-        applying, and the next startup would save that partial database over the file."""
-        from wrolpi.config_version import IMPORT, decide, delete_config_version, get_config_version
-        from wrolpi.db import get_db_session
-        with get_db_session(commit=True) as session:
-            db_version = get_config_version(session, self.file_name)
-            if self.force_import:
-                self.force_import = False
-                decision = IMPORT
-            else:
-                decision = decide(self.version or 0, db_version)
-            if decision == IMPORT:
-                delete_config_version(session, self.file_name)
-        logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
-        self.last_import_decision = decision
-        return decision
-
     def version_decision(self, forced: bool = False) -> Tuple[str, Optional[int]]:
-        """What importing this config's file (already read) may do, and the database version that decided it.  For
-        `import_sections`, which records the version in its own write (`import_decision` is for the others)."""
+        """What importing this config's file (already read) may do (IMPORT, IMPORT_WITHOUT_DELETES, or SAVE), and the
+        database version that decided it.  `import_sections` records the file's version in its own write."""
         from wrolpi.config_version import IMPORT, decide, get_config_version
         from wrolpi.db import get_db_session
         with get_db_session() as session:
@@ -968,26 +950,10 @@ class ConfigFile:
         return decision, db_version
 
     def save_database_instead(self):
-        """The database has changes this config's file does not (see `import_decision`); save them."""
+        """The database has changes this config's file does not (see `version_decision`); save them."""
         logger_.warning(f'{self.file_name} is older than the database; saving the database instead of importing it')
         self.successful_import = True
         self.dump_config()
-
-    def record_import_version(self):
-        """The database now matches this config's file: record the file's version.  Call last, after every write
-        the import makes.
-
-        Not after IMPORT_WITHOUT_DELETES: the database may keep rows the file does not list (changes that were never
-        saved), so recording the file's version would let the next import delete them.  Save them into the file
-        instead; that save records the version (`record_saved_version`).  A save after a partial import is refused,
-        so the version stays unknown until an import applies the whole file."""
-        from wrolpi.config_version import IMPORT, set_config_version
-        from wrolpi.db import get_db_session
-        if self.last_import_decision != IMPORT:
-            self.background_dump.activate_switch()
-            return
-        with get_db_session(commit=True) as session:
-            set_config_version(session, self.file_name, self.version or 0)
 
     def db_version_for_dump(self, session) -> int:
         """The version `dump_config` writes: the database's, read in the same transaction as the rows it saves.
@@ -997,8 +963,8 @@ class ConfigFile:
         return db_version if db_version is not None else (self.version or 0) + 1
 
     def record_saved_version(self, version: int):
-        """The file was just written from the database.  If the database's version was unknown (see
-        `record_import_version`), the two are now in step: record it, so changes from here on count against it."""
+        """The file was just written from the database.  If the database's version was unknown (an import without
+        deletes), the two are now in step: record it, so changes from here on count against it."""
         from wrolpi.config_version import create_config_version
         from wrolpi.db import get_db_session
         with get_db_session(commit=True) as session:
@@ -1466,6 +1432,38 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     return all_configs
 
 
+async def import_file_configs():
+    """Import the configs that do not need the database: wrolpi.yaml, then the downloader settings (not when
+    wrolpi.yaml failed, or while WROL mode is enabled).  Errors are logged so the service starts; a config that failed
+    to import refuses to save.
+
+    This runs from a worker's after_server_start while the worker is already accepting requests, so no import may
+    block the event loop."""
+    from modules.archive.lib import get_archive_downloader_config
+    from modules.videos.lib import get_videos_downloader_config
+    from wrolpi.downloader import get_download_cache_config
+
+    wrolpi_config = get_wrolpi_config()
+    try:
+        await asyncio.to_thread(wrolpi_config.import_config)
+        logger.debug('wrolpi config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import wrolpi config: {e}')
+
+    if not wrolpi_config.successful_import:
+        return
+    if wrolpi_config.wrol_mode:
+        logger.warning('Refusing to import other configs when WROL mode is enabled!')
+        return
+
+    for config in (get_videos_downloader_config(), get_archive_downloader_config(), get_download_cache_config()):
+        try:
+            await asyncio.to_thread(config.import_config)
+            logger.debug(f'{config.file_name} imported')
+        except Exception as e:
+            logger.warning(f'Failed to import {config.file_name}: {e}')
+
+
 async def import_all_db_configs() -> dict[str, bool]:
     """
     Import all configs that require the database.
@@ -1670,10 +1668,8 @@ class WROLPiConfig(ConfigFile):
         return default_config_path
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
+        super().import_config(file, send_events)
         try:
-            # WROLPiConfig does not sync to database.
-            super().import_config(file)
-
             # Destinations cannot be empty.
             self._config['archive_destination'] = self.archive_destination or self.default_config['archive_destination']
             self._config['map_destination'] = self.map_destination or self.default_config['map_destination']
@@ -1699,8 +1695,6 @@ class WROLPiConfig(ConfigFile):
             if repos_root not in ignored:
                 ignored.append(repos_root)
                 self._config['ignored_directories'] = ignored
-
-            self.successful_import = True
         except Exception as e:
             self.successful_import = False
             message = f'Failed to import {self.file_name}'

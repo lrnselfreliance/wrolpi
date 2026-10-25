@@ -5,7 +5,7 @@ A database config (tags.yaml, channels.yaml, ...) saves rows the database owns. 
 config's database version, in the same transaction (`_count_config_changes`).  `dump_config` writes the database's
 version into the file it saves, and an import records the file's version once it has applied it.
 
-So an import can tell which side is newer by comparing two integers (see `ConfigFile.import_decision`):
+So an import can tell which side is newer by comparing two integers (see `ConfigFile.version_decision`):
 
 * file == database: in step.  The file is current; import it, deleting what it no longer lists.
 * file > database: the file is newer (a restored or wiped database, a copied config); import it the same way.
@@ -151,10 +151,6 @@ def get_config_version(session: Session, name: str) -> Optional[int]:
     row = session.connection().execute(
         text('SELECT version FROM config_version WHERE name = :name'), {'name': name}).first()
     return row[0] if row else None
-
-
-def delete_config_version(session: Session, name: str):
-    session.connection().execute(text('DELETE FROM config_version WHERE name = :name'), {'name': name})
 
 
 def create_config_version(session: Session, name: str, version: int):

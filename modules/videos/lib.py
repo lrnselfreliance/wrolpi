@@ -909,10 +909,6 @@ class VideoDownloaderConfig(ConfigFile):
     def strict_codecs(self, value: bool):
         self.update({**self._config, 'strict_codecs': value})
 
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        super().import_config(file, send_events)
-        self.successful_import = True
-
 
 VIDEOS_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig()
 TEST_VIDEOS_DOWNLOADER_CONFIG: VideoDownloaderConfig = None

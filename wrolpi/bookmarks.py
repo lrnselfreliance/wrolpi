@@ -149,12 +149,6 @@ class BookmarksConfig(ConfigFile):
                 return False
         return True
 
-    def import_config(self, file=None, send_events=False):
-        # An invalid file raises here, leaving successful_import False so save() will not
-        # overwrite it.  A missing file is imported as empty, so the first save creates it.
-        super().import_config(file, send_events)
-        self.successful_import = True
-
     @property
     def bookmarks(self) -> List[dict]:
         # A deep copy: the tree is nested, and callers mutate what they get back before

@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import sys
-from contextlib import contextmanager
 
 from sanic import Sanic
 from sanic.signals import Event
@@ -15,7 +14,7 @@ from wrolpi import root_api  # noqa
 from wrolpi.api_utils import api_app, perpetual_signal, per_worker_task
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
-    create_empty_config_files, TRACE_LEVEL
+    create_empty_config_files, import_file_configs, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from modules.videos.cookies import lock_cookies
@@ -27,15 +26,6 @@ from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
-
-
-@contextmanager
-def log_and_suppress(*exceptions, message="Exception suppressed"):
-    """Like contextlib.suppress but logs the exception at INFO level first."""
-    try:
-        yield
-    except exceptions as e:
-        logger.info(f'{message}: {e}', exc_info=e)
 
 
 def db_main(args):
@@ -266,29 +256,10 @@ async def start_single_tasks(app: Sanic):
 
     logger.debug(f'start_single_tasks started')
 
-    # Import configs, ignore errors so the service will start.  Configs will refuse to save if they failed to import.
-    with log_and_suppress(Exception, message='Failed to import wrolpi config'):
-        get_wrolpi_config().import_config()
-        logger.debug('wrolpi config imported')
-
+    # Import configs that don't require the database.  Errors are logged so the service will start; configs refuse
+    # to save if they failed to import.
+    await import_file_configs()
     wrolpi_config = get_wrolpi_config()
-    if wrolpi_config.successful_import:
-        # Only import other configs if WROLPi config was imported, and WROL mode is not enabled.
-        if wrolpi_config.wrol_mode:
-            logger.warning('Refusing to import other configs when WROL mode is enabled!')
-        else:
-            # Import configs that don't require the database.
-            with log_and_suppress(Exception, message='Failed to import videos downloader config'):
-                get_videos_downloader_config().import_config()
-                logger.debug('videos downloader config imported')
-            with log_and_suppress(Exception, message='Failed to import archive downloader config'):
-                from modules.archive.lib import get_archive_downloader_config
-                get_archive_downloader_config().import_config()
-                logger.debug('archive downloader config imported')
-            with log_and_suppress(Exception, message='Failed to import download cache config'):
-                from wrolpi.downloader import get_download_cache_config
-                get_download_cache_config().import_config()
-                logger.debug('download cache config imported')
 
     logger.debug('start_single_tasks waiting for db...')
     async with flags.db_up.wait_for():

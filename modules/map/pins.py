@@ -22,10 +22,6 @@ class MapPinsConfig(ConfigFile):
     )
     validator = MapPinsConfigValidator
 
-    def import_config(self, file=None, send_events=False):
-        super().import_config(file, send_events)
-        self.successful_import = True
-
     @property
     def pins(self) -> List[dict]:
         return list(self._config.get('pins', []))

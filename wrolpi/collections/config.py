@@ -7,7 +7,7 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
-from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relative
+from wrolpi.config_import import ConfigSection, SectionDiff, Unreadable, chunks, media_relative
 from wrolpi.config_version import count_config_change
 from wrolpi.db import get_db_session
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
@@ -21,6 +21,10 @@ __all__ = ['PlaylistsConfig', 'playlists_config', 'save_playlists_config', 'get_
 
 def _playlist_tag_names(rows) -> Set[str]:
     return {i['tag_name'] for i in rows if i['tag_name']}
+
+
+# The position in an invalid item key that stands for all of a playlist's items (its `items` is not a list).
+ITEMS_UNREADABLE = 0
 
 
 def _playlist_name(data) -> Optional[str]:
@@ -39,8 +43,8 @@ class PlaylistsSection(ConfigSection):
             name = _playlist_name(data)
             if not name:
                 logger.error(f'Playlist config entry has no name, skipping: {data!r}')
-                # Counted as skipped; never a playlist's name.
-                invalid.add(f'\0{position}')
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             try:
                 rows[name] = dict(
@@ -118,7 +122,7 @@ class PlaylistItemsSection(ConfigSection):
             items = data.get('items') or []
             if not isinstance(items, list):
                 logger.error(f'Skipping the items of playlist {name!r}, they are not a list: {items!r}')
-                invalid.add((name, None, 0, None))
+                invalid.add((name, None, ITEMS_UNREADABLE, None))
                 continue
             # Positions follow the file's order; an item skipped now keeps its place for a later import.
             for position, item in enumerate(items, start=1):
@@ -267,6 +271,7 @@ class PlaylistsConfig(ConfigFile):
     def prepare(self, diffs: dict):
         self._drop_unknown_tags(diffs['playlists'])
         self._drop_missing_items(diffs['items'])
+        self._keep_unreadable_items(diffs['items'])
         if not self.import_deletes:
             self._merge_items(diffs['items'])
 
@@ -284,6 +289,12 @@ class PlaylistsConfig(ConfigFile):
                 logger.warning(f'Removing unknown Tag {row["tag_name"]!r} from a playlist')
                 row['tag_name'] = None
                 self._config_outdated = True
+
+    def _keep_unreadable_items(self, diff: SectionDiff):
+        """A playlist whose items cannot be read keeps the items it has."""
+        _, invalid = PlaylistItemsSection().file_rows(self._config)
+        if names := {i[0] for i in invalid if i[2] == ITEMS_UNREADABLE}:
+            diff.removed = {i for i in diff.removed if i[0] not in names}
 
     def _drop_missing_items(self, diff: SectionDiff):
         """An added item whose file or Zim is not in the database (not indexed yet, after a rebuild) is skipped

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, load_only
 from wrolpi import dates, flags
 from wrolpi.common import loaded, ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
-from wrolpi.config_import import ConfigSection, SectionDiff, chunks, media_relative
+from wrolpi.config_import import ConfigSection, SectionDiff, Unreadable, chunks, media_relative
 from wrolpi.config_version import count_config_change, register_ownership
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
@@ -405,8 +405,8 @@ class TagFilesSection(ConfigSection):
                 key = (tag_name, media_relative(path))
             except Exception as e:
                 logger.error(f'Skipping invalid tagged file in config: {item!r}', exc_info=e)
-                # Counted as skipped; never a tagged file's key.
-                invalid.add((f'\0{position}',))
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             if tag_names and tag_name not in tag_names:
                 logger.warning(f'Cannot find Tag for {repr(key[1])}')
@@ -508,8 +508,8 @@ class TagZimsSection(ConfigSection):
                 key = (tag_name, media_relative(zim_path), zim_entry)
             except Exception as e:
                 logger.error(f'Skipping invalid tagged Zim entry in config: {item!r}', exc_info=e)
-                # Counted as skipped; never a tagged Zim entry's key.
-                invalid.add((f'\0{position}',))
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             if tag_names and tag_name not in tag_names:
                 logger.warning(f'Cannot find Tag for {repr(key[1])}')

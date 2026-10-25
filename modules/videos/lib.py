@@ -20,7 +20,7 @@ from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config, trim_file_name
 from wrolpi.collections import Collection
 from wrolpi.collections.models import validate_collection_directory
-from wrolpi.config_import import ConfigSection, chunks, media_relative
+from wrolpi.config_import import ConfigSection, Unreadable, chunks, media_relative
 from wrolpi.config_version import register_ownership
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, session_curs
@@ -295,8 +295,8 @@ class ChannelsSection(ConfigSection):
                 key = _channel_key(data)
             except Exception as e:
                 channel_import_logger.error(f'Skipping invalid Channel in config: {data!r}', exc_info=e)
-                # Counted as skipped; never a directory.  (The entry's name keeps its Channel, see `prepare`.)
-                invalid.add(f'\0{position}')
+                # Counted as skipped (see `Unreadable`).  The entry's name keeps its Channel (see `prepare`).
+                invalid.add(Unreadable(position))
                 continue
             if key in rows or key in invalid:
                 raise RuntimeError('Refusing to import channels config because it contains duplicate directories!')
@@ -401,7 +401,7 @@ class ChannelDownloadsSection(ConfigSection):
                 invalid.add((key, '\0downloads'))
                 continue
             for position, download in enumerate(downloads):
-                if isinstance(download, dict) and download.get('url'):
+                if isinstance(download, dict) and download.get('url') and isinstance(download['url'], str):
                     rows[(key, download['url'])] = dict(frequency=download.get('frequency'))
                 else:
                     channel_import_logger.error(f'Skipping invalid Download of Channel {key!r}: {download!r}')

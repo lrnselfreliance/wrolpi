@@ -34,7 +34,7 @@ from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
-from wrolpi.config_import import ConfigSection, chunks
+from wrolpi.config_import import ConfigSection, Unreadable, chunks
 from wrolpi.config_version import collection_kinds, count_config_change, register_ownership
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, session_curs, serializer
@@ -2113,8 +2113,8 @@ class DownloadsSection(ConfigSection):
             url = data.get('url') if isinstance(data, dict) else None
             if not url or not isinstance(url, str):
                 logger.error(f'Download config entry has no url, skipping: {data!r}')
-                # Counted as skipped; never a Download's URL.
-                invalid.add(f'\0{position}')
+                # Counted as skipped (see `Unreadable`).
+                invalid.add(Unreadable(position))
                 continue
             try:
                 settings = dict(data.get('settings') or {})

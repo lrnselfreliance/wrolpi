@@ -2,6 +2,8 @@
 is never saved over it; the rest of the file still imports."""
 import pytest
 
+from wrolpi.config_import import Unreadable, diff_section
+
 from modules.archive.lib import DomainsSection
 from modules.repos.lib import ReposSection
 from modules.videos.lib import ChannelDownloadsSection, ChannelsSection
@@ -60,3 +62,39 @@ def test_malformed_channel_downloads(test_directory):
     rows, invalid = ChannelDownloadsSection().file_rows(config)
     assert rows == dict()
     assert invalid
+
+
+@pytest.mark.parametrize('section,config', [
+    (PlaylistsSection(), dict(playlists=MALFORMED)),
+    (PlaylistItemsSection(), dict(playlists=MALFORMED)),
+    (ReposSection(), dict(repos=MALFORMED)),
+    (DomainsSection(), dict(collections=[*MALFORMED, dict(name=['a', 'list'])])),
+    (ChannelsSection(), dict(channels=MALFORMED)),
+    (DownloadsSection(), dict(downloads=MALFORMED)),
+    (TagsSection(), dict(tags=dict())),
+    # A list of two texts is a tagged file's line (of an unknown Tag), not an unreadable one.
+    (TagFilesSection(), dict(tags=dict(one=dict()), tag_files=['a string', 5, None, [['a'], 'b.txt']])),
+    (TagZimsSection(), dict(tags=dict(one=dict()), tag_zims=MALFORMED)),
+])
+def test_only_malformed_entries_remove_nothing(test_directory, section, config):
+    """A section whose entries are all unreadable is not present: like an empty section, it removes nothing (it
+    cannot be told apart from a damaged file)."""
+    rows, invalid = section.file_rows(config)
+    assert not rows
+    assert not section.present(config, rows, invalid)
+
+
+def test_diff_unreadable():
+    """An unreadable entry keeps no row and does not make the section present; a named invalid row does both."""
+    db_rows = dict(one=dict(), two=dict())
+    assert diff_section(dict(), {Unreadable(0)}, db_rows, deletes=True).removed == set()
+    assert diff_section(dict(), {Unreadable(0), 'one'}, db_rows, deletes=True).removed == {'two'}
+
+
+def test_malformed_channel_download_url(test_directory):
+    """A Channel's Download whose url is not text is counted, so the Channel keeps its Downloads."""
+    config = dict(channels=[dict(name='good', directory='videos/good', downloads=[dict(url=['a', 'list']), dict(url=5)])])
+    rows, invalid = ChannelDownloadsSection().file_rows(config)
+    assert rows == dict()
+    assert {i[0] for i in invalid} == {'videos/good'}
+    assert len(invalid) == 2

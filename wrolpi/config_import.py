@@ -27,6 +27,18 @@ class SectionDiff:
         return bool(self.added or self.changed or self.removed)
 
 
+@dataclass(frozen=True)
+class Unreadable:
+    """The invalid key of an entry too malformed to name a row (not a mapping, no name).  It is counted as skipped, so
+    the file is not saved over it, but it keeps no row, and on its own it does not make a section present."""
+    position: int
+
+
+def listed(file_rows: dict, invalid_keys: set) -> bool:
+    """Whether a section lists anything: a row, or an invalid row it names."""
+    return bool(file_rows) or any(not isinstance(i, Unreadable) for i in invalid_keys)
+
+
 class ConfigSection:
     """One kind of row a database config saves.
 
@@ -52,7 +64,7 @@ class ConfigSection:
     def present(self, config: dict, file_rows: dict, invalid_keys: set) -> bool:
         """Whether the file lists this section at all; an empty section cannot be told apart from a lost or blanked
         file, so it removes nothing."""
-        return bool(file_rows or invalid_keys)
+        return listed(file_rows, invalid_keys)
 
     def same(self, file_row: dict, db_row: dict) -> bool:
         """Whether a file row is already in the database."""
@@ -77,7 +89,7 @@ def diff_section(file_rows: Dict[Hashable, dict], invalid_keys: Set[Hashable], d
         elif not same(row, db_rows[key]):
             diff.changed[key] = row
     if present is None:
-        present = bool(file_rows or invalid_keys)
+        present = listed(file_rows, invalid_keys)
     if deletes and present:
         diff.removed = db_rows.keys() - file_rows.keys() - invalid_keys
     return diff

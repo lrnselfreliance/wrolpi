@@ -917,6 +917,10 @@ def _playlist_file_group_moved(file_group: FileGroup) -> bool:
 
 
 register_ownership('playlists.yaml', FileGroup, columns={'primary_path'}, row=_playlist_file_group_moved)
+# recently_viewed.yaml saves viewed files by path.
+register_ownership('recently_viewed.yaml', FileGroup, columns={'primary_path'},
+                   row=lambda file_group: bool(inspect(file_group).attrs.primary_path.history.deleted)
+                   and file_group.viewed is not None)
 
 
 class Directory(ModelHelper, Base):

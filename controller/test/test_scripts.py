@@ -240,6 +240,46 @@ class TestStartScript:
                     assert "wrolpi-repair.service" in call_args
 
 
+    def _start_upgrade(self, tmp_path, params, current_branch="master"):
+        """Start the upgrade script with its env file in `tmp_path`.  Returns (result, env file, Popen mock)."""
+        env_file = tmp_path / "wrolpi-upgrade.env"
+        with mock.patch.dict(AVAILABLE_SCRIPTS["upgrade"], {"env_file": str(env_file)}), \
+                mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.get_script_status", return_value={"running": False}), \
+                mock.patch("controller.lib.scripts.get_current_branch", return_value=current_branch), \
+                mock.patch("subprocess.Popen") as popen:
+            result = start_script("upgrade", params=params)
+        return result, env_file, popen
+
+    def test_upgrade_without_branch_writes_current_branch(self, tmp_path):
+        """The upgrade service reads BRANCH from its env file, and fails to start without the file; upgrade.sh
+        removes it when it finishes.  With no branch, upgrade the current one, as upgrade.sh does."""
+        for params in (None, {}, {"branch": ""}):
+            result, env_file, popen = self._start_upgrade(tmp_path, params)
+            assert result["success"] is True, params
+            assert env_file.read_text() == "BRANCH=master\n", params
+            popen.assert_called_once()
+            env_file.unlink()
+
+    def test_upgrade_replaces_stale_env_file(self, tmp_path):
+        """A file left by an interrupted upgrade does not choose the branch."""
+        (tmp_path / "wrolpi-upgrade.env").write_text("BRANCH=old\n")
+        result, env_file, _ = self._start_upgrade(tmp_path, None, current_branch="release")
+        assert result["success"] is True
+        assert env_file.read_text() == "BRANCH=release\n"
+
+        result, env_file, _ = self._start_upgrade(tmp_path, {"branch": "master"}, current_branch="release")
+        assert env_file.read_text() == "BRANCH=master\n"
+
+    def test_unknown_param_is_rejected(self, tmp_path):
+        """A misspelled parameter is an error, not silently ignored."""
+        result, env_file, popen = self._start_upgrade(tmp_path, {"brnch": "master"})
+        assert result["success"] is False
+        assert "brnch" in result["error"]
+        assert not env_file.exists()
+        popen.assert_not_called()
+
+
 class TestGetScriptOutput:
     """Tests for get_script_output function."""
 

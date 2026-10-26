@@ -239,17 +239,30 @@ def start_script(name: str, params: Optional[dict] = None) -> dict:
 
     script_config = AVAILABLE_SCRIPTS[name]
     service = script_config["service_name"]
+    parameters = script_config.get("parameters", [])
 
-    # Write parameters to env file if script has one configured
+    # A misspelled parameter would otherwise be dropped, and the script run with its default.
+    unknown = sorted(set(params or {}) - {i["name"] for i in parameters})
+    if unknown:
+        return {
+            "success": False,
+            "error": f"Unknown parameters for script '{name}': {', '.join(unknown)}",
+        }
+
+    # Always write the env file: the service cannot start without it, and a file left by an interrupted run must
+    # not choose the parameters.
     env_file = script_config.get("env_file")
-    if env_file and params:
+    if env_file:
+        values = {key: value for key, value in (params or {}).items() if value}
+        for parameter in parameters:
+            if parameter["type"] == "branch" and not values.get(parameter["name"]):
+                # upgrade.sh upgrades the current branch when it is not given one.
+                values[parameter["name"]] = get_current_branch() or "release"
         try:
             with open(env_file, "w") as f:
-                for key, value in params.items():
-                    if value:  # Only write non-empty values
-                        # Convert param name to uppercase for env var
-                        env_name = key.upper()
-                        f.write(f"{env_name}={value}\n")
+                for key, value in values.items():
+                    # Convert param name to uppercase for env var
+                    f.write(f"{key.upper()}={value}\n")
         except OSError as e:
             return {
                 "success": False,

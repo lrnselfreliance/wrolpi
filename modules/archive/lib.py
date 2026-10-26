@@ -1018,10 +1018,12 @@ def domain_download_links(session: Session) -> Dict[int, int]:
 
     links = dict()
     downloads = session.query(Download.id, Download.url, Download.downloader, Download.sub_downloader,
-                              Download.settings) \
+                              Download.destination, Download.settings) \
         .filter(Download.frequency.isnot(None), Download.collection_id.is_(None))
-    for id_, url, downloader, sub_downloader, settings in downloads:
-        if destination := (settings or dict()).get('destination'):
+    for id_, url, downloader, sub_downloader, destination, settings in downloads:
+        # An old Download kept its destination in its settings.
+        destination = str(destination) if destination else (settings or dict()).get('destination')
+        if destination:
             for collection_id, directory, prefix in directories:
                 if destination == directory or destination.startswith(prefix):
                     links[id_] = collection_id

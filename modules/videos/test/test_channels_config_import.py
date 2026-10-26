@@ -284,3 +284,23 @@ async def test_import_does_not_save_during_its_write(test_session, saved_channel
 
     assert saves == []
     assert 'https://example.com/one' not in (get_download_manager_config().skip_urls or [])
+
+
+@pytest.mark.asyncio
+async def test_saved_change_is_in_step(test_session, saved_channels, await_switches):
+    """A Channel changed in WROLPi is saved with the database's version, so an edit of the saved file is imported
+    (not saved over as an older file)."""
+    print("before", get_config_version(test_session, "channels.yaml"), get_channels_config().version)
+    two = channels(test_session)['two']
+    two.generate_posters = not two.generate_posters
+    test_session.commit()
+    print("after commit", get_config_version(test_session, "channels.yaml"), get_channels_config().version)
+    lib.save_channels_config()
+    await await_switches()
+
+    file_version = yaml.safe_load(saved_channels.read_text())['version']
+    assert file_version == get_config_version(test_session, 'channels.yaml')
+
+    edit_channel(saved_channels, 'two', url='https://example.com/edited')
+    import_channels_config()
+    assert channels(test_session)['two'].url == 'https://example.com/edited'

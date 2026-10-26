@@ -1022,30 +1022,22 @@ def get_yt_dlp_sleep_opts() -> dict:
     return {}
 
 
-def get_channels_config_from_db(session: Session) -> dict:
-    """Create a dictionary that contains all the Channels from the DB."""
-    from wrolpi.collections import Collection
-    channels = session.query(Channel).join(Collection).order_by(Collection.directory).all()
-    channels = sorted((i.config_view() for i in channels), key=lambda i: i['directory'] if i['directory'] else '')
-    return dict(channels=channels)
-
-
 @register_switch_handler('save_channels_config')
 def save_channels_config():
-    """Get the Channel information from the DB, save it to the config."""
+    """Save the Channels in the DB to the config, with the DB's version (see `ChannelsConfig.dump_config`)."""
     with get_db_session() as session:
-        config = get_channels_config_from_db(session)
-        channels_config = get_channels_config()
+        has_channels = session.query(Channel.id).first() is not None
+    channels_config = get_channels_config()
 
     if PYTEST and not channels_config:
         logger.warning('Refusing to save channels config because test did not initialize a test config!')
         return
 
-    if not config.get('channels') and channels_config.channels:
+    if not has_channels and channels_config.channels:
         logger.warning('Refusing to save empty channels config because channels exist in the config file!')
         return
 
-    channels_config.update(config)
+    channels_config.dump_config()
     logger.info('save_channels_config completed')
 
 

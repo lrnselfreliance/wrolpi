@@ -9,7 +9,8 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from wrolpi.collections import Collection
-from wrolpi.conftest import config_was_imported, probe_write_lock_is_held, production_like_sessions
+from wrolpi.conftest import config_versions_lost, config_was_imported, probe_write_lock_is_held, \
+    production_like_sessions
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config, get_relative_to_media_directory
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
@@ -292,10 +293,12 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
     test_session.delete(channel1)
     test_session.delete(channel2)
     test_session.commit()
+    config_versions_lost(test_session)
     await await_switches()
 
     # Importing the config creates two Channels.
     import_channels_config()
+    await await_switches()
     assert len(test_session.query(Channel).all()) == 2
     assert channel1_dir in test_channels_config.read_text()
     assert channel2_dir in test_channels_config.read_text()

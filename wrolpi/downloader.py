@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON, insert, or_, text
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON, event, insert, or_, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Mapped, Session, column_property, relationship
 
@@ -1017,6 +1017,8 @@ class DownloadManager:
         logger.debug(f'Created {len(downloads)} new downloads')
 
         session.flush(downloads)
+        # Save the config once the new Downloads are committed (see `_save_downloads_config_after_commit`).
+        session.info[SAVE_DOWNLOADS_CONFIG_AFTER_COMMIT] = True
         try:
             from wrolpi import perpetual
             if perpetual.IN_PERPETUAL_PROCESS or PYTEST:
@@ -1024,8 +1026,6 @@ class DownloadManager:
                 # them for perpetual_download_worker's next cycle (a few seconds) rather than running a download
                 # inside the API worker.
                 background_task(self.dispatch_downloads())
-            # Save the config now that new Downloads exist.
-            save_downloads_config.activate_switch()
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -2503,6 +2503,25 @@ def save_downloads_config():
 
 
 save_downloads_config: ActivateSwitchMethod
+
+SAVE_DOWNLOADS_CONFIG_AFTER_COMMIT = 'save_downloads_config_after_commit'
+
+
+@event.listens_for(Session, 'after_commit')
+def _save_downloads_config_after_commit(session: Session):
+    """The switch runs in another process, which cannot see Downloads until they are committed."""
+    if session.info.pop(SAVE_DOWNLOADS_CONFIG_AFTER_COMMIT, False):
+        try:
+            save_downloads_config.activate_switch()
+        except RuntimeError:
+            # Sanic's shared context does not exist.  Probably testing?
+            if not PYTEST:
+                logger.error('Unable to save the downloads config after creating Downloads', exc_info=True)
+
+
+@event.listens_for(Session, 'after_rollback')
+def _forget_downloads_config_save(session: Session):
+    session.info.pop(SAVE_DOWNLOADS_CONFIG_AFTER_COMMIT, None)
 
 
 async def import_downloads_config():

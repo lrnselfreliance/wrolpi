@@ -2195,3 +2195,25 @@ async def test_create_downloads_does_not_dispatch_outside_the_perpetual_process(
         test_download_manager.create_downloads(test_session, ['https://example.com/perpetual'], test_downloader.name)
         await asyncio.sleep(0)
     dispatch.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_downloads_saves_the_config_after_commit(test_session, test_download_manager, test_downloader,
+                                                               monkeypatch):
+    """download_manager.yaml is saved once the new Downloads are committed: a save before the commit could not
+    see them (the switch runs in another process), and nothing would save them later."""
+    from wrolpi import downloader
+    saves = []
+    monkeypatch.setattr(downloader.save_downloads_config, 'activate_switch', lambda *a, **kw: saves.append(1))
+
+    test_download_manager.create_downloads(test_session, ['https://example.com/one'], test_downloader.name)
+    assert saves == []
+
+    test_session.commit()
+    assert saves == [1]
+
+    # A rolled back Download is not saved.
+    test_download_manager.create_downloads(test_session, ['https://example.com/two'], test_downloader.name)
+    test_session.rollback()
+    test_session.commit()
+    assert saves == [1]

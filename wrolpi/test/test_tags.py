@@ -596,10 +596,11 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
 
 
 @pytest.mark.asyncio
-async def test_tag_rename_downloads(async_client, test_session, tag_factory, await_background_tasks):
+async def test_tag_rename_downloads(async_client, test_session, tag_factory, await_background_tasks, await_switches,
+                                    test_download_manager_config):
     """Renaming a Tag renames it everywhere a Download applies it, including the settings passed on to the
-    Downloads (and Channels) it creates.  The rename is committed with the request, and leaves the database
-    writable."""
+    Downloads (and Channels) it creates.  The rename is committed with the request, saved to the config, and leaves
+    the database writable."""
     from wrolpi.db import get_db_session
     from wrolpi.downloader import Download
     tag, other = await tag_factory('one'), await tag_factory('two')
@@ -625,6 +626,12 @@ async def test_tag_rename_downloads(async_client, test_session, tag_factory, awa
                                                                    video_resolutions=['720p'])),
         'https://example.com/other': (['two'], dict(tag_names=['two'], channel_tag_name=['two'])),
     }
+
+    await await_switches()
+    config = yaml.load(test_download_manager_config.read_text(), Loader=yaml.Loader)
+    playlist, = [i for i in config['downloads'] if i['url'] == 'https://example.com/playlist']
+    assert playlist['tag_names'] == ['New Name', 'two']
+    assert playlist['settings']['channel_tag_name'] == ['New Name']
 
     # Nothing holds the write lock.
     request, response = await async_client.post('/api/tag', content=json.dumps(dict(name='three', color='#000000')))

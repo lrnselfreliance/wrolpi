@@ -183,18 +183,19 @@ class Tag(ModelHelper, Base):
             self.flush()
 
         # Rename old name referenced in any Downloads, in the caller's transaction.  (A background task's writes
-        # would not be committed with it.)
-        from wrolpi.downloader import Download
-        to_flush = list()
-        for download in session.query(Download):
-            tag_names, settings = with_tag_name_renamed(download.tag_names, download.settings, old_name, name)
-            if tag_names != download.tag_names or settings != download.settings:
-                download.tag_names, download.settings = tag_names, settings
-                to_flush.append(download)
-
-        if to_flush:
-            session.flush(to_flush)
-            save_downloads_config.activate_switch()
+        # would not be committed with it.)  The caller saves the Downloads config after it commits.
+        if old_name and old_name != name:
+            from wrolpi.downloader import Download
+            to_flush = list()
+            downloads = session.query(Download).options(
+                load_only(Download.id, Download.tag_names, Download.settings))
+            for download in downloads:
+                tag_names, settings = with_tag_name_renamed(download.tag_names, download.settings, old_name, name)
+                if tag_names != download.tag_names or settings != download.settings:
+                    download.tag_names, download.settings = tag_names, settings
+                    to_flush.append(download)
+            if to_flush:
+                session.flush(to_flush)
 
         from modules.videos.errors import ChannelDirectoryConflict
 
@@ -1138,8 +1139,10 @@ def get_overlapping_tags(session: Session, tag_names: Union[str, List[str]], lim
 
 
 async def upsert_tag(session: Session, name: str, color: str, tag_id: int = None) -> Tag:
+    old_name = None
     if tag_id:
         tag = Tag.find_by_id(session, tag_id)
+        old_name = tag.name
         await tag.update_tag(session, name, color)
     else:
         tag = Tag()
@@ -1157,6 +1160,9 @@ async def upsert_tag(session: Session, name: str, color: str, tag_id: int = None
 
     save_tags_config.activate_switch()
     sync_tags_directory.activate_switch()
+    if old_name and old_name != tag.name:
+        # Downloads were renamed; save them only once they are committed.
+        save_downloads_config.activate_switch()
 
     return tag
 

@@ -596,27 +596,46 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
 
 
 @pytest.mark.asyncio
-async def test_tag_rename_downloads(test_session, tag_factory, await_background_tasks):
+async def test_tag_rename_downloads(async_client, test_session, tag_factory, await_background_tasks, await_switches,
+                                    test_download_manager_config):
     """Renaming a Tag renames it everywhere a Download applies it, including the settings passed on to the
-    Downloads (and Channels) it creates."""
+    Downloads (and Channels) it creates.  The rename is committed with the request, saved to the config, and leaves
+    the database writable."""
+    from wrolpi.db import get_db_session
     from wrolpi.downloader import Download
     tag, other = await tag_factory('one'), await tag_factory('two')
-    download = Download(url='https://example.com/playlist', downloader='video_channel', tag_names=['one', 'two'],
-                        settings=dict(tag_names=['two', 'one'], channel_tag_name=['one'], video_resolutions=['720p']))
-    untouched = Download(url='https://example.com/other', downloader='video_channel', tag_names=['two'],
-                         settings=dict(tag_names=['two'], channel_tag_name=['two']))
-    test_session.add_all([download, untouched])
+    test_session.add_all([
+        Download(url='https://example.com/playlist', downloader='video_channel', tag_names=['one', 'two'],
+                 settings=dict(tag_names=['two', 'one'], channel_tag_name=['one'], video_resolutions=['720p'])),
+        Download(url='https://example.com/other', downloader='video_channel', tag_names=['two'],
+                 settings=dict(tag_names=['two'], channel_tag_name=['two'])),
+    ])
     test_session.commit()
 
-    await tag.update_tag(test_session, 'New Name', None)
+    content = dict(name='New Name', color=tag.color)
+    request, response = await async_client.post(f'/api/tag/{tag.id}', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
     await await_background_tasks()
-    test_session.commit()
 
-    assert download.tag_names == ['New Name', 'two']
-    assert download.settings == dict(tag_names=['two', 'New Name'], channel_tag_name=['New Name'],
-                                     video_resolutions=['720p'])
-    assert untouched.tag_names == ['two']
-    assert untouched.settings == dict(tag_names=['two'], channel_tag_name=['two'])
+    # Read what was committed, not what a session holds.
+    with get_db_session() as session:
+        downloads = {i.url: (i.tag_names, i.settings) for i in session.query(Download)}
+    assert downloads == {
+        'https://example.com/playlist': (['New Name', 'two'], dict(tag_names=['two', 'New Name'],
+                                                                   channel_tag_name=['New Name'],
+                                                                   video_resolutions=['720p'])),
+        'https://example.com/other': (['two'], dict(tag_names=['two'], channel_tag_name=['two'])),
+    }
+
+    await await_switches()
+    config = yaml.load(test_download_manager_config.read_text(), Loader=yaml.Loader)
+    playlist, = [i for i in config['downloads'] if i['url'] == 'https://example.com/playlist']
+    assert playlist['tag_names'] == ['New Name', 'two']
+    assert playlist['settings']['channel_tag_name'] == ['New Name']
+
+    # Nothing holds the write lock.
+    request, response = await async_client.post('/api/tag', content=json.dumps(dict(name='three', color='#000000')))
+    assert response.status_code == HTTPStatus.CREATED
 
 
 @pytest.mark.asyncio

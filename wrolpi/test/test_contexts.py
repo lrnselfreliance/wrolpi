@@ -38,3 +38,21 @@ def test_domains_config_in_shared_context():
     for config_name in expected_configs:
         assert hasattr(test_app.shared_ctx, config_name), \
             f"{config_name} not found in shared_ctx"
+
+
+def test_all_configs_in_shared_context():
+    """Every config keeps its in-memory data in shared memory.  Switches save configs in the perpetual process, which
+    does not import the files; a config with process-local data would save a stale version there."""
+    from multiprocessing.managers import DictProxy
+
+    from sanic import Sanic
+    from wrolpi.common import get_all_configs
+    from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
+
+    test_app = Sanic(f"test_context_{id(test_all_configs_in_shared_context)}")
+    attach_shared_contexts(test_app)
+    initialize_configs_contexts(test_app)
+
+    not_shared = sorted(name for name, config in get_all_configs().items()
+                        if not isinstance(getattr(config, '_config', None), DictProxy))
+    assert not_shared == [], 'Add these configs to attach_shared_contexts() and initialize_configs_contexts()'

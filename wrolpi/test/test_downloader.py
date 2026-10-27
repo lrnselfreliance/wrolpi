@@ -976,6 +976,20 @@ async def test_process_runner_output(async_client, test_directory, test_download
 
 
 @pytest.mark.asyncio
+async def test_recurring_download_one_url(async_client, test_session, test_download_manager, test_downloader):
+    """A recurring Download has one URL; more are an error, not silently dropped."""
+    body = dict(
+        urls=['https://example.com/1', 'https://example.com/2'],
+        downloader=test_downloader.name,
+        frequency=DownloadFrequency.weekly,
+    )
+    request, response = await async_client.post('/api/download', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.BAD_REQUEST, response.body
+    assert 'one URL' in response.json['error']
+    assert test_session.query(Download).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_crud_download(async_client, test_session, test_download_manager, test_downloader):
     """Test the ways that Downloads can be created."""
     body = dict(

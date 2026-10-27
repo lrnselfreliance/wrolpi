@@ -383,6 +383,9 @@ async def post_download(request: Request, body: schema.DownloadRequest):
     # Raises an InvalidDownload if the Downloader cannot be found.
     download_manager.find_downloader_by_name(body.downloader)
 
+    if body.frequency and len(body.urls) != 1:
+        raise ValidationError('Only one URL can be specified for a recurring Download')
+
     kwargs = dict(downloader_name=body.downloader,
                   sub_downloader_name=body.sub_downloader, reset_attempts=True,
                   destination=body.destination, tag_names=body.tag_names,

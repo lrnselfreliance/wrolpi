@@ -81,12 +81,6 @@ class NativeOnly(APIError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
-class HotspotError(APIError):
-    code = 'HOTSPOT_ERROR'
-    summary = 'Updating/accessing Hotspot encountered an error'
-    status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-
-
 class LogLevelError(APIError):
     code = 'LOG_LEVEL_ERROR'
     summary = 'Log level is invalid'
@@ -123,12 +117,6 @@ class FileGroupIsTagged(APIError):
     status_code = HTTPStatus.CONFLICT
 
 
-class FileGroupAlreadyTagged(APIError):
-    code = 'FILE_GROUP_ALREADY_TAGGED'
-    summary = 'FileGroup is already tagged with this Tag'
-    status_code = HTTPStatus.CONFLICT
-
-
 class FileUploadFailed(APIError):
     code = 'FILE_UPLOAD_FAILED'
     summary = 'Failed to upload file'
@@ -139,18 +127,6 @@ class FileConflict(APIError):
     code = 'FILE_CONFLICT'
     summary = 'File/directory already exists'
     status_code = HTTPStatus.CONFLICT
-
-
-class HotspotPasswordTooShort(APIError):
-    code = 'HOTSPOT_PASSWORD_TOO_SHORT'
-    summary = 'Hotspot password must be at least 8 characters'
-    status_code = HTTPStatus.BAD_REQUEST
-
-
-class ShutdownFailed(APIError):
-    code = 'SHUTDOWN_FAILED'
-    summary = 'Unable to shutdown the WROLPi'
-    status_code = HTTPStatus.INTERNAL_SERVER_ERROR
 
 
 class InvalidConfig(APIError):

@@ -204,7 +204,7 @@ def _auto_create_collections(session: Session, file_group: FileGroup, metadata):
 
 
 @register_refresh_cleanup
-def doc_cleanup(test_directory=None):
+def doc_cleanup():
     """Remove empty author/subject collections after refresh."""
     from sqlalchemy import func
     from wrolpi.collections.models import Collection, CollectionItem

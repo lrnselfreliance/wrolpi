@@ -67,10 +67,7 @@ REPOS_DIRECTORY = 'repos'
 MEDIA_DIRECTORY = Path(os.environ.get('MEDIA_DIRECTORY', DEFAULT_MEDIA_DIRECTORY))
 
 CONFIG_DIR: Path = MEDIA_DIRECTORY / 'config'
-MODULES_DIR: Path = PROJECT_DIR / 'modules'
 
-DATE_FORMAT = '%Y-%M-%d'
-DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 DATETIME_FORMAT_MS = '%Y-%m-%d %H:%M:%S.%f'
 DEFAULT_CPU_FREQUENCY = 'ondemand'
 
@@ -83,7 +80,6 @@ API_AUTO_RELOAD = truthy_arg(os.environ.get('API_AUTO_RELOAD', DOCKERIZED))
 API_ACCESS_LOG = truthy_arg(os.environ.get('API_ACCESS_LOG', DOCKERIZED))
 API_DEBUG = truthy_arg(os.environ.get('API_DEBUG', False))
 
-FILE_REFRESH_CHUNK_SIZE = int(os.environ.get('FILE_CHUNK_SIZE', 100))
 FILE_MAX_PDF_SIZE = int(os.environ.get('FILE_MAX_PDF_SIZE', 40_000_000))
 FILE_MAX_TEXT_SIZE = int(os.environ.get('FILE_MAX_TEXT_SIZE', 100_000))
 
@@ -108,5 +104,3 @@ IS_MACOS = os.uname()[0] == 'Darwin'
 
 SIMULTANEOUS_DOWNLOAD_DOMAINS = int(os.environ.get('SIMULTANEOUS_DOWNLOAD_DOMAINS',
                                                    2 if IS_RPI else 4))
-
-WROLPI_HOME = pathlib.Path(os.environ.get('WROLPI_HOME') or '/home/wrolpi')

@@ -15,7 +15,7 @@ import threading
 import traceback
 import types
 from contextlib import contextmanager
-from typing import Tuple, List, Union, Type, Generator, Any, ContextManager
+from typing import Tuple, List, Union, Generator, Any, ContextManager
 
 import sqlalchemy
 import sqlalchemy.exc
@@ -23,7 +23,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
-from wrolpi.common import logger, Base
+from wrolpi.common import logger
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -525,15 +525,6 @@ class RequestDB:
                 _in_request.set(False)
 
 
-def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session) -> List[Base]:
-    """Get all objects whose primary keys are in the `ranked_primary_keys`, preserve their order."""
-    pkey = sqlalchemy.inspect(model).primary_key[0]
-    pkey_name = pkey.name
-    results = list(session.query(model).filter(pkey.in_(ranked_primary_keys)).all())
-    results = sorted(results, key=lambda i: ranked_primary_keys.index(getattr(i, pkey_name)))
-    return results
-
-
 # SQLite's default variable limit; multi-row VALUES clauses must stay under it.
 SQLITE_MAX_VARIABLES = 32_000
 
@@ -570,13 +561,6 @@ def named_placeholders(prefix: str, values: List, params: dict) -> str:
     return ', '.join(names)
 
 
-def json_each_in(param_name: str) -> str:
-    """An IN-clause subquery over a JSON array parameter; bind `json.dumps(list)` as the parameter.
-
-    Immune to SQLite's variable-count limit regardless of list size."""
-    return f'(SELECT value FROM json_each(:{param_name}))'
-
-
 def parse_db_datetime(value: Union[str, None]):
     """Parse a datetime TEXT value read by a raw cursor into a UTC-aware datetime.
 
@@ -590,5 +574,3 @@ def parse_db_datetime(value: Union[str, None]):
     except ValueError:
         parsed = _datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
     return parsed.replace(tzinfo=_datetime.timezone.utc)
-
-

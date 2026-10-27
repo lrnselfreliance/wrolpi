@@ -198,18 +198,6 @@ class FileGroup(ModelHelper, Base):
             return self.title
         return self.primary_path.name
 
-    @property
-    def full_primary_path(self) -> pathlib.Path:
-        """Returns the complete absolute path to the primary file.
-
-        Handles both old format (primary_path is absolute) and new format (directory + relative primary_path).
-        """
-        if self.directory:
-            # New format: directory + relative filename
-            return self.directory / self.primary_path
-        # Old format: primary_path is already absolute
-        return self.primary_path
-
     def resolve_path(self, relative_path: str | pathlib.Path) -> pathlib.Path:
         """Convert a relative filename to an absolute path using this FileGroup's directory.
 
@@ -369,12 +357,6 @@ class FileGroup(ModelHelper, Base):
         text_files = self.my_files('text/')
         subtitle_paths = [i['path'] for i in self.my_subtitle_files()]
         return [i for i in text_files if i['path'] not in subtitle_paths]
-
-    def my_epub_files(self) -> List[dict]:
-        return self.my_files('application/epub')
-
-    def my_mobi_files(self) -> List[dict]:
-        return self.my_files('application/x-mobipocket-ebook')
 
     def my_html_files(self) -> List[dict]:
         html_files = self.my_files('text/html', 'application/octet-stream')
@@ -637,20 +619,6 @@ class FileGroup(ModelHelper, Base):
         if not file_group:
             raise UnknownFile(f'Unable to find FileGroup with path {path}')
         return file_group
-
-    @classmethod
-    def find_by_directory(cls, session: Session, directory: pathlib.Path, recursive: bool = False) -> List['FileGroup']:
-        """Find all FileGroups in a directory (optionally recursive).
-
-        Uses the indexed `directory` column for efficient lookups.
-        """
-        from sqlalchemy import or_
-        directory_str = str(directory)
-        if recursive:
-            return session.query(cls).filter(
-                or_(cls.directory == directory_str, cls.directory.like(f'{directory_str}/%'))
-            ).all()
-        return session.query(cls).filter(cls.directory == directory_str).all()
 
     @property
     def tag_names(self) -> List[str]:

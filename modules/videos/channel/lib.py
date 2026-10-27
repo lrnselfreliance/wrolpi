@@ -10,7 +10,6 @@ from wrolpi.collections import Collection
 from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_session, session_curs
-from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, FileWorkerConflict
 from wrolpi.events import Events
 from wrolpi.tags import Tag
@@ -240,40 +239,6 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
             .limit(limit)
         channels = stmt.all()
     return channels
-
-
-@wrol_mode_check
-async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict):
-    """Create Download for Channel."""
-    with get_db_session(commit=True) as session:
-        channel = Channel.find_by_id(session, channel_id)
-        download = channel.get_or_create_download(session, url, frequency, reset_attempts=True)
-        download.settings = settings
-
-    save_channels_config.activate_switch()
-    save_downloads_config.activate_switch()
-
-    return download
-
-
-@wrol_mode_check
-async def update_channel_download(channel_id: int, download_id: int, url: str, frequency: int, settings: dict):
-    """Fetch Channel's Download, update its properties."""
-    with get_db_session(commit=True) as session:
-        # Ensure that the Channel exists.
-        Channel.find_by_id(session, channel_id)
-        download = Download.find_by_id(session, download_id)
-        download.url = url
-        download.frequency = frequency
-        download.settings = settings
-        session.commit()
-
-    download_manager.remove_from_skip_list(url)
-
-    save_channels_config.activate_switch()
-    save_downloads_config.activate_switch()
-
-    return download
 
 
 async def _background_move_channel(channel_id: int, target_directory: pathlib.Path):

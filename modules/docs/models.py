@@ -26,12 +26,6 @@ DOC_MIMETYPES = (
     'application/x-cb7',
 )
 
-# Mimetypes that are considered ebook formats.
-EBOOK_MIMETYPES = (
-    EPUB_MIMETYPE,
-    MOBI_MIMETYPE,
-)
-
 
 COMIC_BOOK_SUFFIXES = ('.cbz', '.cbr', '.cbt', '.cb7')
 
@@ -133,11 +127,6 @@ class Doc(ModelHelper, Base):
             ))
             for fg in file_groups:
                 session.delete(fg)
-
-
-# Section kinds.
-SECTION_KIND_EPUB_SPINE = 'epub_spine'
-SECTION_KIND_PDF_PAGE = 'pdf_page'
 
 
 class DocSection(ModelHelper, Base):

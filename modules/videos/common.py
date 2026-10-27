@@ -25,10 +25,6 @@ from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryCon
 logger = logger.getChild(__name__)
 
 
-class ConfigError(Exception):
-    pass
-
-
 def get_videos_directory() -> pathlib.Path:
     """Get the "videos" directory in the media directory.  Make it if it does not exist."""
     from modules.videos.lib import format_videos_destination
@@ -114,13 +110,6 @@ def duration_to_seconds(duration: str) -> int:
         seconds=int(seconds),
         microseconds=int(microseconds),
     ).total_seconds())
-
-
-def seconds_to_duration(seconds: int) -> str:
-    """Convert integer seconds to ffmpeg duration"""
-    hours, seconds = divmod(seconds, 3600)
-    minutes, seconds = divmod(seconds, 60)
-    return f'{hours:02}:{minutes:02}:{seconds:02}.000'
 
 
 DURATION_REGEX = re.compile(r'Duration: ([\d:.]+),')

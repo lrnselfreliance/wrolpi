@@ -60,18 +60,8 @@ def pid_is_running(pid: int) -> bool:
         return False
 
 
-# Admin
-SUDO_BIN = which('sudo', '/usr/bin/sudo')
-NMCLI_BIN = which('nmcli', '/usr/bin/nmcli')
-CPUFREQ_INFO_BIN = which('cpufreq-info', '/usr/bin/cpufreq-info')
-CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
-
-# Files
-WGET_BIN = which('wget', '/usr/bin/wget')
 GIT_BIN = which('git', '/usr/bin/git')
 
-# Map
-BASH_BIN = which('bash', '/bin/bash')
 
 # Archive
 SINGLE_FILE_BIN = which('single-file',

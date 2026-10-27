@@ -94,7 +94,6 @@ DEFAULT_FIELD_SETS = {
 # The first/default type used when a type is not specified (e.g. legacy migration).
 DEFAULT_TYPE = 'food'
 
-INVENTORY_TYPES = tuple(DEFAULT_FIELD_SETS.keys())
 
 # Recommended package counts for a one-adult, one-year (~3,000 kcal/day) food supply, keyed by the shipped
 # food-catalog id (see catalog_defaults.yaml).  Transcribed from the same "One-Year Emergency Food Supply for One

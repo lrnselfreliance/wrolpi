@@ -230,4 +230,3 @@ MAP_REGIONS = [
 ]
 
 MAP_REGIONS_BY_NAME = {r['name']: r for r in MAP_REGIONS}
-MAP_REGIONS_BY_REGION = {r['region']: r for r in MAP_REGIONS}

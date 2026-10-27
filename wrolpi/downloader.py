@@ -339,10 +339,6 @@ class Download(ModelHelper, Base):  # noqa
         self.attempts += 1
         self.status = DownloadStatus.pending
 
-    @property
-    def is_pending(self) -> bool:
-        return self.status == DownloadStatus.pending
-
     def complete(self):
         """Mark this Download as successfully downloaded."""
         self.status = DownloadStatus.complete
@@ -1498,10 +1494,6 @@ class DownloadManager:
         download_manager_data['killed_downloads'] = \
             [i for i in download_manager_data['killed_downloads'] if i != download_id]
         api_app.shared_ctx.download_manager_data.update(download_manager_data)
-
-    @staticmethod
-    def download_is_killed(download_id: int):
-        return download_id in api_app.shared_ctx.download_manager_data['killed_downloads']
 
     FINISHED_STATUSES = (DownloadStatus.complete, DownloadStatus.failed)
 

@@ -5,7 +5,7 @@ from typing import List, Dict
 
 from sqlalchemy.orm import Session
 
-from modules.map.catalog import MAP_REGIONS, MAP_REGIONS_BY_NAME, MAP_REGIONS_BY_REGION, MANIFEST_URL
+from modules.map.catalog import MAP_REGIONS, MAP_REGIONS_BY_NAME, MANIFEST_URL
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config, aiohttp_get, verify_gpg_signature
 from wrolpi.downloader import DownloadFrequency, Download, save_downloads_config, download_manager
 

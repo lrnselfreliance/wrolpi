@@ -53,12 +53,6 @@ class TagFile(ModelHelper, Base):
     def get_by_primary_keys(session: Session, file_group_id: int, tag_id: int) -> Optional['TagFile']:
         return session.query(TagFile).filter_by(tag_id=tag_id, file_group_id=file_group_id).one_or_none()
 
-    @staticmethod
-    def get_by_tag_name(session: Session, file_group_id: int, tag_name: str) -> Optional['TagFile']:
-        return session.query(TagFile).join(Tag) \
-            .filter(TagFile.file_group_id == file_group_id, Tag.name == tag_name) \
-            .one_or_none()
-
 
 # Tag.get_id_by_name
 def get_id_by_name_key(klass: Base, session: Session, name: str):
@@ -109,16 +103,6 @@ class Tag(ModelHelper, Base):
         if tag := session.query(Tag).filter_by(name=name).one_or_none():
             return tag.id
         raise UnknownTag(f'No Tag with name={name}')
-
-    @classmethod
-    @cachetools.cached(cache=get_name_by_id_cache, key=get_name_by_id_key)
-    def get_name_by_id(cls, session: Session, id_: int) -> str:
-        """Returns a Tag's name, if a Tag matches the provided ID.
-
-        @raise UnknownTag: If no Tag matches the provided ID."""
-        if tag := session.query(Tag).filter_by(id=id_).one_or_none():
-            return tag.id
-        raise UnknownTag(f'No Tag with id={id_}')
 
     @classmethod
     def invalidate_cache(cls):

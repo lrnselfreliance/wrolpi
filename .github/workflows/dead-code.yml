@@ -1,0 +1,34 @@
+name: Dead Code
+
+# Same triggers as backend.yml: `pull_request` is unfiltered so pull requests into feature branches
+# are checked too, not only those into master.
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Fails when vulture finds dead code that is not in scripts/vulture_baseline.txt.  vulture only
+  # parses the source, so WROLPi's requirements are not installed.
+  vulture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          # Trixie ships 3.13.
+          python-version: '3.13'
+
+      # Pinned: a new vulture release can report findings the baseline does not know about.
+      - name: Install vulture
+        run: pip install vulture==2.16
+
+      - name: Check for new dead code
+        run: python scripts/check_dead_code.py

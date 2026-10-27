@@ -684,14 +684,29 @@ class ChannelDownloader(Downloader, ABC):
         # Prefer ctx.extract_info when provided so tests can inject a fake without
         # patching the module-level function.  Falls back to the global for back-compat.
         _extract = ctx.extract_info if ctx.extract_info else extract_info
-        try:
-            info = _extract(prepared.url, process=False)
-        except Exception as e:
-            if _bot_blocked(e):
-                raise BotBlockedDownloadError(str(e)) from e
-            raise
+        url = prepared.url
+        visited_urls = set()
+        # Follow a limited number of redirects.  If none resolves, the "entries" check below rejects the URL.
+        for _ in range(10):
+            visited_urls.add(url)
+            try:
+                info = _extract(url, process=False)
+            except Exception as e:
+                if _bot_blocked(e):
+                    raise BotBlockedDownloadError(str(e)) from e
+                raise
+            # yt-dlp redirects a video URL which names a playlist (watch?v=...&list=...) to the playlist.
+            next_url = info.get('url') if info.get('_type') == 'url' else None
+            if not next_url or next_url in visited_urls:
+                break
+            logger.info(f'Following {url} to {next_url}')
+            url = next_url
         # Resolve the "entries" generator.
         info: dict = resolve_generators(info)
+        if 'entries' not in info:
+            # Not a channel or playlist.  A Channel created from this would be named after the URL (e.g. "watch").
+            raise UnrecoverableDownloadError(f'Unable to download {prepared.url} because it is not a channel or'
+                                             f' playlist.')
         entries = info.get('entries')
         if entries and isinstance(entries[0], Dict) and entries[0].get('entries'):
             # Entries contains more channels/playlist, tell the Maintainer to specify the URL.

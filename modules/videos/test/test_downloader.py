@@ -769,6 +769,100 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
     }
 
 
+# yt-dlp's response to a video URL that names a playlist (watch?v=...&list=...).  It is a redirect to the playlist,
+# not the playlist itself; it has no entries and no uploader.
+example_playlist_redirect_json = {
+    '_type': 'url',
+    'ie_key': 'YoutubeTab',
+    'id': 'the playlist id',
+    'title': 'some title',
+    'url': 'https://www.youtube.com/playlist?list=the_playlist_id',
+    'webpage_url': 'https://www.youtube.com/watch?v=video_1_url&list=the_playlist_id',
+    'original_url': 'https://www.youtube.com/watch?v=video_1_url&list=the_playlist_id',
+    'webpage_url_basename': 'watch',
+    'webpage_url_domain': 'youtube.com',
+    'extractor': 'youtube:tab',
+    'extractor_key': 'YoutubeTab',
+}
+
+
+@pytest.mark.asyncio
+async def test_download_playlist_from_video_url(test_session, test_directory, mock_video_extract_info,
+                                                video_download_manager):
+    """A video URL which names a playlist downloads the playlist yt-dlp redirects to."""
+    playlist_url = example_playlist_redirect_json['url']
+    playlist_json = {**example_playlist_json, 'channel_url': 'https://www.youtube.com/channel/the_channel_id'}
+    mock_video_extract_info.side_effect = lambda url, *a, **kw: \
+        playlist_json if url == playlist_url else example_playlist_redirect_json
+
+    download = Download(url=example_playlist_redirect_json['webpage_url'])
+    test_session.add(download)
+    test_session.commit()
+
+    from modules.archive.conftest import make_test_ctx
+    prepared = channel_downloader.prepare_download(test_session, download)
+    executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+    result = channel_downloader.finalize_download(test_session, download, executed)
+    assert result.success is True, 'Download was not successful'
+    assert set(result.downloads) == {
+        'https://www.youtube.com/watch?v=video_1_url',
+        'https://www.youtube.com/watch?v=video_2_url',
+        'https://youtube.com/watch?v=video_3_url',
+    }
+    assert [i.args[0] for i in mock_video_extract_info.call_args_list] == [download.url, playlist_url]
+
+    # The Channel is named after the playlist's uploader, not the URL.
+    channel, = test_session.query(Channel).all()
+    assert channel.name == 'Playlist Uploader'
+
+
+@pytest.mark.asyncio
+async def test_channel_download_without_entries_creates_no_channel(test_session, test_directory,
+                                                                  mock_video_extract_info, video_download_manager):
+    """yt-dlp info without entries is not a channel or playlist, so no Channel is created from it (it would be named
+    after the URL, like "watch")."""
+    # The redirect is never resolved to a playlist.
+    mock_video_extract_info.return_value = example_playlist_redirect_json
+
+    download = Download(url=example_playlist_redirect_json['webpage_url'])
+    test_session.add(download)
+    test_session.commit()
+
+    from modules.archive.conftest import make_test_ctx
+    prepared = channel_downloader.prepare_download(test_session, download)
+    with pytest.raises(UnrecoverableDownloadError):
+        await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+
+    assert test_session.query(Channel).count() == 0
+    assert not list(test_directory.rglob('watch'))
+
+
+@pytest.mark.asyncio
+async def test_channel_download_redirects_are_limited(test_session, test_directory, mock_video_extract_info,
+                                                      video_download_manager):
+    """A chain of redirects which never reaches a channel or playlist is not followed forever."""
+    redirect_count = 0
+
+    def endless_redirect(url, *a, **kw):
+        nonlocal redirect_count
+        redirect_count += 1
+        return {**example_playlist_redirect_json, 'url': f'https://www.youtube.com/playlist?list={redirect_count}'}
+
+    mock_video_extract_info.side_effect = endless_redirect
+
+    download = Download(url=example_playlist_redirect_json['webpage_url'])
+    test_session.add(download)
+    test_session.commit()
+
+    from modules.archive.conftest import make_test_ctx
+    prepared = channel_downloader.prepare_download(test_session, download)
+    with pytest.raises(UnrecoverableDownloadError):
+        await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+
+    assert mock_video_extract_info.call_count == 10
+    assert test_session.query(Channel).count() == 0
+
+
 def test_get_missing_videos_views_order(test_session):
     """The 'views' download order sorts videos most-viewed-first.  Entries missing a `view_count`
     (some listings omit it) sort last rather than raising a KeyError."""

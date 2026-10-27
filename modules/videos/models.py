@@ -454,19 +454,6 @@ class Video(ModelHelper, Base):
 
         return self.ffprobe_json
 
-    def get_streams_by_codec_name(self, codec_name: str) -> List[dict]:
-        """Return all data about all streams which match the codec_name.
-
-        >>> video = Video()
-        >>> video.get_streams_by_codec_name('h264')
-        [ {'codec_name': 'h264', ...} ]
-        """
-        if not self.ffprobe_json:
-            raise RuntimeError(f'ffprobe data has not been extracted, call Video.get_ffprobe_json().')
-
-        streams = [i for i in self.ffprobe_json['streams'] if i['codec_name'] == codec_name]
-        return streams
-
     def get_streams_by_codec_type(self, codec_type: str) -> List[dict]:
         """Return all data about all streams which match the codec_type.
 

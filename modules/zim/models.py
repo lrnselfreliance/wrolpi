@@ -3,7 +3,7 @@ import functools
 import pathlib
 from collections import OrderedDict
 from datetime import datetime
-from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional, Set
+from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional
 
 from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean, UniqueConstraint
@@ -42,20 +42,6 @@ class ZimMetadata:
             name=self.name,
             publisher=self.publisher,
             tags=self.tags,
-            title=self.title,
-        )
-        return d
-
-
-class EntrySummary:
-    zim_id: int
-    path: str
-    title: str
-
-    def __json__(self) -> Dict:
-        d = dict(
-            zim_id=self.zim_id,
-            path=self.path,
             title=self.title,
         )
         return d
@@ -285,38 +271,6 @@ class Zim(Base, ModelHelper):
 
         tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=self.id)
         entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
-        return entries
-
-    @staticmethod
-    def all_entries_with_tags(session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) -> List[Entry]:
-        """Return Zim Entries tagged with the provided names from ALL Zims."""
-        if limit < 1:
-            raise RuntimeError('Limit must be greater than zero')
-
-        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=None)
-        entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
-        return entries
-
-    @functools.cached_property
-    def all_entries(self) -> Set[EntrySummary]:
-        """
-        Iterates over all Entries in the Archive.  Ignores non-article entries (javascript, images, etc).
-        """
-        zim = self.get_zim()
-        zim_id = self.id
-        entry_count = zim.all_entry_count
-        entries = set()
-        for entry_id in range(entry_count):
-            entry: Entry = zim._get_entry_by_id(entry_id)
-            title = entry.title
-            if title.startswith('m/') or title.startswith('-/') or title.startswith('I/'):
-                continue
-
-            summary = EntrySummary()
-            summary.zim_id = zim_id
-            summary.path = entry.path
-            summary.title = title
-            entries.add(summary)
         return entries
 
 

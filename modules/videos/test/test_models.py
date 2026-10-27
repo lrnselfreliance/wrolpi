@@ -16,10 +16,6 @@ async def test_ffprobe_stream_methods(simple_video):
     assert simple_video.get_streams_by_codec_type('audio')
     assert simple_video.get_streams_by_codec_type('subtitle')
 
-    assert simple_video.get_streams_by_codec_name('h264')
-    assert simple_video.get_streams_by_codec_name('aac')
-    assert simple_video.get_streams_by_codec_name('mov_text')
-
 
 @pytest.mark.asyncio
 async def test_channel_move(async_client, test_session, test_directory, channel_factory, video_factory):

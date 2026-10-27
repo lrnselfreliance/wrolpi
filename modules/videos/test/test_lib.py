@@ -1,5 +1,4 @@
 import pathlib
-import shutil
 from http import HTTPStatus
 
 import pytest
@@ -7,11 +6,9 @@ import pytest
 from modules.videos import lib
 from modules.videos.downloader import ChannelDownloader, VideoDownloader
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics, format_videos_destination
-from modules.videos.models import Video, Channel
+from modules.videos.models import Channel
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, RSSDownloader
-from wrolpi.files.models import FileGroup
-from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.mark.parametrize('file_name,expected', [
@@ -183,48 +180,7 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
     assert 'historical' in result['statistics']
 
 
-@pytest.mark.asyncio
-async def test_orphaned_files(async_client, test_session, make_files_structure, test_directory, video_factory,
-                              refresh_files, test_wrolpi_config):
-    # Disable ffprobe json file creation to avoid unexpected files in test assertions
-    get_wrolpi_config().save_ffprobe_json = False
-
-    # A Video without associated files is not orphaned.
-    vid1 = video_factory(title='vid1', with_video_file=True)
-    # The video files will be removed...
-    vid2 = video_factory(title='vid2', with_video_file=True, with_caption_file=True, with_poster_ext='jpeg',
-                         with_info_json=True)
-    vid3 = video_factory(title='vid3', with_video_file=True, with_poster_ext='jpg')
-    # This will be ignored because it is not in the "videos" subdirectory.
-    shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', test_directory / 'vid4.en.vtt')
-    test_session.commit()
-
-    # Remove vid2 video. Caption, poster, info_json are now orphaned.
-    vid2.video_path.unlink()
-    vid2_caption_paths, vid2_poster_path, vid2_info_json_path = vid2.caption_paths, vid2.poster_path, vid2.info_json_path
-    # Remove vid3 video.  Poster is now orphaned.
-    vid3.video_path.unlink()
-    vid3_poster_path = vid3.poster_path
-    await refresh_files()
-    test_session.commit()
-
-    # 6 files when two video files are deleted.
-    # (vid1, vid2[caption,poster,json], vid3 poster, vid4)
-    assert test_session.query(FileGroup).count() == 4
-    assert test_session.query(Video).count() == 1
-
-    videos_directory = test_directory / 'videos'
-    results = lib.find_orphaned_video_files(videos_directory)
-
-    assert sorted(list(results)) == sorted([
-        vid2_caption_paths[0],
-        vid2_info_json_path,
-        vid2_poster_path,
-        vid3_poster_path,
-    ])
-
-
-def test_link_channel_and_downloads(test_session, channel_factory, test_download_manager):
+def test_channel_download_links(test_session, channel_factory, test_download_manager):
     channel = channel_factory(
         url='https://www.youtube.com/c/LearningSelfReliance/videos',
         source_id='UCng5u6ASda3LNRXJN0JCQJA',
@@ -239,15 +195,16 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
     assert test_session.query(Download).count() == 3
     assert not any(i.collection_id for i in test_download_manager.get_downloads(test_session))
 
-    # `link_channel_and_downloads` links Downloads to Collections.
-    lib.link_channel_and_downloads(test_session)
+    # `channel_download_links` links Downloads to Collections.
+    lib._link_downloads(test_session, lib.channel_download_links(test_session))
+    test_session.commit()
     assert test_session.query(Download).count() == 3
     assert all(i.collection_id for i in test_download_manager.get_recurring_downloads(test_session))
     assert not any(i.collection_id for i in test_download_manager.get_once_downloads(test_session))
 
 
 @pytest.mark.asyncio
-def test_link_channel_and_downloads_migration(async_client, test_session, channel_factory, test_download_manager):
+def test_channel_download_links_migration(async_client, test_session, channel_factory, test_download_manager):
     """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
     # A simple Channel which has a download for its URL.
     channel1 = channel_factory(url='https://example.com/channel1')
@@ -269,7 +226,8 @@ def test_link_channel_and_downloads_migration(async_client, test_session, channe
     assert channel2.directory and not channel2.downloads
     assert not channel3.downloads
 
-    lib.link_channel_and_downloads(test_session)
+    lib._link_downloads(test_session, lib.channel_download_links(test_session))
+    test_session.commit()
 
     assert channel1.downloads
     assert channel2.downloads
@@ -288,8 +246,8 @@ def test_link_channel_and_downloads_migration(async_client, test_session, channe
     assert not d2c.collection_id
 
 
-def test_link_channel_and_downloads_destination_column(test_session, channel_factory, test_download_manager):
-    """Test that link_channel_and_downloads matches by download.destination column, not just settings['destination'].
+def test_channel_download_links_destination_column(test_session, channel_factory, test_download_manager):
+    """Test that channel_download_links matches by download.destination column, not just settings['destination'].
 
     This simulates what happens when downloads are imported from config - the destination column is set directly,
     not via settings['destination'].
@@ -309,15 +267,16 @@ def test_link_channel_and_downloads_destination_column(test_session, channel_fac
 
     assert not download.collection_id, 'Download should not be linked yet'
 
-    lib.link_channel_and_downloads(test_session)
+    lib._link_downloads(test_session, lib.channel_download_links(test_session))
+    test_session.commit()
 
     test_session.refresh(download)
     assert download.collection_id == channel.collection_id, \
         'Download should be linked to channel via destination column'
 
 
-def test_link_channel_and_downloads_by_source_id(test_session, channel_factory, test_download_manager):
-    """Test that link_channel_and_downloads matches by info_json channel_id to Channel.source_id.
+def test_channel_download_links_by_source_id(test_session, channel_factory, test_download_manager):
+    """Test that channel_download_links matches by info_json channel_id to Channel.source_id.
 
     When ChannelDownloader runs, it populates download.info_json with channel_id. This should match
     against Channel.source_id even if the URLs don't match.
@@ -337,7 +296,8 @@ def test_link_channel_and_downloads_by_source_id(test_session, channel_factory, 
 
     assert not download.collection_id, 'Download should not be linked yet'
 
-    lib.link_channel_and_downloads(test_session)
+    lib._link_downloads(test_session, lib.channel_download_links(test_session))
+    test_session.commit()
 
     test_session.refresh(download)
     assert download.collection_id == channel.collection_id, \

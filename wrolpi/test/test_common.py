@@ -736,20 +736,6 @@ Another example paragraph
 Paragraph outside an element.'''
 
 
-@pytest.mark.parametrize(
-    'bps,expected', [
-        (100, '100 bps'),
-        (2000, '2 Kbps'),
-        (7777777, '7 Mbps'),
-        (777777777, '777 Mbps'),
-        (7777777777, '7 Gbps'),
-        (77777777777, '77 Gbps'),
-    ]
-)
-def test_human_bandwidth(bps, expected):
-    assert common.human_bandwidth(bps) == expected
-
-
 def test_format_json_file():
     with tempfile.TemporaryDirectory() as d:
         with tempfile.NamedTemporaryFile(suffix='.json', dir=d) as fh:
@@ -788,29 +774,6 @@ def test_format_json_file():
 }'''
             # The copy was deleted.
             assert len(list(file.parent.iterdir())) == 1
-
-
-def test_format_html_file():
-    with tempfile.NamedTemporaryFile() as fh:
-        file = pathlib.Path(fh.name)
-        unformatted = '<html><!--Comment--><head><title>Title</title><body>Body</body></html>'
-        file.write_text(unformatted)
-
-        assert file.read_text() == unformatted
-
-        common.format_html_file(file)
-        assert file.read_text() == '''<html>
- <!--Comment-->
- <head>
-  <title>
-   Title
-  </title>
- </head>
- <body>
-  Body
- </body>
-</html>
-'''
 
 
 @pytest.mark.parametrize(

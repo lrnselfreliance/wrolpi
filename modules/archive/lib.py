@@ -16,7 +16,7 @@ from typing import Optional, Tuple, List, Union, Dict, Set
 from urllib.parse import urlparse
 
 import pytz
-from sqlalchemy import asc, func, BigInteger
+from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Archive, MATCH_DATE, parse_singlefile_saved_date, read_singlefile_header
@@ -58,7 +58,7 @@ def _domain_row(description, directory, tag_name, file_format) -> dict:
 
 class DomainsSection(ConfigSection):
     """domains.yaml's domain Collections, keyed by name.  (Their Downloads are linked after the import, see
-    `link_domain_and_downloads`.)"""
+    `domain_download_links`.)"""
     name = 'domains'
 
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
@@ -860,28 +860,6 @@ def register_archive(session: Session, written: WrittenArchiveFiles) -> Archive:
     return archive
 
 
-async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes,
-                               destination: pathlib.Path = None) -> Archive:
-    """
-    Convert results from ArchiveDownloader into real files.  Create Archive record.
-
-    Thin wrapper around write_archive_files + register_archive that opens its own
-    transaction.  New code (notably the phase-split ArchiveDownloader) should call
-    the helpers directly so the caller controls the session.
-
-    Args:
-        url: The URL that was archived
-        singlefile: The HTML content from SingleFile
-        readability: The readability extraction results
-        screenshot: The screenshot bytes
-        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
-    """
-    written = write_archive_files(url, singlefile, readability, screenshot, destination=destination)
-    with get_db_session(commit=True) as session:
-        archive = register_archive(session, written)
-    return archive
-
-
 def detect_domain_directory(collection: Collection) -> Optional[pathlib.Path]:
     """
     Detect directory for domain collection using format_destination template.
@@ -1041,13 +1019,6 @@ def _link_downloads(session: Session, links: Dict[int, int]):
         for download in session.query(Download).filter(Download.id.in_(ids)):
             download.collection_id = links[download.id]
     session.flush()
-
-
-def link_domain_and_downloads(session: Session):
-    """Associate any Download related to a Domain Collection (see `domain_download_links`)."""
-    if links := domain_download_links(session):
-        _link_downloads(session, links)
-        session.commit()
 
 
 SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')
@@ -1278,17 +1249,6 @@ def get_archive_by_file_group_id(session: Session, file_group_id: int, skip_view
     return archive
 
 
-def delete_archives_by_file_group_ids(*file_group_ids: int, force: bool = False) -> None:
-    """Delete Archives by their FileGroup IDs and all of their files.  Pass force=True to delete
-    even tagged FileGroups (raises FileGroupIsTagged otherwise via FileGroup.delete)."""
-    with get_db_session(commit=True) as session:
-        archives: List[Archive] = list(session.query(Archive).filter(Archive.file_group_id.in_(file_group_ids)))
-        if not archives:
-            raise UnknownArchive(f'Unknown Archives with FileGroup IDs: {", ".join(map(str, file_group_ids))}')
-        for archive in archives:
-            archive.delete(force=force)
-
-
 def archive_strftime(dt: datetime) -> str:
     return dt.strftime('%Y-%m-%d-%H-%M-%S')
 
@@ -1318,43 +1278,6 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
         if SINGLEFILE_HEADER in header:
             return True
     return False
-
-
-def get_domains():
-    """
-    Get all domain collections with their archive statistics.
-
-    This is a thin wrapper around Collection queries that adds archive-specific statistics.
-    Returns a list of dicts with collection id, domain name, url_count, and total size.
-    """
-    with get_db_session() as session:
-        # Query all domain collections with archive statistics in a single query
-        # This uses ORM for better maintainability while keeping performance
-        query = (
-            session.query(
-                Collection.id,
-                Collection.name.label('domain'),
-                func.count(Archive.id).label('url_count'),
-                func.sum(FileGroup.size).cast(BigInteger).label('size')
-            )
-            .outerjoin(Archive, Collection.id == Archive.collection_id)
-            .outerjoin(FileGroup, FileGroup.id == Archive.file_group_id)
-            .filter(Collection.kind == 'domain')
-            .group_by(Collection.id, Collection.name)
-            .order_by(Collection.name)
-        )
-
-        domains = [
-            {
-                'id': row.id,
-                'domain': row.domain,
-                'url_count': row.url_count or 0,
-                'size': row.size or 0,
-            }
-            for row in query.all()
-        ]
-
-        return domains
 
 
 ARCHIVE_ORDERS = {

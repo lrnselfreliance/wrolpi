@@ -2594,21 +2594,6 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
 download_logger = logger.getChild('download')
 
 
-def human_bandwidth(bps: int) -> str:
-    """Convert bits per second to a more readable format.
-
-    >>> human_bandwidth(2000)
-    # '2 Kbps'
-    """
-    units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
-    unit = 0
-    while bps > 1000 and unit <= len(units):
-        bps /= 1000
-        unit += 1
-
-    return f'{int(bps)} {units[unit]}'
-
-
 modelers = []
 
 
@@ -3240,15 +3225,6 @@ def format_html_string(html: str | bytes) -> str:
 
     soup = BeautifulSoup(html, features='lxml')
     return soup.prettify()
-
-
-def format_html_file(file: pathlib.Path):
-    """Reformat the contents of an HTML file to include indentation to increase readability."""
-    if not file or not file.is_file():
-        raise RuntimeError(f'File does not exist: {file}')
-
-    pretty = format_html_string(file.read_text())
-    replace_file(file, pretty)
 
 
 def html_file_screenshot(path: pathlib.Path | str) -> bytes:

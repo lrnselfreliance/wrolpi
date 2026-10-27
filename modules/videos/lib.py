@@ -1,12 +1,11 @@
 import contextlib
 import dataclasses
 import html
-import json
 import pathlib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Generator, Type, List, Set
+from typing import Dict, Type, List, Set
 from typing import Tuple, Optional
 
 import pytz
@@ -23,9 +22,8 @@ from wrolpi.collections.models import validate_collection_directory
 from wrolpi.config_import import ConfigSection, Unreadable, chunks, media_relative
 from wrolpi.config_version import register_ownership
 from wrolpi.dates import from_timestamp
-from wrolpi.db import get_db_curs, get_db_session, session_curs
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.downloader import Download, download_manager, save_downloads_config
-from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
@@ -1113,13 +1111,6 @@ def _link_downloads(session: Session, links: Dict[int, int]):
     session.flush()
 
 
-def link_channel_and_downloads(session: Session):
-    """Associate any Download related to a Channel via its Collection (see `channel_download_links`)."""
-    if links := channel_download_links(session):
-        _link_downloads(session, links)
-        session.commit()
-
-
 YDL = YoutubeDL(dict(cachedir=YTDLP_CACHE_DIR))
 ydl_logger = YDL.params['logger'] = logger.getChild('youtube-dl')
 YDL.add_default_info_extractors()
@@ -1317,43 +1308,6 @@ def get_video_metadata(video) -> dict:
         'source_id': source_id,
         'title': title,
     }
-
-
-def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path, None, None]:
-    """Finds all files which should be associated with a video file, but a video file does not match their stem.
-
-    Example:
-        video1.mp4, video1.info.json  # Video file with info json.
-        video2.info.json  # Orphaned video json.
-    """
-    with get_db_curs() as curs:
-        if not directory.is_dir():
-            raise UnknownDirectory()
-
-        directory_str = str(directory).rstrip('/')
-
-        # Query returns directory and files - files may contain relative or absolute paths
-        # Use indexed directory column for efficient lookup
-        # (Not parameterized, so `%` needs no escaping.)
-        curs.execute(f'''
-            SELECT directory, files
-            FROM file_group
-            WHERE
-                mimetype NOT LIKE 'video%'
-                AND (directory = '{directory_str}' OR directory LIKE '{directory_str}/%')
-        ''')
-        for row in curs.fetchall():
-            fg_directory = pathlib.Path(row[0]) if row[0] else None
-            files = row[1]
-            if isinstance(files, str):
-                # Raw cursor reads return the JSON column as TEXT.
-                files = json.loads(files)
-            for file_info in files:
-                path = pathlib.Path(file_info['path'])
-                if not path.is_absolute() and fg_directory:
-                    # Resolve relative path using directory
-                    path = fg_directory / path
-                yield path
 
 
 def format_videos_destination(channel_name: str = None, channel_tag: str = None, channel_url: str = None) \

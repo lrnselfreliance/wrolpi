@@ -471,3 +471,28 @@ async def test_import_unreadable_items_keeps_items(test_session, test_directory,
     test_session.expire_all()
     collection = test_session.query(Collection).filter_by(kind='playlist').one()
     assert len(collection.items) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('directory', ['../outside', 'playlists/../../outside', '/outside'])
+async def test_import_skips_directory_outside_media(test_session, test_directory, playlists_config, directory):
+    """A playlist directory outside the media directory is skipped (counted); the playlist keeps its directory."""
+    collection = _make_playlist(test_session)
+    collection.directory = test_directory / 'playlists/survives'
+    test_session.commit()
+
+    file = playlists_config.get_file()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(yaml.dump(dict(version=1, playlists=[
+        dict(name='Survives', directory=directory, items=[dict(url='/map?lat=1&lon=2&z=3', title='spot')]),
+        dict(name='Outside', directory=directory),
+    ])))
+
+    config_was_imported(test_session, 'playlists.yaml')
+    playlists_config.import_config()
+
+    assert playlists_config.import_skipped == 2
+    test_session.expire_all()
+    playlists = {i.name: i for i in test_session.query(Collection).filter_by(kind='playlist')}
+    assert set(playlists) == {'Survives'}
+    assert playlists['Survives'].directory == test_directory / 'playlists/survives'

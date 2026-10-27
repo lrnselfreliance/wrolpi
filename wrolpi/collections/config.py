@@ -38,6 +38,7 @@ class PlaylistsSection(ConfigSection):
     name = 'playlists'
 
     def file_rows(self, config: dict) -> Tuple[Dict[str, dict], Set[str]]:
+        from .models import validate_collection_directory
         rows, invalid = dict(), set()
         for position, data in enumerate(config.get('playlists') or []):
             name = _playlist_name(data)
@@ -49,8 +50,9 @@ class PlaylistsSection(ConfigSection):
             try:
                 rows[name] = dict(
                     description=data.get('description') or None,
-                    # Optional custom directory (media-relative); None when not customized.
-                    directory=media_relative(data['directory']) if data.get('directory') else None,
+                    # Optional custom directory (media-relative, inside the media directory); None when not customized.
+                    directory=media_relative(validate_collection_directory(data['directory']))
+                    if data.get('directory') else None,
                     tag_name=data.get('tag_name') or None,
                 )
             except Exception as e:

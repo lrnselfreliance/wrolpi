@@ -216,8 +216,3 @@ def date_range_to_where(wheres: list, params: dict, from_year: int, to_year: int
         params['to_year'] = to_year
 
     return wheres, params
-
-
-def ci_canary_dead_function():
-    """Temporary: proves the Dead Code check fails.  Reverted in the next commit."""
-    return 1

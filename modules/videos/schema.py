@@ -56,27 +56,6 @@ class ChannelTagInfoRequest:
 
 
 @dataclass
-class ChannelDownloadRequest:
-    url: str
-    frequency: int
-    settings: dict = field(default_factory=dict)
-
-    def __post_init__(self):
-        self.url = self.url.strip()
-        if not self.url:
-            raise ValidationError('url cannot be empty')
-
-        # Validate settings contents. Remove empty values.
-        from wrolpi.schema import DownloadSettings
-        self.settings = {k: v for k, v in DownloadSettings(**self.settings).__dict__.items() if v not in ([], None)}
-
-
-@dataclass
-class RefreshRequest:
-    channel_name: str
-
-
-@dataclass
 class ChannelModel:
     id: int
     url: str
@@ -103,12 +82,6 @@ class ChannelsChannelModel:
 @dataclass
 class ChannelsResponse:
     channels: List[ChannelsChannelModel]
-
-
-@dataclass
-class StreamResponse:
-    success: str
-    stream_url: str
 
 
 @dataclass
@@ -211,19 +184,9 @@ class VideoSearchResponse:
 
 
 @dataclass
-class PaginationQuery:
-    offset: int
-
-
-@dataclass
 class TagRequest:
     video_id: int
     tag_name: str
-
-
-@dataclass
-class WROLModeRequest:
-    enabled: bool
 
 
 @dataclass
@@ -250,17 +213,6 @@ class ChannelStatistics:
 class VideosStatisticsResponse:
     videos = VideoStatistics
     channels = ChannelStatistics
-
-
-@dataclass
-class CensoredVideoRequest:
-    limit: int
-    offset: int
-
-
-@dataclass
-class CensoredVideoResponse:
-    videos: List[VideoWithChannel]
 
 
 @dataclass

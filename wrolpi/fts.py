@@ -24,7 +24,6 @@ from typing import List, Optional, Tuple
 
 from wrolpi.schema_ddl import execute_sql
 
-FILE_GROUP_FTS_COLUMNS = ('a_text', 'b_text', 'c_text', 'd_text')
 # The fast (non-deep) path searches these columns only.
 ABC_COLUMNS = ('a_text', 'b_text', 'c_text')
 
@@ -338,12 +337,6 @@ def rebuild_fts(conn):
     `conn` may be a SQLAlchemy Connection, a raw `sqlite3.Connection`, or a cursor."""
     execute_sql(conn, "INSERT INTO file_group_fts(file_group_fts) VALUES('rebuild')")
     execute_sql(conn, "INSERT INTO doc_section_fts(doc_section_fts) VALUES('rebuild')")
-
-
-def optimize_fts(curs):
-    """Merge FTS5 b-trees for faster queries; call after large refreshes."""
-    curs.execute("INSERT INTO file_group_fts(file_group_fts) VALUES('optimize')")
-    curs.execute("INSERT INTO doc_section_fts(doc_section_fts) VALUES('optimize')")
 
 
 def fts_integrity_ok(curs) -> bool:

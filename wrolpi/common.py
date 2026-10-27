@@ -12,7 +12,6 @@ import pathlib
 import re
 import shutil
 import socket
-import string
 import sys
 import tempfile
 from asyncio import Task
@@ -406,9 +405,6 @@ class ModelHelper:
             session.flush([self])
         else:
             raise RuntimeError(f'{self} is not in a session!')
-
-
-URL_CHARS = string.ascii_lowercase + string.digits
 
 
 def find_file(directory: pathlib.Path, name: str, depth=1) -> Optional[pathlib.Path]:

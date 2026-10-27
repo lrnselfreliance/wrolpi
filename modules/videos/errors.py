@@ -15,12 +15,6 @@ class UnknownChannel(APIError):
     status_code = HTTPStatus.NOT_FOUND
 
 
-class InvalidChannel(APIError):
-    code = 'INVALID_CHANNEL'
-    summary = 'The channel is not supported'
-    status_code = HTTPStatus.BAD_REQUEST
-
-
 class ChannelNameConflict(APIError):
     code = 'CHANNEL_NAME_CONFLICT'
     summary = 'The channel name is already taken.'
@@ -42,10 +36,4 @@ class ChannelDirectoryConflict(APIError):
 class ChannelSourceIdConflict(APIError):
     code = 'CHANNEL_SOURCE_ID_CONFLICT'
     summary = 'Search is empty, search_str must have content.'
-    status_code = HTTPStatus.BAD_REQUEST
-
-
-class ChannelURLEmpty(APIError):
-    code = 'CHANNEL_URL_EMPTY'
-    summary = 'This channel has no URL'
     status_code = HTTPStatus.BAD_REQUEST

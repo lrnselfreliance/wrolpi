@@ -26,7 +26,6 @@ from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER, get_url
     SinglefileArtifacts, WrittenArchiveFiles, extract_singlefile_artifacts, register_archive, write_archive_files
 from .models import Archive
 
-PRETTY_NAME = 'Archive'
 
 logger = logger.getChild(__name__)
 

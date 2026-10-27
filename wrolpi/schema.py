@@ -8,11 +8,6 @@ from wrolpi.errors import InvalidDownload, ValidationError
 
 
 @dataclass
-class SettingsObject:
-    media_directory: str
-
-
-@dataclass
 class SettingsResponse:
     download_manager_disabled: bool
     download_manager_stopped: bool
@@ -176,32 +171,6 @@ class MemoryStatusStat:
     used: int
     free: int
     cached: int
-
-
-@dataclass
-class NicBandwidthStatusStat:
-    name: str
-    now: float
-    bytes_recv: int
-    bytes_sent: int
-    speed: int
-    bytes_recv_ps: int
-    bytes_sent_ps: int
-    elapsed: int
-
-
-@dataclass
-class DiskBandwidthStatusStat:
-    bytes_read: int
-    bytes_read_ps: int
-    bytes_write: int
-    bytes_write_ps: int
-    elapsed: int
-    max_read_ps: int
-    max_write_ps: int
-    name: str
-    now: float
-    speed: int
 
 
 @dataclass
@@ -430,11 +399,6 @@ class EventsRequest:
 class TagRequest:
     name: str
     color: str
-
-
-@dataclass
-class DeleteTagRequest:
-    name: str
 
 
 @dataclass

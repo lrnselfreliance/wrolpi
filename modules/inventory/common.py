@@ -5,14 +5,12 @@ All files are loaded into one shared, cross-worker dict keyed by slug.  Unit mat
 frontend (mathjs), so this module treats item field values as opaque strings/numbers.
 """
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import List, Optional
 
 from wrolpi.common import logger, MultiFileConfig, read_config_data
 from wrolpi.errors import ValidationError
 from .defaults import (DEFAULT_INVENTORIES, FIELD_TYPES, default_fields, slugify)
 
-MY_DIR: Path = Path(__file__).parent
 
 logger = logger.getChild(__name__)
 

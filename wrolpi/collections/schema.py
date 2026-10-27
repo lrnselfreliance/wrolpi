@@ -148,16 +148,6 @@ class ReorganizationStatusResponse:
 
 
 @dataclass
-class BatchCollectionInfo:
-    """Info about a single collection in batch reorganization."""
-    collection_id: int
-    collection_name: str
-    total_files: int
-    files_needing_move: int
-    sample_move: Optional[dict] = None
-
-
-@dataclass
 class BatchReorganizationListResponse:
     """Response for listing collections needing batch reorganization."""
     collections: List[dict]
@@ -172,17 +162,6 @@ class BatchReorganizationExecuteResponse:
     batch_job_id: str
     message: str
     collection_count: int
-
-
-@dataclass
-class BatchCollectionProgress:
-    """Progress info for a single collection in batch reorganization."""
-    id: int
-    name: str
-    status: str
-    total: int = 0
-    completed: int = 0
-    percent: int = 0
 
 
 @dataclass

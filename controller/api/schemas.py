@@ -82,22 +82,6 @@ class DriveStatusResponse(BaseModel):
     free_gb: float = Field(description="Free space in GB")
 
 
-class PrimaryDriveStatusResponse(BaseModel):
-    """Response model for /api/stats/drives/primary endpoint."""
-
-    mounted: bool = Field(description="Whether the primary drive is mounted")
-    device: Optional[str] = Field(default=None, description="Device path")
-    mount_point: Optional[str] = Field(default=None, description="Mount point path")
-    fstype: Optional[str] = Field(default=None, description="Filesystem type")
-    total_bytes: Optional[int] = Field(default=None, description="Total space in bytes")
-    used_bytes: Optional[int] = Field(default=None, description="Used space in bytes")
-    free_bytes: Optional[int] = Field(default=None, description="Free space in bytes")
-    percent: Optional[float] = Field(default=None, description="Usage percentage")
-    total_gb: Optional[float] = Field(default=None, description="Total space in GB")
-    used_gb: Optional[float] = Field(default=None, description="Used space in GB")
-    free_gb: Optional[float] = Field(default=None, description="Free space in GB")
-
-
 # ============================================================================
 # Status - Network
 # ============================================================================
@@ -131,17 +115,6 @@ class PowerStatusResponse(BaseModel):
 # ============================================================================
 # Status - Full
 # ============================================================================
-
-class FullStatusResponse(BaseModel):
-    """Response model for /api/stats endpoint."""
-
-    cpu: CpuStatusResponse = Field(description="CPU status")
-    memory: MemoryStatusResponse = Field(description="Memory status")
-    load: LoadStatusResponse = Field(description="System load")
-    drives: list[DriveStatusResponse] = Field(description="All mounted drives")
-    primary_drive: Optional[DriveStatusResponse] = Field(default=None, description="Primary WROLPi drive")
-    network: list[NetworkInterfaceResponse] = Field(description="Network interfaces")
-    power: PowerStatusResponse = Field(description="Power status")
 
 
 # ============================================================================

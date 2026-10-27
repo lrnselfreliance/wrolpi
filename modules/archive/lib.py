@@ -30,7 +30,7 @@ from wrolpi.common import get_media_directory, get_relative_to_media_directory, 
 from wrolpi.collections.models import validate_collection_directory
 from wrolpi.config_import import ConfigSection, Unreadable, media_relative
 from wrolpi.dates import now, Seconds
-from wrolpi.db import get_db_session, get_db_curs, session_curs
+from wrolpi.db import get_db_session, session_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
 from wrolpi.files.lib import handle_file_group_search_results, cached_search_total, \
@@ -1355,50 +1355,6 @@ def get_domains():
         ]
 
         return domains
-
-
-def get_domain(domain_id: int) -> dict:
-    """
-    Get a single domain collection by ID with its archive statistics.
-
-    Returns a dict with collection details including id, domain name, url_count, size,
-    tag_name, directory (relative to media directory), and description.
-
-    Raises UnknownArchive if domain not found.
-    """
-    # Get the collection using find_by_id
-    with get_db_session() as session:
-        try:
-            collection = Collection.find_by_id(session, domain_id)
-        except Exception:
-            # Collection.find_by_id raises UnknownCollection, but we want UnknownArchive
-            raise UnknownArchive(f"Domain collection with ID {domain_id} not found")
-
-        if collection.kind != 'domain':
-            raise UnknownArchive(f"Collection {domain_id} is not a domain")
-
-        # Get base domain data from __json__()
-        domain_data = collection.__json__()
-
-    # Get archive statistics for this domain
-    with get_db_curs() as curs:
-        stmt = '''
-               SELECT COUNT(a.id) AS url_count, SUM(fg.size) AS size
-               FROM archive a
-                        LEFT JOIN file_group fg on fg.id = a.file_group_id
-               WHERE a.collection_id = :domain_id
-               '''
-        curs.execute(stmt, {'domain_id': domain_id})
-        stats = dict(curs.fetchone())
-
-    # Enhance with archive stats
-    domain_data['url_count'] = stats['url_count'] or 0
-    domain_data['size'] = stats['size'] or 0
-
-    # Use 'domain' key for domain collections instead of 'name'
-    domain_data['domain'] = domain_data.pop('name')
-
-    return domain_data
 
 
 ARCHIVE_ORDERS = {

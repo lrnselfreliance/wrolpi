@@ -411,7 +411,7 @@ class FileReorganizeMixin:
                             # Wait for the reorganization job to complete
                             # Poll for completion while updating batch status
                             await self._wait_for_sub_job_with_progress(
-                                job_id, batch_status, collection_id, collection_name, idx, total_collections
+                                job_id, batch_status, collection_id, collection_name, total_collections
                             )
 
                         # Mark this collection as completed
@@ -488,7 +488,6 @@ class FileReorganizeMixin:
             batch_status: dict,
             collection_id: int,
             collection_name: str,
-            collection_idx: int,
             total_collections: int,
     ):
         """Wait for a sub-job to complete while updating batch progress.

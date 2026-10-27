@@ -22,7 +22,7 @@ from wrolpi.collections import Collection
 from wrolpi.collections.models import validate_collection_directory
 from wrolpi.config_import import ConfigSection, Unreadable, chunks, media_relative
 from wrolpi.config_version import register_ownership
-from wrolpi.dates import Seconds, from_timestamp
+from wrolpi.dates import from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, session_curs
 from wrolpi.downloader import Download, download_manager, save_downloads_config
 from wrolpi.errors import UnknownDirectory
@@ -32,7 +32,7 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import Tag, unknown_tag_names
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
-    generate_video_poster, ConfigError, \
+    generate_video_poster, \
     extract_video_duration, ffprobe_json_sync, read_ffprobe_json_file, write_ffprobe_json_file
 from .cookies import cookies_unlocked, cookies_for_download
 from .errors import UnknownChannel
@@ -40,9 +40,6 @@ from .models import Channel
 
 logger = logger.getChild(__name__)
 
-DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
-
-REQUIRED_OPTIONS = ['name', 'directory']
 
 @dataclasses.dataclass
 class VideoInfoJSON:

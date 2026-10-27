@@ -377,12 +377,6 @@ def _find_args_for_roots(roots: list[Path]) -> list[str]:
     return find_args
 
 
-async def _stream_filesystem_paths(root: Path | list[Path]) -> AsyncGenerator[str, None]:
-    """Stream file paths using find. Kept for tests that patch this generator."""
-    async for directory, filename, stem, mtime in _stream_filesystem_entries(root):
-        yield str(Path(directory) / filename)
-
-
 def _split_nul_field_triples(buf: bytes) -> Tuple[list, bytes]:
     """Pull complete NUL-separated (directory, filename, mtime) triples out of `buf`.
 

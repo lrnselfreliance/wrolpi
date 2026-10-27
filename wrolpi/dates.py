@@ -7,7 +7,6 @@ import pytz
 from sqlalchemy import types
 
 from wrolpi.errors import InvalidDatetime
-from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +118,6 @@ def strpdate(dt: str) -> datetime:
         return datetime.fromisoformat(dt)
     except Exception as e:
         raise InvalidDatetime(f'Unable to parse datetime string: {dt}') from e
-
-
-def strftime_ms(dt: datetime) -> str:
-    return dt.strftime(DATETIME_FORMAT_MS)
 
 
 def strptime_ms(dt: str) -> datetime:

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, relationship, Session, joinedload, selectinlo
 from wrolpi import flags
 from wrolpi.common import loaded, Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate, TRACE_LEVEL
-from wrolpi.config_version import collection_kinds, count_config_change, register_ownership
+from wrolpi.config_version import collection_kinds, register_ownership
 from wrolpi.db import serializer
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
@@ -717,73 +717,6 @@ class Collection(ModelHelper, Base):
 
             # Shift remaining items down
             self._shift_positions(session, position + 1, shift_by=-1)
-
-    def remove_file_groups(self, session: Session, file_group_ids: List[int]):
-        """
-        Remove multiple FileGroups from this Collection in batch.
-        More efficient than calling remove_file_group in a loop.
-
-        Args:
-            session: Database session
-            file_group_ids: List of FileGroup IDs to remove
-        """
-
-        if not file_group_ids:
-            return
-
-        # Delete all items at once
-        deleted = session.query(CollectionItem).filter(
-            CollectionItem.collection_id == self.id,
-            CollectionItem.file_group_id.in_(file_group_ids)
-        ).delete(synchronize_session=False)
-
-        logger.debug(f'Removed {deleted} FileGroups from Collection {self.id}')
-        if deleted and self.kind == 'playlist':
-            # A bulk delete is not flushed: count it.
-            count_config_change(session, 'playlists.yaml')
-
-        # Resequence positions to close gaps (optional, but keeps positions clean)
-        items = session.query(CollectionItem).filter_by(
-            collection_id=self.id
-        ).order_by(CollectionItem.position).all()
-
-        for idx, item in enumerate(items, start=1):
-            item.position = idx
-
-        session.flush(items)
-
-    def reorder_item(self, file_group_id: int, new_position: int, session: Session = None):
-        """Move an item to a new position in the collection."""
-        session = session or Session.object_session(self)
-
-        item = session.query(CollectionItem).filter_by(
-            collection_id=self.id,
-            file_group_id=file_group_id
-        ).first()
-
-        if not item:
-            raise ValueError(f'FileGroup {file_group_id} not in Collection {self.id}')
-
-        old_position = item.position
-
-        if old_position == new_position:
-            return
-
-        # Remove item from old position
-        session.query(CollectionItem).filter(
-            CollectionItem.collection_id == self.id,
-            CollectionItem.position > old_position
-        ).update({'position': CollectionItem.position - 1})
-
-        # Make space at new position
-        session.query(CollectionItem).filter(
-            CollectionItem.collection_id == self.id,
-            CollectionItem.position >= new_position
-        ).update({'position': CollectionItem.position + 1})
-
-        # Update item position
-        item.position = new_position
-        session.flush()
 
     def _shift_positions(self, session: Session, from_position: int, shift_by: int):
         """Helper to shift positions of items."""

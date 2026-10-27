@@ -17,10 +17,6 @@ class Events:
         send_event('global_refresh_started', message, subject='refresh')
 
     @staticmethod
-    def send_refresh_completed(message: str = None):
-        send_event('refresh_completed', message, subject='refresh')
-
-    @staticmethod
     def send_global_refresh_modeling_completed(message: str = None):
         send_event('global_refresh_modeling_completed', message, subject='refresh')
 
@@ -65,14 +61,6 @@ class Events:
         send_event('created', message, subject='created')
 
     @staticmethod
-    def send_map_import_complete(message: str = None):
-        send_event('map_import_complete', message, subject='map')
-
-    @staticmethod
-    def send_map_import_failed(message: str = None):
-        send_event('map_import_failed', message, subject='map')
-
-    @staticmethod
     def send_map_search_complete(message: str = None):
         send_event('map_search_complete', message, subject='map')
 
@@ -83,14 +71,6 @@ class Events:
     @staticmethod
     def send_tippecanoe_missing(message: str = None):
         send_event('tippecanoe_missing', message, subject='map')
-
-    @staticmethod
-    def send_shutdown(message: str = None):
-        send_event('shutdown', message, subject='shutdown')
-
-    @staticmethod
-    def send_shutdown_failed(message: str = None):
-        send_event('shutdown_failed', message, subject='shutdown')
 
     @staticmethod
     def send_file_move_completed(message: str = None):

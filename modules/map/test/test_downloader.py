@@ -281,3 +281,42 @@ def test_search_index_finalize_error(test_session):
 
     assert result.success is False
     assert '500' in (result.error or '')
+
+
+def test_catalog_finalize_replaces_stale_extract_download(test_session, test_directory, test_download_manager,
+                                                          monkeypatch):
+    """A new manifest version replaces the region's old extract Download (found by its settings' region)."""
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: test_directory / 'maps')
+    test_session.add(Download(url='https://x/us-2024-01.pmtiles', downloader='map_extract',
+                              settings={'region': 'us', 'version': '2024-01'}))
+    test_session.commit()
+
+    download = Download(url='https://x/manifest.json', downloader='map_catalog')
+    executed = ExecutedMapCatalog(
+        manifest={'regions': {'us': 'https://x/us-2024-02.pmtiles'}, 'version': '2024-02'},
+        subscribed_regions=[{'region': 'us'}],
+    )
+    result = map_catalog_downloader.finalize_download(test_session, download, executed)
+    assert result.success is True, result.error
+
+    downloads = test_session.query(Download).filter_by(downloader='map_extract').all()
+    assert [(i.url, i.settings['version']) for i in downloads] == [('https://x/us-2024-02.pmtiles', '2024-02')]
+
+
+@pytest.mark.parametrize('has_search_download', [True, False])
+def test_extract_finalize_builds_search_index(test_session, test_directory, has_search_download):
+    """The search index is built locally unless a search index Download exists for the region."""
+    if has_search_download:
+        test_session.add(Download(url='https://x/us.search.db', downloader='map_search_index',
+                                  settings={'region': 'us', 'pmtiles_name': 'us-2024-01.pmtiles'}))
+        test_session.commit()
+    download = Download(url='https://x/us.pmtiles', downloader='map_extract')
+    executed = ExecutedMapExtract(
+        region='us', output_path=test_directory / 'us-2024-01.pmtiles', map_directory=test_directory,
+    )
+
+    with mock.patch('modules.map.search.rebuild_search_index') as rebuild:
+        result = map_extract_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is True
+    assert rebuild.called is not has_search_download

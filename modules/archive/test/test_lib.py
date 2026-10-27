@@ -17,7 +17,7 @@ from modules.archive.lib import ArchiveDownloaderConfigValidator
 from modules.archive.lib import format_archive_filename
 from modules.archive.lib import get_archive_downloader_config
 from modules.archive.lib import get_or_create_domain_collection, get_new_archive_files, \
-    delete_archives_by_file_group_ids, model_archive_result, get_domains
+    write_archive_files, register_archive, domain_download_links, _link_downloads
 from modules.archive.models import Archive
 from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.cmd import CommandResult
@@ -27,6 +27,15 @@ from wrolpi.db import get_db_session
 from wrolpi.files.lib import count_file_groups
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_ci
+
+
+async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes,
+                               destination: pathlib.Path = None) -> Archive:
+    """Write the ArchiveDownloader results to files and register the Archive, like the downloader does."""
+    written = write_archive_files(url, singlefile, readability, screenshot, destination=destination)
+    with get_db_session(commit=True) as session:
+        archive = register_archive(session, written)
+    return archive
 
 
 def make_fake_archive_result(readability=True, screenshot=True, title=True):
@@ -246,7 +255,9 @@ async def test_delete_archive(async_client, test_session, archive_factory):
     archive3_paths = list(archive3.my_paths())
 
     # Delete the oldest.
-    delete_archives_by_file_group_ids(archive1.file_group_id, archive3.file_group_id)
+    archive1.delete()
+    archive3.delete()
+    test_session.commit()
     assert test_session.query(Archive).count() == 1
     assert test_session.query(FileGroup).count() == 1
     # Files were deleted.
@@ -256,7 +267,8 @@ async def test_delete_archive(async_client, test_session, archive_factory):
     assert archive2_paths and all(i.is_file() for i in archive2_paths)
 
     # Delete the last archive.  The domain collection should also be deleted.
-    delete_archives_by_file_group_ids(archive2.file_group_id)
+    archive2.delete()
+    test_session.commit()
     assert test_session.query(Archive).count() == 0
     domain = test_session.query(Collection).filter_by(kind='domain').one_or_none()
     assert domain is None
@@ -264,34 +276,6 @@ async def test_delete_archive(async_client, test_session, archive_factory):
     # All Files were deleted.
     assert test_session.query(FileGroup).count() == 0
     assert archive2_paths and not any(i.is_file() for i in archive2_paths)
-
-
-def test_get_domains(test_session, archive_factory):
-    """
-    `get_domains` gets only domain collections with Archives.
-    """
-    archive1 = archive_factory('example.com')
-    archive2 = archive_factory('example.com')
-    archive3 = archive_factory('example.org')
-    test_session.commit()
-
-    assert archive1.domain
-    assert archive2.domain
-    assert archive3.domain
-
-    assert [i['domain'] for i in get_domains()] == ['example.com', 'example.org']
-
-    archive2.delete()
-    test_session.commit()
-    assert [i['domain'] for i in get_domains()] == ['example.com', 'example.org']
-
-    archive1.delete()
-    test_session.commit()
-    assert [i['domain'] for i in get_domains()] == ['example.org']
-
-    archive3.delete()
-    test_session.commit()
-    assert [i['domain'] for i in get_domains()] == []
 
 
 @skip_ci
@@ -850,7 +834,7 @@ async def test_archive_download_index(test_session, test_directory, image_bytes_
         content='<html>the readability</html>',
         textContent='the readability',
     )
-    archive = await lib.model_archive_result('https://example.com', singlefile, readability, image_bytes_factory())
+    archive = await model_archive_result('https://example.com', singlefile, readability, image_bytes_factory())
 
     assert isinstance(archive, lib.Archive), 'Did not get an archive'
     assert archive.singlefile_path and archive.singlefile_path.exists() and \
@@ -1229,10 +1213,9 @@ def test_search_archives_by_domain(test_directory, test_session, archive_factory
     assert len(file_groups) == 1
 
 
-def test_link_domain_and_downloads(test_session, test_download_manager):
+def test_domain_download_links(test_session, test_download_manager):
     """Test that downloads are linked to domain collections."""
     from wrolpi.downloader import Download
-    from modules.archive.lib import link_domain_and_downloads
 
     # Create a domain collection with a directory
     collection = Collection(name='example.com', kind='domain', directory='archive/example.com')
@@ -1269,7 +1252,8 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
 
     assert not any(d.collection_id for d in [download1, download2, download3, download4])
 
-    link_domain_and_downloads(test_session)
+    _link_downloads(test_session, domain_download_links(test_session))
+    test_session.commit()
 
     assert download1.collection_id == collection.id  # matched by directory (exact)
     assert download2.collection_id == collection.id  # matched by subdirectory
@@ -1277,11 +1261,10 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
     assert download4.collection_id is None  # no frequency = no link
 
 
-def test_link_domain_and_downloads_by_destination(test_session, test_directory, test_download_manager):
+def test_domain_download_links_by_destination(test_session, test_directory, test_download_manager):
     """A Download whose destination column is in a domain's directory is linked to that domain (the destination was
     moved out of the settings)."""
     from wrolpi.downloader import Download
-    from modules.archive.lib import link_domain_and_downloads
 
     collection = Collection(name='example.com', kind='domain', directory=test_directory / 'archive/example.com')
     test_session.add(collection)
@@ -1294,7 +1277,8 @@ def test_link_domain_and_downloads_by_destination(test_session, test_directory, 
     test_session.add_all([exact, below, similar])
     test_session.commit()
 
-    link_domain_and_downloads(test_session)
+    _link_downloads(test_session, domain_download_links(test_session))
+    test_session.commit()
 
     assert exact.collection_id == collection.id
     assert below.collection_id == collection.id

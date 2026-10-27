@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Union, List
 
@@ -150,19 +150,6 @@ def seconds_to_timestamp(seconds: Union[int, float]) -> str:
     elif days:
         timestamp = f'{days}d {timestamp}'
     return timestamp
-
-
-def timedelta_to_timestamp(delta: timedelta) -> str:
-    """Convert a datetime.timestamp into a timestamp string.
-
-    >>> timedelta_to_timestamp(timedelta(seconds=60))
-    '00:01:00'
-    >>> timedelta_to_timestamp(timedelta(weeks=1, days=1, seconds=7))
-    '1w 1d 00:00:07'
-    >>> timedelta_to_timestamp(timedelta(days=10))
-    '1w 3d 00:00:00'
-    """
-    return seconds_to_timestamp(delta.total_seconds())
 
 
 class TZDateTime(types.TypeDecorator):

@@ -249,12 +249,3 @@ def remove_fstab_entry(mount_point: str) -> dict:
 
     logger.info("Removed fstab entry for %s", mount_point)
     return {"success": True, "mount_point": mount_point}
-
-
-def get_wrolpi_fstab_entries() -> list[dict]:
-    """Get all fstab entries for mounts under /media (WROLPi-managed mounts)."""
-    entries = parse_fstab()
-    return [
-        e for e in entries
-        if e["type"] == "mount" and e["mount_point"].startswith("/media")
-    ]

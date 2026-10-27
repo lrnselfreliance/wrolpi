@@ -8,7 +8,6 @@ from controller.lib.fstab import (
     parse_fstab,
     add_fstab_entry,
     remove_fstab_entry,
-    get_wrolpi_fstab_entries,
 )
 
 
@@ -345,47 +344,3 @@ UUID=5678 /media/test ext4 defaults,nofail 0 2
                         # User's manual comment should still be there
                         written_str = "".join(written_content)
                         assert "# User added this mount manually" in written_str
-
-
-class TestGetWrolpiFstabEntries:
-    """Tests for get_wrolpi_fstab_entries function."""
-
-    def test_returns_all_media_entries(self):
-        """Should return all entries under /media, not just /media/wrolpi."""
-        fstab_content = """\
-UUID=1234 / ext4 defaults 0 1
-UUID=5678 /media/wrolpi ext4 defaults 0 2
-UUID=9abc /media/wrolpi/data ext4 defaults 0 2
-UUID=defg /media/usb vfat defaults 0 0
-UUID=hijk /media/roland/64GB exfat defaults 0 0
-"""
-        with mock.patch("builtins.open", mock.mock_open(read_data=fstab_content)):
-            result = get_wrolpi_fstab_entries()
-            # Should include all /media/* entries
-            assert len(result) == 4
-            mount_points = [e["mount_point"] for e in result]
-            assert "/media/wrolpi" in mount_points
-            assert "/media/wrolpi/data" in mount_points
-            assert "/media/usb" in mount_points
-            assert "/media/roland/64GB" in mount_points
-            # Root should NOT be included
-            assert "/" not in mount_points
-
-    def test_excludes_non_media_mounts(self):
-        """Should exclude mounts outside /media."""
-        fstab_content = """\
-UUID=1234 / ext4 defaults 0 1
-UUID=5678 /home ext4 defaults 0 2
-UUID=9abc /media/wrolpi ext4 defaults 0 2
-"""
-        with mock.patch("builtins.open", mock.mock_open(read_data=fstab_content)):
-            result = get_wrolpi_fstab_entries()
-            assert len(result) == 1
-            assert result[0]["mount_point"] == "/media/wrolpi"
-
-    def test_returns_empty_if_no_media_entries(self):
-        """Should return empty list if no entries under /media."""
-        fstab_content = "UUID=1234 / ext4 defaults 0 1\n"
-        with mock.patch("builtins.open", mock.mock_open(read_data=fstab_content)):
-            result = get_wrolpi_fstab_entries()
-            assert result == []

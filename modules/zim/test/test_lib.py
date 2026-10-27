@@ -78,10 +78,10 @@ async def test_tag_zim_entry_model(async_client, test_session, zim_factory, tag_
 
 @pytest.mark.asyncio
 async def test_zim_entries_with_tags(async_client, test_session, zim_factory, tag_factory):
-    """Can fetch Zim Entries that have Tags.  Can filter only those entries that are tagged on a specific Zim."""
+    """Can fetch the Entries of a specific Zim that have Tags."""
     tag1, tag2 = await tag_factory(), await tag_factory()
     zim1, zim2 = zim_factory('zim1'), zim_factory('zim2')
-    # Tag Zim1 with both tags, but Zim2 shares one of the tags and is returned when no Zim is passed.
+    # Tag Zim1 with both tags.  Zim2 shares one of the tags, but its Entry is not returned for Zim1.
     zim1.tag_entry(test_session, tag1.name, 'one')
     zim1.tag_entry(test_session, tag2.name, 'two')
     zim2.tag_entry(test_session, tag2.name, 'home')
@@ -94,10 +94,6 @@ async def test_zim_entries_with_tags(async_client, test_session, zim_factory, ta
     entries = zim1.entries_with_tags(test_session, [tag2.name, ])
     assert len(entries) == 1
     assert entries[0].path == 'two'
-
-    # Get entries from any Zim.
-    entries = lib.Zim.all_entries_with_tags(test_session, [tag2.name, ])
-    assert {i.path for i in entries} == {'two', 'home'}, 'Tag2 was applied to `two` and `home`'
 
 
 def test_get_unique_paths():
@@ -174,11 +170,6 @@ async def test_zim_tags_config(async_client, test_session, test_directory, test_
 
     # Tags were recreated.  (SQLite reuses row ids after DELETE, so assert by name rather than by id.)
     assert {i.name for i in test_session.query(tags.Tag)} == {'Tag1', 'Tag2'}
-
-
-def test_zim_all_entries(test_session, test_zim):
-    entries = [i.__json__() for i in test_zim.all_entries]
-    assert len(entries) == 12
 
 
 @skip_ci
@@ -291,7 +282,6 @@ async def test_zim_tag_migration(await_switches, test_session, test_directory, z
         ('tag2', zim2.path, 'two'),
         ('tag2', zim3.path, 'one'),  # Both "one" tags were combined.
     ]
-
 
 
 @pytest.mark.asyncio
@@ -451,15 +441,3 @@ def test_get_custom_zims_directory(async_client, test_directory, test_wrolpi_con
     get_wrolpi_config().zims_destination = 'custom/zims'
 
     assert lib.get_zim_directory() == (test_directory / 'custom/zims')
-
-
-def test_get_estimates_is_cached():
-    """Repeated estimates for the same search string do not re-query the Zims."""
-    from unittest import mock
-    from modules.zim import lib
-
-    lib.get_estimates.cache_clear()
-    with mock.patch.object(lib.Zims, 'get_all', return_value=[]) as get_all:
-        assert lib.get_estimates('cached search') == []
-        assert lib.get_estimates('cached search') == []
-    assert get_all.call_count == 1

@@ -702,22 +702,6 @@ class Collection(ModelHelper, Base):
         logger.debug(f'Added {len(items)} FileGroups to Collection {self.id}')
         return items
 
-    def remove_file_group(self, session: Session, file_group_id: int):
-        """Remove a FileGroup from this Collection."""
-
-        item = session.query(CollectionItem).filter_by(
-            collection_id=self.id,
-            file_group_id=file_group_id
-        ).first()
-
-        if item:
-            position = item.position
-            session.delete(item)
-            session.flush()
-
-            # Shift remaining items down
-            self._shift_positions(session, position + 1, shift_by=-1)
-
     def _shift_positions(self, session: Session, from_position: int, shift_by: int):
         """Helper to shift positions of items."""
         session.query(CollectionItem).filter(

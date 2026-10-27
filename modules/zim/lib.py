@@ -5,7 +5,6 @@ import re
 from datetime import datetime
 from typing import Callable, List, Tuple, Dict
 
-import cachetools.func
 from libzim import Entry
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -258,13 +257,6 @@ def search_all_zims(session: Session, search_str: str, tag_names: List[str] = No
         except Exception as e:
             logger.error(f'Failed to search Zim {zim}', exc_info=e)
     return all_results
-
-
-@cachetools.func.lru_cache(maxsize=1_000)
-def get_estimates(search_str: str) -> List[int]:
-    zims = Zims.get_all()
-    estimates = [i.estimate(search_str) for i in zims]
-    return estimates
 
 
 def get_zim(session: Session, zim_id: int) -> Zim:

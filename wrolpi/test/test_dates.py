@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer
 
 from wrolpi import dates
 from wrolpi.common import Base
-from wrolpi.dates import TZDateTime, timedelta_to_timestamp, seconds_to_timestamp
+from wrolpi.dates import TZDateTime, seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDatetime
 
@@ -68,23 +68,6 @@ def test_TZDateTime(test_session):
 ])
 def test_seconds_to_timestamp(td, expected):
     assert seconds_to_timestamp(td) == expected
-
-
-@pytest.mark.parametrize('td,expected', [
-    (timedelta(seconds=0), '00:00:00'),
-    (timedelta(seconds=1), '00:00:01'),
-    (timedelta(seconds=60), '00:01:00'),
-    (timedelta(seconds=61), '00:01:01'),
-    (timedelta(seconds=65), '00:01:05'),
-    (timedelta(days=1), '1d 00:00:00'),
-    (timedelta(seconds=86461), '1d 00:01:01'),
-    (timedelta(weeks=1, days=1, seconds=7), '1w 1d 00:00:07'),
-    (timedelta(weeks=16, days=3, hours=17, minutes=46, seconds=39), '16w 3d 17:46:39'),
-    (timedelta(days=10), '1w 3d 00:00:00'),
-    (timedelta(days=10, microseconds=1000), '1w 3d 00:00:00'),
-])
-def test_timedelta_to_timestamp(td, expected):
-    assert timedelta_to_timestamp(td) == expected
 
 
 @pytest.mark.parametrize('dt,expected', [

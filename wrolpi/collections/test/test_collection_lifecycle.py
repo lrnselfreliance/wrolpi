@@ -67,7 +67,8 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     assert v4.file_group_id in fg_ids
 
     # 6) Remove one video from the collection only (do not delete the video)
-    coll.remove_file_group(test_session, v2.file_group_id)
+    (v2_item,) = [i for i in coll.get_items(test_session) if i.file_group_id == v2.file_group_id]
+    assert coll.remove_item(test_session, v2_item.id)
     test_session.commit()
 
     items = coll.get_items(test_session)

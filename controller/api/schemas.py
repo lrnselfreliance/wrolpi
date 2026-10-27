@@ -4,7 +4,7 @@ Pydantic models for Controller API requests and responses.
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ============================================================================
@@ -494,6 +494,9 @@ class ScriptOutputResponse(BaseModel):
 
 class ScriptStartRequest(BaseModel):
     """Request model for starting a script."""
+
+    # Parameters belong in `params`; any other key is a mistake, not something to ignore.
+    model_config = ConfigDict(extra="forbid")
 
     params: Optional[dict[str, str]] = Field(default=None, description="Parameter values (e.g., {'branch': 'release'})")
 

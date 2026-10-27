@@ -101,6 +101,16 @@ class TestScriptsStartEndpoint:
                 assert response.status_code == 400
                 assert "already running" in response.json()["detail"].lower()
 
+    def test_scripts_start_rejects_unknown_body_keys(self, test_client):
+        """Parameters go in `params`; a body like {"branch": ...} is an error, not an upgrade of some other
+        branch."""
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.get_script_status", return_value={"running": False}), \
+                mock.patch("subprocess.Popen") as popen:
+            response = test_client.post("/api/scripts/upgrade/start", json={"branch": "master"})
+        assert response.status_code == 422
+        popen.assert_not_called()
+
 
 class TestScriptsOutputEndpoint:
     """Tests for /api/scripts/{name}/output endpoint."""

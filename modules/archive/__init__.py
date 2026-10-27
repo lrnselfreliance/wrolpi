@@ -9,7 +9,7 @@ from typing import Callable, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT
+from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT, which
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html, strip_surrogates, TRACE_LEVEL
@@ -137,11 +137,14 @@ class ArchiveDownloader(Downloader, ABC):
         config = lib.get_archive_downloader_config()
 
         # Determine browser executable
-        browser_executable = config.browser_executable
-        if browser_executable:
-            # Use configured browser path
-            browser = browser_executable
-        else:
+        browser = None
+        if browser_executable := config.browser_executable:
+            # Use the configured browser, if it is installed.  A config can outlive the OS it was written on (e.g.
+            # Raspberry Pi OS names Chromium "chromium-browser").
+            if not (browser := which(browser_executable)):
+                logger.warning(f'Configured browser_executable is not installed, detecting a browser instead:'
+                               f' {browser_executable}')
+        if not browser:
             # Auto-detect: prefer Chromium, fallback to Firefox
             browser = CHROMIUM or FIREFOX
             if not browser:

@@ -19,7 +19,7 @@ from wrolpi.config_version import count_config_change, register_ownership
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_session, named_placeholders, session_curs, serializer
 from wrolpi.downloader import save_downloads_config
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile, InvalidConfig
 from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import PYTEST
@@ -765,18 +765,24 @@ class TagsConfig(ConfigFile):
         if self._config_outdated:
             self.background_dump.activate_switch()
 
+    def _backup_parts(self, data: dict, file: pathlib.Path) -> Tuple[dict, list, list]:
+        """The tags, tag_files and tag_zims a backup preview or merge reads (see `ConfigFile.backup_entries`)."""
+        tags = data.get('tags')
+        if tags is None:
+            tags = dict()
+        elif not isinstance(tags, dict):
+            raise InvalidConfig(f'{get_relative_to_media_directory(file)}: "tags" is not a mapping')
+        return tags, self.backup_entries(data, 'tag_files', file, items=2), \
+            self.backup_entries(data, 'tag_zims', file, items=3)
+
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         backup_file = self._get_backup_file(backup_date)
         backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(tags={}, tag_files=[],
                                                                                       tag_zims=[])
 
-        backup_tags = backup_data.get('tags', {})
-        current_tags = current_data.get('tags', {})
-        backup_tag_files = backup_data.get('tag_files', [])
-        current_tag_files = current_data.get('tag_files', [])
-        backup_tag_zims = backup_data.get('tag_zims', [])
-        current_tag_zims = current_data.get('tag_zims', [])
+        backup_tags, backup_tag_files, backup_tag_zims = self._backup_parts(backup_data, backup_file)
+        current_tags, current_tag_files, current_tag_zims = self._backup_parts(current_data, self.get_file())
 
         # Build identity sets
         current_tag_names = set(current_tags.keys())
@@ -841,23 +847,26 @@ class TagsConfig(ConfigFile):
             current_data = self.read_config_file() if config_file.is_file() else dict(tags={}, tag_files=[],
                                                                                       tag_zims=[], version=0)
 
+            current_tags, current_tag_files, current_tag_zims = self._backup_parts(current_data, config_file)
+            backup_tags, backup_tag_files, backup_tag_zims = self._backup_parts(backup_data, backup_file)
+
             # Merge tags: add missing tags only
-            merged_tags = dict(current_data.get('tags', {}))
-            for name, value in backup_data.get('tags', {}).items():
+            merged_tags = dict(current_tags)
+            for name, value in backup_tags.items():
                 if name not in merged_tags:
                     merged_tags[name] = value
 
             # Merge tag_files: add missing by (tag_name, path)
-            current_tf_keys = {(tf[0], tf[1]) for tf in current_data.get('tag_files', []) if len(tf) >= 2}
-            merged_tag_files = list(current_data.get('tag_files', []))
-            for tf in backup_data.get('tag_files', []):
+            current_tf_keys = {(tf[0], tf[1]) for tf in current_tag_files if len(tf) >= 2}
+            merged_tag_files = list(current_tag_files)
+            for tf in backup_tag_files:
                 if len(tf) >= 2 and (tf[0], tf[1]) not in current_tf_keys:
                     merged_tag_files.append(tf)
 
             # Merge tag_zims: add missing by (tag_name, zim_path, entry)
-            current_tz_keys = {(tz[0], tz[1], tz[2]) for tz in current_data.get('tag_zims', []) if len(tz) >= 3}
-            merged_tag_zims = list(current_data.get('tag_zims', []))
-            for tz in backup_data.get('tag_zims', []):
+            current_tz_keys = {(tz[0], tz[1], tz[2]) for tz in current_tag_zims if len(tz) >= 3}
+            merged_tag_zims = list(current_tag_zims)
+            for tz in backup_tag_zims:
                 if len(tz) >= 3 and (tz[0], tz[1], tz[2]) not in current_tz_keys:
                     merged_tag_zims.append(tz)
 

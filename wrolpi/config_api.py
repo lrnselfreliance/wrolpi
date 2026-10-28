@@ -127,6 +127,10 @@ async def post_config_backup_import(_: Request, body: config_schema.ConfigBackup
         raise InvalidConfig(f'Backup file not found for date {body.backup_date}')
     try:
         await asyncio.to_thread(config.import_backup, body.backup_date, body.mode, send_events=True)
+    except InvalidConfig as e:
+        # e.g. a malformed entry: the message says which file and entry.
+        logger.error(f'Failed to import backup: {body.file_name} {body.backup_date}: {e}')
+        raise
     except Exception as e:
         logger.error(f'Failed to import backup: {body.file_name} {body.backup_date}', exc_info=e)
         raise InvalidConfig(f'Failed to import backup {body.file_name}')

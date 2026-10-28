@@ -451,6 +451,10 @@ class ChannelsConfigValidator:
     channels: list[ChannelDictValidator] = dataclasses.field(default_factory=list)
 
 
+# The fields a channels.yaml entry must have (see `ChannelsSection`).
+CHANNEL_KEYS = ('directory', 'name')
+
+
 class ChannelsConfig(ConfigFile):
     file_name = 'channels.yaml'
     sections = (ChannelsSection(), ChannelDownloadsSection())
@@ -609,8 +613,8 @@ class ChannelsConfig(ConfigFile):
         backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(channels=[], version=0)
 
-        backup_channels = backup_data.get('channels', [])
-        current_channels = current_data.get('channels', [])
+        backup_channels = self.backup_entries(backup_data, 'channels', backup_file, required=CHANNEL_KEYS)
+        current_channels = self.backup_entries(current_data, 'channels', self.get_file(), required=CHANNEL_KEYS)
 
         current_dirs = {ch.get('directory') for ch in current_channels if ch.get('directory')}
         backup_dirs = {ch.get('directory') for ch in backup_channels if ch.get('directory')}
@@ -645,9 +649,11 @@ class ChannelsConfig(ConfigFile):
             backup_data = self.read_config_file(backup_file)
             current_data = self.read_config_file() if config_file.is_file() else dict(channels=[], version=0)
 
-            current_dirs = {ch.get('directory') for ch in current_data.get('channels', []) if ch.get('directory')}
-            merged_channels = list(current_data.get('channels', []))
-            for ch in backup_data.get('channels', []):
+            current_channels = self.backup_entries(current_data, 'channels', config_file, required=CHANNEL_KEYS)
+            backup_channels = self.backup_entries(backup_data, 'channels', backup_file, required=CHANNEL_KEYS)
+            current_dirs = {ch.get('directory') for ch in current_channels if ch.get('directory')}
+            merged_channels = list(current_channels)
+            for ch in backup_channels:
                 if ch.get('directory') and ch['directory'] not in current_dirs:
                     merged_channels.append(ch)
 

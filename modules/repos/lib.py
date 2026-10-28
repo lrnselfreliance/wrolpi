@@ -1542,11 +1542,14 @@ class ReposConfig(ConfigFile):
 
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         """Preview which Repos a backup import would add/remove (keyed by URL)."""
-        backup_data = self.read_config_file(self._get_backup_file(backup_date))
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(repos=[], version=0)
 
-        backup_repos = {repo_url_key(i['url']): i for i in backup_data.get('repos', []) if i.get('url')}
-        current_repos = {repo_url_key(i['url']): i for i in current_data.get('repos', []) if i.get('url')}
+        backup_repos = {repo_url_key(i['url']): i for i in
+                        self.backup_entries(backup_data, 'repos', backup_file, required=('url',))}
+        current_repos = {repo_url_key(i['url']): i for i in
+                         self.backup_entries(current_data, 'repos', self.get_file(), required=('url',))}
 
         add = [dict(type='repo', name=i.get('name', ''), url=i['url'])
                for key, i in backup_repos.items() if key not in current_repos]
@@ -1569,10 +1572,11 @@ class ReposConfig(ConfigFile):
         elif mode == 'merge':
             backup_data = self.read_config_file(backup_file)
             current_data = self.read_config_file() if config_file.is_file() else dict(repos=[], version=0)
-            current_keys = {repo_url_key(i['url']) for i in current_data.get('repos', []) if i.get('url')}
-            merged = list(current_data.get('repos', []))
-            merged.extend(i for i in backup_data.get('repos', [])
-                          if i.get('url') and repo_url_key(i['url']) not in current_keys)
+            current_repos = self.backup_entries(current_data, 'repos', config_file, required=('url',))
+            backup_repos = self.backup_entries(backup_data, 'repos', backup_file, required=('url',))
+            current_keys = {repo_url_key(i['url']) for i in current_repos}
+            merged = list(current_repos)
+            merged.extend(i for i in backup_repos if repo_url_key(i['url']) not in current_keys)
             self.write_config_data(dict(repos=merged, version=current_data.get('version', 0) + 1), config_file)
 
         # Importing a backup is the user's choice: apply it whatever the versions.

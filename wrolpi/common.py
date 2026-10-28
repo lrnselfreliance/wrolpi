@@ -635,6 +635,49 @@ class ConfigFile:
         suffix = pathlib.Path(self.file_name).suffix
         return get_media_directory() / f'config/backup/{stem}-{backup_date}{suffix}'
 
+    @staticmethod
+    def backup_entries(data: dict, key: str, file: pathlib.Path, required: Tuple[str, ...] = (),
+                       optional: Tuple[str, ...] = (), lists: Tuple[str, ...] = (), items: int = 0,
+                       text: bool = False) -> list:
+        """The entries of `data[key]`, as a backup preview or merge reads them.  A malformed entry may be corrupt, so
+        it is an error naming the file and the entry, not skipped.
+
+        @param required: Fields each entry must have, as text.
+        @param optional: Fields that, when present, must be text.
+        @param lists: Fields that, when present, must be lists.
+        @param items: Each entry is a list starting with this many text values (instead of a mapping).
+        @param text: Each entry is text (instead of a mapping).
+        """
+        where = get_relative_to_media_directory(file)
+        entries = data.get(key)
+        if entries is None:
+            return []
+        if not isinstance(entries, list):
+            raise InvalidConfig(f'{where}: "{key}" is not a list')
+        for number, entry in enumerate(entries, 1):
+            entry_where = f'{where}: {key} entry {number}'
+            shown = repr(entry)[:80]
+            if items:
+                if not isinstance(entry, list) or len(entry) < items \
+                        or not all(isinstance(i, str) for i in entry[:items]):
+                    raise InvalidConfig(f'{entry_where} must be a list starting with {items} text values: {shown}')
+            elif text:
+                if not isinstance(entry, str):
+                    raise InvalidConfig(f'{entry_where} is not text: {shown}')
+            elif not isinstance(entry, dict):
+                raise InvalidConfig(f'{entry_where} is not a mapping: {shown}')
+            else:
+                for field in required:
+                    if not entry.get(field) or not isinstance(entry[field], str):
+                        raise InvalidConfig(f'{entry_where} needs "{field}" as text: {shown}')
+                for field in optional:
+                    if entry.get(field) is not None and not isinstance(entry[field], str):
+                        raise InvalidConfig(f'{entry_where} has a "{field}" that is not text: {shown}')
+                for field in lists:
+                    if entry.get(field) is not None and not isinstance(entry[field], list):
+                        raise InvalidConfig(f'{entry_where} has "{field}" that is not a list: {shown}')
+        return entries
+
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         """Preview what a backup import would do. Subclasses override this."""
         raise NotImplementedError(f'{self.__class__.__name__} does not support backup import')

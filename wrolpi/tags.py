@@ -767,8 +767,10 @@ class TagsConfig(ConfigFile):
 
     def _backup_parts(self, data: dict, file: pathlib.Path) -> Tuple[dict, list, list]:
         """The tags, tag_files and tag_zims a backup preview or merge reads (see `ConfigFile.backup_entries`)."""
-        tags = data.get('tags') or dict()
-        if not isinstance(tags, dict):
+        tags = data.get('tags')
+        if tags is None:
+            tags = dict()
+        elif not isinstance(tags, dict):
             raise InvalidConfig(f'{get_relative_to_media_directory(file)}: "tags" is not a mapping')
         return tags, self.backup_entries(data, 'tag_files', file, items=2), \
             self.backup_entries(data, 'tag_zims', file, items=3)

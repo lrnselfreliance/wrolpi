@@ -159,7 +159,7 @@ class MapCatalogDownloader(Downloader):
             # Delete stale download for this region if the URL changed (new version).
             old = session.query(Download).filter(
                 Download.downloader == 'map_extract',
-                Download.settings['region'].astext == region,
+                Download.settings['region'].as_string() == region,
                 Download.url != region_url,
             ).one_or_none()
             if old:
@@ -384,7 +384,7 @@ class MapExtractDownloader(Downloader):
         # search index download already exists for this region.
         has_search_download = session.query(Download).filter(
             Download.downloader == 'map_search_index',
-            Download.settings['region'].astext == executed.region,
+            Download.settings['region'].as_string() == executed.region,
         ).count() > 0
         if not has_search_download:
             try:

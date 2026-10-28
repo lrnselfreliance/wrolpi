@@ -550,23 +550,32 @@ class ConfigFile:
         return dict(self._config)
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
-        """Initializes this config dict using the default config and the config file."""
+        """Initializes this config dict using the default config and the config file.
+
+        Every process initializes the shared dict, some while the others use it (a restarted perpetual process).  Only
+        the first loads it; the others keep what it holds, which may be newer than the file."""
+        from wrolpi.api_utils import api_app
+
         # Use the provided multiprocessing.Manager().dict() when live, or, dict() for testing.
         self._config = multiprocessing_dict if multiprocessing_dict is not None else dict()
-        # Use the default settings to initialize the config.
-        config = deepcopy(self.default_config)
-        try:
-            file = self.get_file()
-            if file.is_file():
-                if not self.is_valid(file):
-                    raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
-                # is_valid() already validated, just load the data
-                config_data = self.read_config_file(file)
-                config.update({k: v for k, v in config_data.items() if k in self.default_config})
-        finally:
-            # Every process initializes the shared dict while the others use it: set it in one call, so they never
-            # see the defaults in place of the file (an import would record their version 0).
-            self._config.update(config)
+        with getattr(api_app.shared_ctx, 'config_update_lock', None) or contextlib.nullcontext():
+            if self._config:
+                return self
+
+            # Use the default settings to initialize the config.
+            config = deepcopy(self.default_config)
+            try:
+                file = self.get_file()
+                if file.is_file():
+                    if not self.is_valid(file):
+                        raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
+                    # is_valid() already validated, just load the data
+                    config_data = self.read_config_file(file)
+                    config.update({k: v for k, v in config_data.items() if k in self.default_config})
+            finally:
+                # In one call: other processes never see the defaults in place of the file (an import would record
+                # their version 0).
+                self._config.update(config)
         return self
 
     @property
@@ -1145,15 +1154,20 @@ class MultiFileConfig:
         return sorted(f.stem for f in directory.glob(self.glob_pattern) if f.is_file())
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
-        """Assign the shared in-memory store, then import every entity file from disk."""
+        """Assign the shared in-memory store, then import every entity file from disk.
+
+        Every process initializes the shared store, some while the others use it (a restarted perpetual process).
+        Only the first imports the files; the others keep what it holds, which may be newer than the files."""
         configs = multiprocessing_dict if multiprocessing_dict is not None else dict()
-        # Every process initializes the shared dict while the others use it: import into this process's dict, then
-        # replace the entities without emptying the shared dict first.
-        self._configs = dict()
-        self.import_all()
-        configs.update(self._configs)
-        for slug in set(configs.keys()) - set(self._configs):
-            configs.pop(slug, None)
+        with self.save_lock():
+            if not configs:
+                # Import into this process's dict, then add the entities in one call.
+                self._configs = dict()
+                try:
+                    self.import_all()
+                    configs.update(self._configs)
+                finally:
+                    self._configs = configs
         self._configs = configs
         return self
 
@@ -1299,15 +1313,16 @@ class MultiFileConfig:
 
     def create(self, slug: str, data: dict):
         """Add a new entity and persist it immediately."""
-        if slug in self._configs:
-            raise ValueError(f'{self.name} already exists: {slug}')
         entity = deepcopy(self.default_entity)
         entity.update(data)
         entity['version'] = 0
         if not self.is_valid(entity):
             raise ValidationError(f'Invalid {self.name} config: {entity}')
-        self._configs[slug] = entity
-        self._save_slug(slug)
+        with self.save_lock():
+            if slug in self._configs:
+                raise ValueError(f'{self.name} already exists: {slug}')
+            self._configs[slug] = entity
+            self._persist_slug(slug)
 
     def replace(self, slug: str, data: dict):
         """Replace an entity's config wholesale and persist it (background)."""

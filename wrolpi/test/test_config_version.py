@@ -367,7 +367,7 @@ async def test_import_while_another_process_initializes(test_session, test_direc
     monkeypatch.setattr('wrolpi.tags.TEST_TAGS_CONFIG', config)
     monkeypatch.setattr('modules.videos.lib.TEST_CHANNELS_CONFIG', config)
 
-    # Another process initializes this config, and pauses where it reads the file.
+    # Another process initializes this config, and pauses if it reads the file.
     other_process = threading.Thread(target=config.initialize, args=(shared,))
     paused, resume = threading.Event(), threading.Event()
     read_config_file = config.read_config_file
@@ -386,7 +386,8 @@ async def test_import_while_another_process_initializes(test_session, test_direc
     def racing_version_decision(*args, **kwargs):
         decision = version_decision(*args, **kwargs)
         other_process.start()
-        assert paused.wait(10)
+        while other_process.is_alive() and not paused.wait(0.01):
+            pass
         return decision
 
     monkeypatch.setattr(config, 'version_decision', racing_version_decision)

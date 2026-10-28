@@ -78,17 +78,25 @@ def test_all_configs_in_shared_context():
 
 @pytest.mark.parametrize('config_class', config_classes(), ids=lambda i: i.__name__)
 def test_initialize_keeps_the_shared_config(test_directory, restore_switch_handlers, config_class):
-    """Each Sanic process initializes the configs it shares with the others, while the others already serve, import
-    and save them.  Initializing must never show the others anything but the file's data: a config which showed its
-    defaults (version 0) for a moment had that version recorded by a concurrent import."""
+    """Each Sanic process initializes the configs it shares with the others, some while the others already serve,
+    import and save them (a restarted perpetual process).  Initializing must never show the others anything but what
+    the shared config holds: a config which showed its defaults (version 0) for a moment had that version recorded by
+    a concurrent import, and one which went back to its file lost another process's newer change."""
     config = config_class()
     write_config_files(config, 7)
     shared = SharedDict()
     config.initialize(shared)  # The first process.
-    loaded = deepcopy(dict(shared))
-    assert loaded
+    assert shared and shared.readable
+
+    # Another process changes the config, and has not saved it yet.
+    if isinstance(config, MultiFileConfig):
+        shared['one'] = {**shared['one'], 'name': 'Renamed'}
+        shared['two'] = {**shared['one'], 'slug': 'two', 'name': 'Two'}
+    else:
+        shared['version'] = 8
+    changed = deepcopy(dict(shared))
 
     shared.readable.clear()
-    config.initialize(shared)  # Another process.
-    assert shared.readable, 'Initializing did not set the shared config'
-    assert all(i == loaded for i in shared.readable), 'Another process could read something other than the file'
+    config.initialize(shared)  # Another process starts.
+    assert dict(shared) == changed
+    assert all(i == changed for i in shared.readable), 'Another process could read something else'

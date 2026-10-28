@@ -131,6 +131,17 @@ def no_unexpected_queries(request):
                         '\n'.join(f'{reason}: {" ".join(statement.split())[:300]}' for reason, statement in queries)
 
 
+@pytest.fixture
+def restore_switch_handlers():
+    """Creating a config replaces the switch handlers of the global config with the same file (see
+    `ConfigFile.__init__`); put them back after the test."""
+    from wrolpi import switches
+    handlers = dict(switches.SWITCH_HANDLERS)
+    yield
+    switches.SWITCH_HANDLERS.clear()
+    switches.SWITCH_HANDLERS.update(handlers)
+
+
 def config_was_imported(session, *file_names: str):
     """Record that these database configs were imported before, as on any WROLPi after its first startup with
     wrolpi.config_version, so their next import deletes what the file no longer lists.  (Version 0 is no newer than

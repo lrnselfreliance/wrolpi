@@ -1,4 +1,10 @@
 """A database config's file and the database each carry a version (see wrolpi.config_version)."""
+import ast
+import inspect
+import textwrap
+import threading
+from copy import deepcopy
+
 import pytest
 import yaml
 
@@ -7,6 +13,7 @@ from wrolpi.config_version import get_config_version, set_config_version
 from wrolpi.dates import now
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import Tag, get_tags_config, import_tags_config
+from wrolpi.test.common import config_classes
 
 
 def write_tags_config(path, version: int, names):
@@ -338,3 +345,81 @@ def test_domain_downloads_count_for_domains(test_session):
     test_session.commit()
 
     assert db_version(test_session, 'domains.yaml') == 2
+
+
+@pytest.mark.parametrize('config_class', [i for i in config_classes() if getattr(i, 'sections', None)],
+                         ids=lambda i: i.__name__)
+@pytest.mark.asyncio
+async def test_import_while_another_process_initializes(test_session, test_directory, async_client,
+                                                        restore_switch_handlers, config_class, monkeypatch):
+    """The Sanic processes initialize the configs they share while one of them imports the database configs.  The
+    import records the version of the file it read, whatever another process does to the shared config meanwhile;
+    otherwise the database's version goes back (e.g. to 0), and every later save is refused as older than the file."""
+    config = config_class()
+    file = config.get_file()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    config.write_config_data({**deepcopy(config.default_config), 'version': 7}, file)
+    shared = dict()
+    config.initialize(shared)
+    set_config_version(test_session, config.file_name, 7)
+    test_session.commit()
+    # Configs refuse to import while testing unless they are the test's config.
+    monkeypatch.setattr('wrolpi.tags.TEST_TAGS_CONFIG', config)
+    monkeypatch.setattr('modules.videos.lib.TEST_CHANNELS_CONFIG', config)
+
+    # Another process initializes this config, and pauses if it reads the file.
+    other_process = threading.Thread(target=config.initialize, args=(shared,))
+    paused, resume = threading.Event(), threading.Event()
+    read_config_file = config.read_config_file
+
+    def pausing_read_config_file(*args, **kwargs):
+        if threading.current_thread() is other_process:
+            paused.set()
+            resume.wait(10)
+        return read_config_file(*args, **kwargs)
+
+    monkeypatch.setattr(config, 'read_config_file', pausing_read_config_file)
+
+    # It starts after this import has decided what to do, and before it writes.
+    version_decision = config.version_decision
+
+    def racing_version_decision(*args, **kwargs):
+        decision = version_decision(*args, **kwargs)
+        other_process.start()
+        while other_process.is_alive() and not paused.wait(0.01):
+            pass
+        return decision
+
+    monkeypatch.setattr(config, 'version_decision', racing_version_decision)
+    try:
+        config.import_config()
+    finally:
+        resume.set()
+        if other_process.is_alive():
+            other_process.join(10)
+
+    assert config.successful_import
+    assert db_version(test_session, config.file_name) == 7
+
+
+@pytest.mark.parametrize('config_class', [i for i in config_classes() if getattr(i, 'sections', None)],
+                         ids=lambda i: i.__name__)
+def test_import_steps_read_the_file(config_class):
+    """`prepare` and `after_import` (and the methods they call) read the file's config (`import_file_config`), never
+    the shared `_config`, which other processes change during the import."""
+    tree = ast.parse(textwrap.dedent(inspect.getsource(config_class)))
+    methods = {i.name: i for i in tree.body[0].body if isinstance(i, ast.FunctionDef)}
+    properties = {name for name, method in methods.items()
+                  if any(getattr(i, 'id', None) == 'property' for i in method.decorator_list)}
+    reads, seen, todo = set(), set(), [i for i in ('prepare', 'after_import') if i in methods]
+    while todo:
+        if (name := todo.pop()) in seen:
+            continue
+        seen.add(name)
+        for node in ast.walk(methods[name]):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'self':
+                if node.attr in methods and node.attr not in properties:
+                    todo.append(node.attr)
+                elif node.attr in properties | {'_config', 'version'}:
+                    reads.add(f'{name} reads self.{node.attr}')
+    assert not reads

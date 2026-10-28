@@ -268,13 +268,13 @@ class RecentlyViewedConfig(ConfigFile):
 
     def prepare(self, diffs: dict):
         diff, db_rows = diffs['viewed'], self.import_db_rows['viewed']
-        file_rows = ViewedSection().file_rows(self._config)[0]
+        file_rows = ViewedSection().file_rows(self.import_file_config)[0]
 
         # Only views at least as recent as the oldest entry of the file are removed: an older view fell off the end
         # of the saved window.  A malformed entry keeps its file's history.
         if diff.removed:
             oldest = min(i['viewed'] for i in file_rows.values()) if file_rows else None
-            malformed = _malformed_keys(self._config)
+            malformed = _malformed_keys(self.import_file_config)
             diff.removed = {i for i in diff.removed
                             if oldest and db_rows[i]['viewed'] >= oldest and i not in malformed}
 

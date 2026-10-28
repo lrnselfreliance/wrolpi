@@ -1,4 +1,22 @@
 """Tests for shared context initialization."""
+from copy import deepcopy
+
+import pytest
+
+from wrolpi.common import MultiFileConfig, write_config_data
+from wrolpi.test.common import SharedDict, config_classes
+
+
+def write_config_files(config, version: int):
+    """Write a valid config file (or, for a MultiFileConfig, one entity's file) at `version`."""
+    if isinstance(config, MultiFileConfig):
+        file = config.get_file('one')
+        data = {**deepcopy(config.default_entity), 'version': version, 'slug': 'one', 'name': 'One'}
+    else:
+        file = config.get_file()
+        data = {**deepcopy(config.default_config), 'version': version}
+    file.parent.mkdir(parents=True, exist_ok=True)
+    write_config_data(data, file)
 
 
 def test_domains_config_in_shared_context():
@@ -56,3 +74,29 @@ def test_all_configs_in_shared_context():
     not_shared = sorted(name for name, config in get_all_configs().items()
                         if not isinstance(getattr(config, '_config', None), DictProxy))
     assert not_shared == [], 'Add these configs to attach_shared_contexts() and initialize_configs_contexts()'
+
+
+@pytest.mark.parametrize('config_class', config_classes(), ids=lambda i: i.__name__)
+def test_initialize_keeps_the_shared_config(test_directory, restore_switch_handlers, config_class):
+    """Each Sanic process initializes the configs it shares with the others, some while the others already serve,
+    import and save them (a restarted perpetual process).  Initializing must never show the others anything but what
+    the shared config holds: a config which showed its defaults (version 0) for a moment had that version recorded by
+    a concurrent import, and one which went back to its file lost another process's newer change."""
+    config = config_class()
+    write_config_files(config, 7)
+    shared = SharedDict()
+    config.initialize(shared)  # The first process.
+    assert shared and shared.readable
+
+    # Another process changes the config, and has not saved it yet.
+    if isinstance(config, MultiFileConfig):
+        shared['one'] = {**shared['one'], 'name': 'Renamed'}
+        shared['two'] = {**shared['one'], 'slug': 'two', 'name': 'Two'}
+    else:
+        shared['version'] = 8
+    changed = deepcopy(dict(shared))
+
+    shared.readable.clear()
+    config.initialize(shared)  # Another process starts.
+    assert dict(shared) == changed
+    assert all(i == changed for i in shared.readable), 'Another process could read something else'

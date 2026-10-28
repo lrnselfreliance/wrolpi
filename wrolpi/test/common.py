@@ -2,6 +2,7 @@ import json
 import pathlib
 import tempfile
 from contextlib import contextmanager
+from copy import deepcopy
 from functools import partialmethod
 from itertools import zip_longest
 from typing import List
@@ -138,3 +139,57 @@ def assert_dict_contains(d1: dict, d2: dict):
             d1_str = json.dumps(d1, indent=1, cls=CustomJSONEncoder)
             d2_str = json.dumps(d2, indent=1, cls=CustomJSONEncoder)
             raise AssertionError(f'{d1_str}\n\n{d2_str}\n\nDictionaries above are unequal') from e
+
+
+def config_classes() -> list:
+    """Every config class: each ConfigFile, and each MultiFileConfig (a directory of files)."""
+    from wrolpi.common import ConfigFile, MultiFileConfig
+
+    # Import every module that defines a config.
+    import modules.archive.lib  # noqa
+    import modules.flasher.config  # noqa
+    import modules.inventory.catalog  # noqa
+    import modules.inventory.common  # noqa
+    import modules.map.pins  # noqa
+    import modules.repos.lib  # noqa
+    import modules.videos.lib  # noqa
+    import wrolpi.bookmarks  # noqa
+    import wrolpi.collections.config  # noqa
+    import wrolpi.downloader  # noqa
+    import wrolpi.files.progress  # noqa
+    import wrolpi.tags  # noqa
+
+    return sorted(ConfigFile.__subclasses__() + MultiFileConfig.__subclasses__(), key=lambda i: i.__name__)
+
+
+class SharedDict(dict):
+    """Stands in for a `multiprocessing.Manager().dict()` the Sanic processes share: each call is atomic, and another
+    process may read between any two calls.  `readable` records what it could read."""
+
+    def __init__(self):
+        super().__init__()
+        self.readable = []
+
+    def _changed(self):
+        self.readable.append(deepcopy(dict(self)))
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self._changed()
+
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self._changed()
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        self._changed()
+
+    def clear(self):
+        super().clear()
+        self._changed()
+
+    def pop(self, *args):
+        value = super().pop(*args)
+        self._changed()
+        return value

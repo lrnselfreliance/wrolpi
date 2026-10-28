@@ -294,7 +294,7 @@ class PlaylistsConfig(ConfigFile):
 
     def _keep_unreadable_items(self, diff: SectionDiff):
         """A playlist whose items cannot be read keeps the items it has."""
-        _, invalid = PlaylistItemsSection().file_rows(self._config)
+        _, invalid = PlaylistItemsSection().file_rows(self.import_file_config)
         if names := {i[0] for i in invalid if i[2] == ITEMS_UNREADABLE}:
             diff.removed = {i for i in diff.removed if i[0] not in names}
 
@@ -327,7 +327,7 @@ class PlaylistsConfig(ConfigFile):
             return
         with get_db_session() as session:
             db_rows = section.db_rows(session)
-        file_rows, _ = section.file_rows(self._config)
+        file_rows, _ = section.file_rows(self.import_file_config)
         for name in names:
             merged = sorted((i for i in db_rows if i[0] == name), key=lambda i: db_rows[i]['position'])
             previous = None

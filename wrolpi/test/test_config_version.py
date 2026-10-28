@@ -1,4 +1,7 @@
 """A database config's file and the database each carry a version (see wrolpi.config_version)."""
+import ast
+import inspect
+import textwrap
 import threading
 from copy import deepcopy
 
@@ -347,8 +350,8 @@ def test_domain_downloads_count_for_domains(test_session):
 @pytest.mark.parametrize('config_class', [i for i in config_classes() if getattr(i, 'sections', None)],
                          ids=lambda i: i.__name__)
 @pytest.mark.asyncio
-async def test_import_while_another_process_initializes(test_session, test_directory, async_client, config_class,
-                                                        monkeypatch):
+async def test_import_while_another_process_initializes(test_session, test_directory, async_client,
+                                                        restore_switch_handlers, config_class, monkeypatch):
     """The Sanic processes initialize the configs they share while one of them imports the database configs.  The
     import records the version of the file it read, whatever another process does to the shared config meanwhile;
     otherwise the database's version goes back (e.g. to 0), and every later save is refused as older than the file."""
@@ -396,3 +399,26 @@ async def test_import_while_another_process_initializes(test_session, test_direc
 
     assert config.successful_import
     assert db_version(test_session, config.file_name) == 7
+
+
+@pytest.mark.parametrize('config_class', [i for i in config_classes() if getattr(i, 'sections', None)],
+                         ids=lambda i: i.__name__)
+def test_import_steps_read_the_file(config_class):
+    """`prepare` and `after_import` (and the methods they call) read the file's config (`import_file_config`), never
+    the shared `_config`, which other processes change during the import."""
+    tree = ast.parse(textwrap.dedent(inspect.getsource(config_class)))
+    methods = {i.name: i for i in tree.body[0].body if isinstance(i, ast.FunctionDef)}
+    properties = {name for name, method in methods.items()
+                  if any(getattr(i, 'id', None) == 'property' for i in method.decorator_list)}
+    reads, seen, todo = set(), set(), [i for i in ('prepare', 'after_import') if i in methods]
+    while todo:
+        if (name := todo.pop()) in seen:
+            continue
+        seen.add(name)
+        for node in ast.walk(methods[name]):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == 'self':
+                if node.attr in methods and node.attr not in properties:
+                    todo.append(node.attr)
+                elif node.attr in properties | {'_config', 'version'}:
+                    reads.add(f'{name} reads self.{node.attr}')
+    assert not reads

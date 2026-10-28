@@ -77,7 +77,7 @@ def test_all_configs_in_shared_context():
 
 
 @pytest.mark.parametrize('config_class', config_classes(), ids=lambda i: i.__name__)
-def test_initialize_keeps_the_shared_config(test_directory, config_class):
+def test_initialize_keeps_the_shared_config(test_directory, restore_switch_handlers, config_class):
     """Each Sanic process initializes the configs it shares with the others, while the others already serve, import
     and save them.  Initializing must never show the others anything but the file's data: a config which showed its
     defaults (version 0) for a moment had that version recorded by a concurrent import."""

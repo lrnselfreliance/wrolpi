@@ -554,16 +554,19 @@ class ConfigFile:
         # Use the provided multiprocessing.Manager().dict() when live, or, dict() for testing.
         self._config = multiprocessing_dict if multiprocessing_dict is not None else dict()
         # Use the default settings to initialize the config.
-        self._config.update(deepcopy(self.default_config))
-
-        file = self.get_file()
-        if file.is_file():
-            if not self.is_valid(file):
-                raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
-            # is_valid() already validated, just load the data
-            config_data = self.read_config_file(file)
-            config_data = {k: v for k, v in config_data.items() if k in self.default_config}
-            self._config.update(config_data)
+        config = deepcopy(self.default_config)
+        try:
+            file = self.get_file()
+            if file.is_file():
+                if not self.is_valid(file):
+                    raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
+                # is_valid() already validated, just load the data
+                config_data = self.read_config_file(file)
+                config.update({k: v for k, v in config_data.items() if k in self.default_config})
+        finally:
+            # Every process initializes the shared dict while the others use it: set it in one call, so they never
+            # see the defaults in place of the file (an import would record their version 0).
+            self._config.update(config)
         return self
 
     @property
@@ -816,11 +819,12 @@ class ConfigFile:
             data = self.read_config_file(file) if file.stat().st_size else None
             if not data or not self.validate(data):
                 raise InvalidConfig(f'Config is {"invalid" if data else "empty"}: {file_str}')
-            self._config.update({k: v for k, v in data.items() if k in self.default_config})
+            config = {**deepcopy(self.default_config), **{k: v for k, v in data.items() if k in self.default_config}}
+            self._config.update(config)
 
             # Another writer may change the database between the snapshot and the write; then decide again.
             for _ in range(3):
-                if self._import_sections_once(forced):
+                if self._import_sections_once(config, forced):
                     break
             else:
                 raise RuntimeError(f'The database kept changing while importing {file_str}')
@@ -833,27 +837,32 @@ class ConfigFile:
                 Events.send_config_import_failed(message)
             raise
 
-    def _import_sections_once(self, forced: bool) -> bool:
-        """One pass of `import_sections`.  Returns False when the database's version changed before the write."""
+    def _import_sections_once(self, config: dict, forced: bool) -> bool:
+        """One pass of `import_sections` of the file's `config`.  Returns False when the database's version changed
+        before the write.
+
+        It reads the file's `config`, not the shared `_config`, which other processes change meanwhile."""
         from wrolpi.config_import import diff_section
         from wrolpi.config_version import IMPORT, SAVE, get_config_version, set_config_version
         from wrolpi.db import get_db_session
 
-        decision, db_version = self.version_decision(forced)
+        file_version = config['version'] or 0
+        decision, db_version = self.version_decision(file_version, forced)
         if decision == SAVE:
             self.save_database_instead()
             return True
 
-        file_rows = {i.name: i.file_rows(self._config) for i in self.sections}
+        file_rows = {i.name: i.file_rows(config) for i in self.sections}
         with get_db_session() as session:
             db_rows = {i.name: i.db_rows(session) for i in self.sections}
         diffs = {i.name: diff_section(*file_rows[i.name], db_rows[i.name], deletes=decision == IMPORT, same=i.same,
-                                      present=i.present(self._config, *file_rows[i.name]))
+                                      present=i.present(config, *file_rows[i.name]))
                  for i in self.sections}
         # `prepare` may skip rows it cannot apply.
         self.import_skipped = sum(len(invalid) for _, invalid in file_rows.values())
         self.import_deletes = decision == IMPORT
         self.import_db_rows = db_rows
+        self.import_file_config = config
         if any(diffs.values()):
             self.prepare(diffs)
             # A row `prepare` brought in line with the database (e.g. it dropped a Tag the file names but no longer
@@ -863,7 +872,6 @@ class ConfigFile:
                 for key in [i for i in changed if section.same(changed[i], db_rows[section.name][i])]:
                     del changed[key]
 
-        file_version = self.version or 0
         if any(diffs.values()) or (decision == IMPORT and db_version != file_version):
             try:
                 with get_db_session(commit=True) as session:
@@ -903,6 +911,7 @@ class ConfigFile:
         differences.  `diffs` maps each section's name to its `SectionDiff`; it may drop rows it cannot apply
         (count them in `import_skipped`), or add what it found to a row for `upsert`.  `import_deletes`: whether
         this import deletes what the file no longer lists.  `import_db_rows`: each section's database rows.
+        `import_file_config`: the file's config (not the shared `_config`, which other processes change meanwhile).
 
         It must be safe to repeat and to abandon: when the database changes before the write, the import decides
         again (up to three passes), and the diffs it was given may never be written (the write fails, or the next
@@ -934,15 +943,16 @@ class ConfigFile:
         from wrolpi.config_version import versioned_config_names
         return self.file_name in versioned_config_names()
 
-    def version_decision(self, forced: bool = False) -> Tuple[str, Optional[int]]:
-        """What importing this config's file (already read) may do (IMPORT, IMPORT_WITHOUT_DELETES, or SAVE), and the
-        database version that decided it.  `import_sections` records the file's version in its own write."""
+    def version_decision(self, file_version: int, forced: bool = False) -> Tuple[str, Optional[int]]:
+        """What importing this config's file (already read, at `file_version`) may do (IMPORT, IMPORT_WITHOUT_DELETES,
+        or SAVE), and the database version that decided it.  `import_sections` records the file's version in its own
+        write."""
         from wrolpi.config_version import IMPORT, decide, get_config_version
         from wrolpi.db import get_db_session
         with get_db_session() as session:
             db_version = get_config_version(session, self.file_name)
-        decision = IMPORT if forced else decide(self.version or 0, db_version)
-        logger_.debug(f'{self.file_name}: file version {self.version}, database version {db_version}: {decision}')
+        decision = IMPORT if forced else decide(file_version, db_version)
+        logger_.debug(f'{self.file_name}: file version {file_version}, database version {db_version}: {decision}')
         return decision, db_version
 
     def save_database_instead(self):
@@ -1136,9 +1146,15 @@ class MultiFileConfig:
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Assign the shared in-memory store, then import every entity file from disk."""
-        self._configs = multiprocessing_dict if multiprocessing_dict is not None else dict()
-        self._configs.clear()
+        configs = multiprocessing_dict if multiprocessing_dict is not None else dict()
+        # Every process initializes the shared dict while the others use it: import into this process's dict, then
+        # replace the entities without emptying the shared dict first.
+        self._configs = dict()
         self.import_all()
+        configs.update(self._configs)
+        for slug in set(configs.keys()) - set(self._configs):
+            configs.pop(slug, None)
+        self._configs = configs
         return self
 
     def is_valid(self, data: dict) -> bool:

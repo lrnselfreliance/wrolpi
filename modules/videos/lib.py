@@ -505,13 +505,13 @@ class ChannelsConfig(ConfigFile):
         # An invalid entry keeps its Channel (found by the entry's name when its directory is invalid), and the
         # Channel's Downloads; so does an entry without a list of Downloads (an old config), or with an unreadable
         # Download.
-        entries = [i for i in self._config.get('channels') or [] if isinstance(i, dict)]
+        entries = [i for i in self.import_file_config.get('channels') or [] if isinstance(i, dict)]
         invalid_names = {i.get('name') for i in entries if i.get('name')} - {i['name'] for i in self._channel_rows()}
         for key in [i for i in channels.removed if db_rows[i]['name'] in invalid_names]:
             channels.removed.discard(key)
         kept = set(db_rows) - set(self._channel_rows_by_key()) - channels.removed - set(moves)
         kept |= {key for key, data in self._channel_entries() if 'downloads' not in data}
-        kept |= {directory for directory, _ in ChannelDownloadsSection().file_rows(self._config)[1]}
+        kept |= {directory for directory, _ in ChannelDownloadsSection().file_rows(self.import_file_config)[1]}
 
         # A moved Channel's Downloads are deleted after the move, under its new directory; one its new entry lists
         # is the same Download.
@@ -535,7 +535,7 @@ class ChannelsConfig(ConfigFile):
     def _channel_entries(self) -> List[Tuple[str, dict]]:
         """The valid entries of the file, keyed by directory."""
         entries = list()
-        for data in self._config.get('channels') or []:
+        for data in self.import_file_config.get('channels') or []:
             try:
                 entries.append((_channel_key(data), data))
             except Exception:
@@ -543,7 +543,7 @@ class ChannelsConfig(ConfigFile):
         return entries
 
     def _channel_rows_by_key(self) -> dict:
-        return ChannelsSection().file_rows(self._config)[0]
+        return ChannelsSection().file_rows(self.import_file_config)[0]
 
     def _channel_rows(self) -> list:
         return list(self._channel_rows_by_key().values())

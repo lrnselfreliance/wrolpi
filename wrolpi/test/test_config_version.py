@@ -1,4 +1,7 @@
 """A database config's file and the database each carry a version (see wrolpi.config_version)."""
+import threading
+from copy import deepcopy
+
 import pytest
 import yaml
 
@@ -7,6 +10,7 @@ from wrolpi.config_version import get_config_version, set_config_version
 from wrolpi.dates import now
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import Tag, get_tags_config, import_tags_config
+from wrolpi.test.common import config_classes
 
 
 def write_tags_config(path, version: int, names):
@@ -338,3 +342,57 @@ def test_domain_downloads_count_for_domains(test_session):
     test_session.commit()
 
     assert db_version(test_session, 'domains.yaml') == 2
+
+
+@pytest.mark.parametrize('config_class', [i for i in config_classes() if getattr(i, 'sections', None)],
+                         ids=lambda i: i.__name__)
+@pytest.mark.asyncio
+async def test_import_while_another_process_initializes(test_session, test_directory, async_client, config_class,
+                                                        monkeypatch):
+    """The Sanic processes initialize the configs they share while one of them imports the database configs.  The
+    import records the version of the file it read, whatever another process does to the shared config meanwhile;
+    otherwise the database's version goes back (e.g. to 0), and every later save is refused as older than the file."""
+    config = config_class()
+    file = config.get_file()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    config.write_config_data({**deepcopy(config.default_config), 'version': 7}, file)
+    shared = dict()
+    config.initialize(shared)
+    set_config_version(test_session, config.file_name, 7)
+    test_session.commit()
+    # Configs refuse to import while testing unless they are the test's config.
+    monkeypatch.setattr('wrolpi.tags.TEST_TAGS_CONFIG', config)
+    monkeypatch.setattr('modules.videos.lib.TEST_CHANNELS_CONFIG', config)
+
+    # Another process initializes this config, and pauses where it reads the file.
+    other_process = threading.Thread(target=config.initialize, args=(shared,))
+    paused, resume = threading.Event(), threading.Event()
+    read_config_file = config.read_config_file
+
+    def pausing_read_config_file(*args, **kwargs):
+        if threading.current_thread() is other_process:
+            paused.set()
+            resume.wait(10)
+        return read_config_file(*args, **kwargs)
+
+    monkeypatch.setattr(config, 'read_config_file', pausing_read_config_file)
+
+    # It starts after this import has decided what to do, and before it writes.
+    version_decision = config.version_decision
+
+    def racing_version_decision(*args, **kwargs):
+        decision = version_decision(*args, **kwargs)
+        other_process.start()
+        assert paused.wait(10)
+        return decision
+
+    monkeypatch.setattr(config, 'version_decision', racing_version_decision)
+    try:
+        config.import_config()
+    finally:
+        resume.set()
+        if other_process.is_alive():
+            other_process.join(10)
+
+    assert config.successful_import
+    assert db_version(test_session, config.file_name) == 7

@@ -129,6 +129,10 @@ class DomainsConfigValidator:
     collections: List[dict] = field(default_factory=list)
 
 
+# The fields a domains.yaml entry must have (see `DomainsSection`).
+DOMAIN_FIELDS = dict(required=('name',), optional=('directory',))
+
+
 class DomainsConfig(ConfigFile):
     """
     Config file for Domain Collections.
@@ -229,8 +233,8 @@ class DomainsConfig(ConfigFile):
         backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(collections=[], version=0)
 
-        backup_collections = backup_data.get('collections', [])
-        current_collections = current_data.get('collections', [])
+        backup_collections = self.backup_entries(backup_data, 'collections', backup_file, **DOMAIN_FIELDS)
+        current_collections = self.backup_entries(current_data, 'collections', self.get_file(), **DOMAIN_FIELDS)
 
         # Identity key for domains is the directory (if present) or name
         def get_key(c):
@@ -273,9 +277,11 @@ class DomainsConfig(ConfigFile):
             def get_key(c):
                 return c.get('directory') or c.get('name', '')
 
-            current_keys = {get_key(c) for c in current_data.get('collections', [])}
-            merged_collections = list(current_data.get('collections', []))
-            for c in backup_data.get('collections', []):
+            current_collections = self.backup_entries(current_data, 'collections', config_file, **DOMAIN_FIELDS)
+            backup_collections = self.backup_entries(backup_data, 'collections', backup_file, **DOMAIN_FIELDS)
+            current_keys = {get_key(c) for c in current_collections}
+            merged_collections = list(current_collections)
+            for c in backup_collections:
                 if get_key(c) not in current_keys:
                     merged_collections.append(c)
 

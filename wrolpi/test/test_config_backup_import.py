@@ -903,6 +903,59 @@ class TestPreviewWithRealisticData:
         assert preview['unchanged'] == 2
 
 
+MALFORMED = [
+    # (config, fixture, a valid file, a malformed file, the error names this)
+    ('channels.yaml', 'test_channels_config', dict(channels=[]),
+     dict(channels=[dict(name='one', directory='videos/one'), 'not a mapping']), 'channels entry 2 is not a mapping'),
+    ('channels.yaml', 'test_channels_config', dict(channels=[]),
+     dict(channels=[dict(name='one', directory=['videos', 'one'])]), 'channels entry 1 needs "directory"'),
+    ('domains.yaml', None, dict(collections=[]), dict(collections=[5]), 'collections entry 1 is not a mapping'),
+    ('domains.yaml', None, dict(collections=[]), dict(collections=[dict(name='example.com', directory=1)]),
+     'collections entry 1 has a "directory" that is not text'),
+    ('playlists.yaml', None, dict(playlists=[]), dict(playlists=[dict(name='one', items=5)]),
+     'playlists entry 1 has "items" that is not a list'),
+    ('download_manager.yaml', 'test_download_manager_config', dict(downloads=[], skip_urls=[]),
+     dict(downloads=[dict(downloader='archive')], skip_urls=[]), 'downloads entry 1 needs "url"'),
+    ('download_manager.yaml', 'test_download_manager_config', dict(downloads=[], skip_urls=[]),
+     dict(downloads=[], skip_urls=[['https://example.com']]), 'skip_urls entry 1 is not text'),
+    ('repos.yaml', None, dict(repos=[]), dict(repos='https://example.com/a/b'), '"repos" is not a list'),
+    ('tags.yaml', 'test_tags_config', dict(tags={}, tag_files=[], tag_zims=[]),
+     dict(tags=['news'], tag_files=[], tag_zims=[]), '"tags" is not a mapping'),
+    ('tags.yaml', 'test_tags_config', dict(tags={}, tag_files=[], tag_zims=[]),
+     dict(tags={}, tag_files=[['news']], tag_zims=[]), 'tag_files entry 1 must be a list starting with 2 text'),
+    ('tags.yaml', 'test_tags_config', dict(tags={}, tag_files=[], tag_zims=[]),
+     dict(tags={}, tag_files=[], tag_zims=[['news', 'wiki.zim', 5]]),
+     'tag_zims entry 1 must be a list starting with 3 text'),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('file_name,fixture,valid,malformed,error', MALFORMED)
+@pytest.mark.parametrize('corrupt', ['backup', 'current'])
+@pytest.mark.parametrize('endpoint', ['preview', 'import'])
+async def test_malformed_entry_is_an_error(request, async_client, test_directory, file_name, fixture, valid,
+                                           malformed, error, corrupt, endpoint):
+    """A malformed entry, in the backup or the current config, may be corrupt: the preview and the merge refuse it
+    with an error naming the file and the entry, rather than skip it.  The current config is not changed."""
+    from wrolpi.common import get_config_by_file_name
+    if fixture:
+        request.getfixturevalue(fixture)
+    config = get_config_by_file_name(file_name)
+    backup, current = (malformed, valid) if corrupt == 'backup' else (valid, malformed)
+    _make_backup(test_directory, file_name, '20260301', dict(backup, version=1))
+    _write_yaml(config.get_file(), dict(current, version=1))
+    before = config.get_file().read_text()
+
+    body = dict(file_name=file_name, backup_date='20260301', mode='merge')
+    _, response = await async_client.post(f'/api/config/backup/{endpoint}', json=body)
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    stem = pathlib.Path(file_name).stem
+    name = f'config/backup/{stem}-20260301.yaml' if corrupt == 'backup' else f'config/{file_name}'
+    assert f'{name}: {error}' in response.json['error']
+    assert config.get_file().read_text() == before
+
+
 class TestWriteConfigData:
 
     def test_rejects_python_objects(self, test_directory, test_tags_config):

@@ -2316,8 +2316,10 @@ class DownloadManagerConfig(ConfigFile):
         backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(downloads=[], version=0)
 
-        backup_downloads = backup_data.get('downloads', [])
-        current_downloads = current_data.get('downloads', [])
+        backup_downloads = self.backup_entries(backup_data, 'downloads', backup_file, required=('url',))
+        current_downloads = self.backup_entries(current_data, 'downloads', self.get_file(), required=('url',))
+        self.backup_entries(backup_data, 'skip_urls', backup_file, text=True)
+        self.backup_entries(current_data, 'skip_urls', self.get_file(), text=True)
 
         current_urls = {dl.get('url') for dl in current_downloads if dl.get('url')}
         backup_urls = {dl.get('url') for dl in backup_downloads if dl.get('url')}
@@ -2359,18 +2361,22 @@ class DownloadManagerConfig(ConfigFile):
             current_data = self.read_config_file() if config_file.is_file() else dict(downloads=[], skip_urls=[],
                                                                                       version=0)
 
-            current_urls = {dl.get('url') for dl in current_data.get('downloads', []) if dl.get('url')}
-            merged_downloads = list(current_data.get('downloads', []))
-            for dl in backup_data.get('downloads', []):
+            current_downloads = self.backup_entries(current_data, 'downloads', config_file, required=('url',))
+            backup_downloads = self.backup_entries(backup_data, 'downloads', backup_file, required=('url',))
+            current_skip_urls = self.backup_entries(current_data, 'skip_urls', config_file, text=True)
+            backup_skip_urls = self.backup_entries(backup_data, 'skip_urls', backup_file, text=True)
+            current_urls = {dl.get('url') for dl in current_downloads if dl.get('url')}
+            merged_downloads = list(current_downloads)
+            for dl in backup_downloads:
                 url = dl.get('url')
                 # Only merge recurring downloads
                 if url and url not in current_urls and dl.get('frequency'):
                     merged_downloads.append(dl)
 
             # Merge skip_urls
-            current_skip = set(current_data.get('skip_urls', []))
-            merged_skip = list(current_data.get('skip_urls', []))
-            for url in backup_data.get('skip_urls', []):
+            current_skip = set(current_skip_urls)
+            merged_skip = list(current_skip_urls)
+            for url in backup_skip_urls:
                 if url not in current_skip:
                     merged_skip.append(url)
 

@@ -240,6 +240,10 @@ class PlaylistsConfigValidator:
     playlists: List[dict] = field(default_factory=list)
 
 
+# The fields a playlists.yaml entry must have (see `PlaylistsSection`).
+PLAYLIST_FIELDS = dict(required=('name',), lists=('items',))
+
+
 class PlaylistsConfig(ConfigFile):
     """Config file for playlists (Collections with kind='playlist').
 
@@ -361,8 +365,8 @@ class PlaylistsConfig(ConfigFile):
         backup_data = self.read_config_file(backup_file)
         current_data = self.read_config_file() if self.get_file().is_file() else dict(playlists=[], version=0)
 
-        backup_playlists = backup_data.get('playlists', [])
-        current_playlists = current_data.get('playlists', [])
+        backup_playlists = self.backup_entries(backup_data, 'playlists', backup_file, **PLAYLIST_FIELDS)
+        current_playlists = self.backup_entries(current_data, 'playlists', self.get_file(), **PLAYLIST_FIELDS)
 
         current_names = {p.get('name') for p in current_playlists if p.get('name')}
         backup_names = {p.get('name') for p in backup_playlists if p.get('name')}
@@ -400,9 +404,11 @@ class PlaylistsConfig(ConfigFile):
             backup_data = self.read_config_file(backup_file)
             current_data = self.read_config_file() if config_file.is_file() else dict(playlists=[], version=0)
 
-            current_names = {p.get('name') for p in current_data.get('playlists', []) if p.get('name')}
-            merged_playlists = list(current_data.get('playlists', []))
-            for playlist in backup_data.get('playlists', []):
+            current_playlists = self.backup_entries(current_data, 'playlists', config_file, **PLAYLIST_FIELDS)
+            backup_playlists = self.backup_entries(backup_data, 'playlists', backup_file, **PLAYLIST_FIELDS)
+            current_names = {p.get('name') for p in current_playlists if p.get('name')}
+            merged_playlists = list(current_playlists)
+            for playlist in backup_playlists:
                 if playlist.get('name') and playlist['name'] not in current_names:
                     merged_playlists.append(playlist)
 

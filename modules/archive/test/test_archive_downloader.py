@@ -238,3 +238,31 @@ async def test_finalize_adds_tags(async_client, test_session, test_directory, ta
     assert len(archives) == 1
     archive_tag_names = [tf.tag.name for tf in archives[0].file_group.tag_files]
     assert tag.name in archive_tag_names
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('configured, expected', [
+    # A config can outlive the OS it was written on: Raspberry Pi OS names Chromium "chromium-browser".
+    ('/nonexistent/chromium-browser', '/usr/bin/chromium'),
+    (None, '/usr/bin/chromium'),
+    ('/bin/sh', '/bin/sh'),
+])
+async def test_do_singlefile_configured_browser(test_session, test_directory, monkeypatch, configured, expected):
+    """The configured browser is used when it is installed; otherwise one is detected."""
+    from types import SimpleNamespace
+    import modules.archive
+    singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
+    process_runner, calls = make_process_runner_recorder(singlefile)
+    monkeypatch.setattr(modules.archive, 'DENO_BIN', '/usr/local/bin/deno')
+    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT',
+                        '/usr/local/lib/node_modules/single-file-cli/single-file')
+    monkeypatch.setattr(modules.archive, 'CHROMIUM', '/usr/bin/chromium')
+    monkeypatch.setattr(archive_downloader, 'process_runner', process_runner)
+    monkeypatch.setattr(modules.archive.lib, 'get_archive_downloader_config',
+                        lambda: SimpleNamespace(browser_executable=configured, browser_args=None, user_agent=None))
+
+    prepared = PreparedArchive(url='https://example.com', destination=None, settings={})
+    await archive_downloader.do_singlefile(prepared, make_test_ctx())
+
+    capture, = calls
+    assert capture['env']['WROLPI_BROWSER'] == expected

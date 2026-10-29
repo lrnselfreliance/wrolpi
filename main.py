@@ -13,7 +13,7 @@ from wrolpi import flags
 from wrolpi import root_api  # noqa
 from wrolpi.api_utils import api_app, perpetual_signal, per_worker_task
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
-    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
+    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, have_internet_connection, wrol_mode_enabled, \
     create_empty_config_files, import_file_configs, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
@@ -22,7 +22,7 @@ from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
 from wrolpi.perpetual import register_perpetual_process, perpetual_process_health_check
-from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
@@ -339,7 +339,8 @@ async def perpetual_check_db_is_up_worker():
 @perpetual_signal(sleep=10)
 async def perpetual_have_internet_worker():
     try:
-        if can_connect_to_server(INTERNET_SERVER):
+        # In a thread: the check blocks, and would stall every other perpetual loop.
+        if await asyncio.to_thread(have_internet_connection):
             flags.have_internet.set()
             # Check hourly once we have internet.
             await asyncio.sleep(float(Seconds.hour))

@@ -856,6 +856,52 @@ def test_can_connect_to_server(simple_file_server):
     assert common.can_connect_to_server(host, port)
 
 
+def test_can_connect_to_server_times_out(monkeypatch):
+    """A server that never answers (a firewall that drops the connection) gives up after the timeout, instead of the
+    system's default of minutes."""
+    timeouts = []
+
+    def create_connection(address, timeout=None):
+        timeouts.append(timeout)
+        raise socket.timeout()
+
+    monkeypatch.setattr(common.socket, 'create_connection', create_connection)
+
+    assert common.can_connect_to_server('example.com', timeout=2) is False
+    assert common.can_connect_to_server('example.com') is False
+    assert timeouts == [2, common.INTERNET_CHECK_TIMEOUT]
+
+
+@pytest.mark.asyncio
+async def test_have_internet_connection(async_client, test_wrolpi_config, monkeypatch):
+    """The Internet is up when wrolpi.yaml's hostname (which needs DNS) or its IP address (which does not) answers."""
+    answering = set()
+    checked = []
+
+    def can_connect_to_server(hostname, port=80, timeout=None):
+        checked.append(hostname)
+        return hostname in answering
+
+    monkeypatch.setattr(common, 'can_connect_to_server', can_connect_to_server)
+    config = get_wrolpi_config()
+    assert (config.internet_check_hostname, config.internet_check_ip) == ('one.one.one.one', '1.1.1.1')
+
+    config.internet_check_hostname = 'internet.example.com'
+    config.internet_check_ip = '192.0.2.1'
+    assert common.have_internet_connection() is False
+    assert checked == ['internet.example.com', '192.0.2.1']
+
+    answering.add('192.0.2.1')
+    assert common.have_internet_connection() is True
+
+    # Only the hostname is checked when there is no IP address.
+    config.internet_check_ip = None
+    checked.clear()
+    answering.add('internet.example.com')
+    assert common.have_internet_connection() is True
+    assert checked == ['internet.example.com']
+
+
 @pytest.mark.asyncio
 async def test_log_level(async_client, test_wrolpi_config):
     """User can change API log level."""

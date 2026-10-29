@@ -54,9 +54,6 @@ DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))
 # tests are running
 PYTEST = 'pytest' in sys.modules
 
-# Used to test if the Internet is up.
-INTERNET_SERVER = os.environ.get('INTERNET_SERVER', 'one.one.one.one')
-
 # Running on a GitHub Actions runner, which lacks things some tests need.
 IS_CI = truthy_arg(os.environ.get('GITHUB_ACTIONS', ''))
 

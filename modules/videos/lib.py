@@ -410,9 +410,10 @@ class ChannelDownloadsSection(ConfigSection):
         return bool(config.get('channels'))
 
     def db_rows(self, session: Session) -> Dict[tuple, dict]:
+        # A once-Download (no frequency) is not a Channel's Download; channels.yaml does not save it.
         query = session.query(Collection.directory, Download.url, Download.frequency) \
             .join(Collection, Collection.id == Download.collection_id) \
-            .filter(Collection.kind == 'channel', Collection.directory.isnot(None))
+            .filter(Collection.kind == 'channel', Collection.directory.isnot(None), Download.frequency.isnot(None))
         return {(media_relative(directory), url): dict(frequency=frequency) for directory, url, frequency in query}
 
     def same(self, file_row: dict, db_row: dict) -> bool:
@@ -438,7 +439,8 @@ class ChannelDownloadsSection(ConfigSection):
         media_directory = get_media_directory()
         query = session.query(Download, Collection.directory) \
             .join(Collection, Collection.id == Download.collection_id) \
-            .filter(Collection.kind == 'channel', Download.url.in_([url for _, url in keys]))
+            .filter(Collection.kind == 'channel', Download.frequency.isnot(None),
+                    Download.url.in_([url for _, url in keys]))
         for download, directory in query.all():
             if (media_relative(directory), download.url) in keys:
                 logger.warning(f'Deleting {download} because it is no longer in its Channel')

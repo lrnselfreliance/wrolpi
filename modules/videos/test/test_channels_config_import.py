@@ -304,3 +304,23 @@ async def test_saved_change_is_in_step(test_session, saved_channels, await_switc
     edit_channel(saved_channels, 'two', url='https://example.com/edited')
     import_channels_config()
     assert channels(test_session)['two'].url == 'https://example.com/edited'
+
+
+@pytest.mark.asyncio
+async def test_once_download_is_not_a_channel_download(test_session, saved_channels):
+    """A once-Download of a Channel's video is not one of the Channel's Downloads (channels.yaml does not save it), so
+    importing the config neither deletes it nor writes anything."""
+    two = channels(test_session)['two']
+    download = Download(url='https://example.com/two/video', downloader='video', collection_id=two.collection_id)
+    test_session.add(download)
+    test_session.commit()
+    get_channels_config().dump_config()
+
+    config = get_channels_config()
+    with statements() as collected:
+        config.import_config()
+
+    assert config.successful_import is True
+    test_session.expire_all()
+    assert test_session.query(Download).filter_by(url='https://example.com/two/video').one()
+    assert writes(collected) == []

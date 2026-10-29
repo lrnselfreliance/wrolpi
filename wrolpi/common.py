@@ -3411,10 +3411,13 @@ def can_connect_to_server(hostname: str, port: int = 80, timeout: float = INTERN
 
 
 def have_internet_connection() -> bool:
-    """Whether the Internet is up: wrolpi.yaml's `internet_check_hostname` (which needs DNS) or its
-    `internet_check_ip` (which does not) answers.  Blocks; call it from a thread."""
+    """Whether the Internet is up: wrolpi.yaml's `internet_check_ip` or its `internet_check_hostname` answers.  Blocks;
+    call it from a thread.
+
+    The IP address is tried first: the hostname needs DNS, and a name lookup is not bounded by the connection's
+    timeout."""
     config = get_wrolpi_config()
-    hosts = [i for i in (config.internet_check_hostname, config.internet_check_ip) if i]
+    hosts = [i for i in (config.internet_check_ip, config.internet_check_hostname) if i]
     return any(can_connect_to_server(i) for i in hosts)
 
 

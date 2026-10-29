@@ -874,7 +874,8 @@ def test_can_connect_to_server_times_out(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_have_internet_connection(async_client, test_wrolpi_config, monkeypatch):
-    """The Internet is up when wrolpi.yaml's hostname (which needs DNS) or its IP address (which does not) answers."""
+    """The Internet is up when wrolpi.yaml's IP address or its hostname answers.  The IP address is tried first: the
+    hostname needs DNS, which the connection's timeout does not bound."""
     answering = set()
     checked = []
 
@@ -889,10 +890,13 @@ async def test_have_internet_connection(async_client, test_wrolpi_config, monkey
     config.internet_check_hostname = 'internet.example.com'
     config.internet_check_ip = '192.0.2.1'
     assert common.have_internet_connection() is False
-    assert checked == ['internet.example.com', '192.0.2.1']
+    assert checked == ['192.0.2.1', 'internet.example.com']
 
+    # A working IP address answers without a name lookup.
     answering.add('192.0.2.1')
+    checked.clear()
     assert common.have_internet_connection() is True
+    assert checked == ['192.0.2.1']
 
     # Only the hostname is checked when there is no IP address.
     config.internet_check_ip = None

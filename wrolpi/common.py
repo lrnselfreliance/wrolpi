@@ -268,6 +268,7 @@ __all__ = [
     'apply_refresh_cleanup',
     'background_task',
     'can_connect_to_server',
+    'have_internet_connection',
     'cancel_background_tasks',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
@@ -1417,6 +1418,8 @@ class WROLPiConfigValidator:
     hotspot_password: str = None
     hotspot_ssid: str = None
     ignore_outdated_zims: bool = None
+    internet_check_hostname: str = None
+    internet_check_ip: str = None
     log_level: str = None
     map_default_location: dict = None
     map_destination: str = None
@@ -1697,6 +1700,9 @@ class WROLPiConfig(ConfigFile):
         check_for_upgrades=True,
         ignore_outdated_zims=False,
         ignored_directories=['config', 'tags', REPOS_DIRECTORY],
+        # The Internet is up when either answers (see `have_internet_connection`).
+        internet_check_hostname='one.one.one.one',
+        internet_check_ip='1.1.1.1',
         log_level='info',
         map_default_location=None,
         map_destination='map',
@@ -1789,6 +1795,22 @@ class WROLPiConfig(ConfigFile):
     @require_cookies_unlocked.setter
     def require_cookies_unlocked(self, value: bool):
         self.update({'require_cookies_unlocked': value})
+
+    @property
+    def internet_check_hostname(self) -> Optional[str]:
+        return self._config.get('internet_check_hostname')
+
+    @internet_check_hostname.setter
+    def internet_check_hostname(self, value: Optional[str]):
+        self.update({'internet_check_hostname': value})
+
+    @property
+    def internet_check_ip(self) -> Optional[str]:
+        return self._config.get('internet_check_ip')
+
+    @internet_check_ip.setter
+    def internet_check_ip(self, value: Optional[str]):
+        self.update({'internet_check_ip': value})
 
     @property
     def require_media_mounted(self) -> bool:
@@ -3369,19 +3391,34 @@ def get_title_from_html(html: str, url: str = None) -> str:
         logger_.debug(f'Unable to extract title {url}')
 
 
+# Seconds to wait for a server to answer.  A firewall that drops the connection would otherwise take minutes to fail.
+INTERNET_CHECK_TIMEOUT = 5
+
+
 @wrol_mode_check
-def can_connect_to_server(hostname: str, port: int = 80) -> bool:
+def can_connect_to_server(hostname: str, port: int = 80, timeout: float = INTERNET_CHECK_TIMEOUT) -> bool:
     """Return True only if `hostname` responds."""
     # Thanks https://stackoverflow.com/questions/20913411/test-if-an-internet-connection-is-present-in-python
     try:
         # connect to the host -- tells us if the host is actually
         # reachable
-        conn = socket.create_connection((hostname, port))
+        conn = socket.create_connection((hostname, port), timeout=timeout)
         conn.close()
         return True
     except Exception as e:
         logger_.debug('can_connect_to_server encountered error', exc_info=e)
     return False
+
+
+def have_internet_connection() -> bool:
+    """Whether the Internet is up: wrolpi.yaml's `internet_check_ip` or its `internet_check_hostname` answers.  Blocks;
+    call it from a thread.
+
+    The IP address is tried first: the hostname needs DNS, and a name lookup is not bounded by the connection's
+    timeout."""
+    config = get_wrolpi_config()
+    hosts = [i for i in (config.internet_check_ip, config.internet_check_hostname) if i]
+    return any(can_connect_to_server(i) for i in hosts)
 
 
 def is_valid_hex_color(hex_color: str) -> bool:

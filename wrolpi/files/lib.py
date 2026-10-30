@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Callable, ContextManager, List, Optional, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
-from sqlalchemy import asc, or_, text as sa_text
+from sqlalchemy import and_, asc, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, undefer, joinedload
 
@@ -308,6 +308,15 @@ def get_tagged_file_groups_by_ids(session: Session, file_group_ids: List[int]) -
     return [fg.__json__() for fg in rows]
 
 
+def directory_or_descendant(column, directory: Union[str, pathlib.Path]):
+    """A filter matching `directory` and every directory beneath it.
+
+    A range is used instead of `LIKE 'directory/%'` so SQLite can use the column's index (it cannot for a
+    case-insensitive LIKE), and so `_` and `%` in a path are not wildcards.  '0' is the character after '/'."""
+    directory = str(directory)
+    return or_(column == directory, and_(column >= f'{directory}/', column < f'{directory}0'))
+
+
 def get_tagged_file_groups_by_paths(session: Session, paths: Iterable[pathlib.Path]) -> List[FileGroup]:
     """Return FileGroup objects under any of the given paths that have at least one TagFile.
 
@@ -331,11 +340,7 @@ def get_tagged_file_groups_by_paths(session: Session, paths: Iterable[pathlib.Pa
         else:
             # Search for any FileGroups that have been tagged under this directory.
             # Use indexed directory column for efficient lookup.
-            path_str = str(path)
-            query = query.filter(or_(
-                FileGroup.directory == path_str,
-                FileGroup.directory.like(f'{path_str}/%'),
-            ))
+            query = query.filter(directory_or_descendant(FileGroup.directory, path))
         for file_group in query:
             if path.is_dir() or any(p for p in paths if p in file_group.my_paths()):
                 if file_group.id not in seen_ids:

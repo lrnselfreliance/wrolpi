@@ -1945,3 +1945,30 @@ async def test_remove_files_in_ignored_directories(async_client, test_directory,
     assert lib.remove_files_in_ignored_directories([private, nested, sibling, other]) == [sibling, other]
     # The ignored directory itself is ignored.
     assert lib.remove_files_in_ignored_directories([test_directory / 'private']) == []
+
+
+def test_directory_or_descendant(test_session):
+    """Matches a directory and everything beneath it, using the directory index."""
+    directories = ['/media/a', '/media/a/b', '/media/a/b/c', '/media/ab', '/media/a0', '/media/A/b', '/media/aXb/c']
+    for i, directory in enumerate(directories):
+        test_session.add(FileGroup(primary_path=f'{directory}/file{i}.txt', directory=directory))
+    for i, directory in enumerate(['/media/a_b/c', '/media/a%']):
+        test_session.add(FileGroup(primary_path=f'{directory}/wild{i}.txt', directory=directory))
+    test_session.commit()
+
+    def matching(directory):
+        query = test_session.query(FileGroup).filter(lib.directory_or_descendant(FileGroup.directory, directory))
+        return sorted(str(i.directory) for i in query)
+
+    assert matching('/media/a') == ['/media/a', '/media/a/b', '/media/a/b/c']
+    assert matching(pathlib.Path('/media/a/b')) == ['/media/a/b', '/media/a/b/c']
+    # `_` and `%` are not wildcards.
+    assert matching('/media/a_b') == ['/media/a_b/c']
+    assert matching('/media/a%') == ['/media/a%']
+
+    statement = test_session.query(FileGroup.id) \
+        .filter(lib.directory_or_descendant(FileGroup.directory, '/media/a')).statement \
+        .compile(compile_kwargs={'literal_binds': True})
+    plan = ' '.join(row[3] for row in test_session.execute(sqlalchemy.text(f'EXPLAIN QUERY PLAN {statement}')))
+    assert 'SCAN file_group' not in plan, plan
+    assert 'file_group_directory_idx' in plan, plan

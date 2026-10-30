@@ -2,6 +2,7 @@ import React, {useMemo, useRef, useState} from "react";
 import {Button, Checkbox, Icon, Table} from "../ui";
 import {FieldCell} from "./FieldCell";
 import {applyComputedCounts, computedCountConfigs} from "./computeFields";
+import {formatInventoryDateValue, parseInventoryDateMs} from "./inventoryDates";
 import {NUMERIC_TYPES} from "./units";
 
 const LOCATION_LIST_ID = 'inventory-location-suggestions';
@@ -38,7 +39,7 @@ function compareByField(a, b, field) {
         return (Number(av) || 0) - (Number(bv) || 0);
     }
     if (field.type === 'date') {
-        return (Date.parse(av) || 0) - (Date.parse(bv) || 0);
+        return (parseInventoryDateMs(av) || 0) - (parseInventoryDateMs(bv) || 0);
     }
     return String(av).localeCompare(String(bv));
 }
@@ -296,6 +297,9 @@ export function formatValue(item, field) {
         const unit = item[`${field.key}_unit`] || field.unit || '';
         return `${value} ${unit}`.trim();
     }
+    if (field.type === 'date') {
+        return formatInventoryDateValue(value);
+    }
     return String(value);
 }
 
@@ -307,8 +311,8 @@ export function isItemExpired(item, fields) {
         if (f.type !== 'date') {
             return false;
         }
-        const t = Date.parse(item[f.key]);
-        return !isNaN(t) && t < start.getTime();
+        const t = parseInventoryDateMs(item[f.key]);
+        return t != null && t < start.getTime();
     });
 }
 

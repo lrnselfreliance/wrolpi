@@ -1,5 +1,6 @@
 import React from "react";
 import {Select, TextInput} from "../ui";
+import {formatInventoryDateValue} from "./inventoryDates";
 import {ALL_UNITS, evaluateExpression, NUMERIC_TYPES, UNIT_GROUPS} from "./units";
 
 // Renders the correct editor for a single field/value, wiring up keyboard navigation.  The `inputRef` is attached
@@ -102,7 +103,7 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
     }
 
     if (field.type === 'date') {
-        return <TextInput {...common} type='date' ref={setRef}/>;
+        return <TextInput {...common} type='date' value={formatInventoryDateValue(value)} ref={setRef}/>;
     }
 
     if (field.type === 'number' || field.type === 'calories') {

@@ -2017,3 +2017,19 @@ async def test_queue_first_refresh_skipped(async_client, test_session, test_dire
     flags.refresh_complete.clear()
     await wrol_mode_fixture(True)
     assert file_worker.queue_first_refresh() is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_missing_path_keeps_lookalike_directories(
+        async_client, test_session, test_directory, make_files_structure
+):
+    """A missing path is refreshed as a possibly-deleted directory; only that directory and its descendants are
+    matched, never a directory whose name differs by a character `LIKE` would treat as a wildcard."""
+    kept, = make_files_structure(['docs/aXb/sub/kept.txt'])
+    await file_worker.refresh_sync([kept])
+    assert test_session.query(FileGroup).count() == 1
+
+    await file_worker.refresh_sync([test_directory / 'docs/a_b'])
+
+    test_session.expire_all()
+    assert [i.primary_path for i in test_session.query(FileGroup)] == [kept]

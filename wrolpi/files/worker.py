@@ -17,7 +17,7 @@ from multiprocessing.queues import Queue
 from pathlib import Path
 from typing import Callable, Set, Dict, List, Tuple
 
-from sqlalchemy import text, or_
+from sqlalchemy import text
 
 from wrolpi import flags
 from wrolpi.common import apply_modelers, apply_refresh_cleanup
@@ -31,6 +31,7 @@ from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, glob_shared_stem,
     group_files_by_stem, choose_primary_file, apply_indexers,
     get_normalized_ignored_directories, remove_files_in_ignored_directories, merge_into_surviving_duplicates,
+    directory_or_descendant,
 )
 from wrolpi.files.refresh import (
     FileGroupDiff, FileComparisonResult, classify_file_group_diffs, compare_file_groups,
@@ -1096,12 +1097,8 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
 
                 # Also query for FileGroups contained in deleted directories
                 for deleted_path in deleted_paths:
-                    deleted_path_str = str(deleted_path)
                     dir_deleted_fgs = session.query(FileGroup).filter(
-                        or_(
-                            FileGroup.directory == deleted_path_str,
-                            FileGroup.directory.like(f'{deleted_path_str}/%')
-                        ),
+                        directory_or_descendant(FileGroup.directory, deleted_path),
                         ~FileGroup.id.in_(seen_fg_ids) if seen_fg_ids else True,
                     ).all()
                     for fg in dir_deleted_fgs:

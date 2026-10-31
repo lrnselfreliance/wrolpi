@@ -8,7 +8,7 @@ import shutil
 
 from wrolpi.common import logger, read_config_data
 from wrolpi.dates import now
-from .defaults import default_fields, slugify
+from .defaults import default_fields, normalize_item_dates, slugify
 
 logger = logger.getChild(__name__)
 
@@ -42,6 +42,8 @@ def _convert_item(legacy: dict, item_id: int) -> dict:
         unit = normalize_unit(legacy.get('unit'))
         if unit:
             item['item_size_unit'] = unit
+    # Legacy expiration dates are epoch seconds; store calendar dates like the rest of the app.
+    normalize_item_dates([item], default_fields('food'))
     return item
 
 

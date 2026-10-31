@@ -55,6 +55,55 @@ def test_migrate_legacy_yaml(test_inventory_configs):
     assert legacy_file.with_suffix('.yaml.migrated').is_file()
 
 
+def test_migrate_converts_epoch_expiration_dates(test_inventory_configs):
+    """Legacy items stored expiration dates as epoch seconds (sometimes ``str(float)``); the migration writes
+    calendar dates so no reader has to guess what an all-digit string means."""
+    config = test_inventory_configs
+    _write_legacy(config, [
+        dict(name='Food Storage', created_at='2024-01-01', items=[
+            dict(id=1, name='Salt', item_size='25', unit='lb', count='8', expiration_date=1893456000),
+            dict(id=2, name='Rice', item_size='25', unit='lb', count='8', expiration_date='1893456000.0'),
+            dict(id=3, name='Beans', item_size='25', unit='lb', count='8', expiration_date='2030-01-01'),
+            dict(id=4, name='Odd', item_size='25', unit='lb', count='8', expiration_date='2030'),
+        ]),
+    ])
+
+    assert migrate_legacy_inventory(config) is True
+    config.import_all()
+
+    inventory = config.get_inventory(config.all_inventories()[0]['slug'])
+    assert [i['expiration_date'] for i in inventory['items']] == ['2030-01-01', '2030-01-01', '2030-01-01', '2030']
+    # The file on disk holds calendar dates too.
+    assert '1893456000' not in config.get_file(inventory['slug']).read_text()
+
+
+def test_import_repairs_legacy_epoch_dates(test_inventory_configs):
+    """Inventories migrated before dates were normalized are rewritten once on import."""
+    config = test_inventory_configs
+    directory = config.get_directory()
+    directory.mkdir(parents=True, exist_ok=True)
+    file = directory / 'food.yaml'
+    with file.open('wt') as fh:
+        yaml.dump(dict(
+            version=3, slug='food', name='Food', type='food', created_at='2024-01-01', viewed_at='2024-01-01',
+            fields=[dict(key='name', label='Name', type='text', order=0),
+                    dict(key='expiration_date', label='Expires', type='date', order=1)],
+            items=[dict(id=1, name='Salt', expiration_date='1893456000'),
+                   dict(id=2, name='Rice', expiration_date='2030-06-01')],
+        ), fh)
+
+    config.import_all()
+    inventory = config.get_inventory('food')
+    assert [i['expiration_date'] for i in inventory['items']] == ['2030-01-01', '2030-06-01']
+    # Repaired on disk, with a version bump so stale clients notice.
+    assert '1893456000' not in file.read_text()
+    assert inventory['version'] == 4
+
+    # A second import finds nothing to repair and does not rewrite the file.
+    config.import_all()
+    assert config.get_inventory('food')['version'] == 4
+
+
 def test_migrate_is_idempotent(test_inventory_configs):
     config = test_inventory_configs
     _write_legacy(config, [dict(name='Food', items=[])])

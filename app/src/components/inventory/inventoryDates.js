@@ -80,10 +80,9 @@ export function formatInventoryDateValue(value) {
         return value == null ? '' : String(value);
     }
     if (typeof value === 'number' && Number.isFinite(value)) {
-        if (isEpochSecondsNumber(value)) {
-            return formatMsUtc(digitsToEpochMs(value));
-        }
-        return formatMsLocal(value);
+        // A YAML number is either legacy epoch seconds or something we can't interpret; never treat it as epoch
+        // milliseconds, so `2030` and `'2030'` display the same.
+        return isEpochSecondsNumber(value) ? formatMsUtc(digitsToEpochMs(value)) : String(value);
     }
     const s = String(value).trim();
     if (DATE_ONLY_RE.test(s)) {

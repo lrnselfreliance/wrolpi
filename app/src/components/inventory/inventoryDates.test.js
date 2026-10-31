@@ -19,6 +19,10 @@ describe('inventoryDates', () => {
         expect(parseInventoryDateMs('20300101')).toBeNull();
         expect(formatInventoryDateValue('2030')).not.toMatch(/^1970/);
         expect(formatInventoryDateValue('20300101')).not.toMatch(/^1970/);
+        // Unquoted YAML numbers display the same as the equivalent string.
+        expect(formatInventoryDateValue(2030)).toBe('2030');
+        expect(formatInventoryDateValue(20300101)).toBe('20300101');
+        expect(formatInventoryDateValue(1893456000)).toBe('2030-01-01');
     });
 
     test('epoch seconds with a .0 suffix are accepted', () => {
@@ -34,7 +38,8 @@ describe('inventoryDates', () => {
             const fromInput = displayed;
             expect(fromInput).toBe(stored);
             expect(formatInventoryDateValue(fromInput)).toBe(stored);
-            expect(formatInventoryDateValue(parseInventoryDateMs(fromInput))).toBe(stored);
+            const [y, m, d] = stored.split('-').map(Number);
+            expect(parseInventoryDateMs(fromInput)).toBe(new Date(y, m - 1, d).getTime());
         }
     });
 });
@@ -42,21 +47,31 @@ describe('inventoryDates', () => {
 describe('isItemExpired', () => {
     const fields = [{key: 'expiration_date', label: 'Expires', type: 'date', order: 0}];
 
-    test('tomorrow\'s calendar date is not expired at 9 PM Eastern', () => {
+    afterEach(() => jest.useRealTimers());
+
+    // The local calendar date of the (possibly faked) clock, independent of the process TZ.
+    const localYmd = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    test('a date that is still today or later is not expired late in the evening', () => {
         jest.useFakeTimers();
-        // 2030-01-01T02:00:00Z = 9 PM ET on 2029-12-31 (EST).
+        // 2030-01-01T02:00:00Z is 9 PM on 2029-12-31 in US Eastern, but already 2030-01-01 in UTC and east of it.
+        // Either way 2030-01-01 is not before the local date, so it must not be expired.
         jest.setSystemTime(new Date('2030-01-01T02:00:00.000Z'));
-        expect(localTodayYmd()).toBe('2029-12-31');
+        expect(localTodayYmd()).toBe(localYmd());
         expect(isItemExpired({expiration_date: '2030-01-01'}, fields)).toBe(false);
         expect(isItemExpired({expiration_date: '1893456000'}, fields)).toBe(false);
-        jest.useRealTimers();
     });
 
     test('yesterday\'s calendar date is expired', () => {
+        // 2030-01-02T15:00:00Z is 2030-01-02 in every timezone from UTC-9 through UTC+8.
         jest.useFakeTimers();
         jest.setSystemTime(new Date('2030-01-02T15:00:00.000Z'));
+        expect(localTodayYmd()).toBe(localYmd());
         expect(isItemExpired({expiration_date: '2030-01-01'}, fields)).toBe(true);
-        jest.useRealTimers();
+        expect(isItemExpired({expiration_date: '1893456000'}, fields)).toBe(true);
     });
 });
 

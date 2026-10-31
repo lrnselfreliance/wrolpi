@@ -108,10 +108,15 @@ fi
 chattr -i "${BUILD_DIR}"/work/*/stage*/rootfs/opt/wrolpi-blobs/* 2>/dev/null || :
 rm -rf "${BUILD_DIR}" /var/tmp/pi-gen-arm64 /var/tmp/arm64.zip
 
-# Get the latest pi-gen code.  The `arm64` branch builds trixie (Debian 13).
-wget https://github.com/RPi-Distro/pi-gen/archive/refs/heads/arm64.zip -O /var/tmp/arm64.zip
-unzip /var/tmp/arm64.zip -d /var/tmp
-mv /var/tmp/pi-gen-arm64 "${BUILD_DIR}"
+# pi-gen runs as root and builds the image, so it is fetched by commit hash: git verifies the objects against the
+# hash, so the build runs this exact pi-gen even if the TLS connection was intercepted.  The commit is on the
+# `arm64` branch, which builds trixie (Debian 13).  Bump it deliberately to take pi-gen updates.
+PI_GEN_COMMIT=c851f00178c64b87a86c06c2be216bd89d62e55b
+git init -q "${BUILD_DIR}" &&
+  git -C "${BUILD_DIR}" fetch -q --depth 1 https://github.com/RPi-Distro/pi-gen.git "${PI_GEN_COMMIT}" &&
+  git -C "${BUILD_DIR}" checkout -q FETCH_HEAD || { echo "ERROR: Failed to fetch pi-gen ${PI_GEN_COMMIT}"; exit 1; }
+[ "$(git -C "${BUILD_DIR}" rev-parse HEAD)" = "${PI_GEN_COMMIT}" ] || \
+  { echo "ERROR: pi-gen is not at ${PI_GEN_COMMIT}"; exit 1; }
 
 # Copy the configuration and build files into the pi-gen directory.
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"

@@ -2,6 +2,7 @@ import React, {useMemo, useRef, useState} from "react";
 import {Button, Checkbox, Icon, Table} from "../ui";
 import {FieldCell} from "./FieldCell";
 import {applyComputedCounts, computedCountConfigs} from "./computeFields";
+import {formatInventoryDateValue, localTodayYmd, parseInventoryDateMs} from "./inventoryDates";
 import {NUMERIC_TYPES} from "./units";
 
 const LOCATION_LIST_ID = 'inventory-location-suggestions';
@@ -25,22 +26,37 @@ function nextId(items) {
     return items.reduce((max, i) => (typeof i.id === 'number' && i.id > max ? i.id : max), 0) + 1;
 }
 
-// Type-aware comparison for sorting: numeric for number/quantity/calories, chronological for date, locale string
-// otherwise.  Blank values sort last (ascending).
-function compareByField(a, b, field) {
-    const av = a[field.key], bv = b[field.key];
-    const aBlank = av === '' || av == null;
-    const bBlank = bv === '' || bv == null;
-    if (aBlank || bBlank) {
-        return aBlank === bBlank ? 0 : (aBlank ? 1 : -1);
+// Blank values sort last (ascending).  Sort keys are precomputed once per row before sorting.
+function fieldSortKey(item, field) {
+    const av = item[field.key];
+    if (av === '' || av == null) {
+        return {kind: 'blank'};
     }
     if (NUMERIC_TYPES.includes(field.type)) {
-        return (Number(av) || 0) - (Number(bv) || 0);
+        return {kind: 'number', v: Number(av) || 0};
     }
     if (field.type === 'date') {
-        return (Date.parse(av) || 0) - (Date.parse(bv) || 0);
+        return {kind: 'date', v: parseInventoryDateMs(av) || 0};
     }
-    return String(av).localeCompare(String(bv));
+    return {kind: 'string', v: String(av)};
+}
+
+function compareFieldSortKeys(ak, bk) {
+    if (ak.kind === 'blank' || bk.kind === 'blank') {
+        const aBlank = ak.kind === 'blank';
+        const bBlank = bk.kind === 'blank';
+        return aBlank === bBlank ? 0 : (aBlank ? 1 : -1);
+    }
+    if (ak.kind === 'number' && bk.kind === 'number') {
+        return ak.v - bk.v;
+    }
+    if (ak.kind === 'date' && bk.kind === 'date') {
+        return ak.v - bk.v;
+    }
+    if (ak.kind === 'string' && bk.kind === 'string') {
+        return ak.v.localeCompare(bk.v);
+    }
+    return 0;
 }
 
 /**
@@ -120,7 +136,10 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
         if (!field) {
             return list;
         }
-        const sorted = [...list].sort((a, b) => compareByField(a, b, field));
+        const withKeys = list.map(item => ({item, key: fieldSortKey(item, field)}));
+        const sorted = withKeys
+            .sort((a, b) => compareFieldSortKeys(a.key, b.key))
+            .map(({item}) => item);
         return sort.dir === 'desc' ? sorted.reverse() : sorted;
     }, [items, fields, sort]);
 
@@ -296,19 +315,25 @@ export function formatValue(item, field) {
         const unit = item[`${field.key}_unit`] || field.unit || '';
         return `${value} ${unit}`.trim();
     }
+    if (field.type === 'date') {
+        return formatInventoryDateValue(value);
+    }
     return String(value);
 }
 
-// True when any `date`-type field is before the start of today (item is expired).
+// True when any `date`-type field is before today's local calendar date (item is expired).
 export function isItemExpired(item, fields) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    const today = localTodayYmd();
     return (fields || []).some(f => {
         if (f.type !== 'date') {
             return false;
         }
-        const t = Date.parse(item[f.key]);
-        return !isNaN(t) && t < start.getTime();
+        const raw = item[f.key];
+        if (raw === '' || raw == null) {
+            return false;
+        }
+        const ymd = formatInventoryDateValue(raw);
+        return /^\d{4}-\d{2}-\d{2}$/.test(ymd) && ymd < today;
     });
 }
 

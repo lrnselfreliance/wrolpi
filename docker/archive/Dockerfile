@@ -34,8 +34,9 @@ RUN DENO_VERSION="v2.8.3" \
     && deno --version
 
 # Install the Python wrapper and it's requirements.
-COPY docker/archive/requirements.txt /app/requirements.txt
-RUN  /app/venv/bin/pip3 install -r /app/requirements.txt
+COPY docker/archive/requirements.txt docker/archive/requirements.lock /app/
+COPY scripts/install_python_requirements.sh /opt/install_python_requirements.sh
+RUN  /opt/install_python_requirements.sh /app/venv/bin/pip3 /app/requirements.txt
 COPY docker/archive /app
 COPY scripts/singlefile_browser_wrapper.sh /app/singlefile_browser_wrapper.sh
 

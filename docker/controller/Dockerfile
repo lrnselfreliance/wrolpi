@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
-COPY controller/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy requirements first for caching; installed from the hash-locked requirements.
+COPY controller/requirements.txt controller/requirements.lock /app/
+COPY scripts/install_python_requirements.sh /app/install_python_requirements.sh
+RUN PIP_NO_CACHE_DIR=1 /app/install_python_requirements.sh pip /app/requirements.txt
 
 # Copy Controller code
 COPY controller/ /app/controller/

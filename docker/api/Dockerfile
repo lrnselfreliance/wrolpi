@@ -37,9 +37,10 @@ RUN DENO_VERSION="v2.8.3" \
 # yt-dlp needs cache directory
 RUN mkdir /.cache && chown -R 1000:1000 /.cache
 
-# Install dependencies.
-COPY requirements.txt /opt/wrolpi/requirements.txt
-RUN pip3 install -r /opt/wrolpi/requirements.txt
+# Install dependencies from the hash-locked requirements.
+COPY requirements.txt requirements.lock /opt/wrolpi/
+COPY scripts/install_python_requirements.sh /opt/wrolpi/scripts/install_python_requirements.sh
+RUN /opt/wrolpi/scripts/install_python_requirements.sh pip3 /opt/wrolpi/requirements.txt
 
 # Install WROLPi.
 COPY main.py /opt/wrolpi/

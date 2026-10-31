@@ -7,7 +7,6 @@ ENV PATH /app/node_modules/.bin:$PATH
 
 # install and cache app dependencies
 USER root
-RUN npm install -g serve
 COPY app/public /app/public
 COPY app/src /app/src
 COPY app/package.json app/package-lock.json app/tsconfig.json /app/

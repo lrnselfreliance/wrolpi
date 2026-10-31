@@ -20,11 +20,8 @@ apt-get install -y $(cat /opt/wrolpi/debian-live-config/config/package-lists/wro
 node -v
 npm -v
 
-# Install serve, and archiving tools.  Check each independently so a present
-# single-file cannot mask a missing serve (which breaks wrolpi-app).
-command -v serve >/dev/null || sudo npm i -g serve@12.0.1
-single-file --version >/dev/null 2>&1 || sudo npm i -g single-file-cli@2.0.73
-command -v readability-extractor >/dev/null || sudo npm i -g readability-extractor@0.0.6
+# Install serve and the archiving tools from the committed lockfile.
+/opt/wrolpi/scripts/install_npm_tools.sh
 
 # Install Deno runtime; single-file runs under it.
 command -v deno || {

@@ -216,20 +216,9 @@ upgrade_deno() {
 
 upgrade_deno || echo "Deno upgrade failed, continuing..."
 
-# Upgrade single-file to the pinned version; old versions (1.x) create compressed Archives without
-# the SingleFile comment header in the prelude, which WROLPi cannot validate.
-# readability-extractor is pinned alongside it to match the install scripts.
-upgrade_singlefile() {
-    SINGLE_FILE_VERSION="2.0.73"
-    if [ "$(single-file --version 2>/dev/null)" != "${SINGLE_FILE_VERSION}" ]; then
-        echo "Upgrading single-file-cli to ${SINGLE_FILE_VERSION}..."
-        npm i -g single-file-cli@${SINGLE_FILE_VERSION} readability-extractor@0.0.6
-    else
-        echo "single-file-cli ${SINGLE_FILE_VERSION} already installed"
-    fi
-}
-
-upgrade_singlefile || echo "single-file upgrade failed, continuing..."
+# Install serve and the archiving tools at the versions in the committed lockfile; old single-file versions (1.x)
+# create compressed Archives without the SingleFile comment header in the prelude, which WROLPi cannot validate.
+/opt/wrolpi/scripts/install_npm_tools.sh || echo "npm tools install failed, continuing..."
 
 # Clear Python bytecode cache before upgrading packages.
 echo "Clearing Python bytecode cache..."

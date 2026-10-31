@@ -9,8 +9,10 @@ RUN apt update && apt install -y python3 python3-dev python3-venv curl unzip && 
 RUN python3 -m venv /app/venv
 RUN . /app/venv/bin/activate
 
-# Install a newer singlefile and Readability.
-RUN npm install -g single-file-cli@2.0.73 readability-extractor@0.0.6
+# Install single-file and Readability from the committed lockfile.  Not in /usr/src/app, which is browserless's own app.
+COPY npm-tools/package.json npm-tools/package-lock.json /opt/npm-tools/
+COPY scripts/install_npm_tools.sh /opt/install_npm_tools.sh
+RUN /opt/install_npm_tools.sh /opt/npm-tools
 
 # Install Deno; single-file-cli is designed for it (under node 18 it cannot reach the browser CDP
 # on IPv6-enabled hosts and never exits).  Match the version pinned in scripts/upgrade.sh.

@@ -21,9 +21,6 @@ EOF
 # Create WROLPi user.  This user will own the media directory, API, and App.
 useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 
-# Install Node console commands.
-npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
-
 # Install Deno runtime.
 DENO_VERSION="v2.8.3"
 DENO_SHA256="d4589cc1ffcbf1995c92a0127d932aaf832ac70cfdcc6d5b7bf38043cf303575"
@@ -38,6 +35,9 @@ deno --version
 git clone -b "${WROLPI_BRANCH:-release}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 bash /opt/wrolpi-blobs/verify_wrolpi_commit.sh /opt/wrolpi HEAD /opt/wrolpi-blobs/roland@learningselfreliance.com.gpg
 rm /opt/wrolpi-blobs/verify_wrolpi_commit.sh /opt/wrolpi-blobs/roland@learningselfreliance.com.gpg
+
+# Install serve and the archiving tools from the committed lockfile.
+/opt/wrolpi/scripts/install_npm_tools.sh
 # `git config --global` needs HOME, which is empty when the build runs under
 # systemd (the release poller service has no HOME); set it to root's home.
 export HOME=/root

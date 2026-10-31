@@ -30,6 +30,25 @@ while getopts ":hb:" option; do
   esac
 done
 
+# Verifies the WROLPi checkout before anything in it runs.  This is a copy of wrolpi/scripts/verify_wrolpi_commit.sh
+# (install.sh runs before any verified checkout exists); a test keeps the two the same.
+verify_wrolpi_commit() {
+  local repo=$1 rev=$2 key=$3
+  local fingerprint=${WROLPI_SIGNING_FINGERPRINT:-A74A9634A86C65F3C13949AD1BA620CE6C9A4680}
+  local gnupghome status rc=1
+  # A short path: gpg's agent socket lives in GNUPGHOME and its path is limited to ~108 characters.
+  gnupghome=$(mktemp -d /tmp/wgpg.XXXXXX) || return 1
+  if GNUPGHOME="${gnupghome}" gpg --batch --quiet --import "${key}" 2>/dev/null; then
+    # VALIDSIG <signing key fingerprint> ... <primary key fingerprint>
+    status=$(GNUPGHOME="${gnupghome}" git -C "${repo}" verify-commit --raw "${rev}" 2>&1) &&
+      awk -v fpr="${fingerprint}" '$2 == "VALIDSIG" && ($3 == fpr || $NF == fpr) {found = 1} END {exit !found}' \
+        <<<"${status}" && rc=0
+  fi
+  rm -rf "${gnupghome}"
+  [ ${rc} -eq 0 ] || echo "ERROR: ${rev} in ${repo} is not signed by the WROLPi key ${fingerprint}" >&2
+  return ${rc}
+}
+
 rpi=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
@@ -60,12 +79,17 @@ set -e
 [ -d /opt/wrolpi ] && git config --global --add safe.directory /opt/wrolpi
 
 # Get the latest WROLPi code.  Use the branch requested.
-apt install -y git
+apt install -y git gnupg
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
 # Use `checkout -B <branch> origin/<branch>` so the ref can never be mistaken for a path. A tracked `release/`
 # directory otherwise collides with the `release` branch name, making a bare `git checkout release` ambiguous.
 (cd /opt/wrolpi && git fetch && git checkout -B "${BRANCH}" "origin/${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+# The key comes from the clone, so it is only trusted because its fingerprint is pinned in verify_wrolpi_commit.
+verify_wrolpi_commit /opt/wrolpi HEAD /opt/wrolpi/wrolpi/roland@learningselfreliance.com.gpg || {
+  echo "Refusing to install: the WROLPi code on ${BRANCH} is not signed by the WROLPi release key."
+  exit 5
+}
 
 if [ ${rpi} == true ]; then
   /opt/wrolpi/scripts/install_raspberrypios.sh 2>&1 | tee /opt/wrolpi/install.log

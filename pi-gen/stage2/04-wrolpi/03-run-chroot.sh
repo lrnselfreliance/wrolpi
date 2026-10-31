@@ -36,6 +36,8 @@ deno --version
 
 # Put the latest WROLPi in /opt/wrolpi.
 git clone -b "${WROLPI_BRANCH:-release}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+bash /opt/wrolpi-blobs/verify_wrolpi_commit.sh /opt/wrolpi HEAD /opt/wrolpi-blobs/roland@learningselfreliance.com.gpg
+rm /opt/wrolpi-blobs/verify_wrolpi_commit.sh /opt/wrolpi-blobs/roland@learningselfreliance.com.gpg
 # `git config --global` needs HOME, which is empty when the build runs under
 # systemd (the release poller service has no HOME); set it to root's home.
 export HOME=/root

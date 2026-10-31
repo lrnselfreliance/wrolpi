@@ -122,6 +122,9 @@ git init -q "${BUILD_DIR}" &&
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
 echo "export WROLPI_BRANCH=${BRANCH}" >> "${BUILD_DIR}/config.txt"
 rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
+# The chroot verifies its WROLPi clone with the verifier and key from this (build) checkout, not from the clone.
+cp "${SCRIPT_DIR}/../wrolpi/scripts/verify_wrolpi_commit.sh" "${SCRIPT_DIR}/../wrolpi/roland@learningselfreliance.com.gpg" \
+  "${BUILD_DIR}/stage2/04-wrolpi/files/"
 
 # We only need to build the Lite and Desktop images.
 rm -f "${BUILD_DIR}"/stage*/EXPORT*

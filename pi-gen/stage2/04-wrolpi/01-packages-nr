@@ -23,6 +23,7 @@ gcc-doc
 git
 git-doc
 gnome-disk-utility
+gnupg
 gnupg-agent
 gpsd
 gpsd-tools

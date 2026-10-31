@@ -89,6 +89,9 @@ class FileGroup(ModelHelper, Base):
         # Identity of a FileGroup.  Duplicates are collapsed by
         # dedupe_file_groups_by_directory_stem before this unique index is created.
         Index('file_group_directory_stem_idx', 'directory', 'stem', unique=True),
+        # Holds only the unindexed rows, so the modelers and indexers find them without reading every row.
+        # SQLite uses a partial index only when the query has this exact term: filter on `indexed != True`.
+        Index('file_group_unindexed_idx', 'id', sqlite_where=text('"indexed" != 1')),
     )
     # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
     id: Mapped[int] = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)

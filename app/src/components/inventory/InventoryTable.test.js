@@ -205,6 +205,22 @@ describe('InventoryTable sorting', () => {
         // 5 < 12 < 20 numerically (lexical would put '12','20','5').
         expect(bodyNames()).toEqual(['Rice', 'Apples', 'Beans']);
     });
+
+    test('date column sorts chronologically, including legacy epoch values', () => {
+        const dateFields = [
+            {key: 'name', label: 'Name', type: 'text', order: 0},
+            {key: 'expiration_date', label: 'Expires', type: 'date', order: 1},
+        ];
+        const datedItems = [
+            {id: 1, name: 'Late', expiration_date: '1893456000'},   // 2030-01-01
+            {id: 2, name: 'Early', expiration_date: '2000-01-01'},
+        ];
+        render(<InventoryTable slug='s' fields={dateFields} items={datedItems} locations={[]}
+                               onChange={jest.fn()}/>);
+        fireEvent.click(screen.getByText('Expires'));
+        expect(bodyNames()).toEqual(['Early', 'Late']);
+        expect(screen.getByText('2030-01-01')).toBeTruthy();
+    });
 });
 
 describe('InventoryTable catalog pre-fill', () => {

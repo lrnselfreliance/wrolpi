@@ -5,11 +5,48 @@ add/remove/reorder/retype fields freely.  Quantity-field default units use mathj
 not ``pound``); all unit math happens in the frontend via mathjs.
 """
 import re
+from datetime import datetime, timezone
 
 # Supported field types.  The backend treats every value as an opaque string/number; only the frontend interprets
 # `quantity` (magnitude + `<key>_unit`), `date`, `select` (enum `options`), `location`, and `calories` (a number of
 # kcal-per-unit that the Summary's ration estimate detects by type).
 FIELD_TYPES = ('text', 'number', 'quantity', 'date', 'select', 'location', 'calories')
+
+
+_DATE_ONLY_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+# Legacy inventory dates were stored as Unix epoch seconds (optionally ``str(float)``, e.g. ``1893456000.0``).
+_EPOCH_SECONDS_RE = re.compile(r'^\d{9,10}(\.0+)?$')
+
+
+def normalize_date_value(value):
+    """Normalize a ``date``-field value: legacy epoch seconds become ``YYYY-MM-DD`` (UTC); anything else is
+    returned unchanged (stripped if a string)."""
+    if value is None or value == '':
+        return value
+    s = value.strip() if isinstance(value, str) else str(value)
+    if _DATE_ONLY_RE.match(s):
+        return s
+    if _EPOCH_SECONDS_RE.match(s):
+        return datetime.fromtimestamp(int(float(s)), tz=timezone.utc).strftime('%Y-%m-%d')
+    return s
+
+
+def date_field_keys(fields_) -> set:
+    """The keys of every ``date``-type field in a field schema."""
+    return {f['key'] for f in fields_ or [] if isinstance(f, dict) and f.get('type') == 'date'}
+
+
+def normalize_item_dates(items: list, fields_: list) -> bool:
+    """Normalize every date-field value of ``items`` in place.  Returns True if anything changed."""
+    changed = False
+    for key in date_field_keys(fields_):
+        for item in items or []:
+            if isinstance(item, dict) and key in item:
+                new = normalize_date_value(item[key])
+                if new != item[key]:
+                    item[key] = new
+                    changed = True
+    return changed
 
 
 def _field(key, label, type_, order, **kwargs):

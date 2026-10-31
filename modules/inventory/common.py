@@ -9,8 +9,7 @@ from typing import List, Optional
 
 from wrolpi.common import logger, MultiFileConfig, read_config_data
 from wrolpi.errors import ValidationError
-from .defaults import (DEFAULT_INVENTORIES, FIELD_TYPES, default_fields, slugify)
-
+from .defaults import (DEFAULT_INVENTORIES, FIELD_TYPES, default_fields, normalize_item_dates, slugify)
 
 logger = logger.getChild(__name__)
 
@@ -62,6 +61,7 @@ def _normalize_items(items: list, fields_: list) -> list:
     normalized = []
     for raw in items:
         clean = {k: (v.strip() if isinstance(v, str) else v) for k, v in raw.items() if k in allowed}
+        normalize_item_dates([clean], fields_)
         item_id = raw.get('id')
         if not isinstance(item_id, int) or item_id in used:
             counter += 1
@@ -87,6 +87,27 @@ class InventoriesConfig(MultiFileConfig):
     def discover(self) -> List[str]:
         # Exclude reserved files (e.g. catalog.yaml) that share the directory but are not inventories.
         return [slug for slug in super().discover() if slug not in RESERVED_SLUGS]
+
+    def import_all(self, send_events: bool = False):
+        super().import_all(send_events=send_events)
+        self._repair_legacy_dates()
+
+    def _repair_legacy_dates(self):
+        """One-time repair: inventories migrated before dates were normalized hold epoch seconds in their date
+        fields.  Rewrite those files as YYYY-MM-DD so every reader (API, MCP, frontend) sees a calendar date."""
+        for slug in list(self._configs.keys()):
+            entity = dict(self._configs[slug])
+            items = [dict(i) for i in entity.get('items') or [] if isinstance(i, dict)]
+            if not normalize_item_dates(items, entity.get('fields') or []):
+                continue
+            entity['items'] = items
+            try:
+                with self.save_lock():
+                    self._configs[slug] = entity
+                    self._persist_slug(slug)
+                logger.info(f'Normalized legacy epoch dates in inventory {slug}')
+            except Exception as e:
+                logger.error(f'Failed to normalize legacy epoch dates in inventory {slug}', exc_info=e)
 
     def all_inventories(self) -> List[dict]:
         """Return every inventory in full (fields + items), sorted by name.

@@ -79,7 +79,20 @@ def test_save_inventory_strips_whitespace(food_inventory_factory, test_inventory
     assert item['name'] == 'Rice'
     assert item['category'] == 'grains'
     assert item['count'] == '4'
-  
+
+
+def test_save_inventory_normalizes_legacy_epoch_expiration(food_inventory_factory, test_inventory_configs):
+    config = test_inventory_configs
+    slug = food_inventory_factory()
+    saved = config.save_inventory(slug, dict(items=[
+        dict(name='Rice', expiration_date='1893456000'),
+    ]))
+    assert saved['items'][0]['expiration_date'] == '2030-01-01'
+    # Short digit strings are not mistaken for epoch seconds.
+    saved = config.save_inventory(slug, dict(items=[
+        dict(name='Weird', expiration_date='2030'),
+    ]))
+    assert saved['items'][0]['expiration_date'] == '2030'
 
 def test_save_inventory_fields(food_inventory_factory, test_inventory_configs):
     config = test_inventory_configs

@@ -213,6 +213,16 @@ def test_get_or_create_author_collection_case_insensitive(test_session):
     assert col1.id == col2.id == col3.id
 
 
+@pytest.mark.parametrize('get_or_create', [get_or_create_author_collection, get_or_create_subject_collection])
+def test_get_or_create_collection_non_ascii(test_session, get_or_create):
+    """A name beginning with a non-ASCII capital finds its existing collection."""
+    col1 = get_or_create(test_session, 'Édouard Hospitalier')
+    test_session.commit()
+    col2 = get_or_create(test_session, 'Édouard Hospitalier')
+    col3 = get_or_create(test_session, 'ÉDOUARD HOSPITALIER')
+    assert col1.id == col2.id == col3.id
+
+
 @pytest.mark.asyncio
 async def test_search_authors_by_name(test_session):
     """Search for author collections by partial name."""

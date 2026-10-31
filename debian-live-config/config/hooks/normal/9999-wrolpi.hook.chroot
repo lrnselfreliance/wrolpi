@@ -48,6 +48,8 @@ git --version
 WROLPI_BRANCH="release"
 [ -f /opt/wrolpi-branch ] && WROLPI_BRANCH=$(cat /opt/wrolpi-branch)
 git clone -b "${WROLPI_BRANCH}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+bash /opt/wrolpi-verify/verify_wrolpi_commit.sh /opt/wrolpi HEAD /opt/wrolpi-verify/roland@learningselfreliance.com.gpg
+rm -rf /opt/wrolpi-verify
 rm -f /opt/wrolpi-branch
 
 # Install webapp.

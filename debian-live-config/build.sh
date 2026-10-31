@@ -107,6 +107,10 @@ rsync -a "${SCRIPT_DIR}/config" "${BUILD_DIR}/"
 # Write branch config for hook script.
 mkdir -p "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs"
 echo "${BRANCH}" > "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-branch"
+# The hook verifies its WROLPi clone with the verifier and key from this (build) checkout, not from the clone.
+mkdir -p "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-verify"
+cp "${SCRIPT_DIR}/../wrolpi/scripts/verify_wrolpi_commit.sh" "${SCRIPT_DIR}/../wrolpi/roland@learningselfreliance.com.gpg" \
+  "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-verify/"
 
 # Cache directory for downloaded blobs (persists across builds).
 BLOB_CACHE="${SCRIPT_DIR}/files"

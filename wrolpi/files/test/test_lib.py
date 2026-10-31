@@ -3,6 +3,7 @@ import itertools
 import json
 import os
 import pathlib
+import re
 import shutil
 import zipfile
 from http import HTTPStatus
@@ -1990,6 +1991,40 @@ def test_directory_or_descendant(test_session):
     plan = ' '.join(row[3] for row in test_session.execute(sqlalchemy.text(f'EXPLAIN QUERY PLAN {statement}')))
     assert 'SCAN file_group' not in plan, plan
     assert 'file_group_directory_idx' in plan, plan
+
+
+@pytest.mark.asyncio
+async def test_unindexed_lookups_use_index(async_client, test_session, make_files_structure, refresh_files):
+    """The modelers' and indexers' lookups of unindexed FileGroups read an index, not every file_group row.
+
+    A large library is almost entirely indexed, so a full scan to find the few unindexed rows read the whole
+    table on every refresh."""
+    make_files_structure(['a.txt', 'b.pdf', 'c.html'])
+    await refresh_files()
+    test_session.execute(sqlalchemy.text('UPDATE file_group SET "indexed" = 0'))
+    test_session.commit()
+
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if re.search(r'FROM file_group WHERE file_group\."indexed" != 1( LIMIT|\)|$)', ' '.join(statement.split())):
+            statements.append((statement, parameters))
+
+    engine = test_session.get_bind()
+    sqlalchemy.event.listen(engine, 'before_cursor_execute', capture)
+    try:
+        await wrolpi.common.apply_modelers(progress_callback=lambda *a: None)
+        await lib.apply_indexers(progress_callback=lambda *a: None)
+    finally:
+        sqlalchemy.event.remove(engine, 'before_cursor_execute', capture)
+
+    # The progress counts and the indexer's batch select.
+    assert len(statements) >= 3
+    connection = test_session.connection().connection.dbapi_connection
+    for statement, parameters in statements:
+        plan = [i[3] for i in connection.execute(f'EXPLAIN QUERY PLAN {statement}', parameters)]
+        assert 'SCAN file_group' not in plan, (statement, plan)
+        assert any('file_group_unindexed_idx' in i for i in plan), (statement, plan)
 
 
 def test_sha256_files(test_directory):

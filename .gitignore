@@ -118,6 +118,7 @@ test/config
 
 modules/node_modules/
 docker/archive/node_modules/
+npm-tools/node_modules/
 docker/archive/package-lock.json
 
 # open street map files

@@ -1,0 +1,10 @@
+{
+  "name": "wrolpi-npm-tools",
+  "private": true,
+  "description": "Command-line tools WROLPi runs; installed from package-lock.json by scripts/install_npm_tools.sh.",
+  "dependencies": {
+    "readability-extractor": "0.0.6",
+    "serve": "12.0.1",
+    "single-file-cli": "2.0.73"
+  }
+}

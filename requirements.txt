@@ -36,7 +36,6 @@ sanic-testing==24.6.0
 sanic==25.12.1
 secretstorage==3.5.0
 selenium==4.50.0
-srt==3.5.3
 tqdm==4.70.1
 vininfo[cli]==1.11.0
 webvtt-py==0.5.1

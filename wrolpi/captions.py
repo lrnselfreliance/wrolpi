@@ -7,11 +7,11 @@ import tempfile
 from pathlib import Path
 from typing import Generator, List, Optional, Union
 
-import srt
 import webvtt
 
 from wrolpi.cmd import FFMPEG_BIN
 from wrolpi.common import logger
+from wrolpi.vendor import srt
 
 __all__ = ['read_captions', 'read_captions_with_timestamps', 'extract_captions',
            'strip_youtube_caption_positioning']

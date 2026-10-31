@@ -2858,9 +2858,6 @@ sqlalchemy==2.0.54 \
     # via
     #   -r requirements.txt
     #   alembic
-srt==3.5.3 \
-    --hash=sha256:4884315043a4f0740fd1f878ed6caa376ac06d70e135f306a6dc44632eed0cc0
-    # via -r requirements.txt
 tabulate==0.10.0 \
     --hash=sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d \
     --hash=sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3

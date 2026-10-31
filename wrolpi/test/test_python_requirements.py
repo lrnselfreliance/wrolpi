@@ -3,6 +3,7 @@ Tests that WROLPi's Python packages are installed from hash-locked requirements,
 separately so devices get YouTube fixes as soon as they are released.
 """
 import re
+import subprocess
 
 import pytest
 from packaging.requirements import Requirement
@@ -103,7 +104,62 @@ def test_install_sites_use_the_helper(path):
     assert 'install_python_requirements.sh' in (PROJECT_DIR / path).read_text()
 
 
-def test_helper_requires_hashes_and_floats_only_yt_dlp():
-    text = HELPER.read_text()
-    assert '--require-hashes' in text
-    assert re.search(r"grep -E '\^yt-dlp'", text)
+@pytest.fixture
+def fake_pip(tmp_path):
+    """A pip that records each call's arguments, and fails the first `fail` calls of each kind."""
+
+    def make(fail: int = 0):
+        log = tmp_path / 'calls'
+        pip = tmp_path / 'pip'
+        pip.write_text(f"""#!/usr/bin/env bash
+kind=$([ "$1 $2" = "install --require-hashes" ] && echo lock || echo yt-dlp)
+count=$(( $(cat "{tmp_path}/$kind.count" 2>/dev/null || echo 0) + 1 ))
+echo "$count" > "{tmp_path}/$kind.count"
+printf '%s\\n' "$*" >> "{log}"
+[ "$count" -gt {fail} ]
+""")
+        pip.chmod(0o755)
+        requirements = tmp_path / 'requirements.txt'
+        requirements.write_text('sanic==25.12.1\nyt-dlp[default,curl-cffi]>=2026.08.19  # floats\nyt-dlp-ejs>=0.8.0\n')
+        result = subprocess.run(['bash', str(HELPER), str(pip), str(requirements)], capture_output=True, text=True)
+        calls = log.read_text().splitlines() if log.exists() else []
+        return result, calls, tmp_path
+
+    return make
+
+
+def test_helper_installs_the_lock_with_hashes_then_only_yt_dlp(fake_pip):
+    result, calls, tmp_path = fake_pip()
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        f'install --require-hashes --only-binary :all: -r {tmp_path}/requirements.lock',
+        # --no-deps: the unhashed install can never replace a locked package or add one.
+        'install --upgrade --no-deps --only-binary :all: yt-dlp[default,curl-cffi]>=2026.08.19 yt-dlp-ejs>=0.8.0',
+    ]
+
+
+def test_helper_retries_both_installs(fake_pip):
+    result, calls, _ = fake_pip(fail=2)
+    assert result.returncode == 0, result.stderr
+    assert len(calls) == 6
+
+
+def test_helper_fails_when_the_lock_cannot_be_installed(fake_pip):
+    """Three failed hash-checked installs stop the install; yt-dlp is never installed on its own."""
+    result, calls, _ = fake_pip(fail=3)
+    assert result.returncode != 0
+    assert len(calls) == 3 and all('--require-hashes' in i for i in calls)
+
+
+def test_locks_are_wheels_only():
+    """A source archive's build installs setuptools without a hash; lock_requirements.sh refuses packages with no
+    wheel, and srt (source only on PyPI) is vendored instead."""
+    assert '--only-binary :all:' in (PROJECT_DIR / 'scripts/lock_requirements.sh').read_text()
+    for requirements in REQUIREMENTS:
+        assert 'srt' not in {_name(i.name) for i in _requirements(requirements)}
+
+
+def test_captions_use_the_vendored_srt():
+    from wrolpi import captions
+    from wrolpi.vendor import srt
+    assert captions.srt is srt

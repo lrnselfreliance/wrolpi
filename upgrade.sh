@@ -126,12 +126,14 @@ rollback_or_no_restart() {
   fi
 }
 
-# Refuses to move a checkout back to an older commit of the branch it is already on.  A signature proves a commit is
+# Refuses to move a checkout back to an older WROLPi on the branch it is already on.  A signature proves a commit is
 # WROLPi's, not that it is the newest, so an intercepted fetch could otherwise roll a device back to an old signed
-# release.  Switching branches, re-running the same commit, and history the checkout does not contain (a Debian 12
-# device pinned to debian12-final) are allowed; -d allows a deliberate downgrade.
+# commit.  Older means an ancestor of HEAD, or a lower wrolpi/version.txt (that file is inside the signed tree, and it
+# catches old signed commits from other history).  A rewritten branch at the same or a higher version, a branch switch,
+# and the same commit are allowed; -d allows a deliberate downgrade.  Debian 12 devices never reach this: they run the
+# upgrade.sh pinned at debian12-final.
 refuse_rollback() {
-  local repo=$1 branch=$2 target=$3 current head
+  local repo=$1 branch=$2 target=$3 current head head_version target_version
   [ "${ALLOW_DOWNGRADE}" = true ] && return 0
   current=$(git -C "${repo}" branch --show-current)
   # A detached HEAD (a device built from a release image) is on the branch it upgrades.
@@ -139,9 +141,13 @@ refuse_rollback() {
   head=$(git -C "${repo}" rev-parse HEAD)
   target=$(git -C "${repo}" rev-parse "${target}^{commit}")
   [ "${head}" = "${target}" ] && return 0
-  if git -C "${repo}" merge-base --is-ancestor "${target}" "${head}"; then
-    echo "ERROR: ${branch} (${target}) is older than this WROLPi (${head}).  Refusing to roll back; run" \
-      "upgrade.sh -d to allow it."
+  head_version=$(git -C "${repo}" show "${head}:wrolpi/version.txt" 2>/dev/null | tr -d '[:space:]')
+  target_version=$(git -C "${repo}" show "${target}:wrolpi/version.txt" 2>/dev/null | tr -d '[:space:]')
+  if git -C "${repo}" merge-base --is-ancestor "${target}" "${head}" ||
+    { [ "${target_version}" != "${head_version}" ] &&
+      [ "$(printf '%s\n%s\n' "${target_version}" "${head_version}" | sort -V | head -n1)" = "${target_version}" ]; }; then
+    echo "ERROR: ${branch} (${target}, version ${target_version:-unknown}) is older than this WROLPi (${head}," \
+      "version ${head_version}).  Refusing to roll back; run upgrade.sh -d to allow it."
     return 1
   fi
 }

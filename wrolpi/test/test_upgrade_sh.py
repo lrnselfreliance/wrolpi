@@ -20,7 +20,8 @@ def _function(name: str) -> str:
 
 @pytest.fixture
 def repo(tmp_path):
-    """A checkout on `release` at the third of three commits, plus an unrelated `orphan` commit."""
+    """A checkout on `release` at the third of three commits (versions 0.1.0 to 0.3.0), plus commits from unrelated
+    history: `orphan-old` (0.1.0), `orphan-same` (0.3.0), `orphan-new` (0.4.0) and `orphan-unversioned`."""
     path = tmp_path / 'repo'
     path.mkdir()
 
@@ -31,13 +32,26 @@ def repo(tmp_path):
     git('init', '-q', '-b', 'release')
     git('config', 'user.email', 'test@test.com')
     git('config', 'user.name', 'Test')
-    for name in ('first', 'second', 'third'):
+    version = path / 'wrolpi/version.txt'
+    version.parent.mkdir()
+
+    def commit(name, version_=None):
+        if version_:
+            version.write_text(f'{version_}\n')
+            git('add', 'wrolpi/version.txt')
         git('commit', '-q', '--allow-empty', '--no-gpg-sign', '-m', name)
         git('tag', name)
-    git('checkout', '-q', '--orphan', 'unrelated')
-    git('commit', '-q', '--allow-empty', '--no-gpg-sign', '-m', 'orphan')
-    git('tag', 'orphan')
-    git('checkout', '-q', 'release')
+
+    for name, version_ in (('first', '0.1.0'), ('second', '0.2.0'), ('third', '0.3.0')):
+        commit(name, version_)
+    for name, version_ in (('orphan-old', '0.1.0'), ('orphan-same', '0.3.0'), ('orphan-new', '0.4.0')):
+        git('checkout', '-q', '--orphan', name + '-branch')
+        commit(name, version_)
+    git('checkout', '-q', '--orphan', 'unversioned-branch')
+    git('rm', '-q', '-r', '--cached', '.')
+    version.unlink()
+    commit('orphan-unversioned')
+    git('checkout', '-q', '-f', 'release')
     yield path, git
 
 
@@ -81,13 +95,23 @@ def test_refuse_rollback_detached_head(repo):
     assert _refuse_rollback(path, 'release', 'third').returncode == 0
 
 
-def test_refuse_rollback_allows_unrelated_history(repo):
-    """A Debian 12 device is pinned to debian12-final, which is not in release's history."""
-    assert _refuse_rollback(repo[0], 'release', 'orphan').returncode == 0
+@pytest.mark.parametrize('target', ['orphan-same', 'orphan-new'])
+def test_refuse_rollback_allows_rewritten_history(repo, target):
+    """A force-pushed branch is not in the device's history; it is allowed when its version is not lower."""
+    assert _refuse_rollback(repo[0], 'release', target).returncode == 0
 
 
-def test_refuse_rollback_allow_downgrade(repo):
-    assert _refuse_rollback(repo[0], 'release', 'second', allow_downgrade=True).returncode == 0
+@pytest.mark.parametrize('target', ['orphan-old', 'orphan-unversioned'])
+def test_refuse_rollback_lower_version_from_other_history(repo, target):
+    """An old signed commit from other history (an old experimental branch) is a rollback by its version."""
+    result = _refuse_rollback(repo[0], 'release', target)
+    assert result.returncode != 0
+    assert 'Refusing to roll back' in result.stdout
+
+
+@pytest.mark.parametrize('target', ['second', 'orphan-old'])
+def test_refuse_rollback_allow_downgrade(repo, target):
+    assert _refuse_rollback(repo[0], 'release', target, allow_downgrade=True).returncode == 0
 
 
 def test_upgrade_refuses_rollback_before_checkout():

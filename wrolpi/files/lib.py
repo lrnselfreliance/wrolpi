@@ -4,6 +4,7 @@ import dataclasses
 import datetime
 import functools
 import glob
+import hashlib
 import json
 import mimetypes
 import os
@@ -690,6 +691,38 @@ def get_unique_files_by_stem(files: List[pathlib.Path] | Tuple[pathlib.Path, ...
         logger.trace(f'get_unique_files_by_stem {files=}')
         logger.trace(f'get_unique_files_by_stem {results=}')
     return results
+
+
+# The metadata JSON holds the sums, so it cannot hold its own.
+METADATA_JSON_SUFFIXES = ('.info.json', '.readability.json')
+
+# A file's (modification time in nanoseconds, hex sha256), keyed by its path.
+FileSums = Dict[pathlib.Path, Tuple[int, str]]
+
+
+def sha256_files(paths: Iterable[pathlib.Path], known: FileSums = None) -> FileSums:
+    """Hash each file, skipping the metadata JSON and files that do not exist.
+
+    A `known` sum is reused while its file's modification time is unchanged.  This reads whole files; call it in a
+    thread."""
+    known = known or dict()
+    sums = dict()
+    for path in paths:
+        if path.name.endswith(METADATA_JSON_SUFFIXES) or not path.is_file():
+            continue
+        mtime_ns = path.stat().st_mtime_ns
+        if (known_sum := known.get(path)) and known_sum[0] == mtime_ns:
+            sums[path] = known_sum
+            continue
+        with path.open('rb') as fh:
+            sums[path] = (mtime_ns, hashlib.file_digest(fh, 'sha256').hexdigest())
+    return sums
+
+
+def sha256_by_suffix(sums: FileSums) -> Dict[str, str]:
+    """The hex sha256 of each file keyed by its suffix.  The files of a FileGroup share a stem, so a suffix names one
+    file even after the group is renamed."""
+    return {split_path_stem_and_suffix(path)[1]: sha256 for path, (_, sha256) in sums.items()}
 
 
 refresh_logger = logger.getChild('refresh')

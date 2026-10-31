@@ -1,5 +1,7 @@
+import hashlib
 import itertools
 import json
+import os
 import pathlib
 import shutil
 import zipfile
@@ -1988,3 +1990,33 @@ def test_directory_or_descendant(test_session):
     plan = ' '.join(row[3] for row in test_session.execute(sqlalchemy.text(f'EXPLAIN QUERY PLAN {statement}')))
     assert 'SCAN file_group' not in plan, plan
     assert 'file_group_directory_idx' in plan, plan
+
+
+def test_sha256_files(test_directory):
+    """Each file is hashed; the metadata JSON, which holds the sums, and missing files are skipped."""
+    video, caption = test_directory / 'foo.mp4', test_directory / 'foo.en.vtt'
+    video.write_bytes(b'video')
+    caption.write_bytes(b'caption')
+    (test_directory / 'foo.info.json').write_text('{}')
+    (test_directory / 'foo.readability.json').write_text('{}')
+    paths = [video, caption, test_directory / 'foo.info.json', test_directory / 'foo.readability.json',
+             test_directory / 'foo.webp']
+
+    sums = lib.sha256_files(paths)
+    assert sums == {
+        video: (video.stat().st_mtime_ns, hashlib.sha256(b'video').hexdigest()),
+        caption: (caption.stat().st_mtime_ns, hashlib.sha256(b'caption').hexdigest()),
+    }
+    # Keyed by suffix: every file of a FileGroup shares a stem, which a rename changes.
+    assert lib.sha256_by_suffix(sums) == {
+        '.mp4': hashlib.sha256(b'video').hexdigest(),
+        '.en.vtt': hashlib.sha256(b'caption').hexdigest(),
+    }
+
+    # A known sum is reused while the file is unchanged.
+    known = {video: (video.stat().st_mtime_ns, 'known')}
+    assert lib.sha256_files([video], known=known) == known
+    # A file changed since it was hashed is hashed again.
+    video.write_bytes(b'video changed')
+    os.utime(video, ns=(0, 0))
+    assert lib.sha256_files([video], known=known) == {video: (0, hashlib.sha256(b'video changed').hexdigest())}

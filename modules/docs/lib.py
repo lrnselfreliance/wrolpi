@@ -210,7 +210,8 @@ def get_or_create_author_collection(session: Session, author_name: str) -> Optio
 
     author_name = author_name.strip()
     collection = session.query(Collection).filter(
-        func.lower(Collection.name) == author_name.lower(),
+        # Both sides use SQLite's lower(), which folds only ASCII; Python's lower() would miss 'Édouard'.
+        func.lower(Collection.name) == func.lower(author_name),
         Collection.kind == 'author',
     ).first()
     if not collection:
@@ -228,7 +229,8 @@ def get_or_create_subject_collection(session: Session, subject_name: str) -> Opt
 
     subject_name = subject_name.strip()
     collection = session.query(Collection).filter(
-        func.lower(Collection.name) == subject_name.lower(),
+        # Both sides use SQLite's lower(), which folds only ASCII; Python's lower() would miss 'Édouard'.
+        func.lower(Collection.name) == func.lower(subject_name),
         Collection.kind == 'subject',
     ).first()
     if not collection:

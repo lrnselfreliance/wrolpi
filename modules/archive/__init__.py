@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import pathlib
@@ -17,6 +18,7 @@ from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.modeler import run_modeler_loop, skip_clause, SkipModeler
+from wrolpi.files.lib import sha256_files, sha256_by_suffix, FileSums
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT, PROJECT_DIR
 from . import lib
@@ -48,6 +50,7 @@ class PreparedArchive:
 class ExecutedArchive:
     """Output of ArchiveDownloader.execute_download: files are on disk and ready to register."""
     written: WrittenArchiveFiles
+    sha256: FileSums = None  # sums of the written files, hashed without the DB session
 
 
 class ArchiveDownloader(Downloader, ABC):
@@ -98,11 +101,13 @@ class ArchiveDownloader(Downloader, ABC):
 
         written = write_archive_files(artifacts.url, artifacts.singlefile, artifacts.readability,
                                       artifacts.screenshot, destination=prepared.destination)
-        return ExecutedArchive(written=written)
+        sha256 = await asyncio.to_thread(sha256_files, written.paths)
+        return ExecutedArchive(written=written, sha256=sha256)
 
     def finalize_download(self, session: Session, download: Download,
                           executed: ExecutedArchive) -> DownloadResult:
-        """Register the Archive record, apply tags, persist parent_download_url. Caller commits."""
+        """Register the Archive record, apply tags, persist parent_download_url and the sha256 of its files.
+        Caller commits."""
         archive = register_archive(session, executed.written)
 
         if tag_names := download.tag_names:
@@ -115,6 +120,12 @@ class ArchiveDownloader(Downloader, ABC):
                 archive.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
             except ValueError as e:
                 logger.warning(f'Failed to update wrolpi json for {archive}: {e}')
+
+        try:
+            sums = sha256_files(archive.file_group.my_paths(), executed.sha256)
+            archive.file_group.update_wrolpi_json({'sha256': sha256_by_suffix(sums)})
+        except (OSError, ValueError) as e:
+            logger.warning(f'Failed to record sha256 of {archive}', exc_info=e)
 
         logger.info(f'Successfully downloaded Archive {download.url} {archive}')
         return DownloadResult(success=True, location=archive.location)

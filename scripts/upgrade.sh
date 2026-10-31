@@ -186,8 +186,10 @@ upgrade_deno() {
     ARCH=$(uname -m)
     if [ "$ARCH" = "aarch64" ]; then
         DENO_ARCH="aarch64-unknown-linux-gnu"
+        DENO_SHA256="d4589cc1ffcbf1995c92a0127d932aaf832ac70cfdcc6d5b7bf38043cf303575"
     elif [ "$ARCH" = "x86_64" ]; then
         DENO_ARCH="x86_64-unknown-linux-gnu"
+        DENO_SHA256="30455b845ffa6082209c3590269c910ad3b7efdf28c9879afd4006c47ae54197"
     else
         echo "Unsupported architecture for Deno: $ARCH"
         return 1
@@ -204,6 +206,8 @@ upgrade_deno() {
 
     echo "Installing Deno ${DENO_VERSION} for ${ARCH}..."
     curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip
+    # `set -e` does not apply inside a function called with `||`, so a mismatch must return explicitly.
+    echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c - || { rm -f /tmp/deno.zip; return 1; }
     unzip -o /tmp/deno.zip -d /usr/local/bin/
     chmod +x /usr/local/bin/deno
     rm /tmp/deno.zip

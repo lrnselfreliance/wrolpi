@@ -109,6 +109,34 @@ def test_refuse_rollback_lower_version_from_other_history(repo, target):
     assert 'Refusing to roll back' in result.stdout
 
 
+def test_refuse_rollback_older_commit_with_the_same_version(repo):
+    """A version spans many commits, so only ancestry catches a rollback to an earlier commit of the same version."""
+    path, git = repo
+    git('commit', '-q', '--allow-empty', '--no-gpg-sign', '-m', 'fourth')  # Still 0.3.0.
+    result = _refuse_rollback(path, 'release', 'third')
+    assert result.returncode != 0
+    assert 'Refusing to roll back' in result.stdout
+
+
+@pytest.mark.parametrize('head_version,target_version,refused', [
+    ('0.30.3-beta', '0.30.10-beta', False),
+    ('0.30.10-beta', '0.30.3-beta', True),
+    ('0.9.0-beta', '0.10.0-beta', False),
+])
+def test_refuse_rollback_compares_versions_numerically(repo, head_version, target_version, refused):
+    """Versions compare by their numbers: a plain text sort puts 0.30.10 before 0.30.3."""
+    path, git = repo
+    version = path / 'wrolpi/version.txt'
+    for name, version_ in (('target', target_version), ('head', head_version)):
+        git('checkout', '-q', '--orphan', f'{name}-version-branch')
+        version.write_text(f'{version_}\n')
+        git('add', 'wrolpi/version.txt')
+        git('commit', '-q', '--no-gpg-sign', '-m', name)
+        git('tag', f'{name}-version')
+    git('checkout', '-q', '-B', 'release', 'head-version')
+    assert (_refuse_rollback(path, 'release', 'target-version').returncode != 0) is refused
+
+
 @pytest.mark.parametrize('target', ['second', 'orphan-old'])
 def test_refuse_rollback_allow_downgrade(repo, target):
     assert _refuse_rollback(repo[0], 'release', target, allow_downgrade=True).returncode == 0

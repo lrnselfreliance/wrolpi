@@ -1,12 +1,21 @@
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** Legacy inventory dates stored as Unix epoch seconds (not arbitrary digit strings). */
+const EPOCH_SECONDS_RE = /^\d{9,10}(\.0+)?$/;
 
 function digitsToEpochMs(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) {
         return null;
     }
-    const digits = String(Math.trunc(Math.abs(n))).length;
-    return digits >= 12 || n >= 1e12 ? n : n * 1000;
+    return n * 1000;
+}
+
+function isEpochSecondsNumber(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return false;
+    }
+    const digits = String(Math.trunc(Math.abs(value))).length;
+    return digits >= 9 && digits <= 10;
 }
 
 function formatMsUtc(ms) {
@@ -37,21 +46,29 @@ function parseDateOnlyLocalMs(value) {
     return Number.isNaN(ms) ? null : ms;
 }
 
-// Parse inventory `date`-field values (YYYY-MM-DD or legacy Unix epoch seconds/ms) to epoch ms, or null.
+/** Today's calendar date in the local timezone as YYYY-MM-DD. */
+export function localTodayYmd() {
+    return formatMsLocal(Date.now());
+}
+
+// Parse inventory `date`-field values (YYYY-MM-DD or legacy Unix epoch seconds) to epoch ms, or null.
 export function parseInventoryDateMs(value) {
     if (value === '' || value == null) {
         return null;
     }
-    if (typeof value === 'number' && Number.isFinite(value)) {
+    if (isEpochSecondsNumber(value)) {
         return digitsToEpochMs(value);
     }
     const s = String(value).trim();
-    if (/^\d+$/.test(s)) {
+    if (EPOCH_SECONDS_RE.test(s)) {
         return digitsToEpochMs(s);
     }
     const dateOnlyMs = parseDateOnlyLocalMs(s);
     if (dateOnlyMs != null) {
         return dateOnlyMs;
+    }
+    if (/^\d+$/.test(s)) {
+        return null;
     }
     const parsed = Date.parse(s);
     return Number.isNaN(parsed) ? null : parsed;
@@ -62,18 +79,21 @@ export function formatInventoryDateValue(value) {
     if (value === '' || value == null) {
         return value == null ? '' : String(value);
     }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        if (isEpochSecondsNumber(value)) {
+            return formatMsUtc(digitsToEpochMs(value));
+        }
+        return formatMsLocal(value);
+    }
     const s = String(value).trim();
     if (DATE_ONLY_RE.test(s)) {
         return s;
     }
-    if (/^\d+$/.test(s)) {
-        const ms = digitsToEpochMs(s);
-        return formatMsUtc(ms);
+    if (EPOCH_SECONDS_RE.test(s)) {
+        return formatMsUtc(digitsToEpochMs(s));
     }
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        const ms = digitsToEpochMs(value);
-        const digits = String(Math.trunc(Math.abs(value))).length;
-        return digits >= 12 || value >= 1e12 ? formatMsLocal(ms) : formatMsUtc(ms);
+    if (/^\d+$/.test(s)) {
+        return s;
     }
     const dateOnlyMs = parseDateOnlyLocalMs(s);
     if (dateOnlyMs != null) {

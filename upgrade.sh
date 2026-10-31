@@ -5,16 +5,19 @@ Help() {
   # Display Help
   echo "Upgrade WROLPi API and App on this machine."
   echo
-  echo "Syntax: upgrade.sh [-h] [-b BRANCH]"
+  echo "Syntax: upgrade.sh [-h] [-b BRANCH] [-d]"
   echo "options:"
   echo "h     Print this help."
   echo "b     Upgrade from this git BRANCH (default: current branch, or 'release')."
+  echo "d     Allow a downgrade to an older commit of the current branch."
   echo
 }
 
 BRANCH=""
 BRANCH_OVERRIDE=false
-while getopts ":hb:" option; do
+# The upgrade service reads this from the env file written below.
+ALLOW_DOWNGRADE=${ALLOW_DOWNGRADE:-false}
+while getopts ":hb:d" option; do
   case $option in
   h) # display Help
     Help
@@ -23,6 +26,9 @@ while getopts ":hb:" option; do
   b)
     BRANCH="${OPTARG}"
     BRANCH_OVERRIDE=true
+    ;;
+  d)
+    ALLOW_DOWNGRADE=true
     ;;
   *) # invalid argument(s)
     echo "Error: Invalid option"
@@ -64,6 +70,7 @@ if [ -z "$WROLPI_UPGRADE_SERVICE" ]; then
   systemctl daemon-reload
   # Write branch config for the service.
   echo "BRANCH=${BRANCH}" >/tmp/wrolpi-upgrade.env
+  echo "ALLOW_DOWNGRADE=${ALLOW_DOWNGRADE}" >>/tmp/wrolpi-upgrade.env
   chown wrolpi:wrolpi /tmp/wrolpi-upgrade.env
   # Start following journal in background (new entries only).
   journalctl -fn0 -u wrolpi-upgrade.service &
@@ -119,6 +126,26 @@ rollback_or_no_restart() {
   fi
 }
 
+# Refuses to move a checkout back to an older commit of the branch it is already on.  A signature proves a commit is
+# WROLPi's, not that it is the newest, so an intercepted fetch could otherwise roll a device back to an old signed
+# release.  Switching branches, re-running the same commit, and history the checkout does not contain (a Debian 12
+# device pinned to debian12-final) are allowed; -d allows a deliberate downgrade.
+refuse_rollback() {
+  local repo=$1 branch=$2 target=$3 current head
+  [ "${ALLOW_DOWNGRADE}" = true ] && return 0
+  current=$(git -C "${repo}" branch --show-current)
+  # A detached HEAD (a device built from a release image) is on the branch it upgrades.
+  [ -n "${current}" ] && [ "${current}" != "${branch}" ] && return 0
+  head=$(git -C "${repo}" rev-parse HEAD)
+  target=$(git -C "${repo}" rev-parse "${target}^{commit}")
+  [ "${head}" = "${target}" ] && return 0
+  if git -C "${repo}" merge-base --is-ancestor "${target}" "${head}"; then
+    echo "ERROR: ${branch} (${target}) is older than this WROLPi (${head}).  Refusing to roll back; run" \
+      "upgrade.sh -d to allow it."
+    return 1
+  fi
+}
+
 # Fetch the latest commits without modifying the working tree.
 git -C /opt/wrolpi fetch || exit 4
 
@@ -140,6 +167,8 @@ if ! git -C /opt/wrolpi verify-commit origin/"${BRANCH}" 2>&1; then
   rm -rf "$GNUPGHOME"
   exit 5
 fi
+
+refuse_rollback /opt/wrolpi "${BRANCH}" "origin/${BRANCH}" || exit 7
 
 # Signature verified, safe to apply.
 PREVIOUS_HEAD=$(git -C /opt/wrolpi rev-parse HEAD)

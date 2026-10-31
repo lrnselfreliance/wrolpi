@@ -37,7 +37,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "BROWSERSLIST_IGNORE_OLD_DATA=true react-scripts build",
-    "test": "react-scripts test",
+    "test": "TZ=America/New_York react-scripts test",
     "eject": "react-scripts eject",
     "cy:run": "cypress run",
     "cy:open": "cypress open"

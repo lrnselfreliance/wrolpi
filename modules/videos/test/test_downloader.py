@@ -11,7 +11,8 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
     prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download, \
-    parse_ytdlp_progress, is_youtube_rss_feed_url, is_youtube_url, format_selector, VIDEO_RESOLUTION_MAP
+    parse_ytdlp_progress, is_youtube_rss_feed_url, is_youtube_url, format_selector, VIDEO_RESOLUTION_MAP, \
+    ExecutedVideo
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -2043,3 +2044,65 @@ async def test_download_records_sha256(test_session, test_directory, mock_video_
                 for path in video.file_group.my_paths() if path != info_json_path and path.is_file()}
     assert {'.mp4', '.en.vtt', '.jpg'} <= set(expected)
     assert sums == expected
+
+
+@pytest.mark.asyncio
+async def test_finalize_never_suspends(test_session, test_directory):
+    """finalize_download holds the write session from start to end.  Were it to suspend, the event loop could run a
+    switch whose (blocking) write waits on that session, and the loop would stall until the database's busy timeout.
+    So once the files are on disk, finalize completes without suspending."""
+    directory = test_directory / 'videos/channel name'
+    directory.mkdir(parents=True)
+    video_path = directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    info_json_path = video_path.with_suffix('.info.json')
+    url = 'https://example.com/the-video'
+    info_json_path.write_text(json.dumps({'id': 'the-id', 'title': 'Title', 'webpage_url': url}))
+    executed = ExecutedVideo(url=url, video_path=video_path, video_paths=[video_path, info_json_path],
+                             info_json=dict(), entry={'id': 'the-id'}, channel_id=None, audio_only=False,
+                             tag_names=[], settings=dict(), location=None)
+
+    coro = video_downloader.finalize_download(test_session, Download(url=url, downloader='video'), executed)
+    try:
+        coro.send(None)
+    except StopIteration as e:
+        result = e.value
+    else:
+        coro.close()
+        pytest.fail('finalize_download suspended')
+
+    assert result.success is True, result
+    sums = json.loads(info_json_path.read_text())['wrolpi']['sha256']
+    assert sums['.mp4'] == hashlib.sha256(video_path.read_bytes()).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_download_without_info_json_skips_sha256(test_session, test_directory, mock_video_extract_info,
+                                                       simple_channel, await_switches, video_download_manager,
+                                                       mock_video_process_runner):
+    """Sums are kept in the info json; a download that writes none does not read its files to hash them."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+    test_session.commit()
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    video_path = simple_channel.directory / 'a video.mp4'
+
+    from wrolpi.cmd import CommandResult
+
+    async def yt_dlp_writes_video(*args, **kwargs):
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
+
+    mock_video_process_runner.side_effect = yt_dlp_writes_video
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename, \
+            mock.patch('modules.videos.downloader.sha256_files') as mock_sha256_files:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+        video_download_manager.create_download(test_session, url, video_downloader.name,
+                                               settings={'writeinfojson': False})
+        await video_download_manager.wait_for_all_downloads()
+
+    video: Video = test_session.query(Video).one()
+    assert video.info_json_path is None
+    mock_sha256_files.assert_not_called()

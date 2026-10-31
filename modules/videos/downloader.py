@@ -1212,8 +1212,11 @@ class VideoDownloader(Downloader, ABC):
                         except Exception:
                             logger.warning(f'Failed to center YouTube captions in {path}', exc_info=True)
 
-            # Hash the (large) files here; finalize holds the DB session.
-            sha256 = await asyncio.to_thread(sha256_files, video_paths)
+            # Hash the (large) files here; finalize holds the DB session.  The sums are kept in the info json, so
+            # without one there is nothing to hash for.
+            sha256 = dict()
+            if effective['writeinfojson'] or any(i.name.endswith('.info.json') for i in video_paths):
+                sha256 = await asyncio.to_thread(sha256_files, video_paths)
 
             return ExecutedVideo(
                 url=url,
@@ -1308,9 +1311,12 @@ class VideoDownloader(Downloader, ABC):
                                   location=location)
 
         # Hashed once the files are final: validation may have converted the poster, or written the ffprobe json.
+        # Not awaited: this session holds the write lock, so suspending would let a switch's write stall the loop.
+        # Only files changed since execute_download are read, and those are small.
         try:
-            sums = await asyncio.to_thread(sha256_files, video.file_group.my_paths(), executed.sha256)
-            video.file_group.update_wrolpi_json({'sha256': sha256_by_suffix(sums)})
+            if video.info_json_path:
+                sums = sha256_files(video.file_group.my_paths(), executed.sha256)
+                video.file_group.update_wrolpi_json({'sha256': sha256_by_suffix(sums)})
         except (OSError, ValueError) as e:
             logger.warning(f'Failed to record sha256 of {video}', exc_info=e)
 

@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import asyncio
 import copy
 import dataclasses
 import json
@@ -30,7 +31,8 @@ from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult, \
     clear_download_progress, _parse_size, make_progress_callback, get_download_cache_config
 from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError, ValidationError
-from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
+from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix, sha256_files, sha256_by_suffix, \
+    FileSums
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import file_worker
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
@@ -923,6 +925,7 @@ class ExecutedVideo:
     settings: dict
     location: Optional[str]                    # for error reporting
     wrolpi: dict = field(default_factory=dict)  # existing video's wrolpi section, to carry over
+    sha256: FileSums = field(default_factory=dict)  # sums of video_paths, hashed without the DB session
 
 
 class VideoDownloader(Downloader, ABC):
@@ -1209,6 +1212,12 @@ class VideoDownloader(Downloader, ABC):
                         except Exception:
                             logger.warning(f'Failed to center YouTube captions in {path}', exc_info=True)
 
+            # Hash the (large) files here; finalize holds the DB session.  The sums are kept in the info json, so
+            # without one there is nothing to hash for.
+            sha256 = dict()
+            if effective['writeinfojson'] or any(i.name.endswith('.info.json') for i in video_paths):
+                sha256 = await asyncio.to_thread(sha256_files, video_paths)
+
             return ExecutedVideo(
                 url=url,
                 video_path=video_path,
@@ -1221,6 +1230,7 @@ class VideoDownloader(Downloader, ABC):
                 settings=settings,
                 location=location,
                 wrolpi=prepared.wrolpi,
+                sha256=sha256,
             )
 
         except BotBlockedDownloadError:
@@ -1299,6 +1309,16 @@ class VideoDownloader(Downloader, ABC):
             return DownloadResult(success=False,
                                   error='Download did not contain audio stream',
                                   location=location)
+
+        # Hashed once the files are final: validation may have converted the poster, or written the ffprobe json.
+        # Not awaited: this session holds the write lock, so suspending would let a switch's write stall the loop.
+        # Only files changed since execute_download are read, and those are small.
+        try:
+            if video.info_json_path:
+                sums = sha256_files(video.file_group.my_paths(), executed.sha256)
+                video.file_group.update_wrolpi_json({'sha256': sha256_by_suffix(sums)})
+        except (OSError, ValueError) as e:
+            logger.warning(f'Failed to record sha256 of {video}', exc_info=e)
 
         logger.info(f'Successfully downloaded video {executed.url} {video}')
 

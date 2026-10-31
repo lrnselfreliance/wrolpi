@@ -5,10 +5,13 @@ isolation.  None of them use async_client or test_download_manager — that's th
 whole point of the refactor.
 """
 import asyncio
+import hashlib
+import json
 import pathlib
 
 import pytest
 
+import modules.archive
 from modules.archive import (
     ExecutedArchive,
     PreparedArchive,
@@ -266,3 +269,32 @@ async def test_do_singlefile_configured_browser(test_session, test_directory, mo
 
     capture, = calls
     assert capture['env']['WROLPI_BROWSER'] == expected
+
+
+@pytest.mark.asyncio
+async def test_download_records_sha256(async_client, test_session, test_directory, monkeypatch):
+    """An archive download records the sha256 of each file in its group in the readability json's wrolpi section."""
+    singlefile, readability, screenshot = make_fake_archive_result()
+
+    async def mock_request_archive(url, compress=False):
+        return singlefile, readability, screenshot
+
+    monkeypatch.setattr(modules.archive, 'request_archive', mock_request_archive)
+
+    download = Download(url='https://example.com/x', downloader='archive',
+                        settings={'parent_download_url': 'https://example.com/feed'})
+    prepared = archive_downloader.prepare_download(test_session, download)
+    executed = await archive_downloader.execute_download(prepared, make_test_ctx())
+    result = archive_downloader.finalize_download(test_session, download, executed)
+    test_session.commit()
+    assert result.success is True
+
+    archive = test_session.query(Archive).one()
+    readability_json_path = archive.file_group.readability_json_path
+    wrolpi = json.loads(readability_json_path.read_text())['wrolpi']
+    assert wrolpi['parent_download_url'] == 'https://example.com/feed'
+    stem = archive.singlefile_path.name[:-len('.html')]
+    expected = {path.name[len(stem):]: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in archive.file_group.my_paths() if path != readability_json_path}
+    assert set(expected) == {'.html', '.readability.html', '.readability.txt', '.png'}
+    assert wrolpi['sha256'] == expected

@@ -1,4 +1,5 @@
 """Tests for the transcode Job and its API (see `wrolpi.jobs`)."""
+import hashlib
 import json
 import pathlib
 import shutil
@@ -318,3 +319,41 @@ async def test_transcode_temp_file_is_not_discovered_by_refresh(test_session, te
     assert str(video_path) in primary_paths
     assert str(tmp_path) not in primary_paths, 'the transcoder temporary file was indexed'
     assert not any(str(tmp_path) in str(p) for p in primary_paths)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recorded', [True, False])
+async def test_transcode_video_job_refreshes_sha256(test_session, test_directory, async_client, video_factory,
+                                                    recorded):
+    """The sums a download recorded follow the files the Job replaced; a Video without sums gains none."""
+    video_path = test_directory / 'videos/NO CHANNEL/movie.webm'
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    wrolpi = {'custom_title': 'Mine'}
+    if recorded:
+        wrolpi['sha256'] = {'.webm': 'old webm', '.ffprobe.json': 'old ffprobe'}
+    video = video_factory(with_video_file=video_path, with_info_json={'duration': 5, 'wrolpi': wrolpi})
+    test_session.commit()
+    info_json_path = video_path.with_suffix('.info.json')
+
+    async def fake_run_command(cmd, stdout_callback=None, **kwargs):
+        if cmd[-1] == '-':
+            return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', cmd[-1])
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
+
+    with mock.patch('wrolpi.cmd.run_command', side_effect=fake_run_command):
+        job_id = transcode_video_job.enqueue(file_group_id=video.file_group_id, container='mp4')
+        record = await jobs.wait_for_job(job_id)
+    assert record['status'] == jobs.COMPLETE, record
+
+    wrolpi = json.loads(info_json_path.read_text())['wrolpi']
+    assert wrolpi['custom_title'] == 'Mine'
+    if not recorded:
+        assert 'sha256' not in wrolpi
+        return
+    mp4_path = video_path.with_suffix('.mp4')
+    ffprobe_json_path = video_path.with_suffix('.ffprobe.json')
+    assert wrolpi['sha256'] == {
+        '.mp4': hashlib.sha256(mp4_path.read_bytes()).hexdigest(),
+        '.ffprobe.json': hashlib.sha256(ffprobe_json_path.read_bytes()).hexdigest(),
+    }

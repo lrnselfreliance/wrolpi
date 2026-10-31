@@ -31,6 +31,8 @@ A Debian 12 (bookworm) WROLPi stays on the final version for Debian 12; reinstal
 1. Run the upgrade script
     * `sudo /bin/bash /opt/wrolpi/upgrade.sh`
     * (If the upgrade script does not exist, run the installation script:  `sudo /bin/bash /opt/wrolpi/install.sh`)
+    * The upgrade refuses to move back to an older commit of the branch you are on.  To downgrade on purpose,
+      run `sudo /bin/bash /opt/wrolpi/upgrade.sh -d`.
 
 ## Upgrading a WROLPi Portable USB
 

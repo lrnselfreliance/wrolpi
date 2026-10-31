@@ -15,7 +15,7 @@ from PIL import Image
 import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer, get_wrolpi_config
-from wrolpi.conftest import await_switches
+from wrolpi.conftest import await_switches, await_file_worker
 import sqlalchemy
 from sqlalchemy.exc import IntegrityError
 
@@ -57,6 +57,22 @@ async def test_delete_file(async_client, test_session, make_files_structure, tes
     # Cannot delete the media directory.
     with pytest.raises(InvalidFile):
         await lib.delete('.')
+
+
+@pytest.mark.asyncio
+async def test_delete_post_processing_in_background(async_client, test_session, make_files_structure, refresh_files):
+    """A delete removes its FileGroups before returning, but does not wait on the library-wide modelers; the
+    FileWorker runs them afterward."""
+    make_files_structure(['foo.txt', 'bar.txt'])
+    await refresh_files()
+
+    with mock.patch('wrolpi.files.worker.apply_modelers') as apply_modelers:
+        await lib.delete('foo.txt')
+        apply_modelers.assert_not_called()
+        assert [i.primary_path.name for i in test_session.query(FileGroup)] == ['bar.txt']
+
+        await await_file_worker()
+        apply_modelers.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import run_command
 from wrolpi.common import logger, get_relative_to_media_directory, wrol_mode_enabled
 from wrolpi.db import get_db_session
+from wrolpi.files.lib import sha256_files, sha256_by_suffix
 from wrolpi.jobs import register_job, get_current_job
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS, PYTEST
 
@@ -505,6 +506,22 @@ def retarget_file_group(file_group_id: int, old_path: pathlib.Path, new_path: pa
         file_group.indexed = False
 
 
+async def refresh_recorded_sha256(file_group_id: int):
+    """Hash a FileGroup's files again if a download recorded their sums; the recorded sums describe files which
+    may have been replaced.  The files are read without a session held."""
+    from wrolpi.files.models import FileGroup
+
+    with get_db_session() as session:
+        file_group = session.get(FileGroup, file_group_id)
+        if 'sha256' not in file_group.get_wrolpi_json():
+            return
+        paths = file_group.my_paths()
+
+    sums = await asyncio.to_thread(sha256_files, paths)
+    with get_db_session(commit=True) as session:
+        session.get(FileGroup, file_group_id).update_wrolpi_json({'sha256': sha256_by_suffix(sums)})
+
+
 @register_job('transcode_video')
 async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = None,
                               audio_codec: Optional[str] = None, container: str = 'mp4',
@@ -542,5 +559,7 @@ async def transcode_video_job(file_group_id: int, video_codec: Optional[str] = N
 
     job_id = file_worker.queue_refresh([final_path], send_events=False)
     await file_worker.wait_for_job(job_id)
+
+    await refresh_recorded_sha256(file_group_id)
 
     return {'path': str(get_relative_to_media_directory(final_path))}

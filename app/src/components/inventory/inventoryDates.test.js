@@ -3,13 +3,25 @@ import {filterItems, formatValue} from "./InventoryTable";
 
 describe('inventoryDates', () => {
     test('parseInventoryDateMs accepts ISO dates and epoch seconds', () => {
-        expect(parseInventoryDateMs('2030-01-01')).toBe(Date.parse('2030-01-01'));
+        expect(parseInventoryDateMs('2030-01-01')).toBe(new Date(2030, 0, 1).getTime());
         expect(parseInventoryDateMs('1893456000')).toBe(1893456000 * 1000);
     });
 
     test('formatInventoryDateValue renders a calendar date', () => {
         expect(formatInventoryDateValue('2030-01-01')).toBe('2030-01-01');
         expect(formatInventoryDateValue('1893456000')).toBe('2030-01-01');
+    });
+
+    test('date-only values round-trip without timezone shift (US Eastern)', () => {
+        const samples = ['2030-01-01', '2000-06-15', '2999-01-01'];
+        for (const stored of samples) {
+            const displayed = formatInventoryDateValue(stored);
+            expect(displayed).toBe(stored);
+            const fromInput = displayed;
+            expect(fromInput).toBe(stored);
+            expect(formatInventoryDateValue(fromInput)).toBe(stored);
+            expect(formatInventoryDateValue(parseInventoryDateMs(fromInput))).toBe(stored);
+        }
     });
 });
 

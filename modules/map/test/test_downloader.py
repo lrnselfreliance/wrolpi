@@ -473,3 +473,51 @@ async def test_map_download_refuses_tampered_file_with_injected_hash(test_direct
         executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
         assert not executed.error, executed.error
         assert prepared.output_path.read_bytes() == b'genuine contents'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('downloader,prepare', [
+    (map_extract_downloader, _prepared_extract),
+    (map_search_index_downloader, _prepared_search_index),
+], ids=['extract', 'search_index'])
+async def test_map_download_moves_only_the_checked_file(test_directory, monkeypatch, downloader, prepare):
+    """Only the file aria2c checked (named in the meta4 WROLPi wrote) is moved into place, never the path
+    download_file reports, which comes from the server's HEAD response (Content-Disposition, redirects)."""
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = prepare(map_dir)
+    url = 'https://x/us-2024-01.pmtiles'
+    # An unchecked leftover of an interrupted download, which the server names in its HEAD response.
+    leftover = map_dir / '.partial/other.pmtiles'
+    leftover.parent.mkdir()
+    leftover.write_bytes(b'tampered contents')
+
+    meta4 = INJECTED_META4.format(url=url).encode()
+    with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(downloader, 'download_file', mock.AsyncMock(return_value=leftover)):
+        executed = await downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+
+    assert executed.error
+    assert leftover.read_bytes() == b'tampered contents'
+    assert {i.name for i in map_dir.iterdir()} <= {'.partial', 'us-2024-01.pmtiles'}
+    assert not any(i.read_bytes() == b'tampered contents' for i in map_dir.glob('*.*') if i.is_file())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('url', ['https://x/', 'https://x/..', 'https://x/.hidden', 'https://x/a%2F..'])
+async def test_map_download_refuses_unusable_file_name(test_directory, monkeypatch, url):
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = _prepared_extract(map_dir)
+
+    meta4 = INJECTED_META4.format(url=url).encode()
+    with mock.patch.object(map_extract_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(map_extract_downloader, 'download_file', mock.AsyncMock()) as download_file:
+        executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+
+    assert executed.error
+    download_file.assert_not_called()

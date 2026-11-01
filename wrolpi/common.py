@@ -2798,14 +2798,14 @@ def chunks(it: Iterable, size: int):
 
 def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Generator[List[pathlib.Path], None, None]:
     """
-    Attempt to split a list of paths near the defined size.  Keep groups of files together when they share
-    matching names.
+    Attempt to split a list of paths near the defined size.  All files sharing a (directory, stem) are in the
+    same chunk.
 
     >>> files = ['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4']
-    >>> chunks_by_stem(files, 2)
-    [['1.mp4', '1.txt'], ['2.mp4', '2.txt', '2.png'], ['3.mp4']]
+    >>> chunks_by_stem(files, 1)
+    [['1.mp4', '1.txt'], ['2.mp4', '2.png', '2.txt'], ['3.mp4']]
     >>> chunks_by_stem(files, 3)
-    [['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png'], ['3.mp4']]
+    [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt'], ['3.mp4']]
     """
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
@@ -2817,28 +2817,16 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Genera
     if not isinstance(it, list):
         raise ValueError('iterable must a list')
 
-    from wrolpi.files.lib import split_path_stem_and_suffix
-    it = sorted(it.copy())
-    index = size
-    last_key = None
-    while it:
-        if index >= len(it):
-            # Ran out of items, yield what is left.
-            yield it
-            return
-        path = it[index]
-        path = pathlib.Path(path)
-        stem, _ = split_path_stem_and_suffix(path)
-        key = (str(path.parent), stem)
-        if last_key and key != last_key:
-            # Found a break in directory or stem, yield and reset.
-            chunk, it = it[:index], it[index:]
-            index = size
-            last_key = None
+    from wrolpi.files.lib import group_files_by_stem
+    # Pack whole stem groups; a chunk ends at the first group that takes it past `size`.
+    chunk = []
+    for group in group_files_by_stem(it):
+        chunk.extend(group)
+        if len(chunk) > size:
             yield chunk
-            continue
-        last_key = key
-        index += 1
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 @contextlib.contextmanager

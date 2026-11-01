@@ -470,6 +470,87 @@ async def test_refresh_paths(test_session, make_files_structure, test_directory,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('chunk_size', [500, 1])
+async def test__upsert_files_interleaved_stems(test_session, make_files_structure, test_directory, video_bytes,
+                                               assert_file_groups, chunk_size):
+    """Files sharing a stem are one FileGroup even when another stem sorts between them, and even when the chunk
+    size would split them.  Two FileGroups for one (directory, stem) violate its unique index."""
+    files = make_files_structure({
+        'foo.en.vtt': 'WEBVTT',
+        'foo.f137.mp4': video_bytes,
+        'foo.jpg': 'jpg',
+        'foo.mp4': video_bytes,
+        'foo.tar.gz': 'tar',
+        'foo.txt': 'text',
+    })
+
+    with mock.patch('wrolpi.files.lib.UPSERT_CHUNK_SIZE', chunk_size):
+        lib._upsert_files(files)
+
+    assert_file_groups([
+        {'primary_path': 'foo.mp4', 'stem': 'foo',
+         'files': [{'path': 'foo.en.vtt'}, {'path': 'foo.jpg'}, {'path': 'foo.mp4'}, {'path': 'foo.txt'}]},
+        {'primary_path': 'foo.f137.mp4', 'stem': 'foo.f137', 'files': [{'path': 'foo.f137.mp4'}]},
+        {'primary_path': 'foo.tar.gz', 'stem': 'foo.tar', 'files': [{'path': 'foo.tar.gz'}]},
+    ])
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_same_count_different_members(test_session, make_files_structure, video_bytes):
+    """A FileGroup whose files changed is re-indexed even when the count, total size and newest modification time
+    did not change."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    lib._upsert_files([mp4, jpg])
+    test_session.query(FileGroup).one().indexed = True
+    test_session.commit()
+
+    # foo.png replaces foo.jpg: same size, and foo.mp4 is still the newest file.
+    png = jpg.rename(jpg.with_suffix('.png'))
+    os.utime(png, (mp4.stat().st_mtime - 10,) * 2)
+    lib._upsert_files([mp4, png])
+
+    test_session.expire_all()
+    foo = test_session.query(FileGroup).one()
+    assert {i['path'] for i in foo.files} == {'foo.mp4', 'foo.png'}
+    assert foo.indexed is False
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_unchanged_legacy_absolute_paths(test_session, make_files_structure, video_bytes):
+    """A FileGroup whose files are stored with absolute paths (the old format) is not re-indexed when its files did
+    not change."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    lib._upsert_files([mp4, jpg])
+    foo = test_session.query(FileGroup).one()
+    foo.files = [{**i, 'path': str(foo.directory / i['path'])} for i in foo.files]
+    foo.indexed = True
+    test_session.commit()
+
+    lib._upsert_files([mp4, jpg])
+
+    test_session.expire_all()
+    assert test_session.query(FileGroup).one().indexed is True
+
+
+@pytest.mark.asyncio
+async def test_refresh_interleaved_stems(test_session, make_files_structure, test_directory, video_bytes,
+                                         refresh_files):
+    """Refreshing a directory whose stems interleave when sorted creates one FileGroup per stem."""
+    make_files_structure({
+        'videos/foo.en.vtt': 'WEBVTT',
+        'videos/foo.f137.mp4': video_bytes,
+        'videos/foo.jpg': 'jpg',
+        'videos/foo.mp4': video_bytes,
+    })
+    await refresh_files([test_directory])
+
+    file_groups = {i.stem: i for i in test_session.query(FileGroup)}
+    assert set(file_groups) == {'foo', 'foo.f137'}
+    assert {'foo.en.vtt', 'foo.jpg', 'foo.mp4'} <= {i['path'].name for i in file_groups['foo'].my_files()}
+    assert file_groups['foo'].primary_path == test_directory / 'videos/foo.mp4'
+
+
+@pytest.mark.asyncio
 async def test_refresh_groups(test_session, make_files_structure, test_directory, video_bytes, refresh_files):
     make_files_structure({'dir1/foo.mp4': video_bytes, 'dir1/foo.info.json': 'hello', 'baz.txt': 'hello'})
     await refresh_files([test_directory])
@@ -986,6 +1067,24 @@ def test_group_files_by_stem(make_files_structure, test_directory):
         [test_directory / 'dir_a/s3.bin'],
         [test_directory / 'dir_b/s3.bin'],
     ]
+
+
+def test_group_files_by_stem_interleaved(make_files_structure, test_directory):
+    """A stem's files are one group even when another stem sorts between them.
+
+    `foo.f137.mp4` (stem `foo.f137`) and `foo.tar.gz` (stem `foo.tar`) sort between `foo.en.vtt`, `foo.jpg`,
+    `foo.mp4` and `foo.txt` (stem `foo`)."""
+    files = make_files_structure([
+        'foo.en.vtt', 'foo.f137.mp4', 'foo.jpg', 'foo.mp4', 'foo.tar.gz', 'foo.txt',
+    ])
+    expected = [
+        [test_directory / i for i in ('foo.en.vtt', 'foo.jpg', 'foo.mp4', 'foo.txt')],
+        [test_directory / 'foo.f137.mp4'],
+        [test_directory / 'foo.tar.gz'],
+    ]
+    assert list(lib.group_files_by_stem(files)) == expected
+    # Input order does not matter.
+    assert list(lib.group_files_by_stem(list(reversed(files)))) == expected
 
 
 def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, example_mobi, example_pdf,

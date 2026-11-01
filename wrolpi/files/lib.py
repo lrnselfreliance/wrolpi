@@ -831,6 +831,22 @@ def choose_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]
         return sorted(paths)[0]
 
 
+def _file_names_sql(table: str) -> str:
+    """SQL: the sorted names in `table`.files, as a JSON array.
+
+    Old FileGroups store each file's absolute path, new ones its name; both give the name."""
+    path = "json_extract(j.value, '$.path')"
+    return f'''(SELECT json_group_array(name) FROM (
+                SELECT CASE WHEN {path} LIKE '/%' THEN substr({path}, length({table}.directory) + 2) ELSE {path} END
+                    AS name
+                FROM json_each({table}.files) AS j
+                ORDER BY name))'''
+
+
+# About how many files `_upsert_files` writes per transaction.  A stem's files are never split across chunks.
+UPSERT_CHUNK_SIZE = 500
+
+
 def _upsert_files(files: List[pathlib.Path],
                   progress_callback: Callable[[int, int], None] = None):
     """Insert/update all records of the provided files.
@@ -847,9 +863,9 @@ def _upsert_files(files: List[pathlib.Path],
     processed_count = 0
 
     non_primary_files = set()
-    for chunk in chunks_by_stem(files, 500):
-        # Group all files by their shared full-stem.  `chunk_by_stem` already sorted the files.
-        grouped = group_files_by_stem(chunk, pre_sorted=True)
+    for chunk in chunks_by_stem(files, UPSERT_CHUNK_SIZE):
+        # Group all files by their shared full-stem.  `chunks_by_stem` keeps each stem in one chunk.
+        grouped = group_files_by_stem(chunk)
         # Convert the groups into file_groups.  Extract common information into `file_group.data`.
         values = dict()
         for group in grouped:
@@ -891,6 +907,8 @@ def _upsert_files(files: List[pathlib.Path],
                              (json.dumps(list(map(str, non_primary_files))),))
 
             placeholders, params = values_clause(values)
+            # Compare names, not counts: a file can replace another without changing the size or newest time.
+            same_files = f'{_file_names_sql("file_group")} = {_file_names_sql("EXCLUDED")}'
             stmt = f'''
                 INSERT INTO file_group
                     (primary_path, directory, indexed, modification_datetime, mimetype, size, files,
@@ -911,7 +929,7 @@ def _upsert_files(files: List[pathlib.Path],
                         WHEN
                             file_group.modification_datetime = EXCLUDED.modification_datetime
                             AND file_group.size = EXCLUDED.size
-                            AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                            AND {same_files}
                             THEN file_group.files
                         ELSE EXCLUDED.files
                         END
@@ -921,7 +939,7 @@ def _upsert_files(files: List[pathlib.Path],
                         file_group.indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
                         AND file_group.size = EXCLUDED.size
-                        AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                        AND {same_files}
                     )
                 RETURNING id, primary_path, indexed
             '''
@@ -1681,32 +1699,25 @@ def get_file_statistics(session: Session):
         return statistics
 
 
-def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> \
-        Generator[List[pathlib.Path], None, None]:
+def group_files_by_stem(files: Iterable[pathlib.Path]) -> Generator[List[pathlib.Path], None, None]:
     """
-    Return lists of paths, each list contains only paths that share a common stem.
+    Return lists of paths, each list contains only paths that share a common directory and stem.
+
+    Groups are ordered by (directory, stem), and each group is sorted.
 
     >>> a = ['foo.txt', 'foo.mp4', 'bar.txt']
     >>> group_files_by_stem(list(map((pathlib.Path, a))))
-    # Generator(['foo.mp4', 'foo.txt'], ['bar.txt'])
-
-    @param files: A list of paths to be grouped.  All paths must be in the same directory!
-    @param pre_sorted: This function requires the files to be sorted, it will sort them by default.
+    # Generator(['bar.txt'], ['foo.mp4', 'foo.txt'])
     """
-    files = sorted(files) if not pre_sorted else files.copy()
-    file = files.pop(0)
-    group = [file, ]
-    prev_dir, prev_stem = file.parent, split_path_stem_and_suffix(file)[0]
+    # Sorted paths do not keep a stem's files together: `foo.tar.gz` (stem `foo.tar`) sorts between `foo.jpg` and
+    # `foo.txt` (stem `foo`).  Group by (directory, stem) so each stem yields exactly one group.
+    groups = dict()
     for file in files:
-        stem, _ = split_path_stem_and_suffix(file)
-        if stem == prev_stem and file.parent == prev_dir:
-            group.append(file)
-            continue
-        # Directory or stem changed, group is finished.
-        yield group
-        group = [file, ]
-        prev_dir, prev_stem = file.parent, stem
-    yield group
+        file = pathlib.Path(file)
+        key = (str(file.parent), split_path_stem_and_suffix(file)[0])
+        groups.setdefault(key, set()).add(file)
+    for key in sorted(groups):
+        yield sorted(groups[key])
 
 
 async def _get_tag_and_file_group(session: Session, file_group_id: int, file_group_primary_path: str, tag_name: str,

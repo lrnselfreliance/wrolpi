@@ -6,7 +6,9 @@ without a signed hash; the paths that drive download_file + GPG verification + f
 rename are integration territory and are deliberately omitted; the parent download_file ctx
 threading is already covered by the FileDownloader migration tests.
 """
+import hashlib
 from unittest import mock
+from xml.etree import ElementTree
 
 import pytest
 
@@ -23,6 +25,7 @@ from modules.map.downloader import (
     map_search_index_downloader,
 )
 from wrolpi.downloader import Download
+from wrolpi.test.common import skip_ci
 
 
 # ---------------------------------------------------------------------------
@@ -347,11 +350,11 @@ def _prepared_search_index(map_dir):
     (map_extract_downloader, _prepared_extract),
     (map_search_index_downloader, _prepared_search_index),
 ], ids=['extract', 'search_index'])
-@pytest.mark.parametrize('meta4,signature_valid', [
-    (None, True),  # The CDN has no .meta4 (or it could not be fetched).
-    (b'<metalink/>', False),  # The .meta4's hash is not signed by WROLPi.
+@pytest.mark.parametrize('has_meta4,signature_valid', [
+    (False, True),  # The CDN has no .meta4 (or it could not be fetched).
+    (True, False),  # The .meta4's hash is not signed by WROLPi.
 ], ids=['no_meta4', 'bad_signature'])
-async def test_map_download_requires_signed_hash(test_directory, monkeypatch, downloader, prepare, meta4,
+async def test_map_download_requires_signed_hash(test_directory, monkeypatch, downloader, prepare, has_meta4,
                                                  signature_valid):
     """A map file is never downloaded unless its .meta4 carries a hash signed by WROLPi; aria2c then refuses any
     file that does not match that hash."""
@@ -360,11 +363,113 @@ async def test_map_download_requires_signed_hash(test_directory, monkeypatch, do
     monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
     prepared = prepare(map_dir)
     download = Download(url=f'https://x/{prepared.region}.file')
+    meta4 = INJECTED_META4.format(url=download.url).encode() if has_meta4 else None
 
     with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
-            mock.patch('modules.map.downloader.verify_meta4_signature', mock.AsyncMock(return_value=signature_valid)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=signature_valid)), \
             mock.patch.object(downloader, 'download_file', mock.AsyncMock()) as download_file:
         executed = await downloader.execute_download(prepared, make_test_ctx(), download)
 
     assert executed.error and 'us' in executed.error
     download_file.assert_not_called()
+
+
+GENUINE_SHA256 = hashlib.sha256(b'genuine contents').hexdigest()
+TAMPERED_SHA512 = hashlib.sha512(b'tampered contents').hexdigest()
+# Only the sha-256 hash of a meta4 is signed; everything else in it is whatever the server sent.
+INJECTED_META4 = f'''<?xml version="1.0" encoding="UTF-8"?>
+<metalink xmlns="urn:ietf:params:xml:ns:metalink">
+  <file name="us-2024-01.pmtiles">
+    <hash type="sha-256">{GENUINE_SHA256}</hash>
+    <signature mediatype="application/pgp-signature">pretend signature</signature>
+    <hash type="sha-512">{TAMPERED_SHA512}</hash>
+    <pieces length="1" type="sha-512"><hash>{TAMPERED_SHA512}</hash></pieces>
+    <url>{{url}}</url>
+    <url>https://elsewhere.example/us-2024-01.pmtiles</url>
+  </file>
+  <file name="extra.pmtiles">
+    <url>https://elsewhere.example/extra.pmtiles</url>
+  </file>
+</metalink>
+'''
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('downloader,prepare', [
+    (map_extract_downloader, _prepared_extract),
+    (map_search_index_downloader, _prepared_search_index),
+], ids=['extract', 'search_index'])
+async def test_map_download_passes_only_the_signed_hash(test_directory, monkeypatch, downloader, prepare):
+    """aria2c gets a meta4 holding only the signed sha-256 hash and the download URL, never the downloaded meta4,
+    whose other hashes, pieces, files, and URLs are not signed."""
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = prepare(map_dir)
+    url = 'https://x/us-2024-01.pmtiles'
+    meta4 = INJECTED_META4.format(url=url).encode()
+
+    with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(downloader, 'download_file', mock.AsyncMock(side_effect=RuntimeError('stop'))) as df:
+        await downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+
+    passed = ElementTree.fromstring(df.call_args.kwargs['meta4_xml'])
+    ns = {'ml': 'urn:ietf:params:xml:ns:metalink'}
+    files = passed.findall('ml:file', ns)
+    assert len(files) == 1
+    assert [(i.get('type'), i.text) for i in files[0].iter('{urn:ietf:params:xml:ns:metalink}hash')] \
+           == [('sha-256', GENUINE_SHA256)]
+    assert [i.text for i in files[0].findall('ml:url', ns)] == [url]
+    assert files[0].find('ml:pieces', ns) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sha256', ['', 'not-hex', GENUINE_SHA256 + '00', f'{GENUINE_SHA256[:-1]}<'])
+async def test_map_download_refuses_a_malformed_signed_hash(test_directory, monkeypatch, sha256):
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = _prepared_extract(map_dir)
+    meta4 = INJECTED_META4.format(url='https://x/us-2024-01.pmtiles').replace(GENUINE_SHA256, sha256, 1)
+
+    with mock.patch.object(map_extract_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4.encode())), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(map_extract_downloader, 'download_file', mock.AsyncMock()) as download_file:
+        executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url='https://x/a'))
+
+    assert executed.error
+    download_file.assert_not_called()
+
+
+@skip_ci
+@pytest.mark.asyncio
+async def test_map_download_refuses_tampered_file_with_injected_hash(test_directory, monkeypatch,
+                                                                     simple_file_server):
+    """Real aria2c: a server that adds a sha-512 of its tampered file to a genuinely signed meta4 does not get the
+    tampered file accepted, the rejected file is not left where the next attempt would take it as downloaded, and a
+    retry downloads the genuine file."""
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    served = test_directory / 'us-2024-01.pmtiles'
+    served.write_bytes(b'tampered contents')
+    host, port = simple_file_server.server_address
+    url = f'http://{host}:{port}/us-2024-01.pmtiles'  # noqa
+
+    meta4 = INJECTED_META4.format(url=url).encode()
+    with mock.patch.object(map_extract_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)):
+        prepared = _prepared_extract(map_dir)
+        executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+        assert executed.error
+        assert list(map_dir.glob('*.pmtiles')) == []
+        # The next attempt does not skip the download.
+        assert not _prepared_extract(map_dir).already_done
+
+        # The server now serves the genuine file.
+        served.write_bytes(b'genuine contents')
+        prepared = _prepared_extract(map_dir)
+        executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+        assert not executed.error, executed.error
+        assert prepared.output_path.read_bytes() == b'genuine contents'

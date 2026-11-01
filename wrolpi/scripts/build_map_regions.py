@@ -10,7 +10,7 @@ Example:
 This script:
   1. Reads region definitions from modules/map/catalog.py
   2. Runs `pmtiles extract` for each bbox region
-  3. Generates manifest.json with direct download URLs for each region
+  3. Generates manifest.json with direct download URLs and the sha256 of each file, then signs it
   4. Prints a summary of all extracted files and sizes
 
 Requirements:
@@ -87,8 +87,8 @@ def generate_meta4(name: str, url: str, sha256: str, size: int, signature: str) 
     )
 
 
-def write_meta4(file_path: str, cdn_url: str):
-    """Compute hash, sign it, and write a signed .meta4 file alongside the given file."""
+def write_meta4(file_path: str, cdn_url: str) -> str:
+    """Compute hash, sign it, and write a signed .meta4 file alongside the given file.  Returns the hash."""
     name = os.path.basename(file_path)
     size = os.path.getsize(file_path)
     sha256 = sha256_file(file_path)
@@ -99,6 +99,24 @@ def write_meta4(file_path: str, cdn_url: str):
     with open(meta4_path, 'w') as f:
         f.write(meta4_xml)
     print(f'  Written {os.path.basename(meta4_path)}')
+    return sha256
+
+
+def sign_manifest(manifest_path: str):
+    """Write the manifest's detached GPG signature beside it, or exit."""
+    sig_path = f'{manifest_path}.sig'
+    print(f'Signing manifest...')
+    result = subprocess.run(
+        ['gpg', '-u', 'roland@learningselfreliance.com', '--detach-sign', '--armor', '-o', sig_path, manifest_path],
+        capture_output=True,
+    )
+    if result.returncode == 0:
+        print(f'Signature written to: {sig_path}')
+    else:
+        print(f'ERROR: GPG signing failed: {result.stderr.decode().strip()}')
+        print(f'Sign manually and re-run, or fix GPG key access:'
+              f'\n  gpg -u roland@learningselfreliance.com --detach-sign --armor -o {sig_path} {manifest_path}')
+        sys.exit(1)
 
 
 def extract_region(planet_path: str, output_path: str, bbox: str, threads: int = 4) -> bool:
@@ -269,6 +287,8 @@ def main():
     # Extract each bbox region.
     manifest_regions = {}
     search_index_urls = {}
+    # WROLPi checks each download against its hash here; a meta4's signed hash is not tied to any one file.
+    hashes = {}
     results = []
     failed = []
 
@@ -298,7 +318,7 @@ def main():
 
         size = os.path.getsize(output_path)
         cdn_url = f'{cdn_base}/{output_name}'
-        write_meta4(output_path, cdn_url)
+        hashes[cdn_url] = write_meta4(output_path, cdn_url)
         results.append((r['name'], region, size))
         manifest_regions[region] = cdn_url
 
@@ -308,7 +328,7 @@ def main():
             enrich_search_db_with_regions(search_db_path)
             search_db_name = os.path.basename(str(search_db_path))
             search_cdn_url = f'{cdn_base}/{search_db_name}'
-            write_meta4(str(search_db_path), search_cdn_url)
+            hashes[search_cdn_url] = write_meta4(str(search_db_path), search_cdn_url)
             search_index_urls[region] = search_cdn_url
 
     # Add terrain to manifest if the file exists in output_dir.
@@ -317,7 +337,7 @@ def main():
         terrain_path = os.path.join(output_dir, terrain_name)
         if os.path.isfile(terrain_path):
             cdn_url = f'{cdn_base}/{terrain_name}'
-            write_meta4(terrain_path, cdn_url)
+            hashes[cdn_url] = write_meta4(terrain_path, cdn_url)
             manifest_regions[terrain_region['region']] = cdn_url
             size = os.path.getsize(terrain_path)
             results.append((terrain_region['name'], terrain_region['region'], size))
@@ -336,26 +356,14 @@ def main():
     # Add search index URLs.
     if search_index_urls:
         manifest['search_indexes'] = search_index_urls
+    manifest['sha256'] = hashes
 
     manifest_path = os.path.join(output_dir, 'manifest.json')
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
     print(f'\nManifest written to: {manifest_path}')
 
-    # Sign manifest with GPG.
-    sig_path = f'{manifest_path}.sig'
-    print(f'Signing manifest...')
-    result = subprocess.run(
-        ['gpg', '-u', 'roland@learningselfreliance.com', '--detach-sign', '--armor', '-o', sig_path, manifest_path],
-        capture_output=True,
-    )
-    if result.returncode == 0:
-        print(f'Signature written to: {sig_path}')
-    else:
-        print(f'ERROR: GPG signing failed: {result.stderr.decode().strip()}')
-        print(f'Sign manually and re-run, or fix GPG key access:'
-              f'\n  gpg -u roland@learningselfreliance.com --detach-sign --armor -o {sig_path} {manifest_path}')
-        sys.exit(1)
+    sign_manifest(manifest_path)
 
     # Print summary.
     print(f'\n{"="*70}')

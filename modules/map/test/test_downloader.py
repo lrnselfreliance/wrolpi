@@ -330,18 +330,18 @@ def test_extract_finalize_builds_search_index(test_session, test_directory, has_
 # ---------------------------------------------------------------------------
 
 
-def _prepared_extract(map_dir):
+def _prepared_extract(map_dir, sha256: str = None):
     return map_extract_downloader.prepare_download(None, Download(
         url='https://x/us-2024-01.pmtiles', downloader='map_extract',
-        settings={'region': 'us', 'version': '2024-01'},
+        settings={'region': 'us', 'version': '2024-01', 'sha256': sha256},
     ))
 
 
-def _prepared_search_index(map_dir):
+def _prepared_search_index(map_dir, sha256: str = None):
     (map_dir / 'us-2024-01.pmtiles').write_bytes(b'pretend pmtiles')
     return map_search_index_downloader.prepare_download(None, Download(
         url='https://x/us-2024-01.search.db', downloader='map_search_index',
-        settings={'region': 'us', 'pmtiles_name': 'us-2024-01.pmtiles'},
+        settings={'region': 'us', 'pmtiles_name': 'us-2024-01.pmtiles', 'sha256': sha256},
     ))
 
 
@@ -518,6 +518,78 @@ async def test_map_download_refuses_unusable_file_name(test_directory, monkeypat
             mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
             mock.patch.object(map_extract_downloader, 'download_file', mock.AsyncMock()) as download_file:
         executed = await map_extract_downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+
+    assert executed.error
+    download_file.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Hashes from the signed manifest
+# ---------------------------------------------------------------------------
+
+MANIFEST_SHA256 = hashlib.sha256(b'manifest contents').hexdigest()
+
+
+def test_catalog_finalize_copies_manifest_hashes(test_session, test_directory, test_download_manager, monkeypatch):
+    """Each child download gets its file's hash from the signed manifest."""
+    map_dir = test_directory / 'maps'
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    pmtiles_url, search_url = 'https://x/us-2024-02.pmtiles', 'https://x/us-2024-02.search.db'
+    executed = ExecutedMapCatalog(
+        manifest={'regions': {'us': pmtiles_url}, 'search_indexes': {'us': search_url}, 'version': '2024-02',
+                  'sha256': {pmtiles_url: MANIFEST_SHA256, search_url: GENUINE_SHA256}},
+        subscribed_regions=[{'region': 'us'}],
+    )
+    download = Download(url='https://x/manifest.json', downloader='map_catalog')
+    result = map_catalog_downloader.finalize_download(test_session, download, executed)
+    assert result.success is True, result.error
+
+    hashes = {i.downloader: i.settings.get('sha256') for i in test_session.query(Download)}
+    assert hashes == {'map_extract': MANIFEST_SHA256, 'map_search_index': GENUINE_SHA256}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('downloader,prepare', [
+    (map_extract_downloader, _prepared_extract),
+    (map_search_index_downloader, _prepared_search_index),
+], ids=['extract', 'search_index'])
+async def test_map_download_uses_the_manifest_hash(test_directory, monkeypatch, downloader, prepare):
+    """A hash from the signed manifest is the one aria2c checks.  A meta4 signs only a bare hash, so any genuine
+    meta4 (an older version, another region) would pass its own signature check."""
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = prepare(map_dir, sha256=MANIFEST_SHA256)
+    url = 'https://x/us-2024-01.pmtiles'
+    # A genuinely signed meta4, but of some other file.
+    meta4 = INJECTED_META4.format(url=url).encode()
+
+    with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)) as get_meta4, \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(downloader, 'download_file', mock.AsyncMock(side_effect=RuntimeError('stop'))) as df:
+        await downloader.execute_download(prepared, make_test_ctx(), Download(url=url))
+
+    get_meta4.assert_not_called()
+    passed = ElementTree.fromstring(df.call_args.kwargs['meta4_xml'])
+    assert [i.text for i in passed.iter('{urn:ietf:params:xml:ns:metalink}hash')] == [MANIFEST_SHA256]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('downloader,prepare', [
+    (map_extract_downloader, _prepared_extract),
+    (map_search_index_downloader, _prepared_search_index),
+], ids=['extract', 'search_index'])
+async def test_map_download_refuses_a_malformed_manifest_hash(test_directory, monkeypatch, downloader, prepare):
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = prepare(map_dir, sha256='not-a-hash')
+    meta4 = INJECTED_META4.format(url='https://x/a.pmtiles').encode()
+
+    with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_gpg_signature', mock.AsyncMock(return_value=True)), \
+            mock.patch.object(downloader, 'download_file', mock.AsyncMock()) as download_file:
+        executed = await downloader.execute_download(prepared, make_test_ctx(), Download(url='https://x/a.pmtiles'))
 
     assert executed.error
     download_file.assert_not_called()

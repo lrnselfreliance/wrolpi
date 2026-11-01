@@ -210,17 +210,14 @@ async def post_search_estimates(request: Request, body: schema.SearchEstimateReq
     if not body.search_str and not body.tag_names:
         return response.empty(HTTPStatus.BAD_REQUEST)
 
-    def estimate():
-        session = request.ctx.session
-        if body.tag_names:
-            # Get actual count of entries tagged with the tag names.
-            counts = Zims.entries_with_tags(session, body.tag_names)
-        else:
-            # Get estimates using libzim.
-            counts = Zims.estimate(session, body.search_str)
-        return [dict(estimate=count, **zim.__json__()) for zim, count in counts.items()]
-
-    zims_estimates = await asyncio.to_thread(estimate)
+    session = request.ctx.session
+    if body.tag_names:
+        # Get actual count of entries tagged with the tag names.
+        counts = Zims.entries_with_tags(session, body.tag_names)
+    else:
+        # Get estimates using libzim, in the estimate process (see `lib.estimate_zims`).
+        counts = await lib.estimate_zims(session, body.search_str)
+    zims_estimates = [dict(estimate=count, **zim.__json__()) for zim, count in counts.items()]
 
     ret = dict(
         zims_estimates=zims_estimates

@@ -291,15 +291,6 @@ class Zims:
         return zims
 
     @classmethod
-    def estimate(cls, session: Session, search_str: str) -> OrderedDictType[Zim, int]:
-        zims = cls.get_all(session)
-        results = OrderedDict()
-        for zim in zims:
-            if zim.auto_search:
-                results[zim] = zim.estimate(search_str)
-        return results
-
-    @classmethod
     def entries_with_tags(cls, session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
         zims = cls.get_all(session)
         results = OrderedDict()

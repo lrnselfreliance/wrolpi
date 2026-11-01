@@ -1,4 +1,7 @@
+import asyncio
 import json
+import sys
+from unittest import mock
 from http import HTTPStatus
 
 import pytest
@@ -366,3 +369,31 @@ async def test_delete_zim_waits_for_a_concurrent_writer(async_client, test_sessi
         assert not zim_path.exists()
         with maker() as session:
             assert session.query(Zim).filter_by(id=zim_id).one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_estimate_zims_runs_outside_the_api_process(test_session, zim_factory):
+    """libzim holds the GIL, so estimates run in a separate process rather than a thread of the API worker."""
+    zim = zim_factory('test zim')
+    test_session.commit()
+
+    with mock.patch('modules.zim.lib.asyncio.create_subprocess_exec', wraps=asyncio.create_subprocess_exec) as m:
+        counts = await lib.estimate_zims(test_session, 'one')
+    assert counts == {zim: 2}
+    assert m.call_args.args[:2] == (sys.executable, '-I')
+
+
+@pytest.mark.asyncio
+async def test_estimate_zims_skips_a_zim_it_cannot_read(test_session, zim_factory):
+    """A Zim the estimate process cannot open is left out of the estimates, like `Zims.get_all` leaves it out."""
+    good = zim_factory('good zim')
+    bad = zim_factory('bad zim')
+    test_session.commit()
+    bad.path.write_bytes(b'not a zim file')
+
+    counts = await lib.estimate_zims(test_session, 'one')
+    assert counts == {good: 2}
+
+    bad.path.unlink()
+    counts = await lib.estimate_zims(test_session, 'one')
+    assert counts == {good: 2}

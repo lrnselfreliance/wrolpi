@@ -1,9 +1,12 @@
+import asyncio
 import functools
 import json
 import pathlib
 import re
+import sys
 from datetime import datetime
-from typing import Callable, List, Tuple, Dict
+from collections import OrderedDict
+from typing import Callable, List, Tuple, Dict, OrderedDict as OrderedDictType
 
 from libzim import Entry
 from sqlalchemy import or_
@@ -235,6 +238,33 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
         estimate=estimate,
     )
     return results
+
+
+ESTIMATE_SCRIPT = pathlib.Path(__file__).with_name('estimate_zims.py')
+
+
+async def estimate_zims(session: Session, search_str: str) -> OrderedDictType[Zim, int]:
+    """Estimate how many entries of each auto-search Zim match `search_str`.
+
+    Everything libzim does happens in a separate process (see `estimate_zims.py`): python-libzim never releases
+    the GIL, and opening a large Zim cold takes seconds, so neither may run in the API worker.  `Zims.get_all`
+    opens every Zim and is not used here for that reason; a Zim the process cannot read is reported and left
+    out, as `Zims.get_all` would.  (A plain subprocess: Sanic workers are daemonic, so they cannot fork
+    multiprocessing children.)"""
+    zims = session.query(Zim).options(*Zim.json_options()).filter_by(auto_search=True).order_by(Zim.path).all()
+    zims = [i for i in zims if i.path and i.path.is_file()]
+    request = json.dumps(dict(paths=[str(i.path) for i in zims], search_str=search_str)).encode()
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, '-I', str(ESTIMATE_SCRIPT),
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate(request)
+    if proc.returncode != 0:
+        raise RuntimeError(f'Zim estimate failed ({proc.returncode}): {stderr.decode(errors="replace").strip()}')
+    if stderr:
+        logger.error(f'Failed to estimate some Zims:\n{stderr.decode(errors="replace").strip()}')
+    counts = json.loads(stdout)
+    return OrderedDict((zim, count) for zim, count in zip(zims, counts) if count is not None)
 
 
 def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,

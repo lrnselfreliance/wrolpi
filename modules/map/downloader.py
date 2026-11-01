@@ -48,7 +48,7 @@ async def verify_meta4_signature(meta4_contents: bytes) -> bool:
             logger.warning('meta4 missing <hash type="sha-256"> element')
             return False
         if sig_el is None or sig_el.text is None:
-            logger.warning('meta4 missing <signature> element — skipping verification')
+            logger.warning('meta4 missing <signature> element')
             return False
 
         sha256_hash = hash_el.text.strip()
@@ -312,18 +312,22 @@ class MapExtractDownloader(Downloader):
         # `download` with a URL.
         url = download.url
 
-        # Fetch meta4 once, GPG-verify the hash signature before downloading.
+        # Fetch meta4 once, GPG-verify the hash signature before downloading.  A map file is never downloaded
+        # without a signed hash.
         meta4_contents = await self.get_meta4_contents(url)
-        if meta4_contents:
-            if not await verify_meta4_signature(meta4_contents):
-                return ExecutedMapExtract(
-                    region=prepared.region, output_path=prepared.output_path,
-                    map_directory=prepared.map_directory,
-                    error=f'meta4 hash signature verification failed for {prepared.region}',
-                )
-            logger.info(f'meta4 signature verified for {prepared.region}')
-        else:
-            logger.warning(f'No meta4 available for {prepared.region} — downloading without hash verification')
+        if not meta4_contents:
+            return ExecutedMapExtract(
+                region=prepared.region, output_path=prepared.output_path,
+                map_directory=prepared.map_directory,
+                error=f'No signed hash (meta4) available for {prepared.region}, not downloading',
+            )
+        if not await verify_meta4_signature(meta4_contents):
+            return ExecutedMapExtract(
+                region=prepared.region, output_path=prepared.output_path,
+                map_directory=prepared.map_directory,
+                error=f'meta4 hash signature verification failed for {prepared.region}',
+            )
+        logger.info(f'meta4 signature verified for {prepared.region}')
 
         # Download via aria2c, passing the pre-verified meta4 for hash checking.
         logger.warning(f'Downloading {prepared.region} from {url}')
@@ -475,15 +479,19 @@ class MapSearchIndexDownloader(Downloader):
         download = download if download is not None else Download(url=prepared.pmtiles_name)
         url = download.url
 
-        # Fetch and verify meta4 (GPG-signed hash).
+        # Fetch and verify meta4 (GPG-signed hash).  A search index is never downloaded without a signed hash.
         meta4_contents = await self.get_meta4_contents(url)
-        if meta4_contents:
-            if not await verify_meta4_signature(meta4_contents):
-                return ExecutedMapSearchIndex(
-                    region=prepared.region,
-                    error=f'meta4 signature verification failed for {prepared.region} search index',
-                )
-            logger.info(f'Search index meta4 verified for {prepared.region}')
+        if not meta4_contents:
+            return ExecutedMapSearchIndex(
+                region=prepared.region,
+                error=f'No signed hash (meta4) available for {prepared.region} search index, not downloading',
+            )
+        if not await verify_meta4_signature(meta4_contents):
+            return ExecutedMapSearchIndex(
+                region=prepared.region,
+                error=f'meta4 signature verification failed for {prepared.region} search index',
+            )
+        logger.info(f'Search index meta4 verified for {prepared.region}')
 
         # Download via aria2c with meta4 hash verification.
         logger.warning(f'Downloading search index for {prepared.region} from {url}')

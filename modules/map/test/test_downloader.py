@@ -1,10 +1,10 @@
 """Phase-split tests for MapCatalogDownloader / MapExtractDownloader / MapSearchIndexDownloader.
 
 These exercise prepare_download and finalize_download in isolation — no async_client,
-no test_download_manager, no real subprocess.  Execute paths that drive download_file +
-GPG verification + filesystem rename are integration territory and are deliberately
-omitted; the parent download_file ctx threading is already covered by the FileDownloader
-migration tests.
+no test_download_manager, no real subprocess.  Execute is tested only for refusing a download
+without a signed hash; the paths that drive download_file + GPG verification + filesystem
+rename are integration territory and are deliberately omitted; the parent download_file ctx
+threading is already covered by the FileDownloader migration tests.
 """
 from unittest import mock
 
@@ -320,3 +320,51 @@ def test_extract_finalize_builds_search_index(test_session, test_directory, has_
 
     assert result.success is True
     assert rebuild.called is not has_search_download
+
+
+# ---------------------------------------------------------------------------
+# Signed hash required before downloading
+# ---------------------------------------------------------------------------
+
+
+def _prepared_extract(map_dir):
+    return map_extract_downloader.prepare_download(None, Download(
+        url='https://x/us-2024-01.pmtiles', downloader='map_extract',
+        settings={'region': 'us', 'version': '2024-01'},
+    ))
+
+
+def _prepared_search_index(map_dir):
+    (map_dir / 'us-2024-01.pmtiles').write_bytes(b'pretend pmtiles')
+    return map_search_index_downloader.prepare_download(None, Download(
+        url='https://x/us-2024-01.search.db', downloader='map_search_index',
+        settings={'region': 'us', 'pmtiles_name': 'us-2024-01.pmtiles'},
+    ))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('downloader,prepare', [
+    (map_extract_downloader, _prepared_extract),
+    (map_search_index_downloader, _prepared_search_index),
+], ids=['extract', 'search_index'])
+@pytest.mark.parametrize('meta4,signature_valid', [
+    (None, True),  # The CDN has no .meta4 (or it could not be fetched).
+    (b'<metalink/>', False),  # The .meta4's hash is not signed by WROLPi.
+], ids=['no_meta4', 'bad_signature'])
+async def test_map_download_requires_signed_hash(test_directory, monkeypatch, downloader, prepare, meta4,
+                                                 signature_valid):
+    """A map file is never downloaded unless its .meta4 carries a hash signed by WROLPi; aria2c then refuses any
+    file that does not match that hash."""
+    map_dir = test_directory / 'maps'
+    map_dir.mkdir()
+    monkeypatch.setattr('modules.map.lib.get_map_directory', lambda: map_dir)
+    prepared = prepare(map_dir)
+    download = Download(url=f'https://x/{prepared.region}.file')
+
+    with mock.patch.object(downloader, 'get_meta4_contents', mock.AsyncMock(return_value=meta4)), \
+            mock.patch('modules.map.downloader.verify_meta4_signature', mock.AsyncMock(return_value=signature_valid)), \
+            mock.patch.object(downloader, 'download_file', mock.AsyncMock()) as download_file:
+        executed = await downloader.execute_download(prepared, make_test_ctx(), download)
+
+    assert executed.error and 'us' in executed.error
+    download_file.assert_not_called()

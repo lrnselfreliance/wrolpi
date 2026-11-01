@@ -88,22 +88,39 @@ class InventoriesConfig(MultiFileConfig):
         # Exclude reserved files (e.g. catalog.yaml) that share the directory but are not inventories.
         return [slug for slug in super().discover() if slug not in RESERVED_SLUGS]
 
+    def __init__(self):
+        super().__init__()
+        # Slugs repaired in memory by `_repair_legacy_dates` whose files still need to be written.
+        self._legacy_date_slugs: set = set()
+
     def import_all(self, send_events: bool = False):
         super().import_all(send_events=send_events)
         self._repair_legacy_dates()
 
     def _repair_legacy_dates(self):
-        """One-time repair: inventories migrated before dates were normalized hold epoch seconds in their date
-        fields.  Rewrite those files as YYYY-MM-DD so every reader (API, MCP, frontend) sees a calendar date."""
+        """Inventories migrated before dates were normalized hold epoch seconds in their date fields.  Repair them in
+        memory and remember the slugs; `persist_legacy_date_repairs` writes the files.
+
+        This runs under `save_lock()` when called from `initialize()`, and that lock is not reentrant, so nothing
+        here may take the lock or write a file (doing so hung every API process at startup)."""
         for slug in list(self._configs.keys()):
             entity = dict(self._configs[slug])
             items = [dict(i) for i in entity.get('items') or [] if isinstance(i, dict)]
             if not normalize_item_dates(items, entity.get('fields') or []):
                 continue
             entity['items'] = items
+            self._configs[slug] = entity
+            self._legacy_date_slugs.add(slug)
+
+    def persist_legacy_date_repairs(self):
+        """One-time write of every inventory repaired by `_repair_legacy_dates`, so every reader (API, MCP,
+        frontend) sees calendar dates.  Takes the save lock: call it only where the lock is not already held."""
+        while self._legacy_date_slugs:
+            slug = self._legacy_date_slugs.pop()
+            if slug not in self._configs:
+                continue
             try:
                 with self.save_lock():
-                    self._configs[slug] = entity
                     self._persist_slug(slug)
                 logger.info(f'Normalized legacy epoch dates in inventory {slug}')
             except Exception as e:
@@ -324,6 +341,7 @@ def import_inventories_config():
     except Exception as e:
         logger.error('Failed to migrate legacy inventories', exc_info=e)
     config.import_all()
+    config.persist_legacy_date_repairs()
     config.seed_defaults()
 
     # Load the shared food catalog and merge in any new shipped defaults.

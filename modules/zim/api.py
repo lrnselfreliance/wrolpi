@@ -1,4 +1,3 @@
-import asyncio
 import urllib.parse
 from http import HTTPStatus
 
@@ -12,7 +11,6 @@ from wrolpi.common import logger
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from . import lib, schema
-from .models import Zims
 
 zim_bp = Blueprint('Zim', '/api/zim')
 
@@ -64,13 +62,8 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
 )
 @validate(schema.ZimSearchRequest)
 async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
-    # libzim searches are synchronous and slow; run off the event loop.  The request's Session is used
-    # in the worker thread; the handler awaits the thread, so the Session has one user at a time.
-    def search():
-        return lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
-                                   offset=body.offset, limit=body.limit)
-
-    results = await asyncio.to_thread(search)
+    results = await lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
+                                        offset=body.offset, limit=body.limit)
     return json_response({'zims': results})
 
 
@@ -82,11 +75,8 @@ async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
 )
 @validate(schema.ZimSearchRequest)
 async def search_zim(request: Request, zim_id: int, body: schema.ZimSearchRequest):
-    def search():
-        return lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
-                                offset=body.offset, limit=body.limit)
-
-    headlines = await asyncio.to_thread(search)
+    headlines = await lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
+                                       offset=body.offset, limit=body.limit)
     return json_response({'zim': headlines})
 
 
@@ -210,17 +200,14 @@ async def post_search_estimates(request: Request, body: schema.SearchEstimateReq
     if not body.search_str and not body.tag_names:
         return response.empty(HTTPStatus.BAD_REQUEST)
 
-    def estimate():
-        session = request.ctx.session
-        if body.tag_names:
-            # Get actual count of entries tagged with the tag names.
-            counts = Zims.entries_with_tags(session, body.tag_names)
-        else:
-            # Get estimates using libzim.
-            counts = Zims.estimate(session, body.search_str)
-        return [dict(estimate=count, **zim.__json__()) for zim, count in counts.items()]
-
-    zims_estimates = await asyncio.to_thread(estimate)
+    session = request.ctx.session
+    if body.tag_names:
+        # Count the entries tagged with the tag names (from the database; see `lib.count_tagged_zim_entries`).
+        counts = await lib.count_tagged_zim_entries(session, body.tag_names)
+    else:
+        # Get estimates using libzim, in the estimate process (see `lib.estimate_zims`).
+        counts = await lib.estimate_zims(session, body.search_str)
+    zims_estimates = [dict(estimate=count, **zim.__json__()) for zim, count in counts.items()]
 
     ret = dict(
         zims_estimates=zims_estimates

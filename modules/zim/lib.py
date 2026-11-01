@@ -16,11 +16,11 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 from modules.zim import kiwix
 from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
-from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
+from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription, ZimMetadata
 from wrolpi import flags, tags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate, aiohttp_post
+    register_refresh_cleanup, background_task, get_wrolpi_config, aiohttp_post
 from wrolpi.switches import register_switch_handler
 from wrolpi.dates import Seconds
 from wrolpi.events import Events
@@ -42,7 +42,6 @@ __all__ = [
     'get_entries_tags',
     'get_entry',
     'get_kiwix_catalog',
-    'get_unique_paths',
     'get_zim',
     'get_zims',
     'model_zim',
@@ -156,40 +155,57 @@ def get_entries_tags(session: Session, paths: List[str], zim_id: int):
     return entries
 
 
-def get_unique_paths(*paths: str) -> List[str]:
-    """Return a new list which contains unique Zim paths."""
-    unique_paths = unique_by_predicate(
-        paths,
-        lambda i: i.replace('-', '').replace('_', '').replace('/', '').lower()
+LIBZIM_WORKER = pathlib.Path(__file__).with_name('libzim_worker.py')
+
+
+async def run_libzim_jobs(jobs: List[Dict]) -> List[Dict]:
+    """Run libzim jobs (see `libzim_worker.py`) in a separate process, return one result per job.
+
+    python-libzim never releases the GIL, and opening a large Zim cold takes seconds, so nothing libzim does may
+    run in the API worker: every other request on that worker would wait behind it.  (A plain subprocess:
+    Sanic workers are daemonic, so they cannot fork multiprocessing children.)  A failed job's result is
+    `{'error': ...}`, so one bad Zim does not fail the rest."""
+    request = json.dumps(dict(jobs=jobs)).encode()
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, '-I', str(LIBZIM_WORKER),
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    return list(unique_paths)
+    stdout, stderr = await proc.communicate(request)
+    if proc.returncode != 0:
+        raise RuntimeError(f'libzim worker failed ({proc.returncode}): {stderr.decode(errors="replace").strip()}')
+    if stderr:
+        logger.error(f'libzim worker reported errors:\n{stderr.decode(errors="replace").strip()}')
+    return json.loads(stdout)
 
 
-def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List[str] = None, offset: int = 0,
-                 limit: int = 10) -> Dict:
-    zim_id = int(zim_id)
-    zim = get_zim(session, zim_id)
+def _apply_metadata(zim: Zim, result: Dict):
+    """Fill the Zim's cached `zim_metadata` from a worker result so `Zim.__json__` does not open the Zim."""
+    if metadata := result.get('metadata'):
+        zim.__dict__['zim_metadata'] = ZimMetadata(**metadata)
 
+
+def _search_job(zim: Zim, search_str: str, tag_names: List[str], session: Session, offset: int, limit: int) -> Dict:
+    """The worker job that fetches what `_headline_results` needs for one Zim."""
     if tag_names:
         # TODO what is the count goes over the limit?
-        entries = zim.entries_with_tags(session, tag_names, offset=offset, limit=1_000)
-        estimate = 0
+        paths = zim.entry_paths_with_tags(session, tag_names, offset=offset, limit=1_000)
+        return dict(op='entries', path=str(zim.path), paths=paths, metadata=True)
     elif search_str:
-        # Get suggested results (this searches titles).
-        results = zim.suggest(search_str, offset, limit)
-        search_results = zim.search(search_str, offset, limit)
-        # Remove duplicate entries (disambiguation or redirect).
-        results = get_unique_paths(*results, *search_results)
-        results = results[:limit]
-        entries = [zim.find_entry(i) for i in results]
-        estimate = zim.estimate(search_str)
-    else:
-        raise RuntimeError('Must provide search_str or tag_names.')
+        return dict(op='search', path=str(zim.path), search_str=search_str, offset=offset, limit=limit, metadata=True)
+    raise RuntimeError('Must provide search_str or tag_names.')
 
-    articles = [bytes(i.get_item().content).decode('UTF-8') for i in entries]
-    articles = [extract_html_text(i) for i in articles]
 
-    entries_tag_names = get_entries_tags(session, [i.path for i in entries], zim_id)
+def _headline_results(session: Session, zim: Zim, search_str: str, tag_names: List[str], result: Dict) -> Dict:
+    """Headline the entries a search job returned for one Zim."""
+    if 'error' in result:
+        raise RuntimeError(f'Failed to search {zim}: {result["error"]}')
+    _apply_metadata(zim, result)
+    entries = result['entries']
+    estimate = result.get('estimate', 0)
+
+    articles = [extract_html_text(i['content']) for i in entries]
+
+    entries_tag_names = get_entries_tags(session, [i['path'] for i in entries], zim.id)
 
     # Always get headlines even if there is no search_str.  Non-matches get the leading text of each article.
     headlines = extract_headlines(articles, search_str)
@@ -197,7 +213,7 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
     search = list()
     if search_str:
         # `search_str` allows us to headline the title.
-        titles = [i.title for i in entries]
+        titles = [i['title'] for i in entries]
         headline_titles = extract_headlines(titles, search_str)
 
         for entry in entries:
@@ -205,7 +221,7 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
             headline, rank = headlines.pop(0)
             if rank > 0 or title_rank > 0:
                 # The result for each Entry.
-                path = entry.path
+                path = entry['path']
                 entry_tag_names = entries_tag_names[path] if path in entries_tag_names else list()
                 search.append(dict(
                     headline=headline,
@@ -220,14 +236,14 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
         # No `search_str`, we return all entries.
         for entry in entries:
             headline, _ = headlines.pop(0)
-            path = entry.path
+            path = entry['path']
             entry_tag_names = entries_tag_names[path] if path in entries_tag_names else list()
             search.append(dict(
                 headline=headline,
                 path=path,
                 rank=0,
                 tag_names=entry_tag_names,
-                title=entry.title,
+                title=entry['title'],
             ))
         estimate = len(entries)
 
@@ -240,53 +256,61 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
     return results
 
 
-ESTIMATE_SCRIPT = pathlib.Path(__file__).with_name('estimate_zims.py')
+async def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List[str] = None, offset: int = 0,
+                       limit: int = 10) -> Dict:
+    zim = get_zim(session, int(zim_id))
+    job = _search_job(zim, search_str, tag_names, session, offset, limit)
+    result, = await run_libzim_jobs([job])
+    return await asyncio.to_thread(_headline_results, session, zim, search_str, tag_names, result)
+
+
+def auto_search_zims(session: Session) -> List[Zim]:
+    """The Zims that the global search searches, without opening them."""
+    zims = session.query(Zim).options(*Zim.json_options()).filter_by(auto_search=True).order_by(Zim.path).all()
+    return [i for i in zims if i.path and i.path.is_file()]
 
 
 async def estimate_zims(session: Session, search_str: str) -> OrderedDictType[Zim, int]:
     """Estimate how many entries of each auto-search Zim match `search_str`.
 
-    Everything libzim does happens in a separate process (see `estimate_zims.py`): python-libzim never releases
-    the GIL, and opening a large Zim cold takes seconds, so neither may run in the API worker.  `Zims.get_all`
-    opens every Zim and is not used here for that reason; a Zim the process cannot read is reported and left
-    out, as `Zims.get_all` would.  (A plain subprocess: Sanic workers are daemonic, so they cannot fork
-    multiprocessing children.)"""
-    zims = session.query(Zim).options(*Zim.json_options()).filter_by(auto_search=True).order_by(Zim.path).all()
-    zims = [i for i in zims if i.path and i.path.is_file()]
-    request = json.dumps(dict(paths=[str(i.path) for i in zims], search_str=search_str)).encode()
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable, '-I', str(ESTIMATE_SCRIPT),
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate(request)
-    if proc.returncode != 0:
-        raise RuntimeError(f'Zim estimate failed ({proc.returncode}): {stderr.decode(errors="replace").strip()}')
-    if stderr:
-        logger.error(f'Failed to estimate some Zims:\n{stderr.decode(errors="replace").strip()}')
-    counts = json.loads(stdout)
-    return OrderedDict((zim, count) for zim, count in zip(zims, counts) if count is not None)
+    `Zims.get_all` opens every Zim and is not used here for that reason; a Zim the worker cannot read is
+    reported and left out, as `Zims.get_all` would."""
+    zims = auto_search_zims(session)
+    jobs = [dict(op='estimate', path=str(i.path), search_str=search_str, metadata=True) for i in zims]
+    results = await run_libzim_jobs(jobs)
+    counts = OrderedDict()
+    for zim, result in zip(zims, results):
+        if 'error' not in result:
+            _apply_metadata(zim, result)
+            counts[zim] = result['estimate']
+    return counts
 
 
-def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,
-                    limit: int = 10) -> List[Dict]:
-    """Search all Zim files that have auto_search enabled.
+async def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,
+                          limit: int = 10) -> List[Dict]:
+    """Search all Zim files that have auto_search enabled, in one libzim worker process.
 
     Returns a list of per-zim result dicts, each containing metadata and search results.
     Each search entry includes `zim_id` so callers can fetch the full entry afterward."""
-    zims = Zims.get_all(session)
-    all_results = []
-    for zim in zims:
-        if not zim.auto_search:
-            continue
-        try:
-            result = headline_zim(session, search_str, zim.id, tag_names=tag_names, offset=offset, limit=limit)
-            if result.get('search'):
-                for entry in result['search']:
+    zims = auto_search_zims(session)
+    jobs = [_search_job(zim, search_str, tag_names, session, offset, limit) for zim in zims]
+    results = await run_libzim_jobs(jobs)
+
+    def headline_all():
+        all_results = []
+        for zim, result in zip(zims, results):
+            try:
+                headlined = _headline_results(session, zim, search_str, tag_names, result)
+            except Exception as e:
+                logger.error(f'Failed to search Zim {zim}', exc_info=e)
+                continue
+            if headlined.get('search'):
+                for entry in headlined['search']:
                     entry['zim_id'] = zim.id
-                all_results.append(result)
-        except Exception as e:
-            logger.error(f'Failed to search Zim {zim}', exc_info=e)
-    return all_results
+                all_results.append(headlined)
+        return all_results
+
+    return await asyncio.to_thread(headline_all)
 
 
 def get_zim(session: Session, zim_id: int) -> Zim:

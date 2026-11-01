@@ -5,7 +5,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional
 
-from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
+from libzim import Archive, Entry
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 from sqlalchemy.orm.exc import NoResultFound  # noqa
@@ -165,39 +165,6 @@ class Zim(Base, ModelHelper):
         )
         return metadata
 
-    def get_searcher(self) -> Searcher:
-        searcher = Searcher(self.get_zim())
-        return searcher
-
-    def get_search(self, search_str: str):
-        query = Query().set_query(search_str)
-        searcher = self.get_searcher()
-        search = searcher.search(query)
-        return search
-
-    def get_suggestion_searcher(self) -> SuggestionSearcher:
-        searcher = SuggestionSearcher(self.get_zim())
-        return searcher
-
-    def estimate(self, search_str: str) -> int:
-        """Count the number of Entry(s) that contain the `search_str`."""
-        search = self.get_search(search_str)
-        count = search.getEstimatedMatches()
-        return count
-
-    def search(self, search_str: str, offset: int = 0, limit: int = 10) -> List[str]:
-        """Return the paths of the Entry(s) that contain the `search_str`."""
-        search = self.get_search(search_str)
-        results = list(search.getResults(offset, limit))
-        return results
-
-    def suggest(self, search_str: str, offset: int = 0, limit: int = 10) -> List[str]:
-        """Return the paths of the Entry(s) that contain the `search_str`.  Also searches the titles."""
-        searcher = self.get_suggestion_searcher()
-        suggestions = searcher.suggest(search_str)
-        results = list(suggestions.getResults(offset, limit))
-        return results
-
     def get_entry(self, path: str) -> Optional[Entry]:
         """Search this Zim file for the provided Entry at the `path`."""
         zim = self.get_zim()
@@ -256,22 +223,21 @@ class Zim(Base, ModelHelper):
             .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry) \
             .offset(offset).limit(limit)
 
-        entries = list()
-        for tag_zim_entry, zim in tag_zim_entries:
-            entry = zim.find_entry(tag_zim_entry.zim_entry)
-            entries.append(entry)
+        return [(zim, tag_zim_entry.zim_entry) for tag_zim_entry, zim in tag_zim_entries]
 
-        return entries
-
-    def entries_with_tags(self, session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) -> List[
-        Entry]:
-        """Return Zim Entries tagged with the provided names."""
+    def entry_paths_with_tags(self, session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) \
+            -> List[str]:
+        """Return the paths of the Zim Entries tagged with the provided names.  Does not open the Zim."""
         if limit < 1:
             raise RuntimeError('Limit must be greater than zero')
 
         tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=self.id)
-        entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
-        return entries
+        return [path for _, path in Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)]
+
+    def entries_with_tags(self, session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) -> List[
+        Entry]:
+        """Return Zim Entries tagged with the provided names."""
+        return [self.find_entry(i) for i in self.entry_paths_with_tags(session, tag_names, limit, offset)]
 
 
 class Zims:

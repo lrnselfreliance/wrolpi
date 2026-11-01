@@ -4,7 +4,7 @@ from http import HTTPStatus
 import pytest
 from libzim import Entry
 
-from modules.zim import lib
+from modules.zim import lib, libzim_worker
 from modules.zim.errors import UnknownZim, UnknownZimEntry
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
@@ -96,29 +96,29 @@ async def test_zim_entries_with_tags(async_client, test_session, zim_factory, ta
     assert entries[0].path == 'two'
 
 
-def test_get_unique_paths():
+def test_unique_paths():
     paths = ['A/Prickly_Pear', 'A/Prickly_pear', 'A/Prickly-pear', 'A/Arborescent_Prickly_Pear',
              'A/Arborescent_prickly_pear', 'A/Beavertail_prickly_pear', 'A/Brittle_prickly-pear',
              'A/Chenille_prickly-pear', 'A/Coastal_Prickly_Pear', 'A/Coastal_prickly_pear',
              'A/Prickly_pears_in_South_Africa', 'A/Prickly_Pear_Cays', 'A/Prickly_pears_in_Australia', 'A/Opuntia',
              'A/Prickly_Pear_(British_Virgin_Islands)', 'A/Prickly_Pear_Island', 'A/Prickly_Pears_(film)',
              'A/Invasive_succulent_plants_in_South_Africa', 'A/Cactoblastis_Memorial_Hall', 'A/Thomas_Harvey_Johnston']
-    assert lib.get_unique_paths(*paths) == ['A/Prickly_Pear',
-                                            'A/Arborescent_Prickly_Pear',
-                                            'A/Beavertail_prickly_pear',
-                                            'A/Brittle_prickly-pear',
-                                            'A/Chenille_prickly-pear',
-                                            'A/Coastal_Prickly_Pear',
-                                            'A/Prickly_pears_in_South_Africa',
-                                            'A/Prickly_Pear_Cays',
-                                            'A/Prickly_pears_in_Australia',
-                                            'A/Opuntia',
-                                            'A/Prickly_Pear_(British_Virgin_Islands)',
-                                            'A/Prickly_Pear_Island',
-                                            'A/Prickly_Pears_(film)',
-                                            'A/Invasive_succulent_plants_in_South_Africa',
-                                            'A/Cactoblastis_Memorial_Hall',
-                                            'A/Thomas_Harvey_Johnston']
+    assert libzim_worker.unique_paths(*paths) == ['A/Prickly_Pear',
+                                                  'A/Arborescent_Prickly_Pear',
+                                                  'A/Beavertail_prickly_pear',
+                                                  'A/Brittle_prickly-pear',
+                                                  'A/Chenille_prickly-pear',
+                                                  'A/Coastal_Prickly_Pear',
+                                                  'A/Prickly_pears_in_South_Africa',
+                                                  'A/Prickly_Pear_Cays',
+                                                  'A/Prickly_pears_in_Australia',
+                                                  'A/Opuntia',
+                                                  'A/Prickly_Pear_(British_Virgin_Islands)',
+                                                  'A/Prickly_Pear_Island',
+                                                  'A/Prickly_Pears_(film)',
+                                                  'A/Invasive_succulent_plants_in_South_Africa',
+                                                  'A/Cactoblastis_Memorial_Hall',
+                                                  'A/Thomas_Harvey_Johnston']
 
 
 @pytest.mark.asyncio

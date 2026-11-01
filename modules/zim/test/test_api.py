@@ -397,3 +397,34 @@ async def test_estimate_zims_skips_a_zim_it_cannot_read(test_session, zim_factor
     bad.path.unlink()
     counts = await lib.estimate_zims(test_session, 'one')
     assert counts == {good: 2}
+
+
+@pytest.mark.asyncio
+async def test_zim_search_runs_outside_the_api_process(async_client, test_session, test_zim):
+    """Zim searches, like estimates, do all their libzim work in the worker script's process."""
+    with mock.patch('modules.zim.lib.asyncio.create_subprocess_exec', wraps=asyncio.create_subprocess_exec) as m:
+        request, response = await async_client.post(f'/api/zim/search/{test_zim.id}', json=dict(search_str='one'))
+        assert response.status_code == HTTPStatus.OK
+        assert [i['path'] for i in response.json['zim']['search']] == ['one', 'home']
+        assert response.json['zim']['metadata']['title'], 'Metadata should come from the worker'
+
+        request, response = await async_client.post('/api/zim/search', json=dict(search_str='one'))
+        assert response.status_code == HTTPStatus.OK
+        assert [i['path'] for i in response.json['zims'][0]['search']] == ['one', 'home']
+    assert m.call_count == 2
+    assert all(call.args[:2] == (sys.executable, '-I') for call in m.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_search_all_zims_skips_a_zim_it_cannot_read(async_client, test_session, zim_factory):
+    """One unreadable Zim does not fail the search of all Zims."""
+    good = zim_factory('good zim')
+    bad = zim_factory('bad zim')
+    test_session.commit()
+    bad.path.write_bytes(b'not a zim file')
+
+    request, response = await async_client.post('/api/zim/search', json=dict(search_str='one'))
+    assert response.status_code == HTTPStatus.OK
+    zims = response.json['zims']
+    assert len(zims) == 1 and zims[0]['path'].endswith('good zim')
+    assert zims[0]['estimate'] == 2

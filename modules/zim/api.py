@@ -1,4 +1,3 @@
-import asyncio
 import urllib.parse
 from http import HTTPStatus
 
@@ -64,13 +63,8 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
 )
 @validate(schema.ZimSearchRequest)
 async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
-    # libzim searches are synchronous and slow; run off the event loop.  The request's Session is used
-    # in the worker thread; the handler awaits the thread, so the Session has one user at a time.
-    def search():
-        return lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
-                                   offset=body.offset, limit=body.limit)
-
-    results = await asyncio.to_thread(search)
+    results = await lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
+                                        offset=body.offset, limit=body.limit)
     return json_response({'zims': results})
 
 
@@ -82,11 +76,8 @@ async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
 )
 @validate(schema.ZimSearchRequest)
 async def search_zim(request: Request, zim_id: int, body: schema.ZimSearchRequest):
-    def search():
-        return lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
-                                offset=body.offset, limit=body.limit)
-
-    headlines = await asyncio.to_thread(search)
+    headlines = await lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
+                                       offset=body.offset, limit=body.limit)
     return json_response({'zim': headlines})
 
 

@@ -170,7 +170,17 @@ async def run_libzim_jobs(jobs: List[Dict]) -> List[Dict]:
         sys.executable, '-I', str(LIBZIM_WORKER),
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate(request)
+    try:
+        stdout, stderr = await proc.communicate(request)
+    except asyncio.CancelledError:
+        # Sanic cancels the handler at its response timeout or when the client disconnects; cancelling
+        # `communicate` leaves the process running (and, once its stdout pipe fills, stuck).  Kill and reap it.
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        await proc.wait()
+        raise
     if proc.returncode != 0:
         raise RuntimeError(f'libzim worker failed ({proc.returncode}): {stderr.decode(errors="replace").strip()}')
     if stderr:
@@ -284,6 +294,21 @@ async def estimate_zims(session: Session, search_str: str) -> OrderedDictType[Zi
             _apply_metadata(zim, result)
             counts[zim] = result['estimate']
     return counts
+
+
+async def count_tagged_zim_entries(session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
+    """Count the entries of every Zim tagged with all of `tag_names`.  The counts come from the database; the
+    worker only reads each Zim's metadata, and a Zim it cannot read is left out."""
+    zims = session.query(Zim).options(*Zim.json_options()).order_by(Zim.path).all()
+    zims = [i for i in zims if i.path and i.path.is_file()]
+    counts = {i: len(i.entry_paths_with_tags(session, tag_names, limit=1_000_000)) for i in zims}
+    results = await run_libzim_jobs([dict(op='metadata', path=str(i.path)) for i in zims])
+    readable = OrderedDict()
+    for zim, result in zip(zims, results):
+        if 'error' not in result:
+            _apply_metadata(zim, result)
+            readable[zim] = counts[zim]
+    return readable
 
 
 async def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,

@@ -256,14 +256,6 @@ class Zims:
                 logger.error(f'Failed to read Zim: {zim}', exc_info=e)
         return zims
 
-    @classmethod
-    def entries_with_tags(cls, session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
-        zims = cls.get_all(session)
-        results = OrderedDict()
-        for zim in zims:
-            results[zim] = len(zim.entries_with_tags(session, tag_names))
-        return results
-
 
 class TagZimEntry(Base):
     __tablename__ = 'tag_zim'

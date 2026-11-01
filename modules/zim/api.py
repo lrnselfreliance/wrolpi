@@ -11,7 +11,6 @@ from wrolpi.common import logger
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from . import lib, schema
-from .models import Zims
 
 zim_bp = Blueprint('Zim', '/api/zim')
 
@@ -203,8 +202,8 @@ async def post_search_estimates(request: Request, body: schema.SearchEstimateReq
 
     session = request.ctx.session
     if body.tag_names:
-        # Get actual count of entries tagged with the tag names.
-        counts = Zims.entries_with_tags(session, body.tag_names)
+        # Count the entries tagged with the tag names (from the database; see `lib.count_tagged_zim_entries`).
+        counts = await lib.count_tagged_zim_entries(session, body.tag_names)
     else:
         # Get estimates using libzim, in the estimate process (see `lib.estimate_zims`).
         counts = await lib.estimate_zims(session, body.search_str)

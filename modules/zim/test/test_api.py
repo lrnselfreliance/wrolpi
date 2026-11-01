@@ -428,3 +428,49 @@ async def test_search_all_zims_skips_a_zim_it_cannot_read(async_client, test_ses
     zims = response.json['zims']
     assert len(zims) == 1 and zims[0]['path'].endswith('good zim')
     assert zims[0]['estimate'] == 2
+
+
+@pytest.mark.asyncio
+async def test_tagged_search_estimates_do_not_open_zims(async_client, test_session, test_zim, tag_factory):
+    """Estimates with tags count from the database; the API process never opens a Zim, even for its metadata."""
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    test_zim.tag_entry(test_session, tag1.name, 'one')
+    test_zim.tag_entry(test_session, tag1.name, 'two')
+    test_zim.tag_entry(test_session, tag2.name, 'one')
+    test_session.commit()
+
+    with mock.patch('modules.zim.models.Zim.get_zim', side_effect=AssertionError('opened a Zim in the API')):
+        body = dict(search_str='one', tag_names=[tag1.name])
+        request, response = await async_client.post('/api/zim/search_estimates', json=body)
+        assert response.status_code == HTTPStatus.OK
+        assert [(i['estimate'], bool(i['metadata']['title'])) for i in response.json['zims_estimates']] \
+            == [(2, True)]
+
+        body = dict(search_str='', tag_names=[tag1.name, tag2.name])
+        request, response = await async_client.post('/api/zim/search_estimates', json=body)
+        assert [i['estimate'] for i in response.json['zims_estimates']] == [1]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_libzim_jobs_kill_the_worker(test_directory):
+    """Sanic cancels a handler at its response timeout or on disconnect; the worker process must not outlive it."""
+    slow_worker = test_directory / 'slow_worker.py'
+    slow_worker.write_text('import time; time.sleep(60)')
+    procs = []
+    create_subprocess_exec = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        proc = await create_subprocess_exec(*args, **kwargs)
+        procs.append(proc)
+        return proc
+
+    with mock.patch('modules.zim.lib.LIBZIM_WORKER', slow_worker), \
+            mock.patch('modules.zim.lib.asyncio.create_subprocess_exec', side_effect=spy):
+        task = asyncio.create_task(lib.run_libzim_jobs([]))
+        while not procs:
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert procs[0].returncode is not None, 'The worker was killed and reaped'

@@ -12,6 +12,7 @@ Reads `{"jobs": [...]}` from stdin and writes one result per job, in order, to s
     {"op": "search", "search_str": ..., "offset": ..., "limit": ...}
                                                       -> {"estimate": int, "entries": [{"path", "title", "content"}]}
     {"op": "entries", "paths": [...]}                 -> {"entries": [{"path", "title", "content"}]}
+    {"op": "metadata"}                                -> {} (with the metadata below)
 
 Any job may add `"metadata": true` to also get the Zim's metadata.  A job that fails returns `{"error": str}`
 so one bad Zim does not hide the rest.  Imports only the standard library and libzim; it is run with
@@ -73,6 +74,8 @@ def run_job(job: dict) -> dict:
         result['entries'] = [entry_dict(archive, i) for i in paths]
     elif op == 'entries':
         result['entries'] = [entry_dict(archive, i) for i in job['paths']]
+    elif op == 'metadata':
+        job['metadata'] = True
     else:
         raise ValueError(f'Unknown op {op!r}')
     if job.get('metadata'):

@@ -831,6 +831,18 @@ def choose_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]
         return sorted(paths)[0]
 
 
+def _file_names_sql(table: str) -> str:
+    """SQL: the sorted names in `table`.files, as a JSON array.
+
+    Old FileGroups store each file's absolute path, new ones its name; both give the name."""
+    path = "json_extract(j.value, '$.path')"
+    return f'''(SELECT json_group_array(name) FROM (
+                SELECT CASE WHEN {path} LIKE '/%' THEN substr({path}, length({table}.directory) + 2) ELSE {path} END
+                    AS name
+                FROM json_each({table}.files) AS j
+                ORDER BY name))'''
+
+
 # About how many files `_upsert_files` writes per transaction.  A stem's files are never split across chunks.
 UPSERT_CHUNK_SIZE = 500
 
@@ -895,6 +907,8 @@ def _upsert_files(files: List[pathlib.Path],
                              (json.dumps(list(map(str, non_primary_files))),))
 
             placeholders, params = values_clause(values)
+            # Compare names, not counts: a file can replace another without changing the size or newest time.
+            same_files = f'{_file_names_sql("file_group")} = {_file_names_sql("EXCLUDED")}'
             stmt = f'''
                 INSERT INTO file_group
                     (primary_path, directory, indexed, modification_datetime, mimetype, size, files,
@@ -915,7 +929,7 @@ def _upsert_files(files: List[pathlib.Path],
                         WHEN
                             file_group.modification_datetime = EXCLUDED.modification_datetime
                             AND file_group.size = EXCLUDED.size
-                            AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                            AND {same_files}
                             THEN file_group.files
                         ELSE EXCLUDED.files
                         END
@@ -925,7 +939,7 @@ def _upsert_files(files: List[pathlib.Path],
                         file_group.indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
                         AND file_group.size = EXCLUDED.size
-                        AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                        AND {same_files}
                     )
                 RETURNING id, primary_path, indexed
             '''

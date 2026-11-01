@@ -496,6 +496,43 @@ async def test__upsert_files_interleaved_stems(test_session, make_files_structur
 
 
 @pytest.mark.asyncio
+async def test__upsert_files_same_count_different_members(test_session, make_files_structure, video_bytes):
+    """A FileGroup whose files changed is re-indexed even when the count, total size and newest modification time
+    did not change."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    lib._upsert_files([mp4, jpg])
+    test_session.query(FileGroup).one().indexed = True
+    test_session.commit()
+
+    # foo.png replaces foo.jpg: same size, and foo.mp4 is still the newest file.
+    png = jpg.rename(jpg.with_suffix('.png'))
+    os.utime(png, (mp4.stat().st_mtime - 10,) * 2)
+    lib._upsert_files([mp4, png])
+
+    test_session.expire_all()
+    foo = test_session.query(FileGroup).one()
+    assert {i['path'] for i in foo.files} == {'foo.mp4', 'foo.png'}
+    assert foo.indexed is False
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_unchanged_legacy_absolute_paths(test_session, make_files_structure, video_bytes):
+    """A FileGroup whose files are stored with absolute paths (the old format) is not re-indexed when its files did
+    not change."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    lib._upsert_files([mp4, jpg])
+    foo = test_session.query(FileGroup).one()
+    foo.files = [{**i, 'path': str(foo.directory / i['path'])} for i in foo.files]
+    foo.indexed = True
+    test_session.commit()
+
+    lib._upsert_files([mp4, jpg])
+
+    test_session.expire_all()
+    assert test_session.query(FileGroup).one().indexed is True
+
+
+@pytest.mark.asyncio
 async def test_refresh_interleaved_stems(test_session, make_files_structure, test_directory, video_bytes,
                                          refresh_files):
     """Refreshing a directory whose stems interleave when sorted creates one FileGroup per stem."""

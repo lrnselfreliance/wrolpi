@@ -18,6 +18,7 @@ from PIL import Image
 import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer, get_wrolpi_config
+from wrolpi.config_version import get_config_version, set_config_version
 from wrolpi.conftest import await_switches, await_file_worker
 import sqlalchemy
 from sqlalchemy.exc import IntegrityError
@@ -493,6 +494,119 @@ async def test__upsert_files_interleaved_stems(test_session, make_files_structur
         {'primary_path': 'foo.f137.mp4', 'stem': 'foo.f137', 'files': [{'path': 'foo.f137.mp4'}]},
         {'primary_path': 'foo.tar.gz', 'stem': 'foo.tar', 'files': [{'path': 'foo.tar.gz'}]},
     ])
+
+
+def _file_group_by_stem(test_session, stem: str) -> FileGroup:
+    test_session.expire_all()
+    return test_session.query(FileGroup).filter_by(stem=stem).one()
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_primary_moves_to_new_file(async_client, test_session, make_files_structure, video_bytes,
+                                                       tag_factory):
+    """A FileGroup whose primary file becomes a companion keeps its id, tags and viewing state when the new
+    primary file arrives."""
+    jpg, = make_files_structure({'foo.jpg': 'jpg'})
+    lib._upsert_files([jpg])
+    foo = _file_group_by_stem(test_session, 'foo')
+    foo_id = foo.id
+    tag = await tag_factory()
+    foo.add_tag(test_session, tag.id)
+    foo.set_viewed()
+    set_config_version(test_session, 'tags.yaml', 1)
+    test_session.commit()
+
+    mp4, = make_files_structure({'foo.mp4': video_bytes})
+    lib._upsert_files([jpg, mp4])
+
+    foo = _file_group_by_stem(test_session, 'foo')
+    assert test_session.query(FileGroup).count() == 1
+    assert foo.id == foo_id
+    assert foo.primary_path == mp4
+    assert foo.tag_names == [tag.name]
+    assert foo.viewed
+    # tags.yaml saves tagged files by their primary path.
+    assert get_config_version(test_session, 'tags.yaml') > 1
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_primary_file_replaced(async_client, test_session, make_files_structure, video_bytes, tag_factory):
+    """A FileGroup whose primary file was replaced by a file with the same stem is renamed, not duplicated.
+
+    The old primary file is not in the refresh, so it is not a companion of the new group."""
+    txt, = make_files_structure({'foo.txt': 'text'})
+    lib._upsert_files([txt])
+    foo = _file_group_by_stem(test_session, 'foo')
+    foo_id = foo.id
+    tag = await tag_factory()
+    foo.add_tag(test_session, tag.id)
+    test_session.commit()
+
+    txt.unlink()
+    mp4, = make_files_structure({'foo.mp4': video_bytes})
+    lib._upsert_files([mp4])
+
+    foo = _file_group_by_stem(test_session, 'foo')
+    assert test_session.query(FileGroup).count() == 1
+    assert foo.id == foo_id
+    assert foo.primary_path == mp4
+    assert foo.tag_names == [tag.name]
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_primary_path_and_stem_owned_by_different_rows(async_client, test_session, make_files_structure,
+                                                                           video_bytes, tag_factory):
+    """When one FileGroup owns the incoming primary path and another owns its (directory, stem), the modeled one
+    survives with the tags and viewing state of both."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    # A row with a stale stem owns foo.mp4.
+    lib._upsert_files([mp4])
+    stale = _file_group_by_stem(test_session, 'foo')
+    stale.stem = 'stale'
+    test_session.commit()
+    # The modeled row owns stem `foo`.
+    lib._upsert_files([jpg])
+    modeled = _file_group_by_stem(test_session, 'foo')
+    modeled.model = 'video'
+    modeled_id = modeled.id
+    one, two = await tag_factory(), await tag_factory()
+    stale.add_tag(test_session, one.id)
+    stale.set_viewed()
+    modeled.add_tag(test_session, two.id)
+    test_session.commit()
+
+    lib._upsert_files([jpg, mp4])
+
+    foo = _file_group_by_stem(test_session, 'foo')
+    assert test_session.query(FileGroup).count() == 1
+    assert foo.id == modeled_id
+    assert foo.primary_path == mp4
+    assert sorted(foo.tag_names) == sorted([one.name, two.name])
+    assert foo.viewed
+
+
+@pytest.mark.asyncio
+async def test__upsert_files_companion_with_stale_stem(async_client, test_session, make_files_structure, video_bytes,
+                                                       tag_factory):
+    """A companion file's old FileGroup gives its tags and viewing state to the group's FileGroup before it is
+    deleted."""
+    jpg, mp4 = make_files_structure({'foo.jpg': 'jpg', 'foo.mp4': video_bytes})
+    lib._upsert_files([jpg])
+    old = _file_group_by_stem(test_session, 'foo')
+    old.stem = 'stale'
+    tag = await tag_factory()
+    old.add_tag(test_session, tag.id)
+    old.set_viewed()
+    test_session.commit()
+
+    lib._upsert_files([jpg, mp4])
+
+    foo = _file_group_by_stem(test_session, 'foo')
+    assert test_session.query(FileGroup).count() == 1
+    assert foo.primary_path == mp4
+    assert foo.tag_names == [tag.name]
+    assert foo.viewed
+    assert jpg.is_file()
 
 
 @pytest.mark.asyncio

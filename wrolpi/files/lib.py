@@ -843,6 +843,98 @@ def _file_names_sql(table: str) -> str:
                 ORDER BY name))'''
 
 
+def _rank_file_groups(curs, file_group_ids: Iterable[int]) -> List[int]:
+    """The ids of these FileGroups, the one most worth keeping first: modeled, then tagged, then with files, then
+    the newest."""
+    curs.execute('''
+                 SELECT fg.id,
+                        CASE
+                            WHEN fg.files IS NULL OR json_type(fg.files) != 'array' THEN 0
+                            ELSE json_array_length(fg.files)
+                        END AS file_count,
+                        CASE
+                            WHEN fg.model IS NOT NULL AND fg.model != '' THEN 1
+                            ELSE 0
+                        END AS has_model,
+                        (SELECT COUNT(*) FROM tag_file tf WHERE tf.file_group_id = fg.id) AS tag_count
+                 FROM file_group fg
+                 WHERE fg.id IN (SELECT value FROM json_each(?))
+                 ''', (json.dumps(list(file_group_ids)),))
+    members = list(curs.fetchall())
+    members.sort(key=lambda m: (m['has_model'], m['tag_count'], m['file_count'] > 0, m['id']), reverse=True)
+    return [m['id'] for m in members]
+
+
+def _count_primary_path_change(curs, file_group_id: int):
+    """tags.yaml, playlists.yaml and recently_viewed.yaml save a FileGroup by its primary path; count a change of
+    that path for each config that holds this FileGroup."""
+    curs.execute('''
+                 SELECT EXISTS (SELECT 1 FROM tag_file WHERE file_group_id = :id) AS tagged,
+                        EXISTS (SELECT 1
+                                FROM collection_item ci
+                                         JOIN collection c ON c.id = ci.collection_id
+                                WHERE ci.file_group_id = :id
+                                  AND c.kind = 'playlist') AS in_playlist,
+                        (SELECT viewed IS NOT NULL FROM file_group WHERE id = :id) AS viewed
+                 ''', {'id': file_group_id})
+    row = curs.fetchone()
+    names = [name for name, held in (('tags.yaml', row['tagged']), ('playlists.yaml', row['in_playlist']),
+                                     ('recently_viewed.yaml', row['viewed'])) if held]
+    if names:
+        count_config_change_curs(curs, *names)
+
+
+def _collapse_file_group(curs, loser_id: int, winner_id: int):
+    """Delete the loser FileGroup after giving its tags, collection membership and viewing state to the winner.
+
+    The winner keeps its own viewing state when it has one."""
+    merge_file_group_relations(curs, loser_id, winner_id)
+    curs.execute('SELECT viewed IS NOT NULL AS viewed FROM file_group WHERE id = ?', (loser_id,))
+    if curs.fetchone()['viewed']:
+        # recently_viewed.yaml saves the loser by its primary path.
+        count_config_change_curs(curs, 'recently_viewed.yaml')
+    curs.execute('''
+                 UPDATE file_group
+                 SET viewed   = COALESCE(file_group.viewed, loser.viewed),
+                     progress = COALESCE(file_group.progress, loser.progress),
+                     position = COALESCE(file_group.position, loser.position)
+                 FROM (SELECT viewed, progress, position FROM file_group WHERE id = :loser) AS loser
+                 WHERE file_group.id = :winner
+                 ''', {'loser': loser_id, 'winner': winner_id})
+    curs.execute('DELETE FROM file_group WHERE id = ?', (loser_id,))
+
+
+def _give_stem_owners_their_primary_paths(curs, values: List[tuple]):
+    """Give each incoming primary path to the FileGroup that already owns its (directory, stem).
+
+    `_upsert_files` then updates that FileGroup through ON CONFLICT (primary_path) instead of colliding with it on
+    the (directory, stem) unique index.  The FileGroup keeps its id, so its tags, collection membership, model and
+    viewing state stay with it.  If a different FileGroup owns the primary path, the two collapse into the one
+    `_rank_file_groups` prefers.
+
+    @param values: `_upsert_files` rows: (primary_path, directory, ..., stem)."""
+    incoming = json.dumps([[value[1], value[-1], value[0]] for value in values])
+    curs.execute('''
+                 SELECT fg.id, json_extract(v.value, '$[2]') AS primary_path
+                 FROM json_each(:incoming) AS v
+                          JOIN file_group fg ON fg.directory = json_extract(v.value, '$[0]')
+                     AND fg.stem = json_extract(v.value, '$[1]')
+                 WHERE fg.primary_path != json_extract(v.value, '$[2]')
+                   -- A FileGroup whose primary path is incoming is updated by its own group.
+                   AND fg.primary_path NOT IN (SELECT json_extract(value, '$[2]') FROM json_each(:incoming))
+                 ''', {'incoming': incoming})
+    for stem_owner_id, primary_path in curs.fetchall():
+        curs.execute('SELECT id FROM file_group WHERE primary_path = ?', (primary_path,))
+        if path_owner := curs.fetchone():
+            winner_id, loser_id = _rank_file_groups(curs, [stem_owner_id, path_owner['id']])
+            _collapse_file_group(curs, loser_id, winner_id)
+            if winner_id == path_owner['id']:
+                # The survivor already has the primary path.
+                continue
+        _count_primary_path_change(curs, stem_owner_id)
+        curs.execute('UPDATE file_group SET primary_path = ? WHERE id = ?', (primary_path, stem_owner_id))
+
+
 # About how many files `_upsert_files` writes per transaction.  A stem's files are never split across chunks.
 UPSERT_CHUNK_SIZE = 500
 
@@ -862,12 +954,13 @@ def _upsert_files(files: List[pathlib.Path],
     total_files = len(files)
     processed_count = 0
 
-    non_primary_files = set()
     for chunk in chunks_by_stem(files, UPSERT_CHUNK_SIZE):
         # Group all files by their shared full-stem.  `chunks_by_stem` keeps each stem in one chunk.
         grouped = group_files_by_stem(chunk)
         # Convert the groups into file_groups.  Extract common information into `file_group.data`.
         values = dict()
+        # The primary path of each companion file's group.
+        companion_owners = dict()
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
             try:
@@ -882,7 +975,7 @@ def _upsert_files(files: List[pathlib.Path],
                 stem, suffix = split_path_stem_and_suffix(primary_path)
                 suffix = (suffix or '').lower() or None
                 values[primary_path] = (modification_datetime, mimetype, size, files_json, suffix, stem)
-                non_primary_files.update(i for i in group if i != primary_path)
+                companion_owners.update((str(i), str(primary_path)) for i in group if i != primary_path)
             except FileNotFoundError as e:
                 # A file was deleted between discovery and upsert (temp files, WAL sidecars, etc.).
                 refresh_logger.warning(f'File vanished during refresh, skipping group near {group[0]}', exc_info=e)
@@ -900,11 +993,9 @@ def _upsert_files(files: List[pathlib.Path],
                          '(SELECT value FROM json_each(?))', (json.dumps(primary_paths),))
             previously_indexed = {i['primary_path'] for i in curs.fetchall()}
 
-            if non_primary_files:
-                # Delete before INSERT so a new primary_path that shares (directory, stem)
-                # with an old sidecar FileGroup does not hit the unique index.
-                curs.execute('DELETE FROM file_group WHERE primary_path IN (SELECT value FROM json_each(?))',
-                             (json.dumps(list(map(str, non_primary_files))),))
+            # Before INSERT so a new primary_path does not collide on (directory, stem) with the FileGroup that
+            # already owns that stem.
+            _give_stem_owners_their_primary_paths(curs, values)
 
             placeholders, params = values_clause(values)
             # Compare names, not counts: a file can replace another without changing the size or newest time.
@@ -953,7 +1044,15 @@ def _upsert_files(files: List[pathlib.Path],
             else:
                 refresh_logger.debug(f'Upserted {len(chunk)} files near {chunk[0]}')
 
-            non_primary_files.clear()
+            # A companion file can still be the primary path of an old FileGroup (one with a stale stem).  Its
+            # tags, collection membership and viewing state belong to its group's FileGroup.
+            if companion_owners:
+                ids_by_primary_path = {i['primary_path']: i['id'] for i in results}
+                curs.execute('SELECT id, primary_path FROM file_group WHERE primary_path IN '
+                             '(SELECT value FROM json_each(?))', (json.dumps(list(companion_owners)),))
+                for old in curs.fetchall():
+                    owner_id = ids_by_primary_path[companion_owners[old['primary_path']]]
+                    _collapse_file_group(curs, old['id'], owner_id)
 
         # Report progress after each chunk
         processed_count += len(chunk)
@@ -1081,25 +1180,8 @@ def dedupe_file_groups_by_directory_stem() -> int:
     deleted = 0
     for directory, stem in keys:
         with get_db_curs() as curs:
-            curs.execute('''
-                         SELECT fg.id,
-                                CASE
-                                    WHEN fg.files IS NULL OR json_type(fg.files) != 'array' THEN 0
-                                    ELSE json_array_length(fg.files)
-                                END AS file_count,
-                                CASE
-                                    WHEN fg.model IS NOT NULL AND fg.model != '' THEN 1
-                                    ELSE 0
-                                END AS has_model,
-                                (SELECT COUNT(*) FROM tag_file tf WHERE tf.file_group_id = fg.id) AS tag_count
-                         FROM file_group fg
-                         WHERE fg.directory = ?
-                           AND fg.stem = ?
-                         ''', (directory, stem))
-            members = list(curs.fetchall())
-        members.sort(key=lambda m: (m['has_model'], m['tag_count'], m['file_count'] > 0, m['id']), reverse=True)
-        winner_id = members[0]['id']
-        loser_ids = [m['id'] for m in members[1:]]
+            curs.execute('SELECT id FROM file_group WHERE directory = ? AND stem = ?', (directory, stem))
+            winner_id, *loser_ids = _rank_file_groups(curs, [row['id'] for row in curs.fetchall()])
         with get_db_curs(commit=True) as curs:
             for loser_id in loser_ids:
                 merge_file_group_relations(curs, loser_id, winner_id)

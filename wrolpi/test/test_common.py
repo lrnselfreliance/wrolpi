@@ -443,6 +443,13 @@ def test_chunks_by_stem(test_directory, make_files_structure):
     assert_chunks(6, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt', '3.mp4']])
     assert_chunks(20, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt', '3.mp4']])
 
+    # A stem is never split across chunks, even when another stem sorts between its files.
+    files = make_files_structure(['interleaved/foo.jpg', 'interleaved/foo.tar.gz', 'interleaved/foo.txt'])
+    assert list(common.chunks_by_stem(files, 1)) == [
+        [test_directory / 'interleaved/foo.jpg', test_directory / 'interleaved/foo.txt'],
+        [test_directory / 'interleaved/foo.tar.gz'],
+    ]
+
 
 @pytest.mark.parametrize(
     'value,expected', [

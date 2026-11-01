@@ -50,10 +50,10 @@ jobs:
           # Trixie ships 3.13.
           python-version: '3.13'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: scripts/install_python_requirements.sh pip requirements.txt
 
       # `logical`, not `auto`: with psutil installed, `auto` counts physical cores, which is two on
       # the four-vCPU runner.  No `-v`: the full test output inflates wall time and logs.
@@ -87,10 +87,10 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: scripts/install_python_requirements.sh pip requirements.txt
 
       - name: Fixtures match the OpenAPI spec, and the spec matches the handlers
         run: pytest wrolpi/test/test_api_fixtures.py -v
@@ -107,10 +107,10 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: scripts/install_python_requirements.sh pip requirements.txt
 
       - name: Run Alembic migrations
         env:

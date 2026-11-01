@@ -166,8 +166,7 @@ upgrade_controller() {
 
     # Install dependencies while Controller is still running to minimize downtime.
     echo "Updating Controller dependencies..."
-    /opt/wrolpi/controller/venv/bin/pip install --upgrade pip
-    /opt/wrolpi/controller/venv/bin/pip install --upgrade -r /opt/wrolpi/controller/requirements.txt
+    /opt/wrolpi/scripts/install_python_requirements.sh /opt/wrolpi/controller/venv/bin/pip /opt/wrolpi/controller/requirements.txt
 
     # Dependencies are ready, now restart the Controller as quickly as possible.
     systemctl daemon-reload
@@ -226,7 +225,7 @@ find /opt/wrolpi/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null ||
 find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
 
 # Install any new Python requirements.
-/opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
+/opt/wrolpi/scripts/install_python_requirements.sh /opt/wrolpi/venv/bin/pip3 /opt/wrolpi/requirements.txt
 # Upgrade the WROLPi database.  Never fatal: the media drive may not be mounted;
 # the API creates/migrates the database itself at startup once the media directory is available.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade) || \

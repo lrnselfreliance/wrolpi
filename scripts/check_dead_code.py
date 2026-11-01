@@ -30,7 +30,7 @@ BASELINE = PROJECT_DIR / 'scripts/vulture_baseline.txt'
 
 # Tests and migrations are scanned so their uses count; anything they call is not dead.
 PATHS = ['wrolpi', 'modules', 'controller', 'alembic', 'main.py', 'conftest.py']
-EXCLUDE = ['*/venv/*', '*/.venv/*', '*/node_modules/*']
+EXCLUDE = ['*/venv/*', '*/.venv/*', '*/node_modules/*', '*/vendor/*']
 # These register the function somewhere vulture cannot see, so their functions are never called by name.
 IGNORE_DECORATORS = [
     '@*.get', '@*.post', '@*.put', '@*.patch', '@*.delete', '@*.route', '@*.websocket', '@*.signal',

@@ -49,19 +49,14 @@ git config --global --add safe.directory /opt/wrolpi
 # CPU-heavy step on weak hardware.
 /opt/wrolpi/wrolpi/scripts/install_map_tools.sh
 
-# Install Python requirements.  Try multiple times because pypi may stop responding.
+# Install Python requirements from the hash-locked requirements.  The helper retries because pypi may stop responding.
 python3 -m venv /opt/wrolpi/venv
-/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
-  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
-  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+/opt/wrolpi/scripts/install_python_requirements.sh /opt/wrolpi/venv/bin/pip3 /opt/wrolpi/requirements.txt
 
 # Install Controller with separate venv.
 echo "Pre-installing WROLPi Controller..."
 python3 -m venv /opt/wrolpi/controller/venv
-/opt/wrolpi/controller/venv/bin/pip install --upgrade pip
-/opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
-  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
-  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt
+/opt/wrolpi/scripts/install_python_requirements.sh /opt/wrolpi/controller/venv/bin/pip /opt/wrolpi/controller/requirements.txt
 echo "Controller pre-installed"
 
 # Install webapp.

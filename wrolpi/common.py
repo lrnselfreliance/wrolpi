@@ -1498,6 +1498,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if repos_config := get_repos_config():
         all_configs[repos_config.file_name] = repos_config
 
+    from modules.zim.lib import get_zims_config
+    if zims_config := get_zims_config():
+        all_configs[zims_config.file_name] = zims_config
+
     from wrolpi.files.progress import get_recently_viewed_config
     if recently_viewed_config := get_recently_viewed_config():
         all_configs[recently_viewed_config.file_name] = recently_viewed_config
@@ -1629,6 +1633,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import repos config: {e}')
         results['repos'] = False
+
+    # Zims (auto_search of each Zim; a rebuilt database gets the user's choices back)
+    try:
+        from modules.zim.lib import import_zims_config
+        await asyncio.to_thread(import_zims_config)
+        results['zims'] = True
+        logger.debug('zims config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import zims config: {e}')
+        results['zims'] = False
 
     # Map pins (YAML-only, no DB)
     try:

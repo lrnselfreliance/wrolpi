@@ -4,6 +4,7 @@ import json
 import pathlib
 import re
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from collections import OrderedDict
 from typing import Callable, List, Tuple, Dict, OrderedDict as OrderedDictType
@@ -20,8 +21,10 @@ from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription, ZimMetad
 from wrolpi import flags, tags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task, get_wrolpi_config, aiohttp_post
-from wrolpi.switches import register_switch_handler
+    register_refresh_cleanup, background_task, get_wrolpi_config, aiohttp_post, ConfigFile, \
+    get_relative_to_media_directory
+from wrolpi.config_version import register_ownership, IMPORT, SAVE, set_config_version
+from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.dates import Seconds
 from wrolpi.events import Events
 from wrolpi.db import get_db_session, session_curs
@@ -44,7 +47,11 @@ __all__ = [
     'get_kiwix_catalog',
     'get_zim',
     'get_zims',
+    'get_zims_config',
+    'import_zims_config',
     'model_zim',
+    'save_zims_config',
+    'zims_config',
     'restart_kiwix_handler',
     'zim_download_url_to_name',
     'zim_modeler',
@@ -62,8 +69,10 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
     # Check if a Zim already exists for this FileGroup
     zim = session.query(Zim).filter_by(file_group_id=file_group.id).one_or_none()
     if not zim:
-        # Create new Zim if it doesn't exist
-        zim = Zim(file_group=file_group, path=file_group.primary_path)
+        # Create new Zim if it doesn't exist.  Its settings come from zims.yaml: a rebuilt database, or a newer
+        # version of a Zim, keeps what the user chose.
+        zim = Zim(file_group=file_group, path=file_group.primary_path,
+                  auto_search=zims_config.auto_search_of(file_group.primary_path))
         session.add(zim)
         # Trigger Kiwix restart so the new zim file is available for browsing.
         restart_kiwix_handler.activate_switch()
@@ -750,7 +759,127 @@ async def restart_kiwix():
     return result.return_code
 
 
+def zim_config_name(path: pathlib.Path) -> str:
+    """The name zims.yaml keys a Zim by: its file name without the date, so a newer version of the Zim is the same
+    Zim (wikipedia_en_all_maxi_2026-02.zim -> wikipedia_en_all_maxi).  A Zim named without a date keeps its stem."""
+    try:
+        return parse_name(path)[0]
+    except ValueError:
+        return path.stem
+
+
+@dataclass
+class ZimsConfigValidator:
+    version: int = 0
+    auto_search: dict = field(default_factory=dict)
+
+
+class ZimsConfig(ConfigFile):
+    """zims.yaml: the settings of each Zim that must survive a rebuilt database, keyed by `zim_config_name`.
+
+    Format:
+        auto_search:
+          stackoverflow.com_en_all: false
+          wikipedia_en_all_maxi: true
+
+    `auto_search` is whether the global search searches the Zim.  A Zim the file does not name is searched (the
+    default), so removing a line restores the default."""
+    file_name = 'zims.yaml'
+    validator = ZimsConfigValidator
+    default_config = dict(version=0, auto_search={})
+
+    @property
+    def auto_search(self) -> Dict[str, bool]:
+        return dict(self._config.get('auto_search') or {})
+
+    def auto_search_of(self, path: pathlib.Path) -> bool:
+        """Whether the Zim at `path` should be searched by default, per the config."""
+        return bool(self.auto_search.get(zim_config_name(path), True))
+
+    def import_config(self, file: pathlib.Path = None, send_events=False):
+        """Read the file, then apply `auto_search` to every Zim in the database."""
+        file = file or self.get_file()
+        if not file.is_file():
+            # A missing config is not an empty one: the defaults, and the database, stand.
+            logger.info(f'No config file, skipping import: {get_relative_to_media_directory(file)}')
+            self.successful_import = True
+            return
+        forced, self.force_import = self.force_import, False
+        super().import_config(file, send_events)
+        try:
+            decision, db_version = self.version_decision(self.version or 0, forced)
+            if decision == SAVE:
+                self.save_database_instead()
+                return
+            config = self.auto_search
+            changed = 0
+            with get_db_session(commit=True) as session:
+                for zim in session.query(Zim):
+                    name = zim_config_name(zim.path)
+                    if name in config:
+                        want = bool(config[name])
+                    elif decision == IMPORT:
+                        # Not in the file: the default.
+                        want = True
+                    else:
+                        # The file may be older than the database; only apply what it names.
+                        continue
+                    if bool(zim.auto_search) != want:
+                        zim.auto_search = want
+                        changed += 1
+                if decision == IMPORT:
+                    session.flush()
+                    set_config_version(session, self.file_name, self.version or 0)
+            logger.info(f'Imported {self.file_name} ({decision}): {changed} Zims changed')
+            if decision != IMPORT:
+                # The database may have Zims the file does not list; save them (see `record_saved_version`).
+                self.background_dump.activate_switch()
+        except Exception as e:
+            self.successful_import = False
+            message = f'Failed to import {self.file_name}'
+            logger.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_import_failed(message)
+            raise
+
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
+        """Save every Zim's settings.  Of several versions of one Zim, the newest decides."""
+        with get_db_session() as session:
+            version = self.db_version_for_dump(session)
+            # Sorted by path, so the newest version of a Zim (its date sorts last) wins.
+            auto_search = dict()
+            for zim in session.query(Zim).order_by(Zim.path):
+                auto_search[zim_config_name(zim.path)] = bool(zim.auto_search)
+        self._config['auto_search'] = dict(sorted(auto_search.items()))
+        self._config['version'] = version
+        logger.info(f'Dumping {len(auto_search)} Zim settings to config')
+        self.save(file, send_events, overwrite)
+
+
+zims_config = ZimsConfig()
+register_ownership(ZimsConfig.file_name, Zim, columns={'auto_search'})
+
+
+def get_zims_config() -> ZimsConfig:
+    return zims_config
+
+
+@register_switch_handler('save_zims_config')
+def save_zims_config():
+    """Save the zims config when the switch is activated."""
+    zims_config.background_dump.activate_switch()
+
+
+save_zims_config: ActivateSwitchMethod
+
+
+def import_zims_config():
+    logger.info('Importing zims config')
+    zims_config.import_config()
+
+
 def set_zim_auto_search(session: Session, zim_id: int, auto_search: bool):
     zim = Zim.find_by_id(session, zim_id)
     zim.auto_search = auto_search
     session.commit()
+    save_zims_config.activate_switch()

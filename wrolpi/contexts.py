@@ -34,6 +34,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.videos_downloader_config = manager.dict()
     app.shared_ctx.domains_config = manager.dict()
     app.shared_ctx.repos_config = manager.dict()
+    app.shared_ctx.zims_config = manager.dict()
     app.shared_ctx.playlists_config = manager.dict()
     app.shared_ctx.archive_downloader_config = manager.dict()
     app.shared_ctx.download_cache_config = manager.dict()
@@ -131,6 +132,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.videos_downloader_config.clear()
     app.shared_ctx.domains_config.clear()
     app.shared_ctx.repos_config.clear()
+    app.shared_ctx.zims_config.clear()
     app.shared_ctx.playlists_config.clear()
     app.shared_ctx.archive_downloader_config.clear()
     app.shared_ctx.download_cache_config.clear()
@@ -305,6 +307,12 @@ def initialize_configs_contexts(app: Sanic):
         repos_config.initialize(app.shared_ctx.repos_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory repos config: {e}')
+
+    try:
+        from modules.zim.lib import zims_config
+        zims_config.initialize(app.shared_ctx.zims_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory zims config: {e}')
 
     try:
         from wrolpi.collections.config import playlists_config

@@ -7,7 +7,7 @@ import pytest
 from wrolpi import common
 from wrolpi.common import DownloadFileInfo
 from wrolpi.downloader import Download
-from wrolpi.errors import UnrecoverableDownloadError
+from wrolpi.errors import DownloadError, UnrecoverableDownloadError
 from wrolpi.files.downloader import FileDownloader, PreparedFile, file_downloader
 from wrolpi.test.common import skip_ci
 
@@ -93,6 +93,33 @@ async def test_file_downloader_meta4(test_session, make_files_structure, test_di
     assert (test_directory / f'downloads/{video_file.name}').read_bytes() == video_bytes
     # The meta4 was saved to a temporary file, but not saved.
     assert not (test_directory / 'downloads/foo.txt.meta4').exists()
+
+
+
+@skip_ci
+@pytest.mark.parametrize('meta4_name', ['served.bin', 'other.bin'], ids=['same_name', 'renamed'])
+async def test_download_file_meta4_hash_mismatch(test_directory, simple_file_server, meta4_name):
+    """aria2c refuses a file that does not match the meta4's hash, even when the meta4's (unsigned) name differs from
+    the URL's.  Map downloads rely on this: only the hash in a meta4 is signed."""
+    host, port = simple_file_server.server_address
+    url = f'http://{host}:{port}'  # noqa
+    served = test_directory / 'served.bin'
+    served.write_bytes(b'tampered contents')
+    genuine = test_directory / 'genuine.bin'
+    genuine.write_bytes(b'genuine contents')
+    destination = test_directory / 'downloads'
+    destination.mkdir()
+
+    meta4 = META4_XML.format(url=url, name=meta4_name, size=served.stat().st_size,
+                             sha256=hashlib.sha256(b'genuine contents').hexdigest())
+    if meta4_name == 'other.bin':
+        # The renamed meta4 points aria2c at a genuine file, while the URL serves a tampered one.
+        meta4 = meta4.replace(f'{url}/other.bin', f'{url}/genuine.bin')
+
+    from wrolpi.conftest import make_test_ctx
+    with pytest.raises(DownloadError):
+        await FileDownloader().download_file(mock.MagicMock(), f'{url}/served.bin', destination,
+                                             meta4_xml=meta4.encode(), ctx=make_test_ctx())
 
 
 async def test_get_download_info_uuid_fallback():

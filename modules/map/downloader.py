@@ -1,9 +1,12 @@
 import pathlib
+import re
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, List, Optional
+from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
+from xml.sax.saxutils import escape, quoteattr
 
 from sqlalchemy.orm import Session
 
@@ -28,12 +31,18 @@ __all__ = [
 logger = logger.getChild(__name__)
 
 METALINK_NS = {'ml': 'urn:ietf:params:xml:ns:metalink'}
+# aria2c's exit code when a downloaded file does not match the meta4's hash.
+ARIA2C_CHECKSUM_ERROR = 32
+# Map files are downloaded here, and moved into the map directory only once aria2c has checked them against the signed
+# hash.  A failed download must never leave a file where `prepare_download` would take it as already downloaded.
+PARTIAL_DIRECTORY = '.partial'
 
 
-async def verify_meta4_signature(meta4_contents: bytes) -> bool:
-    """Parse meta4 XML bytes, extract the hash and its GPG signature, and verify.
+async def verified_meta4_sha256(meta4_contents: bytes) -> Optional[str]:
+    """Parse meta4 XML bytes, extract the sha-256 hash and its GPG signature, and verify.
 
-    Returns True if the signature is valid, False if invalid or missing."""
+    Returns the hash if its signature is valid, None if invalid or missing.  Only this hash is signed; nothing else in
+    the meta4 is trusted."""
     try:
         root = ET.fromstring(meta4_contents)
         file_el = root.find('ml:file', METALINK_NS)
@@ -48,14 +57,18 @@ async def verify_meta4_signature(meta4_contents: bytes) -> bool:
             logger.warning('meta4 missing <hash type="sha-256"> element')
             return False
         if sig_el is None or sig_el.text is None:
-            logger.warning('meta4 missing <signature> element — skipping verification')
+            logger.warning('meta4 missing <signature> element')
             return False
 
         sha256_hash = hash_el.text.strip()
         signature = sig_el.text.strip()
     except ET.ParseError as e:
         logger.warning(f'Failed to parse meta4 XML: {e}')
-        return False
+        return None
+
+    if not re.fullmatch(r'[0-9a-f]{64}', sha256_hash):
+        logger.warning('meta4 sha-256 hash is malformed')
+        return None
 
     # Write hash and signature to temp files for GPG verification.
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -64,7 +77,40 @@ async def verify_meta4_signature(meta4_contents: bytes) -> bool:
         hash_path.write_text(sha256_hash)
         sig_path.write_text(signature)
 
-        return await verify_gpg_signature(hash_path, sig_path)
+        if await verify_gpg_signature(hash_path, sig_path):
+            return sha256_hash
+    return None
+
+
+def meta4_file_name(url: str) -> Optional[str]:
+    """The name aria2c saves `url` as, or None if the URL's file name is not a plain one."""
+    name = PurePosixPath(urlparse(url).path).name
+    return name if re.fullmatch(r'\w[\w.-]*', name) else None
+
+
+def make_meta4(url: str, name: str, sha256: str) -> bytes:
+    """A meta4 for aria2c holding only `url`, the `name` to save it as, and its signed `sha256` hash.
+
+    The downloaded meta4 is never given to aria2c: it would also obey any other hash (e.g. a sha-512 of a tampered
+    file), pieces, files, or URLs in it, none of which are signed."""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<metalink xmlns="urn:ietf:params:xml:ns:metalink">\n'
+        f'  <file name={quoteattr(name)}>\n'
+        f'    <hash type="sha-256">{sha256}</hash>\n'
+        f'    <url>{escape(url)}</url>\n'
+        '  </file>\n'
+        '</metalink>\n'
+    ).encode()
+
+
+def remove_rejected_partial(error: Exception, partial_path: pathlib.Path):
+    """Delete a partial download that aria2c rejected for not matching the signed hash; a retry would only reject it
+    again.  Other failures keep it, so the next attempt resumes."""
+    if f'return code {ARIA2C_CHECKSUM_ERROR}' in str(error):
+        logger.warning(f'Deleting download that did not match its signed hash: {partial_path}')
+        partial_path.unlink(missing_ok=True)
+        partial_path.with_name(f'{partial_path.name}.aria2').unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -312,34 +358,48 @@ class MapExtractDownloader(Downloader):
         # `download` with a URL.
         url = download.url
 
-        # Fetch meta4 once, GPG-verify the hash signature before downloading.
+        # Fetch meta4 once, GPG-verify the hash signature before downloading.  A map file is never downloaded
+        # without a signed hash.
         meta4_contents = await self.get_meta4_contents(url)
-        if meta4_contents:
-            if not await verify_meta4_signature(meta4_contents):
-                return ExecutedMapExtract(
-                    region=prepared.region, output_path=prepared.output_path,
-                    map_directory=prepared.map_directory,
-                    error=f'meta4 hash signature verification failed for {prepared.region}',
-                )
-            logger.info(f'meta4 signature verified for {prepared.region}')
-        else:
-            logger.warning(f'No meta4 available for {prepared.region} — downloading without hash verification')
+        if not meta4_contents:
+            return ExecutedMapExtract(
+                region=prepared.region, output_path=prepared.output_path,
+                map_directory=prepared.map_directory,
+                error=f'No signed hash (meta4) available for {prepared.region}, not downloading',
+            )
+        if not (sha256 := await verified_meta4_sha256(meta4_contents)):
+            return ExecutedMapExtract(
+                region=prepared.region, output_path=prepared.output_path,
+                map_directory=prepared.map_directory,
+                error=f'meta4 hash signature verification failed for {prepared.region}',
+            )
+        logger.info(f'meta4 signature verified for {prepared.region}')
+        if not (name := meta4_file_name(url)):
+            return ExecutedMapExtract(
+                region=prepared.region, output_path=prepared.output_path,
+                map_directory=prepared.map_directory,
+                error=f'No usable file name in {url}',
+            )
 
-        # Download via aria2c, passing the pre-verified meta4 for hash checking.
+        # Download via aria2c, which refuses a file that does not match the signed hash.
         logger.warning(f'Downloading {prepared.region} from {url}')
-        downloaded_path = None
+        partial_directory = prepared.map_directory / PARTIAL_DIRECTORY
+        partial_directory.mkdir(parents=True, exist_ok=True)
         try:
             downloaded_path = await self.download_file(
-                download, url, prepared.map_directory,
-                check_for_meta4=False, concurrent=1, meta4_xml=meta4_contents,
+                download, url, partial_directory,
+                check_for_meta4=False, concurrent=1, meta4_xml=make_meta4(url, name, sha256),
                 ctx=ctx,
             )
+            # Only the file aria2c saved under the meta4's name was checked against the signed hash.  The path
+            # download_file reports comes from the server's response, so it may name some other file.
+            if downloaded_path != partial_directory / name:
+                raise RuntimeError(f'Downloaded {downloaded_path.name!r}, expected {name!r}')
             downloaded_path.rename(prepared.tmp_path)
         except Exception as e:
             logger.error(f'Download failed for {prepared.region}: {e}')
             prepared.tmp_path.unlink(missing_ok=True)
-            if downloaded_path:
-                downloaded_path.unlink(missing_ok=True)
+            remove_rejected_partial(e, partial_directory / name)
             return ExecutedMapExtract(
                 region=prepared.region, output_path=prepared.output_path,
                 map_directory=prepared.map_directory,
@@ -475,32 +535,44 @@ class MapSearchIndexDownloader(Downloader):
         download = download if download is not None else Download(url=prepared.pmtiles_name)
         url = download.url
 
-        # Fetch and verify meta4 (GPG-signed hash).
+        # Fetch and verify meta4 (GPG-signed hash).  A search index is never downloaded without a signed hash.
         meta4_contents = await self.get_meta4_contents(url)
-        if meta4_contents:
-            if not await verify_meta4_signature(meta4_contents):
-                return ExecutedMapSearchIndex(
-                    region=prepared.region,
-                    error=f'meta4 signature verification failed for {prepared.region} search index',
-                )
-            logger.info(f'Search index meta4 verified for {prepared.region}')
+        if not meta4_contents:
+            return ExecutedMapSearchIndex(
+                region=prepared.region,
+                error=f'No signed hash (meta4) available for {prepared.region} search index, not downloading',
+            )
+        if not (sha256 := await verified_meta4_sha256(meta4_contents)):
+            return ExecutedMapSearchIndex(
+                region=prepared.region,
+                error=f'meta4 signature verification failed for {prepared.region} search index',
+            )
+        logger.info(f'Search index meta4 verified for {prepared.region}')
+        if not (name := meta4_file_name(url)):
+            return ExecutedMapSearchIndex(
+                region=prepared.region,
+                error=f'No usable file name in {url}',
+            )
 
-        # Download via aria2c with meta4 hash verification.
+        # Download via aria2c, which refuses a file that does not match the signed hash.
         logger.warning(f'Downloading search index for {prepared.region} from {url}')
-        downloaded_path = None
+        partial_directory = prepared.map_directory / PARTIAL_DIRECTORY
+        partial_directory.mkdir(parents=True, exist_ok=True)
         try:
             downloaded_path = await self.download_file(
-                download, url, prepared.map_directory,
-                check_for_meta4=False, concurrent=1, meta4_xml=meta4_contents,
+                download, url, partial_directory,
+                check_for_meta4=False, concurrent=1, meta4_xml=make_meta4(url, name, sha256),
                 ctx=ctx,
             )
+            # Only the file aria2c saved under the meta4's name was checked against the signed hash.  The path
+            # download_file reports comes from the server's response, so it may name some other file.
+            if downloaded_path != partial_directory / name:
+                raise RuntimeError(f'Downloaded {downloaded_path.name!r}, expected {name!r}')
             # Rename to match the local PMTiles filename.
             downloaded_path.rename(prepared.search_db_path)
         except Exception as e:
             logger.error(f'Search index download failed for {prepared.region}: {e}')
-            if downloaded_path:
-                downloaded_path.unlink(missing_ok=True)
-            prepared.search_db_path.unlink(missing_ok=True)
+            remove_rejected_partial(e, partial_directory / name)
             return ExecutedMapSearchIndex(
                 region=prepared.region,
                 error=f'Download failed: {str(e)[:500]}',

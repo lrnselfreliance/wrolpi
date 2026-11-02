@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 import yaml
 
@@ -77,22 +79,28 @@ def test_migrate_converts_epoch_expiration_dates(test_inventory_configs):
     assert '1893456000' not in config.get_file(inventory['slug']).read_text()
 
 
-def test_import_repairs_legacy_epoch_dates(test_inventory_configs):
-    """Inventories migrated before dates were normalized are rewritten once on import."""
-    config = test_inventory_configs
+def _write_epoch_inventory(config, version=3):
     directory = config.get_directory()
     directory.mkdir(parents=True, exist_ok=True)
     file = directory / 'food.yaml'
     with file.open('wt') as fh:
         yaml.dump(dict(
-            version=3, slug='food', name='Food', type='food', created_at='2024-01-01', viewed_at='2024-01-01',
+            version=version, slug='food', name='Food', type='food', created_at='2024-01-01', viewed_at='2024-01-01',
             fields=[dict(key='name', label='Name', type='text', order=0),
                     dict(key='expiration_date', label='Expires', type='date', order=1)],
             items=[dict(id=1, name='Salt', expiration_date='1893456000'),
                    dict(id=2, name='Rice', expiration_date='2030-06-01')],
         ), fh)
+    return file
 
-    config.import_all()
+
+def test_import_repairs_legacy_epoch_dates(test_inventory_configs):
+    """Inventories migrated before dates were normalized are rewritten once by the startup import."""
+    from modules.inventory.common import import_inventories_config
+    config = test_inventory_configs
+    file = _write_epoch_inventory(config)
+
+    import_inventories_config()
     inventory = config.get_inventory('food')
     assert [i['expiration_date'] for i in inventory['items']] == ['2030-01-01', '2030-06-01']
     # Repaired on disk, with a version bump so stale clients notice.
@@ -100,7 +108,29 @@ def test_import_repairs_legacy_epoch_dates(test_inventory_configs):
     assert inventory['version'] == 4
 
     # A second import finds nothing to repair and does not rewrite the file.
-    config.import_all()
+    import_inventories_config()
+    assert config.get_inventory('food')['version'] == 4
+
+
+def test_initialize_repairs_legacy_epoch_dates_without_deadlock(test_inventory_configs):
+    """`initialize()` imports while holding the non-reentrant save lock; the repair must not take it again.
+
+    Every API process initializes the inventory store at startup, so a deadlock here hangs the whole API."""
+    config = test_inventory_configs
+    file = _write_epoch_inventory(config)
+
+    thread = threading.Thread(target=config.initialize, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+    assert not thread.is_alive(), 'initialize() deadlocked while repairing legacy epoch dates'
+
+    # Repaired in memory, but not written while the lock was held.
+    assert [i['expiration_date'] for i in config.get_inventory('food')['items']] == ['2030-01-01', '2030-06-01']
+    assert '1893456000' in file.read_text()
+
+    # The write happens later, outside the lock.
+    config.persist_legacy_date_repairs()
+    assert '1893456000' not in file.read_text()
     assert config.get_inventory('food')['version'] == 4
 
 

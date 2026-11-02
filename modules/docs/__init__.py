@@ -110,7 +110,7 @@ def _model_doc(file_group: FileGroup, session: Session) -> Doc:
     doc.size = file_group.primary_path.stat().st_size if file_group.primary_path.exists() else None
 
     # Handle cover.
-    _handle_doc_cover(doc, file_group, metadata)
+    _handle_doc_cover(session, doc, file_group, metadata)
 
     # Store data dict.
     data = file_group.data or {}
@@ -154,14 +154,14 @@ def _replace_doc_sections(session: Session, doc: Doc, sections):
     ])
 
 
-def _handle_doc_cover(doc: Doc, file_group: FileGroup, metadata):
+def _handle_doc_cover(session: Session, doc: Doc, file_group: FileGroup, metadata):
     """Handle cover extraction and storage for a doc."""
 
     # Check for Calibre cover first (epub only) — must happen before poster check
     # since Calibre cover has a different stem ("cover.jpg" not matching epub stem).
     if file_group.mimetype and file_group.mimetype.startswith('application/epub'):
         if calibre_cover := discover_calibre_cover(file_group.primary_path):
-            doc._hide_calibre_files(file_group)
+            doc._hide_calibre_files(session, file_group)
             file_group.append_files(calibre_cover)
             file_group.data = file_group.data or {}
             file_group.data['cover_path'] = calibre_cover.name

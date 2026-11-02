@@ -296,6 +296,26 @@ async def test_doc_modeler_calibre_cover(test_session, async_client, test_direct
 
 
 @pytest.mark.asyncio
+async def test_doc_modeler_calibre_hides_files_in_the_modelers_session(test_session, async_client, test_directory,
+                                                                        example_epub, example_mobi, image_file,
+                                                                        refresh_files):
+    """Hiding a Calibre book's cover and metadata FileGroups uses the modeler's own session.  A second session
+    cannot take SQLite's write lock while the modeler holds the item's transaction: it waited out the busy timeout
+    and failed, leaving the rows and the ebook unmodeled."""
+    (test_directory / 'metadata.opf').touch()
+    shutil.move(image_file, test_directory / 'cover.jpg')
+
+    # `create=True`: the fixed module no longer imports it; the patch still catches any reintroduced use.
+    with patch('modules.docs.models.get_db_session', create=True,
+               side_effect=AssertionError('opened a second session')):
+        await refresh_files()
+
+    doc: Doc = test_session.query(Doc).one()
+    assert doc.cover_path
+    assert test_session.query(FileGroup).count() == 1, 'The cover and metadata FileGroups were deleted'
+
+
+@pytest.mark.asyncio
 async def test_doc_modeler_normalizes_author(async_client, test_session, test_directory, example_epub, refresh_files):
     """Author names are normalized before creating collections (e.g. quotes stripped)."""
     from wrolpi.collections.models import Collection

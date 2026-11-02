@@ -31,6 +31,7 @@ __all__ = [
 logger = logger.getChild(__name__)
 
 METALINK_NS = {'ml': 'urn:ietf:params:xml:ns:metalink'}
+SHA256_PATTERN = re.compile(r'[0-9a-f]{64}')
 # aria2c's exit code when a downloaded file does not match the meta4's hash.
 ARIA2C_CHECKSUM_ERROR = 32
 # Map files are downloaded here, and moved into the map directory only once aria2c has checked them against the signed
@@ -66,7 +67,7 @@ async def verified_meta4_sha256(meta4_contents: bytes) -> Optional[str]:
         logger.warning(f'Failed to parse meta4 XML: {e}')
         return None
 
-    if not re.fullmatch(r'[0-9a-f]{64}', sha256_hash):
+    if not SHA256_PATTERN.fullmatch(sha256_hash):
         logger.warning('meta4 sha-256 hash is malformed')
         return None
 
@@ -80,6 +81,27 @@ async def verified_meta4_sha256(meta4_contents: bytes) -> Optional[str]:
         if await verify_gpg_signature(hash_path, sig_path):
             return sha256_hash
     return None
+
+
+async def get_signed_sha256(downloader: Downloader, url: str, manifest_sha256: Optional[str],
+                            label: str) -> tuple[Optional[str], Optional[str]]:
+    """The signed sha-256 hash a map file must match, or an error explaining why there is none.
+
+    The hash from the signed manifest is used when it has one: a meta4 signs only a bare hash, so any genuinely signed
+    meta4 (an older version, another region) would pass its own check.  Downloads from a manifest without hashes use
+    the file's signed meta4."""
+    if manifest_sha256:
+        if SHA256_PATTERN.fullmatch(manifest_sha256):
+            return manifest_sha256, None
+        return None, f'Malformed hash in the manifest for {label}'
+
+    meta4_contents = await downloader.get_meta4_contents(url)
+    if not meta4_contents:
+        return None, f'No signed hash (meta4) available for {label}, not downloading'
+    if not (sha256 := await verified_meta4_sha256(meta4_contents)):
+        return None, f'meta4 hash signature verification failed for {label}'
+    logger.info(f'meta4 signature verified for {label}')
+    return sha256, None
 
 
 def meta4_file_name(url: str) -> Optional[str]:
@@ -175,6 +197,7 @@ class MapCatalogDownloader(Downloader):
         version = manifest.get('version', '')
         manifest_regions = manifest.get('regions', {})
         search_indexes = manifest.get('search_indexes', {})
+        hashes = manifest.get('sha256', {})
 
         if not manifest_regions:
             return DownloadResult(success=False, error='Manifest does not contain regions')
@@ -221,6 +244,7 @@ class MapCatalogDownloader(Downloader):
                 'region': region,
                 'version': version,
                 'search_index_url': search_indexes.get(region, ''),
+                'sha256': hashes.get(region_url),
             }
             child.renew(reset_attempts=True)
             created += 1
@@ -239,7 +263,8 @@ class MapCatalogDownloader(Downloader):
                 session, search_url, reset_attempts=True, override_skip=True)
             search_child.downloader = 'map_search_index'
             search_child.location = '/map/manage'
-            search_child.settings = {'region': region, 'pmtiles_name': pmtiles_name}
+            search_child.settings = {'region': region, 'pmtiles_name': pmtiles_name,
+                                     'sha256': hashes.get(search_url)}
             search_child.renew(reset_attempts=True)
             logger.info(f'Created search index download for {region}')
 
@@ -273,6 +298,7 @@ class PreparedMapExtract:
     output_name: str
     output_path: pathlib.Path
     tmp_path: pathlib.Path
+    sha256: Optional[str] = None  # From the signed manifest.
     already_done: bool = False
     error: Optional[str] = None
 
@@ -297,9 +323,7 @@ class MapExtractDownloader(Downloader):
 
     Settings contain: region, version — set by MapCatalogDownloader.
 
-    Fetches the meta4 file once, GPG-verifies the hash signature, then passes
-    the same meta4 bytes to aria2c for download hash verification. This ensures
-    the hash that was GPG-verified is the same hash aria2c checks against.
+    aria2c checks the file against a signed hash (see `get_signed_sha256`), given to it in a meta4 that WROLPi writes.
     """
 
     name = 'map_extract'
@@ -329,6 +353,7 @@ class MapExtractDownloader(Downloader):
         prepared = PreparedMapExtract(
             region=region, version=version, map_directory=map_directory,
             output_name=output_name, output_path=output_path, tmp_path=tmp_path,
+            sha256=settings.get('sha256'),
         )
 
         # Skip if versioned file already exists.
@@ -358,22 +383,13 @@ class MapExtractDownloader(Downloader):
         # `download` with a URL.
         url = download.url
 
-        # Fetch meta4 once, GPG-verify the hash signature before downloading.  A map file is never downloaded
-        # without a signed hash.
-        meta4_contents = await self.get_meta4_contents(url)
-        if not meta4_contents:
+        # A map file is never downloaded without a signed hash.
+        sha256, error = await get_signed_sha256(self, url, prepared.sha256, prepared.region)
+        if error:
             return ExecutedMapExtract(
                 region=prepared.region, output_path=prepared.output_path,
-                map_directory=prepared.map_directory,
-                error=f'No signed hash (meta4) available for {prepared.region}, not downloading',
+                map_directory=prepared.map_directory, error=error,
             )
-        if not (sha256 := await verified_meta4_sha256(meta4_contents)):
-            return ExecutedMapExtract(
-                region=prepared.region, output_path=prepared.output_path,
-                map_directory=prepared.map_directory,
-                error=f'meta4 hash signature verification failed for {prepared.region}',
-            )
-        logger.info(f'meta4 signature verified for {prepared.region}')
         if not (name := meta4_file_name(url)):
             return ExecutedMapExtract(
                 region=prepared.region, output_path=prepared.output_path,
@@ -476,6 +492,7 @@ class PreparedMapSearchIndex:
     map_directory: pathlib.Path
     pmtiles_path: pathlib.Path
     search_db_path: pathlib.Path
+    sha256: Optional[str] = None  # From the signed manifest.
     already_done: bool = False
     error: Optional[str] = None
 
@@ -509,6 +526,7 @@ class MapSearchIndexDownloader(Downloader):
             pmtiles_path=map_directory / pmtiles_name if pmtiles_name else map_directory,
             search_db_path=(map_directory / pmtiles_name).with_suffix('.search.db')
             if pmtiles_name else map_directory,
+            sha256=settings.get('sha256'),
         )
 
         if not region or not pmtiles_name:
@@ -535,19 +553,10 @@ class MapSearchIndexDownloader(Downloader):
         download = download if download is not None else Download(url=prepared.pmtiles_name)
         url = download.url
 
-        # Fetch and verify meta4 (GPG-signed hash).  A search index is never downloaded without a signed hash.
-        meta4_contents = await self.get_meta4_contents(url)
-        if not meta4_contents:
-            return ExecutedMapSearchIndex(
-                region=prepared.region,
-                error=f'No signed hash (meta4) available for {prepared.region} search index, not downloading',
-            )
-        if not (sha256 := await verified_meta4_sha256(meta4_contents)):
-            return ExecutedMapSearchIndex(
-                region=prepared.region,
-                error=f'meta4 signature verification failed for {prepared.region} search index',
-            )
-        logger.info(f'Search index meta4 verified for {prepared.region}')
+        # A search index is never downloaded without a signed hash.
+        sha256, error = await get_signed_sha256(self, url, prepared.sha256, f'{prepared.region} search index')
+        if error:
+            return ExecutedMapSearchIndex(region=prepared.region, error=error)
         if not (name := meta4_file_name(url)):
             return ExecutedMapSearchIndex(
                 region=prepared.region,

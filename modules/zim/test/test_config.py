@@ -97,3 +97,32 @@ async def test_older_file_saves_the_database(test_session, test_directory, async
     data = config.read_config_file()
     assert data['auto_search'] == {'wikipedia_en_all_maxi': False}
     assert data['version'] > saved_version
+
+
+@pytest.mark.asyncio
+async def test_dump_keeps_zims_the_database_does_not_have(test_session, test_directory, async_client,
+                                                          test_wrolpi_config, zim_path_factory):
+    """A rebuilt database imports zims.yaml before any Zim is modeled, then saves the config (an import without a
+    known version does).  That save must keep the file's choices for Zims not yet in the database, or the refresh
+    that follows models every Zim with the default."""
+    config = lib.get_zims_config()
+    config.write_config_data(dict(version=3, auto_search={'wikiversity_en_all_maxi': False, 'ham': True}),
+                             config.get_file())
+    assert test_session.query(Zim).count() == 0, 'The database is empty, as after a rebuild'
+
+    config.import_config()
+    config.dump_config()
+    assert config.read_config_file()['auto_search'] == {'ham': True, 'wikiversity_en_all_maxi': False}, \
+        'The dump kept the file entries for Zims the database does not have'
+
+    # The refresh models the Zims afterward; the choice is applied.
+    file_group = FileGroup.from_paths(test_session, zim_path_factory('wikiversity_en_all_maxi_2026-05.zim'))
+    zim = lib.model_zim(file_group, test_session)
+    test_session.commit()
+    assert zim.auto_search is False
+
+    # A Zim in the database overrides the file's stale value for its name.
+    zim.auto_search = True
+    test_session.commit()
+    config.dump_config()
+    assert config.read_config_file()['auto_search'] == {'ham': True, 'wikiversity_en_all_maxi': True}

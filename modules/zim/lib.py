@@ -843,11 +843,14 @@ class ZimsConfig(ConfigFile):
             raise
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
-        """Save every Zim's settings.  Of several versions of one Zim, the newest decides."""
+        """Save every Zim's settings.  Of several versions of one Zim, the newest decides.
+
+        The file's entries for Zims the database does not have are kept: a rebuilt database imports this config
+        (and saves it) before the refresh has modeled a single Zim, and the choices must survive until then."""
         with get_db_session() as session:
             version = self.db_version_for_dump(session)
+            auto_search = self.auto_search
             # Sorted by path, so the newest version of a Zim (its date sorts last) wins.
-            auto_search = dict()
             for zim in session.query(Zim).order_by(Zim.path):
                 auto_search[zim_config_name(zim.path)] = bool(zim.auto_search)
         self._config['auto_search'] = dict(sorted(auto_search.items()))

@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, In
 from sqlalchemy.orm import Mapped, relationship, Session, joinedload
 
 from wrolpi.common import loaded, ModelHelper, Base
-from wrolpi.db import get_db_session, serializer
+from wrolpi.db import serializer
 from wrolpi.files.models import FileGroup
 
 EPUB_MIMETYPE = 'application/epub'
@@ -110,8 +110,11 @@ class Doc(ModelHelper, Base):
             return cover['path']
         return None
 
-    def _hide_calibre_files(self, file_group: FileGroup):
-        """Delete FileGroups of the cover/metadata when this is a Calibre ebook directory."""
+    def _hide_calibre_files(self, session: Session, file_group: FileGroup):
+        """Delete FileGroups of the cover/metadata when this is a Calibre ebook directory.
+
+        Uses the caller's session: the modeler already holds this item's write transaction, and SQLite has one
+        writer, so a second session would wait out the busy timeout and fail with "database is locked"."""
         from modules.docs.lib import discover_calibre_cover
         path = file_group.primary_path
         if not discover_calibre_cover(path):
@@ -120,13 +123,12 @@ class Doc(ModelHelper, Base):
         metadata = path.parent / 'metadata.opf'
         cover = path.parent / 'cover.jpg'
 
-        with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup).filter(or_(
-                FileGroup.primary_path == str(metadata),
-                FileGroup.primary_path == str(cover),
-            ))
-            for fg in file_groups:
-                session.delete(fg)
+        file_groups = session.query(FileGroup).filter(or_(
+            FileGroup.primary_path == str(metadata),
+            FileGroup.primary_path == str(cover),
+        ))
+        for fg in file_groups:
+            session.delete(fg)
 
 
 class DocSection(ModelHelper, Base):

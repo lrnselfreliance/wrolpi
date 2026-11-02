@@ -9,9 +9,9 @@
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
-    "@tabler/icons-react": "^3.49.0",
+    "@tabler/icons-react": "^3.50.0",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^14.6.7",
+    "@testing-library/user-event": "^14.6.8",
     "cypress": "^15.21.1",
     "dompurify": "^3.4.17",
     "esptool-js": "^0.7.0",
@@ -28,7 +28,7 @@
     "react-dropzone": "^14.4.1",
     "react-hotkeys-hook": "^5.3.3",
     "react-qr-code": "^2.2.0",
-    "react-router": "^7.18.4",
+    "react-router": "^7.18.5",
     "react-scripts": "5.0.1",
     "react-stl-viewer": "^2.5.0",
     "three": "^0.186",
@@ -62,12 +62,12 @@
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
-    "@types/lodash": "^4.17.25",
-    "@types/node": "^26.6.4",
+    "@types/lodash": "^4.17.27",
+    "@types/node": "^26.6.6",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "typescript": "^5.9.3",
-    "webpack-dev-server": "^5.2.6"
+    "webpack-dev-server": "^5.2.7"
   },
   "jest": {
     "transformIgnorePatterns": [

@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 
 from modules.docs.extractors import extract_epub, extract_pdf, extract_metadata, extract_docx, extract_odt, \
@@ -284,3 +287,12 @@ async def test_extract_metadata_dispatches(test_session, test_directory, example
     metadata = extract_metadata(fg)
     assert metadata.title == 'WROLPi Test Book'
     assert metadata.author == 'roland'
+
+
+def test_api_startup_does_not_import_pymupdf():
+    """pymupdf imports onnxruntime (~2s on a Pi 4); only extracting a PDF may import it.  A subprocess, because
+    importing `main` registers listeners on the shared app."""
+    code = 'import sys, main; print(sorted(i for i in ("pymupdf", "onnxruntime") if i in sys.modules))'
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines()[-1] == '[]'

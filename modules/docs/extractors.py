@@ -26,11 +26,6 @@ except ImportError:
     epub = None
 
 try:
-    import pymupdf
-except ImportError:
-    pymupdf = None
-
-try:
     import docx
 except ImportError:
     docx = None
@@ -252,7 +247,11 @@ def _parse_pdf_date(date_str: str):
 
 def extract_pdf(path: pathlib.Path) -> DocMetadata:
     """Extract metadata from a PDF using pymupdf."""
-    if pymupdf is None:
+    # Not imported at module level: pymupdf also imports pymupdf.layout and onnxruntime (~2s on a Pi 4), which must
+    # stay out of API startup.
+    try:
+        import pymupdf
+    except ImportError:
         logger.error(f'Cannot extract PDF metadata: pymupdf is not installed')
         return DocMetadata(title=Indexer.get_title(path))
 

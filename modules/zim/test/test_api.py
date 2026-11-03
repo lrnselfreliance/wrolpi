@@ -508,6 +508,20 @@ async def test_zim_list_skips_a_zim_it_cannot_read(async_client, test_session, z
 
 
 @pytest.mark.asyncio
+async def test_zim_search_without_terms_is_a_bad_request(async_client, test_session, test_zim):
+    """A search with neither a search string nor tag names is the client's mistake: 400, not the worker job's
+    RuntimeError surfacing as a 500 "Unexpected error"."""
+    for body in (dict(), dict(search_str=''), dict(search_str='', tag_names=[])):
+        request, response = await async_client.post(f'/api/zim/search/{test_zim.id}', json=body)
+        assert response.status_code == HTTPStatus.BAD_REQUEST, body
+        assert response.json['code'] == 'VALIDATION_ERROR'
+
+        request, response = await async_client.post('/api/zim/search', json=body)
+        assert response.status_code == HTTPStatus.BAD_REQUEST, body
+        assert response.json['code'] == 'VALIDATION_ERROR'
+
+
+@pytest.mark.asyncio
 async def test_cancelled_libzim_jobs_kill_the_worker(test_directory):
     """Sanic cancels a handler at its response timeout or on disconnect; the worker process must not outlive it."""
     slow_worker = test_directory / 'slow_worker.py'

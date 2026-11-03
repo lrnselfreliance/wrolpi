@@ -909,7 +909,15 @@ def test_tags_config():
 @register_switch_handler('save_tags_config')
 def save_tags_config():
     """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
-    get_tags_config().dump_config()
+    config = get_tags_config()
+    if config.get_file().exists() and not config.successful_import:
+        # Every refresh fires this switch at its cleanup, so a refresh in the first seconds after a start can get
+        # here before tags.yaml has been imported (a rebuilt database has nothing to dump yet).  The file is the
+        # source of truth until the import, which still runs; dumping now would only have `save` refuse the
+        # write and send the user a "Failed to save config" error for a change nobody made.
+        logger.warning('Not saving tags.yaml: the config has not been imported yet')
+        return
+    config.dump_config()
     logger.info('save_tags_config complete')
 
 

@@ -1298,9 +1298,19 @@ async def test_retry_downloads_includes_failed(test_session, test_download_manag
 
 @pytest.mark.asyncio
 async def test_retry_downloads_on_startup(test_session, test_download_manager, test_downloader):
-    """Startup is not a request; it retries incomplete Downloads in a write transaction it commits itself."""
+    """Startup is not a request; it retries incomplete Downloads in a write transaction it commits itself.
+
+    A failed once-download gave up (its downloader raised UnrecoverableDownloadError, or it reached its attempt
+    limit).  Renewing it at startup only had it fail again, with a traceback in the log, at every boot; only the
+    user's Retry brings it back."""
     failed = test_download_manager.create_download(test_session, 'https://example.com/failed', test_downloader.name)
     failed.fail()
+    failed.attempts = 15
+    deferred = test_download_manager.create_download(test_session, 'https://example.com/later', test_downloader.name)
+    deferred.defer()
+    pending = test_download_manager.create_download(test_session, 'https://example.com/pending',
+                                                    test_downloader.name)
+    pending.started()
     complete = test_download_manager.create_download(test_session, 'https://example.com/done', test_downloader.name)
     complete.complete()
     test_session.commit()
@@ -1309,7 +1319,9 @@ async def test_retry_downloads_on_startup(test_session, test_download_manager, t
         test_download_manager.retry_downloads_on_startup()
 
     test_session.expire_all()
-    assert failed.status == 'new'
+    assert (failed.status, failed.attempts) == ('failed', 15)
+    assert deferred.status == 'new'
+    assert pending.status == 'new'
     assert complete.status == 'complete'
 
 

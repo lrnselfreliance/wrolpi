@@ -220,6 +220,35 @@ async def test_delete_duplicate_video_keeps_the_download(async_client, test_sess
 
 
 @pytest.mark.asyncio
+async def test_delete_duplicate_video_under_another_url_deletes_its_download(async_client, test_session,
+                                                                              channel_factory, video_factory):
+    """A copy found by `source_id` under a different URL is an ordinary delete: its own Download goes with it, while
+    the Download of the URL being downloaded is kept."""
+    from wrolpi.downloader import Download, download_manager
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+    url, other_url = 'https://example.com/video', 'https://example.com/short/video'
+
+    new = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title',
+                        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc), source_id='ABC123456',
+                        with_video_file=True, with_info_json=True)
+    new.file_group.url = url
+    old = video_factory(channel_id=channel.id, title=f'{channel.name}_20000101_ABC123456_The video title (old)',
+                        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc), source_id='ABC123456',
+                        with_video_file=True, with_info_json=True)
+    old.file_group.url = other_url
+    test_session.add_all([Download(url=url, status='pending', attempts=1), Download(url=other_url, status='complete')])
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, url, 'ABC123456', video_path)
+    test_session.commit()
+
+    assert [i.file_group.url for i in test_session.query(Video)] == [url]
+    assert [i.url for i in test_session.query(Download)] == [url], 'Only the finishing Download remains'
+    assert not download_manager.is_skipped(url)
+
+
+@pytest.mark.asyncio
 async def test_delete_duplicate_video_tagged_duplicate(async_client, test_session, channel_factory, video_factory,
                                                        tag_factory):
     """Deleting a duplicate Video should work even when the duplicate being deleted has tags."""

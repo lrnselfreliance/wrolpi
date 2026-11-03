@@ -497,13 +497,14 @@ class Video(ModelHelper, Base):
         tag_names = {i for j in duplicate_videos for i in j.file_group.tag_names}
 
         def delete_video(video_: Video):
-            """Delete a Video with any of its tags.  The duplicates share `url` with the kept video, so the URL's
-            Download (the one that is finishing, and reads its row afterwards) and the skip list are left alone."""
+            """Delete a Video with any of its tags.  A copy at `url` shares it with the kept video, so that URL's
+            Download (the one that is finishing, and reads its row afterwards) and the skip list are left alone.  A
+            copy found by `source_id` under another URL is deleted as any video is, with that URL's Download."""
             # Untagging forgets which links are this Video's, so remove them first.
             video_.file_group.unlink_tag_directory_links()
             for tag_name_ in video_.file_group.tag_names:
                 video_.file_group.untag(session, tag_name_)
-            video_.delete(keep_download=True)
+            video_.delete(keep_download=video_.file_group.url == url)
 
         changes = False
         # Delete any Videos without real files.

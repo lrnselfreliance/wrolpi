@@ -1326,23 +1326,30 @@ class DownloadManager:
                 raise TimeoutError('Downloads never finished!')
 
     @staticmethod
-    def retry_downloads(session: Session, reset_attempts: bool = False):
+    def retry_downloads(session: Session, reset_attempts: bool = False, include_failed: bool = True):
         """Set any incomplete Downloads to `new` so they will be retried.  The caller commits.
 
         @param reset_attempts: Will set `download.attempts` to 0 if True.
+        @param include_failed: Also renew failed Downloads (the user's Retry); startup leaves them failed.
         """
         values = dict(status=DownloadStatus.new, attempts=0) if reset_attempts else dict(status=DownloadStatus.new)
+        statuses = [DownloadStatus.pending, DownloadStatus.deferred]
+        if include_failed:
+            statuses.append(DownloadStatus.failed)
         retried = session.query(Download) \
-            .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
+            .filter(Download.status.in_(statuses)) \
             .update(values, synchronize_session=False)
         if retried:
             # A bulk update is not flushed: count it.  `status` is saved only by download_manager.yaml.
             count_config_change(session, DownloadManagerConfig.file_name)
 
     def retry_downloads_on_startup(self):
-        """Startup is not a request: retry incomplete Downloads in a short write transaction of its own."""
+        """Startup is not a request: retry incomplete Downloads in a short write transaction of its own.
+
+        A failed once-download gave up (`UnrecoverableDownloadError`, or its downloader's attempt limit) and stays
+        failed: renewed, it only failed again at every boot, with a traceback in the log each time."""
         with get_db_session(commit=True) as session:
-            self.retry_downloads(session)
+            self.retry_downloads(session, include_failed=False)
 
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """

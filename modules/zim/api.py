@@ -9,6 +9,7 @@ from wrolpi import lang
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger
 from wrolpi.downloader import download_manager
+from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from . import lib, schema
 
@@ -55,6 +56,13 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
     return response.empty()
 
 
+def _check_search_terms(body: schema.ZimSearchRequest):
+    """A search needs a search string or tag names; without either the request is the client's mistake, not a
+    worker failure."""
+    if not body.search_str and not body.tag_names:
+        raise ValidationError('Provide a search_str or tag_names')
+
+
 @zim_bp.post('/search')
 @openapi.definition(
     summary='Search all Zim files that have auto_search enabled',
@@ -62,6 +70,7 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
 )
 @validate(schema.ZimSearchRequest)
 async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
+    _check_search_terms(body)
     results = await lib.search_all_zims(request.ctx.session, body.search_str, tag_names=body.tag_names,
                                         offset=body.offset, limit=body.limit)
     return json_response({'zims': results})
@@ -75,6 +84,7 @@ async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
 )
 @validate(schema.ZimSearchRequest)
 async def search_zim(request: Request, zim_id: int, body: schema.ZimSearchRequest):
+    _check_search_terms(body)
     headlines = await lib.headline_zim(request.ctx.session, body.search_str, zim_id, tag_names=body.tag_names,
                                        offset=body.offset, limit=body.limit)
     return json_response({'zim': headlines})

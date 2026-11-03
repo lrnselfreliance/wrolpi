@@ -10,6 +10,7 @@ refuses to overwrite an existing config while `import_skipped` is non-zero (unle
 `overwrite=True`).  A later complete import resets the counter and dumps resume.
 """
 from copy import deepcopy
+from unittest import mock
 
 import pytest
 
@@ -58,6 +59,31 @@ async def test_tags_partial_import_blocks_dump(async_client, test_session, test_
 
     # The escape hatch still works.
     config.save(overwrite=True)
+
+
+@pytest.mark.asyncio
+async def test_tags_dump_before_import_is_skipped(async_client, test_session, test_directory, test_tags_config,
+                                                  await_switches):
+    """Every refresh fires `save_tags_config` at its cleanup.  A refresh that finishes before tags.yaml has been
+    imported (the first seconds after a start, with a rebuilt database) must not dump the empty database over the
+    file, and must not alarm the user either: the save guard would refuse the write with an error event, although
+    nothing was lost.  The dump is skipped; the import that follows still reads the file."""
+    from wrolpi import tags
+    config = get_tags_config()
+    file = config.get_file()
+    file.write_text(TAGS_YAML)
+    config.successful_import = False
+    before = file.read_text()
+
+    with mock.patch('wrolpi.events.Events.send_config_save_failed') as send_failed:
+        tags.save_tags_config.activate_switch()
+        await await_switches()
+    send_failed.assert_not_called()
+    assert file.read_text() == before, 'A dump before the import must not modify the config file'
+
+    config.import_config()
+    assert config.successful_import is True
+    assert test_session.query(Tag).filter_by(name='important').count() == 1
 
 
 @pytest.mark.asyncio

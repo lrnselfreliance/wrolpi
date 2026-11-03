@@ -104,10 +104,10 @@ class Video(ModelHelper, Base):
         )
         return d
 
-    def delete(self, add_to_skip_list: bool = True, force: bool = False):
+    def delete(self, add_to_skip_list: bool = True, force: bool = False, keep_download: bool = False):
         """Remove all files and File records related to this video.  Delete this Video record.
-        Add it to it's Channel's skip list."""
-        self.file_group.delete(add_to_skip_list=add_to_skip_list, force=force)
+        Add it to it's Channel's skip list.  See `FileGroup.delete` for `keep_download`."""
+        self.file_group.delete(add_to_skip_list=add_to_skip_list, force=force, keep_download=keep_download)
         session = Session.object_session(self)
         session.delete(self)
 
@@ -497,12 +497,14 @@ class Video(ModelHelper, Base):
         tag_names = {i for j in duplicate_videos for i in j.file_group.tag_names}
 
         def delete_video(video_: Video):
-            """Delete a Video with any of its tags."""
+            """Delete a Video with any of its tags.  A copy at `url` shares it with the kept video, so that URL's
+            Download (the one that is finishing, and reads its row afterwards) and the skip list are left alone.  A
+            copy found by `source_id` under another URL is deleted as any video is, with that URL's Download."""
             # Untagging forgets which links are this Video's, so remove them first.
             video_.file_group.unlink_tag_directory_links()
             for tag_name_ in video_.file_group.tag_names:
                 video_.file_group.untag(session, tag_name_)
-            video_.delete()
+            video_.delete(keep_download=video_.file_group.url == url)
 
         changes = False
         # Delete any Videos without real files.

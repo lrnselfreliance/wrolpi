@@ -10,6 +10,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
+from sanic_ext.config import PRIORITY as SANIC_EXT_PRIORITY
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
 from wrolpi.db import RequestDB, no_db_access
@@ -39,6 +40,19 @@ os.register_at_fork(after_in_child=_reset_inherited_signal_handlers)
 
 # The only Sanic App, this is imported all over.
 api_app = Sanic(name='api_app', log_config=LOGGING_CONFIG)
+
+# sanic-ext adds the automatic HEAD and OPTIONS routes one at a time in a `before_server_start` listener at
+# SANIC_EXT_PRIORITY.  Each route re-finalizes the finalized signal router (`Sanic.amend`), so a worker rebuilt it once
+# per route (~20s on a Pi 4).  Leave it unfinalized while those routes are added, then finalize it once.
+@api_app.before_server_start(priority=SANIC_EXT_PRIORITY + 1)
+async def unfinalize_signals_for_auto_routes(app: Sanic):
+    app.signal_router.reset()
+
+
+@api_app.before_server_start(priority=SANIC_EXT_PRIORITY - 1)
+async def finalize_signals_after_auto_routes(app: Sanic):
+    if not app.signal_router.finalized:
+        app.signalize(app.config.TOUCHUP)
 
 
 @wraps(response.json)

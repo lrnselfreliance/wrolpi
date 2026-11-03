@@ -475,9 +475,11 @@ class FileGroup(ModelHelper, Base):
         else:
             self.replace_info_json(contents)
 
-    def delete(self, add_to_skip_list: bool = True, force: bool = False):
+    def delete(self, add_to_skip_list: bool = True, force: bool = False, keep_download: bool = False):
         """Delete this FileGroup record, and all of its files.
 
+        @param keep_download: Leave the Download of my URL and the skip list alone: the URL still belongs to another
+            FileGroup (a duplicate is being removed while its Download finishes).
         @raise FileGroupIsTagged: If any tags are related to me and force is False."""
         if self.tag_files and not force:
             raise FileGroupIsTagged(f'Cannot delete {self} because it has tags')
@@ -488,10 +490,11 @@ class FileGroup(ModelHelper, Base):
 
         if session := Session.object_session(self):
             from wrolpi.downloader import download_manager
-            if self.url and (download := Download.get_by_url(session, self.url)):
-                download.delete(add_to_skip_list)
-            elif self.url and add_to_skip_list is True:
-                download_manager.add_to_skip_list(self.url)
+            if not keep_download:
+                if self.url and (download := Download.get_by_url(session, self.url)):
+                    download.delete(add_to_skip_list)
+                elif self.url and add_to_skip_list is True:
+                    download_manager.add_to_skip_list(self.url)
             session.delete(self)
 
     @property

@@ -153,9 +153,12 @@ def tail_decode_command(video_path: Path, seconds: int = None) -> Tuple[str | Pa
 
 
 # The null muxer complains about duplicate timestamps after the frames have decoded; it is not damage.
+# The h264 decoder's "mmco: unref short failure" is a reference-marking note about the frames before the
+# seek point; the frames decode and ffmpeg exits 0.  Judging it as damage re-downloads a sound video forever.
 # A repeat summary only counts the previous message, whose first copy is still judged.
 TAIL_DECODE_IGNORED_ERRORS = re.compile(
     r'^\[null @ \w+] Application provided invalid, non monotonically increasing dts'
+    r'|^\[h264 @ \w+] mmco: unref short failure\s*$'
     r'|^\s*Last message repeated \d+ times\s*$')
 
 

@@ -77,3 +77,23 @@ async def test_stop_per_worker_tasks_without_start():
     app = mock.Mock()
     app.ctx = mock.Mock(spec=[])  # no per_worker_* attributes
     await stop_per_worker_tasks(app)
+
+
+@pytest.mark.asyncio
+async def test_server_start_finalizes_signals_once(test_session, async_client):
+    """sanic-ext's automatic HEAD and OPTIONS routes must not re-finalize the signal router once per route; each
+    finalize also left one more `sanic.__signal__` route behind."""
+    def finalizes():
+        return len([i for i in api_app.signal_router.routes if str(i.path).startswith('sanic.__signal__.')])
+
+    # Other tests started the shared app before.
+    before = finalizes()
+    await async_client.get('/api/echo')
+    assert finalizes() - before < 10, f'{finalizes() - before} signal router finalizes'
+
+    # The automatic routes still work.
+    request, response = await async_client.options('/api/status')
+    assert response.status_code == 204
+    assert set(response.headers['allow'].split(',')) == {'GET', 'HEAD', 'OPTIONS'}
+    request, response = await async_client.head('/api/status')
+    assert response.status_code == 200

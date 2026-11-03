@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup, Directory
+from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile
 from wrolpi.test.common import only_macos, skip_ci
 from wrolpi.vars import PROJECT_DIR, IS_MACOS
@@ -254,6 +255,19 @@ async def test_delete_similar_names(async_client, test_session, make_files_struc
     ])
 def test_split_path_stem_and_suffix(path, full, expected):
     assert lib.split_path_stem_and_suffix(Path(path), full) == expected
+
+
+def test_is_language_region_suffix():
+    """Every language-region and language-auto subtitle suffix is recognized, without listing them all."""
+    for language in ISO_639_CODES:
+        for ext in ('.srt', '.vtt'):
+            assert lib._is_language_region_suffix(f'.{language}-auto{ext}'.lower())
+            for region in ISO_3166_CODES:
+                assert lib._is_language_region_suffix(f'.{language}-{region}{ext}'.lower())
+
+    for suffix in ('.srt', '.en.srt', '.en-.srt', '.-us.srt', '.en-usa.srt', '.zz-us.srt', '.en-zz.vtt',
+                   '.foo.en-us.srt', '.en.us.srt', '.en_us.srt'):
+        assert not lib._is_language_region_suffix(suffix), suffix
 
 
 @pytest.mark.asyncio

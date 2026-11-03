@@ -566,17 +566,22 @@ SUFFIXES = {
 }
 SUFFIXES |= {f'.{i}.srt' for i in ISO_639_CODES}
 SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
-EXTRA_SUFFIXES = set()
-for six_ in ISO_639_CODES.keys():
-    EXTRA_SUFFIXES |= {f'.{six_}-{i}.srt' for i in ISO_3166_CODES}
-    EXTRA_SUFFIXES |= {f'.{six_}-{i}.vtt' for i in ISO_3166_CODES}
-# Add auto suffixes once (these don't depend on the loop variable)
-EXTRA_SUFFIXES |= {f'.{i}-auto.srt' for i in ISO_639_CODES}
-EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
 
 # Convert to lowercase frozensets for O(1) case-insensitive lookup
 _SUFFIXES_LOWER = frozenset(s.lower() for s in SUFFIXES)
-_EXTRA_SUFFIXES_LOWER = frozenset(s.lower() for s in EXTRA_SUFFIXES)
+_LANGUAGES_LOWER = frozenset(i.lower() for i in ISO_639_CODES)
+_REGIONS_LOWER = frozenset(i.lower() for i in ISO_3166_CODES)
+
+
+def _is_language_region_suffix(suffix_lower: str) -> bool:
+    """Is this lowercase .srt/.vtt suffix a language with a region or "auto", like ".en-us.srt" or ".en-auto.vtt"?
+
+    Never build the set of every combination: 336,000 strings cost ~2s and ~65MiB in each process on a Pi 4.  A
+    region code never contains "-"; a language code may ("en-gb")."""
+    language, _, region = suffix_lower[1:-4].rpartition('-')
+    return language in _LANGUAGES_LOWER and (region == 'auto' or region in _REGIONS_LOWER)
+
+
 _HARDCODED_SUFFIXES = frozenset(
     {'.info.json', '.ffprobe.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
 
@@ -630,11 +635,11 @@ def _get_suffix_length(name_lower: str) -> int:
         if suffix in _SUFFIXES_LOWER:
             return len(suffix)
 
-    # Only check EXTRA_SUFFIXES for .srt/.vtt files
+    # Only .srt/.vtt files have language-region suffixes
     simple_suffix = candidates[0] if candidates else ''
     if simple_suffix in {'.srt', '.vtt'}:
         for suffix in reversed(candidates):
-            if suffix in _EXTRA_SUFFIXES_LOWER:
+            if _is_language_region_suffix(suffix):
                 return len(suffix)
 
     return len(simple_suffix)

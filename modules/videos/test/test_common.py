@@ -674,6 +674,7 @@ def test_ffmpeg_video_complete_real_files(test_directory, video_file):
 
 NULL_MUXER_DTS = b'[null @ 0x5555faf7fa70] Application provided invalid, non monotonically increasing dts to muxer' \
                  b' in stream 0: 460 >= 460\n'
+H264_MMCO = b'[h264 @ 0x555627ef0f70] mmco: unref short failure\n'
 
 
 @pytest.mark.parametrize('return_code,stderr,expected_ok,expected_errors', [
@@ -687,6 +688,10 @@ NULL_MUXER_DTS = b'[null @ 0x5555faf7fa70] Application provided invalid, non mon
      '[h264 @ 0x1] Invalid NAL unit size'),
     (0, NULL_MUXER_DTS + b'[h264 @ 0x1] Invalid NAL unit size\n', False, '[h264 @ 0x1] Invalid NAL unit size'),
     (0, b'[h264 @ 0x1] error while decoding MB 3 4\n', False, '[h264 @ 0x1] error while decoding MB 3 4'),
+    # The h264 decoder notes a reference-marking quirk at the seek point; the frames decoded and ffmpeg exited 0.
+    (0, H264_MMCO, True, ''),
+    (0, H264_MMCO + b'    Last message repeated 1 times\n', True, ''),
+    (0, H264_MMCO + b'[h264 @ 0x1] Invalid NAL unit size\n', False, '[h264 @ 0x1] Invalid NAL unit size'),
     (1, NULL_MUXER_DTS, False, ''),
 ])
 def test_tail_decode_verdict(return_code, stderr, expected_ok, expected_errors):

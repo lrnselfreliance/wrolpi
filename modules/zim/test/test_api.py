@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import sys
 from unittest import mock
 from http import HTTPStatus
@@ -214,6 +215,18 @@ def test_parse_name():
     assert name == 'wikipedia_en_all_maxi'
     assert date == datetime(2023, 1, 1)
 
+    # A re-release in the same month carries a letter; it is newer than the plain release and older than the next
+    # letter.  The letter is folded into the day, which the month-precision date does not otherwise use.
+    name, date = lib.parse_name(pathlib.Path('3dprinting.stackexchange.com_en_all_2026-07a.zim'))
+    assert name == '3dprinting.stackexchange.com_en_all'
+    assert datetime(2026, 7, 1) < date < lib.parse_name(pathlib.Path('x_2026-07b.zim'))[1] < datetime(2026, 8, 1)
+
+    # The extension is a real suffix, not any character followed by "zim".
+    with pytest.raises(ValueError):
+        lib.parse_name(pathlib.Path('wikipedia_en_all_maxi_2023-01xzim'))
+    with pytest.raises(ValueError):
+        lib.parse_name(pathlib.Path('wikipedia_en_all_maxi_2023-01.zim.part'))
+
     with pytest.raises(ValueError):
         lib.parse_name(pathlib.Path('edibleplantdb.zim'))
 
@@ -222,7 +235,7 @@ def test_parse_name():
 
 
 @pytest.mark.asyncio
-async def test_find_outdated_zim_files(test_session, test_directory, test_zim_bytes, async_client):
+async def test_find_outdated_zim_files(test_session, test_directory, test_zim_bytes, async_client, caplog):
     """Outdated Zim files are found and reported.  They can automatically be deleted."""
     # Can search empty directory.
     outdated, current = lib.find_outdated_zim_files()
@@ -232,24 +245,31 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
 
     wikibooks_one = test_directory / 'zims/books/wikibooks_en_nopic_maxi_2023-01.zim'  # unique
     wikipedia_one = test_directory / 'zims/wikipedia_en_all_maxi_2023-01.zim'  # outdated
-    wikipedia_two = test_directory / 'zims/wikipedia_en_all_maxi_2023-02.zim'  # keep this one
+    wikipedia_two = test_directory / 'zims/wikipedia_en_all_maxi_2023-02.zim'  # outdated by the re-release
+    wikipedia_two_a = test_directory / 'zims/wikipedia_en_all_maxi_2023-02a.zim'  # keep this one
     asdf = test_directory / 'zims/asdf.zim'  # Name cannot be parsed.
     wikibooks_one.write_bytes(test_zim_bytes)
     wikipedia_one.write_bytes(test_zim_bytes)
     wikipedia_two.write_bytes(test_zim_bytes)
+    wikipedia_two_a.write_bytes(test_zim_bytes)
     asdf.write_bytes(test_zim_bytes)
     empty = test_directory / 'zims/wikipedia_en_all_maxi_2023-03.zim'  # empty files should be ignored.
     empty.touch()
-    request, response = await async_client.get('/api/zim/outdated')
+    with caplog.at_level(logging.WARNING, logger='wrolpi'):
+        request, response = await async_client.get('/api/zim/outdated')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['outdated'] == [str(wikipedia_one.relative_to(test_directory)), ]
+    assert response.json['outdated'] == [str(wikipedia_one.relative_to(test_directory)),
+                                         str(wikipedia_two.relative_to(test_directory))]
+    # A Zim that is not named the kiwix way is simply not checked; it does not warn at every start.
+    assert 'asdf.zim' not in caplog.text
 
     request, response = await async_client.delete('/api/zim/outdated')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    # Only the outdated was deleted.
+    # Only the outdated were deleted.
     assert wikibooks_one.is_file()
     assert not wikipedia_one.exists()
-    assert wikipedia_two.is_file()
+    assert not wikipedia_two.exists()
+    assert wikipedia_two_a.is_file()
     assert asdf.is_file()
     assert empty.is_file()
 

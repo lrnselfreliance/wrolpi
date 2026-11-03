@@ -609,15 +609,22 @@ async def check_zim(path: pathlib.Path) -> int:
     return result.return_code
 
 
-ZIM_NAME_PARSER = re.compile(r'(.+?)_(\d{4}-\d{2}).zim')
+# The kiwix naming scheme: {name}_{YYYY-MM}.zim.  A re-release in the same month carries a letter (2026-07a).
+ZIM_NAME_PARSER = re.compile(r'(.+?)_(\d{4}-\d{2})([a-z]?)\.zim$')
 
 
 def parse_name(path: pathlib.Path) -> Tuple[str, datetime]:
+    """The name and release date of a kiwix-named Zim.  The date has month precision; a re-release letter is folded
+    into the otherwise unused day (2026-07 -> July 1, 2026-07a -> July 2), so dates order the releases.
+
+    @raise ValueError: the name is not kiwix-named (edibleplantdb.zim), so it has no date to compare."""
     match = ZIM_NAME_PARSER.match(path.name)
     if not match:
         raise ValueError(f'Zim file name does not match expected pattern: {path.name}')
-    name, date = match.groups()
+    name, date, release = match.groups()
     date = datetime.strptime(date, '%Y-%m')
+    if release:
+        date = date.replace(day=2 + ord(release) - ord('a'))
     return name, date
 
 
@@ -634,8 +641,9 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
     for file in files:
         try:
             name, date = parse_name(file)
-        except Exception:
-            logger.warning(f'Found Zim {file} but its name does not match.')
+        except ValueError:
+            # Not kiwix-named (a Zim the user made), so there is no date to compare: it is never outdated.
+            logger.debug(f'Zim {file} is not named the kiwix way; it is not checked for newer releases.')
             continue
 
         zims.append((name, date, file))

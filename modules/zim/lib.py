@@ -17,7 +17,7 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 from modules.zim import kiwix
 from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
-from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription, ZimMetadata
+from modules.zim.models import Zim, TagZimEntry, ZimSubscription, ZimMetadata
 from wrolpi import flags, tags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
@@ -292,8 +292,8 @@ def auto_search_zims(session: Session) -> List[Zim]:
 async def estimate_zims(session: Session, search_str: str) -> OrderedDictType[Zim, int]:
     """Estimate how many entries of each auto-search Zim match `search_str`.
 
-    `Zims.get_all` opens every Zim and is not used here for that reason; a Zim the worker cannot read is
-    reported and left out, as `Zims.get_all` would."""
+    Only the auto-search Zims are estimated, so `readable_zims` is not used; a Zim the worker cannot read is
+    reported and left out all the same."""
     zims = auto_search_zims(session)
     jobs = [dict(op='estimate', path=str(i.path), search_str=search_str, metadata=True) for i in zims]
     results = await run_libzim_jobs(jobs)
@@ -305,19 +305,28 @@ async def estimate_zims(session: Session, search_str: str) -> OrderedDictType[Zi
     return counts
 
 
-async def count_tagged_zim_entries(session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
-    """Count the entries of every Zim tagged with all of `tag_names`.  The counts come from the database; the
-    worker only reads each Zim's metadata, and a Zim it cannot read is left out."""
+async def readable_zims(session: Session) -> List[Zim]:
+    """Every Zim whose file the libzim worker can read, in path order, with its metadata filled so that
+    `Zim.__json__` does not open it.  The API process never opens a Zim here: a cold open takes seconds and libzim
+    holds the GIL, so the Zims page used to stall its API worker for every other request."""
     zims = session.query(Zim).options(*Zim.json_options()).order_by(Zim.path).all()
     zims = [i for i in zims if i.path and i.path.is_file()]
-    counts = {i: len(i.entry_paths_with_tags(session, tag_names, limit=1_000_000)) for i in zims}
+    if not zims:
+        return zims
     results = await run_libzim_jobs([dict(op='metadata', path=str(i.path)) for i in zims])
-    readable = OrderedDict()
+    readable = list()
     for zim, result in zip(zims, results):
         if 'error' not in result:
             _apply_metadata(zim, result)
-            readable[zim] = counts[zim]
+            readable.append(zim)
     return readable
+
+
+async def count_tagged_zim_entries(session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
+    """Count the entries of every Zim tagged with all of `tag_names`.  The counts come from the database; the
+    worker only reads each Zim's metadata, and a Zim it cannot read is left out."""
+    zims = await readable_zims(session)
+    return OrderedDict((i, len(i.entry_paths_with_tags(session, tag_names, limit=1_000_000))) for i in zims)
 
 
 async def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,
@@ -370,17 +379,8 @@ def get_entry(path: str, zim_id: int) -> Entry:
     return entry
 
 
-def get_zims(session: Session, ids: List[int] = None) -> List[Zim]:
-    if ids:
-        zims = session.query(Zim).filter(Zim.id.in_(ids)).all()
-    else:
-        zims = Zims.get_all(session)
-
-    return zims
-
-
 def delete_zims(session: Session, ids: List[int]):
-    zims = get_zims(session, ids)
+    zims = session.query(Zim).filter(Zim.id.in_(ids)).all()
     for zim in zims:
         zim.delete()
 

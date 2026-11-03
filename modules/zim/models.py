@@ -240,23 +240,6 @@ class Zim(Base, ModelHelper):
         return [self.find_entry(i) for i in self.entry_paths_with_tags(session, tag_names, limit, offset)]
 
 
-class Zims:
-    """Convenience class which searches all known Zim files."""
-
-    @staticmethod
-    def get_all(session: Session) -> List[Zim]:
-        """Returns all Zim records."""
-        zims = list()
-        for zim in session.query(Zim).options(*Zim.json_options()).order_by(Zim.path):
-            try:
-                # It may not be possible to read the Zim file (drive not mounted), report and ignore.
-                zim.get_zim()
-                zims.append(zim)
-            except Exception as e:
-                logger.error(f'Failed to read Zim: {zim}', exc_info=e)
-        return zims
-
-
 class TagZimEntry(Base):
     __tablename__ = 'tag_zim'
     __table_args__ = (

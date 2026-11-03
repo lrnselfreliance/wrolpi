@@ -24,7 +24,7 @@ logger = logger.getChild(__name__)
 )
 async def get_zims(request: Request):
     session = request.ctx.session
-    zims = lib.get_zims(session)
+    zims = await lib.readable_zims(session)
     resp = {
         'zims': [i.__json__() for i in zims],
     }

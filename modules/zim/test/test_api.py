@@ -385,7 +385,7 @@ async def test_estimate_zims_runs_outside_the_api_process(test_session, zim_fact
 
 @pytest.mark.asyncio
 async def test_estimate_zims_skips_a_zim_it_cannot_read(test_session, zim_factory):
-    """A Zim the estimate process cannot open is left out of the estimates, like `Zims.get_all` leaves it out."""
+    """A Zim the estimate process cannot open is left out of the estimates, as the Zim list leaves it out."""
     good = zim_factory('good zim')
     bad = zim_factory('bad zim')
     test_session.commit()
@@ -449,6 +449,42 @@ async def test_tagged_search_estimates_do_not_open_zims(async_client, test_sessi
         body = dict(search_str='', tag_names=[tag1.name, tag2.name])
         request, response = await async_client.post('/api/zim/search_estimates', json=body)
         assert [i['estimate'] for i in response.json['zims_estimates']] == [1]
+
+
+@pytest.mark.asyncio
+async def test_zim_list_does_not_open_zims(async_client, test_session, zim_factory):
+    """Listing Zims reads their metadata in the worker; the API process never opens a Zim.  A cold open takes
+    seconds per Zim and libzim holds the GIL, so the Zims page used to stall its API worker."""
+    zim_factory('one zim')
+    zim_factory('two zim')
+    test_session.commit()
+
+    with mock.patch('modules.zim.models.Zim.get_zim', side_effect=AssertionError('opened a Zim in the API')):
+        request, response = await async_client.get('/api/zim')
+    assert response.status_code == HTTPStatus.OK
+    zims = response.json['zims']
+    assert [i['path'].endswith(('one zim', 'two zim')) for i in zims] == [True, True]
+    assert all(i['metadata']['title'] for i in zims), 'Metadata should come from the worker'
+    assert all(i['size'] for i in zims)
+
+
+@pytest.mark.asyncio
+async def test_zim_list_skips_a_zim_it_cannot_read(async_client, test_session, zim_factory):
+    """A Zim the worker cannot read, or whose file is gone, is left out of the list; the rest are listed."""
+    good = zim_factory('good zim')
+    bad = zim_factory('bad zim')
+    test_session.commit()
+    bad.path.write_bytes(b'not a zim file')
+
+    request, response = await async_client.get('/api/zim')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'].endswith('good zim') for i in response.json['zims']] == [True]
+
+    bad.path.unlink()
+    request, response = await async_client.get('/api/zim')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'].endswith('good zim') for i in response.json['zims']] == [True]
+    assert good.path.is_file()
 
 
 @pytest.mark.asyncio

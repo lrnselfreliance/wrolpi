@@ -2111,6 +2111,12 @@ export const useWROLMode = () => {
     return settings ? settings.wrol_mode : null;
 }
 
+export const useSyncRole = () => {
+    // This WROLPi's role ('primary' or 'secondary', see Sync); during fetch this returns null.
+    const {settings} = useContext(SettingsContext);
+    return settings ? settings.role || 'primary' : null;
+}
+
 export const useDockerized = () => {
     const {status} = React.useContext(StatusContext);
     return status && status['dockerized'] === true;

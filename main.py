@@ -14,7 +14,7 @@ from wrolpi import root_api  # noqa
 from wrolpi.api_utils import api_app, perpetual_signal, per_worker_task
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, have_internet_connection, wrol_mode_enabled, \
-    create_empty_config_files, import_file_configs, TRACE_LEVEL
+    create_empty_config_files, import_file_configs, TRACE_LEVEL, is_secondary
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from modules.videos.cookies import lock_cookies
@@ -286,7 +286,8 @@ async def start_single_tasks(app: Sanic):
 
     # Hotspot/throttle on startup are now handled by the Controller service.
 
-    if get_wrolpi_config().download_on_startup and not wrol_mode_enabled():
+    # A secondary never downloads; its library comes from its primary (see wrolpi.sync).
+    if get_wrolpi_config().download_on_startup and not wrol_mode_enabled() and not is_secondary():
         # Only start downloading when prerequisites have been met.
         try:
             async with flags.have_internet.wait_for(timeout=30):

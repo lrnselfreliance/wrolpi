@@ -26,6 +26,7 @@ import {
     useTitle,
     WROLModeMessage
 } from "../Common";
+import {SecondaryRoleMessage} from "./Sync";
 import {
     Button,
     ButtonGroup,
@@ -715,6 +716,8 @@ export function DownloadsPage() {
 
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
+        <SecondaryRoleMessage content="Downloads are disabled on a secondary WROLPi; its primary downloads, and every
+            sync copies the primary's library here."/>
         <DownloadWindowMessage/>
         <DailyLimitMessage/>
         <DisableDownloadsToggle/>

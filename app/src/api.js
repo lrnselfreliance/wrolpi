@@ -34,6 +34,11 @@ export class ApiDownError extends Error {
 
 const apiDownError = new ApiDownError('API is down');
 
+// A secondary WROLPi refuses requests while it copies its library from its primary.  Like a down API, callers
+// treat it quietly; the app shows the sync's progress instead (see SyncingOverlay).
+export class SyncingError extends ApiDownError {
+}
+
 async function apiCall(url, method, body, ms = 60_000) {
     let init = {method};
     if (body !== undefined) {
@@ -58,8 +63,11 @@ async function apiCall(url, method, body, ms = 60_000) {
         // Request encountered an error.
         let copy = response.clone();
         const content = await copy.json();
-        console.error('API error response json', content);
         const code = content['code'];
+        if (response.status === 503 && code === 'SYNCING') {
+            throw new SyncingError('This WROLPi is syncing from its primary');
+        }
+        console.error('API error response json', content);
         if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({
                 type: 'error',
@@ -410,7 +418,11 @@ export async function getSettings() {
             repos_destination: content.repos_destination,
             require_cookies_unlocked: content.require_cookies_unlocked,
             require_media_mounted: content.require_media_mounted,
+            role: content.role,
             save_ffprobe_json: content.save_ffprobe_json,
+            sync_primary_url: content.sync_primary_url,
+            sync_window_end: content.sync_window_end,
+            sync_window_start: content.sync_window_start,
             tags_directory: content.tags_directory,
             throttle_on_startup: content.throttle_on_startup,
             throttle_status: content.throttle_status,
@@ -428,6 +440,39 @@ export async function getSettings() {
             time: 5000,
         });
     }
+}
+
+// Sync: a secondary WROLPi copies its library from its primary.
+
+export async function saveSyncSettings(settings) {
+    const response = await apiPut(`${API_URI}/sync/settings`, settings);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not save sync settings.');
+        toast({type: 'error', title: 'Saving Sync Settings Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function runSync(force = false) {
+    const response = await apiPost(`${API_URI}/sync/run`, {force});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not start the sync.');
+        toast({type: 'error', title: 'Sync Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function cancelSync() {
+    return await apiPost(`${API_URI}/sync/cancel`);
+}
+
+export async function testSync() {
+    const response = await apiGet(`${API_URI}/sync/test`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not reach the primary.');
+    return {ok: false, error: message};
 }
 
 export async function saveSettings(settings) {

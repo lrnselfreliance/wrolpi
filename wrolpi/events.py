@@ -41,6 +41,14 @@ class Events:
         send_event('downloads_disabled', message, subject='downloads')
 
     @staticmethod
+    def send_sync_completed(message: str):
+        send_event('sync_completed', message, subject='sync')
+
+    @staticmethod
+    def send_sync_failed(message: str):
+        send_event('sync_failed', message, subject='sync')
+
+    @staticmethod
     def send_user_notify(message: str, url: str = None):
         send_event('user_notify_message', message, subject='user_notify', url=url)
 

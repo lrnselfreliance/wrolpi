@@ -15,6 +15,7 @@ import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/inventory/InventoryRoute";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
+import {SyncingOverlay} from "./components/admin/Sync";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
 import {BookmarksProvider} from "./contexts/BookmarksContext";
@@ -75,6 +76,7 @@ function Root() {
                             <header>
                                 <NavBar/>
                             </header>
+                            <SyncingOverlay/>
                             <ErrorBoundary>
                                 <Outlet/>
                             </ErrorBoundary>

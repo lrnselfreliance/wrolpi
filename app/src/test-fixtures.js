@@ -74,7 +74,11 @@ export const settingsFixture = (overrides = {}) => ({
     repos_destination: 'repos/%(repo_tag)s/%(repo_name)s',
     require_cookies_unlocked: false,
     require_media_mounted: false,
+    role: 'primary',
     save_ffprobe_json: true,
+    sync_primary_url: null,
+    sync_window_end: null,
+    sync_window_start: null,
     tags_directory: true,
     throttle_on_startup: false,
     timezone: null,
@@ -82,6 +86,32 @@ export const settingsFixture = (overrides = {}) => ({
     videos_destination: 'videos/%(channel_tag)s/%(channel_name)s',
     wrol_mode: false,
     zims_destination: 'zims',
+    ...overrides,
+});
+
+/** The `sync` of GET /api/status: a secondary that has never synced. */
+export const syncStatusFixture = (overrides = {}) => ({
+    state: 'idle',
+    phase: null,
+    requested: false,
+    force: false,
+    cancel_requested: false,
+    started_at: null,
+    finished_at: null,
+    last_success_at: null,
+    last_error: null,
+    last_skip_reason: null,
+    primary_url: null,
+    primary_version: null,
+    groups_seen: 0,
+    max_id: 0,
+    files_checked: 0,
+    files_to_download: 0,
+    files_downloaded: 0,
+    bytes_downloaded: 0,
+    files_failed: 0,
+    configs_imported: [],
+    disk_full: false,
     ...overrides,
 });
 
@@ -122,6 +152,8 @@ export const statusFixture = (overrides = {}) => ({
     memory_stats: {total: 4000000000, used: 1000000000, free: 3000000000, cached: 500000000},
     processes_stats: [],
     sanic_workers: {},
+    // A secondary's sync (wrolpi.sync); idle on a primary.
+    sync: syncStatusFixture(),
     version: '1.0.0',
     wrol_mode: false,
     // Upgrade info, seeded by the API and refreshed by its upgrade check.

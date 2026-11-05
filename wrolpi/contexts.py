@@ -5,6 +5,7 @@ import queue
 from sanic import Sanic
 
 from wrolpi.common import logger
+from wrolpi.sync.status import default_sync_status
 from wrolpi.vars import LOG_LEVEL_INT
 
 logger = logger.getChild(__name__)
@@ -65,6 +66,9 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_stopped.set()
 
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
+    # Set while a secondary syncs (wrolpi.sync); the API refuses requests.  An Event so the request middleware can
+    # check it without a manager round trip.
+    app.shared_ctx.sync_api_locked = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
 
     # Transcode
@@ -152,6 +156,7 @@ def reset_shared_contexts(app: Sanic):
         current_commit=None,
         commits_behind=0,
         git_branch=None,
+        sync=default_sync_status(),
     ))
     app.shared_ctx.cache.clear()
     # Secure cookies
@@ -239,6 +244,7 @@ def reset_shared_contexts(app: Sanic):
     # Clear events_history in place to preserve references held by fixtures
     del app.shared_ctx.events_history[:]
     app.shared_ctx.single_tasks_started.clear()
+    app.shared_ctx.sync_api_locked.clear()
     app.shared_ctx.flags_initialized.clear()
     if hasattr(app.shared_ctx, 'flag_holders'):
         app.shared_ctx.flag_holders.clear()

@@ -50,6 +50,14 @@ class CaddyLikeHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if self.server_state['omit_length'] and os.path.isfile(path):
+            # The body ends when the connection closes (HTTP/1.0), so the client cannot know its size.
+            self.send_response(200)
+            self.end_headers()
+            with open(path, 'rb') as fh:
+                self.wfile.write(fh.read())
+            return
+
         range_ = self.headers.get('Range')
         if range_ and self.server_state['honor_range'] and os.path.isfile(path):
             start = int(range_.split('=', 1)[1].split('-', 1)[0])
@@ -74,11 +82,12 @@ class CaddyLikeHandler(http.server.SimpleHTTPRequestHandler):
 @pytest.fixture
 def primary_media_server() -> Callable[[pathlib.Path], tuple]:
     """Start a server that serves a directory like the primary's Caddy.  Returns (url, state); `state['requests']`
-    records (path, Range header) of each request, `state['honor_range'] = False` makes it ignore Range."""
+    records (path, Range header) of each request, `state['honor_range'] = False` makes it ignore Range, and
+    `state['omit_length'] = True` makes it send files without a Content-Length."""
     servers = list()
 
     def start(directory: pathlib.Path):
-        state = dict(requests=list(), honor_range=True)
+        state = dict(requests=list(), honor_range=True, omit_length=False)
         handler = functools.partial(CaddyLikeHandler, directory=str(directory), server_state=state)
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()

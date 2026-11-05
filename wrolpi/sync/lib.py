@@ -18,6 +18,7 @@ being replaced.
 """
 import asyncio
 import contextlib
+import json
 import os
 import pathlib
 import re
@@ -56,6 +57,8 @@ MTIME_TOLERANCE_SECONDS = 2.0
 # Within the sync window, sync again this long after the last sync finished (an idle sync only compares sizes).
 SYNC_WINDOW_REPEAT_SECONDS = 15 * 60
 REFRESH_TIMEOUT_SECONDS = 60 * 60
+# Configs and directory listings are small; never read more than this from the primary.
+MAX_CONFIG_BYTES = 64 * 1024 * 1024
 
 # Top-level directories never written by a sync: the configs and database, and the Tags Directory (hard links that
 # the secondary rebuilds from tags.yaml).
@@ -158,7 +161,7 @@ def _manifest_file(media_directory: pathlib.Path, path: pathlib.Path) -> Optiona
 def get_sync_info(session: Session) -> dict:
     from wrolpi.files.models import FileGroup
     return dict(
-        version=__version__,
+        version=__version__.strip(),
         role=get_wrolpi_config().role,
         media_directory=str(get_media_directory()),
         max_file_group_id=session.execute(select(func.max(FileGroup.id))).scalar() or 0,
@@ -230,9 +233,21 @@ def normalize_primary_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https') or not parsed.hostname:
         raise ValueError('The primary must be an http:// or https:// address')
+    if parsed.username or parsed.password:
+        # The address is logged and shown in the sync's status.
+        raise ValueError('The primary address must not contain a user name or password')
     if parsed.path or parsed.query or parsed.fragment:
         raise ValueError('The primary address must not have a path')
     return url
+
+
+async def _read_limited(response: aiohttp.ClientResponse, path: str) -> bytes:
+    data = bytearray()
+    async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
+        data.extend(chunk)
+        if len(data) > MAX_CONFIG_BYTES:
+            raise SyncError(f'{path} is larger than {MAX_CONFIG_BYTES} bytes')
+    return bytes(data)
 
 
 class PrimaryClient:
@@ -260,7 +275,7 @@ class PrimaryClient:
         async with self.session.get(f'{self.url}{path}', params=params, headers=headers) as response:
             if response.status != HTTPStatus.OK:
                 raise SyncError(f'{path} returned HTTP {response.status}')
-            return await response.json(content_type=None)
+            return json.loads(await _read_limited(response, path))
 
     async def get_info(self) -> dict:
         return await self.get_json('/api/sync/info')
@@ -281,7 +296,7 @@ class PrimaryClient:
                 return None
             if response.status != HTTPStatus.OK:
                 raise SyncError(f'{path} returned HTTP {response.status}')
-            return await response.read()
+            return await _read_limited(response, path)
 
     async def list_directory(self, path: str) -> List[dict]:
         """The entries of a directory in the primary's media directory (Caddy's browse listing), [] if missing."""
@@ -291,7 +306,7 @@ class PrimaryClient:
                 return []
             if response.status != HTTPStatus.OK:
                 raise SyncError(f'{path} returned HTTP {response.status}')
-            return await response.json(content_type=None)
+            return json.loads(await _read_limited(response, path))
 
     @contextlib.asynccontextmanager
     async def open_media(self, path: str, offset: int = 0):
@@ -338,6 +353,11 @@ async def download_file(client: PrimaryClient, file: ManifestFile, destination: 
 
             with open(partial, mode) as fh:
                 async for chunk in response.content.iter_chunked(DOWNLOAD_CHUNK_SIZE):
+                    if offset + received + len(chunk) > file.size:
+                        # Never write past the size the free-space check allowed for.
+                        fh.close()
+                        partial.unlink(missing_ok=True)
+                        raise SyncError(f'{file.path} is larger than the primary said')
                     await asyncio.to_thread(fh.write, chunk)
                     received += len(chunk)
                     if on_bytes:
@@ -591,8 +611,8 @@ async def run_sync(force: bool = False) -> dict:
                 info = await client.get_info()
                 if info.get('role') != 'primary':
                     raise SyncError(f'{url} is not a primary WROLPi')
-                if info.get('version') != __version__:
-                    logger.warning(f'The primary runs WROLPi {info.get("version")}, this is {__version__}')
+                if (info.get('version') or '').strip() != __version__.strip():
+                    logger.warning(f'The primary runs WROLPi {info.get("version")}, this is {__version__.strip()}')
                 update_sync_status(primary_version=info.get('version'))
 
                 downloaded = await _sync_files(client)

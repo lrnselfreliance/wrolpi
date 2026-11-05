@@ -14,7 +14,6 @@ import {
 } from "../Common";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
 import {ConfigsTable} from "./Configs";
-import {SyncSection} from "./Sync";
 import {navColorHexMap} from "../Vars";
 import {Link} from "react-router";
 import {
@@ -957,8 +956,6 @@ export function SettingsPage() {
         <UpgradeSegment/>
 
         <WROLModeSection/>
-
-        <SyncSection/>
 
         <Panel>
             <Header as='h1'>Browser Settings</Header>

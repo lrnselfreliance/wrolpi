@@ -1,7 +1,8 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {cancelSync, runSync, saveSyncSettings, testSync} from "../../api";
-import {humanFileSize, isoDatetimeToAgoPopup} from "../Common";
+import {humanFileSize, isoDatetimeToAgoPopup, useTitle} from "../Common";
+import {Link} from "react-router";
 import {useSyncRole, useWROLMode} from "../../hooks/customHooks";
 import {Button, Header, Message, Panel, Progress, Select, TextInput, toast} from "../ui";
 
@@ -44,6 +45,7 @@ export function SecondaryRoleNotice({primaryUrl, content}) {
         {content || <>
             This WROLPi is a copy of <b>{primaryUrl || 'its primary'}</b>. Every sync replaces its library with the
             primary's, so changes made here are lost. Do not use it as a primary. Enable WROL Mode to stop syncing.
+            {' '}<Link to='/admin/sync'>Sync settings</Link>
         </>}
     </Message>
 }
@@ -222,4 +224,14 @@ export function SyncSection() {
 
         {settings.role === 'secondary' && <SyncStatus sync={status?.sync} running={running}/>}
     </Panel>
+}
+
+
+/** The Sync tab of /admin. */
+export function SyncPage() {
+    useTitle('Sync');
+    return <div className='wrolpi-stack'>
+        <SecondaryRoleMessage/>
+        <SyncSection/>
+    </div>
 }

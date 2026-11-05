@@ -150,6 +150,23 @@ async def test_download_file_changed_on_primary(primary, secondary_directory):
 
 
 @pytest.mark.asyncio
+async def test_download_file_larger_than_manifest(primary, secondary_directory):
+    """A primary that sends more bytes than its manifest said (no Content-Length to catch it) is not written past
+    the manifest's size, which is what the free-space check allowed for."""
+    primary.state['omit_length'] = True
+    write_primary_file(primary, 'a.bin', b'x' * 5 * lib.DOWNLOAD_CHUNK_SIZE)
+    file = lib.ManifestFile('a.bin', 3000, 1_700_000_000.0)
+    destination = secondary_directory / file.path
+
+    async with lib.PrimaryClient(primary.url) as client:
+        with pytest.raises(lib.SyncError, match='larger than the primary said'):
+            await lib.download_file(client, file, destination)
+
+    assert not destination.exists()
+    assert not lib.partial_path(destination).exists()
+
+
+@pytest.mark.asyncio
 async def test_download_file_disk_full(primary, secondary_directory, monkeypatch):
     """A file that would leave less than the minimum free space is not downloaded; its partial is kept."""
     file = write_primary_file(primary, 'a.bin', b'x' * 1000)

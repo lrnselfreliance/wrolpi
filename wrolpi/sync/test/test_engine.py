@@ -226,9 +226,10 @@ async def test_run_sync(async_client, test_session, primary, secondary_directory
     test_session.query(FileGroup).delete()
     test_session.commit()
 
-    # This WROLPi becomes the secondary.
+    # This WROLPi becomes the secondary; it has its own (empty) tags.yaml.
     set_test_media_directory(secondary_directory)
     make_secondary(primary.url)
+    (secondary_directory / 'config/tags.yaml').write_text('tags: {}\ntag_files: []\nversion: 1\n')
 
     status = await lib.run_sync()
 
@@ -241,6 +242,10 @@ async def test_run_sync(async_client, test_session, primary, secondary_directory
         copy = secondary_directory / path
         assert copy.read_bytes() == (primary.directory / path).read_bytes()
         assert copy.stat().st_mtime == (primary.directory / path).stat().st_mtime
+
+    # The secondary's own tags.yaml is kept in today's backup.
+    backups = list((secondary_directory / 'config/backup').glob('tags-*.yaml'))
+    assert len(backups) == 1 and b'docs/notes.txt' not in backups[0].read_bytes()
 
     # The primary's tags.yaml is copied byte for byte, and imported.
     assert (secondary_directory / 'config/tags.yaml').read_bytes() == primary_tags

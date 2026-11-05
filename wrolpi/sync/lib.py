@@ -442,10 +442,16 @@ def _parse_config(data: bytes, name: str) -> dict:
     return config
 
 
-def write_config_bytes(file: pathlib.Path, data: bytes) -> bool:
-    """Replace `file` with the primary's bytes (keeping its version).  Returns False if they are already the same."""
+def write_config_bytes(file: pathlib.Path, data: bytes, backup: pathlib.Path = None) -> bool:
+    """Replace `file` with the primary's bytes (keeping its version).  Returns False if they are already the same.
+
+    The replaced file is copied to `backup` first (today's config backup), unless today's backup exists: like a save,
+    the first copy of the day is the one kept, so a sync can be undone with a config backup import."""
     if file.is_file() and file.read_bytes() == data:
         return False
+    if backup and file.is_file() and not backup.exists():
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file, backup)
     file.parent.mkdir(parents=True, exist_ok=True)
     temporary = file.with_name(f'.{file.name}.sync')
     temporary.write_bytes(data)
@@ -463,7 +469,7 @@ async def sync_configs(client: PrimaryClient, primary_media_directory: str, reim
             continue
         config = get_config_by_file_name(file_name)
         _parse_config(data, file_name)
-        changed = write_config_bytes(config.get_file(), data)
+        changed = write_config_bytes(config.get_file(), data, config._get_backup_filename())
         if changed or reimport:
             logger.info(f'Importing {file_name} from the primary')
             await asyncio.to_thread(import_)
@@ -480,7 +486,8 @@ async def sync_configs(client: PrimaryClient, primary_media_directory: str, reim
 
 async def _sync_inventory_directory(client: PrimaryClient) -> bool:
     from modules.inventory.common import get_inventory_configs
-    directory = get_inventory_configs().get_directory()
+    inventories = get_inventory_configs()
+    directory = inventories.get_directory()
     changed = False
     for entry in await client.list_directory(INVENTORY_DIRECTORY):
         name = entry.get('name') or ''
@@ -490,7 +497,8 @@ async def _sync_inventory_directory(client: PrimaryClient) -> bool:
         if data is None:
             continue
         _parse_config(data, name)
-        changed = write_config_bytes(directory / name, data) or changed
+        backup = inventories._get_backup_filename(name.removesuffix('.yaml'))
+        changed = write_config_bytes(directory / name, data, backup) or changed
     return changed
 
 

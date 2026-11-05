@@ -50,19 +50,9 @@ import {contrastingColor, ViewProgress} from './Common';
 import {navBarStyle, navColorNames, useNavColors} from '../themes/navColors';
 import {IconMenu2} from '@tabler/icons-react';
 import {BookmarkAddForms, BookmarkMenuItems, BookmarkTable} from './Bookmarks';
-import {SecondaryRoleNotice, SyncingPanel, SyncStatus} from './admin/Sync';
 import {
     RepoBreadcrumb, RepoHistoryTable, RepoImportSummary, RepoStatusIcon, RepoSummary, RepoTreeTable,
 } from './Repos';
-
-// A secondary that last synced an hour ago (see the Sync section).
-const sampleSyncStatus = {
-    state: 'idle', phase: null, requested: false, force: false, cancel_requested: false,
-    started_at: '2026-11-05T01:00:00Z', finished_at: '2026-11-05T01:12:00Z', last_success_at: '2026-11-05T01:12:00Z',
-    last_error: null, last_skip_reason: null, primary_url: 'https://192.168.0.10', primary_version: '0.30.5-beta',
-    groups_seen: 1000, max_id: 1000, files_checked: 4210, files_to_download: 37, files_downloaded: 37,
-    bytes_downloaded: 4_200_000_000, files_failed: 0, configs_imported: ['tags.yaml'], disk_full: false,
-};
 
 /*
  * A gallery of every component in the library, in the current theme.
@@ -1220,24 +1210,6 @@ export function ThemeSamplePage() {
                     <RepoSummary repo={sampleFailedRepo}/>
                 </div>
             </Panel>
-        </Section>
-
-        <Section label='Sync'>
-            <p style={{fontSize: '0.75rem', color: 'var(--muted)', marginTop: 0}}>
-                A secondary WROLPi copies its primary's library.  Every page of a secondary warns that it is a
-                copy; while it syncs, the syncing panel covers the app.
-            </p>
-            <SecondaryRoleNotice primaryUrl='https://192.168.0.10'/>
-            <Panel style={{marginTop: 12}}>
-                <SyncStatus sync={sampleSyncStatus} running={false}/>
-                <SyncStatus sync={{...sampleSyncStatus, last_error: '3 files failed', disk_full: true}}
-                            running={false}/>
-            </Panel>
-            <div style={{marginTop: 12}}>
-                <SyncingPanel sync={{...sampleSyncStatus, state: 'running', phase: 'files', groups_seen: 420,
-                    max_id: 1000, files_to_download: 37, files_downloaded: 12, bytes_downloaded: 1_820_000_000}}
-                              onCancel={() => null}/>
-            </div>
         </Section>
 
         <Section label='Danger zone'>

@@ -77,6 +77,7 @@ async def test_settings(async_client, test_wrolpi_config, test_download_manager,
     assert config.sync_window_start is None
 
     for body in (dict(role='tertiary'), dict(sync_primary_url='ftp://primary'),
+                 dict(sync_primary_url='https://user:password@primary'),
                  dict(sync_primary_url='https://primary/media'), dict(sync_window_start='25:00'), dict()):
         request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
         assert response.status_code == HTTPStatus.BAD_REQUEST, body
@@ -98,6 +99,11 @@ async def test_api_locked_while_syncing(async_client, test_wrolpi_config, flags_
             assert response.status_code == HTTPStatus.OK, path
         request, response = await async_client.post('/api/sync/cancel')
         assert response.status_code == HTTPStatus.ACCEPTED
+        # Nothing may change the sync while it runs, except stopping it.
+        request, response = await async_client.put('/api/sync/settings', content=json.dumps(dict(role='primary')))
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        request, response = await async_client.post('/api/sync/run', content='{}')
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
 
         request, response = await async_client.get('/api/status')
         assert response.json['flags']['sync_running'] is True

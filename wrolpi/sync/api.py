@@ -19,7 +19,15 @@ sync_bp = Blueprint('Sync', '/api/sync')
 logger = logger.getChild(__name__)
 
 # Requests a secondary answers while it syncs: enough for the UI to show the sync's progress, and to cancel it.
-SYNC_ALLOWED_PREFIXES = ('/api/sync/', '/api/status', '/api/echo', '/api/events/')
+SYNC_ALLOWED_REQUESTS = frozenset({
+    ('GET', '/api/echo'),
+    ('GET', '/api/events/feed'),
+    ('GET', '/api/settings'),
+    ('GET', '/api/status'),
+    ('GET', '/api/sync/info'),
+    ('GET', '/api/sync/status'),
+    ('POST', '/api/sync/cancel'),
+})
 
 
 @api_app.middleware('request')
@@ -28,8 +36,7 @@ async def check_sync_api_lock(request: Request):
     # The Event costs nothing to check; the Flag confirms it (the Event survives a perpetual process that died).
     if not api_app.shared_ctx.sync_api_locked.is_set() or not flags.sync_running.is_set():
         return
-    path = request.path
-    if path.startswith(SYNC_ALLOWED_PREFIXES) or (path == '/api/settings' and request.method in ('GET', 'OPTIONS')):
+    if request.method == 'OPTIONS' or (request.method, request.path.rstrip('/')) in SYNC_ALLOWED_REQUESTS:
         return
     raise SyncInProgress()
 

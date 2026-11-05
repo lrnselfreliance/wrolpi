@@ -8,6 +8,7 @@ import {
     useLocalStorage,
     useTitle
 } from "./components/Common";
+import {SecondaryRoleMessage} from "./components/admin/Sync";
 import React, {useContext, useState} from "react";
 import {useHotkeys} from "react-hotkeys-hook";
 import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
@@ -436,6 +437,7 @@ export function DashboardPage() {
 
     // Only show dashboard parts if not searching.
     let body = <React.Fragment>
+        <SecondaryRoleMessage/>
         <Getters/>
         <TagsDashboard/>
         <DashboardStatus/>

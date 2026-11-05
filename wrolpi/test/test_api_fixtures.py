@@ -218,6 +218,24 @@ async def test_downloads_summary_fixture_matches_the_download_manager(async_clie
     )
 
 
+def test_sync_status_fixture_matches_the_seed():
+    """statusFixture's `sync` is a secondary's sync progress, seeded by `default_sync_status` and declared by
+    SyncStatusResponse; the fixture, the seed and the declaration must name the same keys."""
+    from dataclasses import fields
+    from wrolpi.schema import SyncStatusResponse
+    from wrolpi.sync.status import default_sync_status
+
+    seeded = set(default_sync_status())
+    declared = {i.name for i in fields(SyncStatusResponse)}
+    assert seeded == declared, f'seed and SyncStatusResponse differ: {sorted(seeded ^ declared)}'
+
+    source = TEST_FIXTURES_JS.read_text()
+    block = re.search(r'^export const syncStatusFixture = .*?\n(.*?)\n    \.\.\.overrides', source, re.S | re.M)
+    assert block, 'syncStatusFixture is no longer in the expected form'
+    fixture = set(re.findall(r'^    ([a-z0-9_]+):', block.group(1), re.M))
+    assert seeded == fixture, f'syncStatusFixture differs from the seed: {sorted(seeded ^ fixture)}'
+
+
 @pytest.mark.asyncio
 async def test_which_fixtures_the_spec_can_vouch_for(async_client):
     """Name the API-shaped fixtures this file does not cover, and why.
@@ -249,9 +267,10 @@ async def test_which_fixtures_the_spec_can_vouch_for(async_client):
 
     source = TEST_FIXTURES_JS.read_text()
     api_fixtures = set(re.findall(r'^export const ([a-zA-Z]+Fixture) =', source, re.M))
-    # domainsFixture is a list built from domainFixture, and the *Context* fixtures are held to
+    # domainsFixture is a list built from domainFixture, syncStatusFixture is statusFixture's `sync`
+    # (test_sync_status_fixture_matches_the_seed holds it), and the *Context* fixtures are held to
     # their React contexts by the frontend's own test-fixtures.test.js.
-    api_fixtures -= {'domainsFixture'}
+    api_fixtures -= {'domainsFixture', 'syncStatusFixture'}
     api_fixtures = {n for n in api_fixtures if 'Context' not in n}
 
     assert api_fixtures == set(checked) | set(unchecked), (

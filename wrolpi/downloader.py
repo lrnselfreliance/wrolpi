@@ -33,10 +33,10 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import loaded, Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
+    get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain, is_secondary
 from wrolpi.config_import import ConfigSection, Unreadable, chunks
 from wrolpi.config_version import collection_kinds, count_config_change, register_ownership
-from wrolpi.dates import TZDateTime, now, Seconds
+from wrolpi.dates import TZDateTime, now, Seconds, is_within_daily_window
 from wrolpi.db import get_db_session, session_curs, serializer
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
     ValidationError, DownloadError
@@ -817,14 +817,8 @@ class DownloadManager:
             return True
 
         current = self._get_local_time()
-        start_time = datetime.strptime(start, "%H:%M").time()
-        end_time = datetime.strptime(end, "%H:%M").time()
-
-        if start_time <= end_time:
-            within = start_time <= current < end_time
-        else:
-            # Overnight window (e.g., 22:00-06:00)
-            within = current >= start_time or current < end_time
+        # Overnight windows (e.g., 22:00-06:00) are supported.
+        within = is_within_daily_window(start, end, current)
 
         # Diagnostic: log only when the window opens/closes, including the computed local time and
         # timezone, so a clock/timezone mismatch (e.g. system UTC-5 vs configured America/Denver)
@@ -845,6 +839,9 @@ class DownloadManager:
 
         Single source of truth for `can_download`; returning a reason string (rather than a bare
         bool) lets the dispatcher log *why* a cycle was skipped."""
+        if is_secondary():
+            # A secondary's library comes from its primary (see wrolpi.sync).
+            return 'secondary role'
         if PYTEST:
             return None
         if self.is_disabled:

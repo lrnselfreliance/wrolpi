@@ -45,6 +45,18 @@ class WROLModeEnabled(APIError):
     status_code = HTTPStatus.FORBIDDEN
 
 
+class SyncInProgress(APIError):
+    code = 'SYNCING'
+    summary = 'This WROLPi is copying its library from its primary.  Try again when the sync finishes.'
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+
+
+class SecondaryRole(APIError):
+    code = 'SECONDARY_ROLE'
+    summary = 'This method is disabled on a secondary WROLPi.'
+    status_code = HTTPStatus.FORBIDDEN
+
+
 class InvalidDownload(APIError):
     code = 'INVALID_DOWNLOAD'
     summary = 'The URL cannot be downloaded.'

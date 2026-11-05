@@ -55,7 +55,7 @@ SHARED_LOCK_HEAL_TIMEOUT = 10
 #    when the recorded holder pid is dead, because a live worker may be inside the block right now.
 # file_worker_busy is deliberately absent: the collection-move path in an API worker holds it as a mutex, and
 # process_queue already drops a stale set on its next idle tick.
-PERPETUAL_ONLY_FLAGS = ('file_worker_counting', 'file_worker_discovery', 'global_refresh_active')
+PERPETUAL_ONLY_FLAGS = ('file_worker_counting', 'file_worker_discovery', 'global_refresh_active', 'sync_running')
 SHARED_PROGRESS_FLAGS = ('file_worker_modeling', 'file_worker_indexing', 'file_worker_cleanup',
                          'map_search_building')
 

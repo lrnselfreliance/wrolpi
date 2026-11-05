@@ -490,6 +490,24 @@ def library_on_internal_disk(media_directory: Path = None) -> bool:
 DB_CONFIG_FILE_NAMES ={'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml',
                         'playlists.yaml', 'repos.yaml'}
 
+# The library configs a secondary WROLPi copies from its primary (see wrolpi.sync).  A secondary never saves these;
+# the primary's copy is the only one that changes them.  repos.yaml is absent because git clones are never synced.
+SYNCED_CONFIG_FILE_NAMES = frozenset({
+    'archives_downloader.yaml',
+    'bookmarks.yaml',
+    'channels.yaml',
+    'domains.yaml',
+    'download_manager.yaml',
+    'inventory/catalog.yaml',
+    'map_pins.yaml',
+    'playlists.yaml',
+    'tags.yaml',
+    'videos_downloader.yaml',
+    'zims.yaml',
+})
+# MultiFileConfig names (directories of configs) a secondary copies from its primary.
+SYNCED_MULTIFILE_CONFIG_NAMES = frozenset({'inventory'})
+
 
 class _DatabaseChanged(Exception):
     """The database changed a config's rows between an import's snapshot and its write."""
@@ -732,6 +750,11 @@ class ConfigFile:
         """
         from wrolpi.api_utils import api_app
         from wrolpi.events import Events
+
+        if self.file_name in SYNCED_CONFIG_FILE_NAMES and is_secondary():
+            # The primary's copy of this config is the only one that changes; the next sync replaces this one.
+            logger_.debug(f'Not saving {self.file_name} on a secondary WROLPi')
+            return
 
         file = file or self.get_file()
         # Compare basenames so a nested file_name (e.g. 'inventory/catalog.yaml') is accepted.
@@ -1004,6 +1027,8 @@ class ConfigFile:
         from wrolpi.db import get_db_session
         with get_db_session() as session:
             db_version = get_config_version(session, self.file_name)
+        # A secondary's synced configs are the primary's; its database never outranks them (see wrolpi.sync).
+        forced = forced or (self.file_name in SYNCED_CONFIG_FILE_NAMES and is_secondary())
         decision = IMPORT if forced else decide(file_version, db_version)
         logger_.debug(f'{self.file_name}: file version {file_version}, database version {db_version}: {decision}')
         return decision, db_version
@@ -1281,6 +1306,10 @@ class MultiFileConfig:
         """Write one entity's in-memory config to its YAML file (version bump + daily backup).
 
         The caller MUST already hold `save_lock()`."""
+        if self.name in SYNCED_MULTIFILE_CONFIG_NAMES and is_secondary():
+            # The primary's copy is the only one that changes; the next sync replaces this one.
+            logger_.debug(f'Not saving {self.name}/{slug} on a secondary WROLPi')
+            return
         file = self.get_file(slug)
         if PYTEST and not is_tempfile(file):
             raise ValueError(f'Refusing to save config file while testing: {file}')
@@ -1428,7 +1457,11 @@ class WROLPiConfigValidator:
     repos_destination: str = None
     require_cookies_unlocked: bool = None
     require_media_mounted: bool = None
+    role: str = None
     save_ffprobe_json: bool = None
+    sync_primary_url: str = None
+    sync_window_end: str = None
+    sync_window_start: str = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
     timezone: str = None
@@ -1725,7 +1758,13 @@ class WROLPiConfig(ConfigFile):
         repos_destination='repos/%(repo_tag)s/%(repo_name)s',
         require_cookies_unlocked=True,
         require_media_mounted=True,
+        # 'primary' or 'secondary'; a secondary copies its library from `sync_primary_url` (see wrolpi.sync).
+        role='primary',
         save_ffprobe_json=True,
+        sync_primary_url=None,
+        # A secondary syncs during this daily window ('HH:MM'); no window means only "Sync now".
+        sync_window_end=None,
+        sync_window_start=None,
         tags_directory=True,
         throttle_on_startup=False,
         timezone=None,
@@ -1793,6 +1832,22 @@ class WROLPiConfig(ConfigFile):
                 from wrolpi.events import Events
                 Events.send_config_import_failed(message)
             raise
+
+    @property
+    def role(self) -> str:
+        return self._config.get('role') or 'primary'
+
+    @property
+    def sync_primary_url(self) -> Optional[str]:
+        return self._config.get('sync_primary_url')
+
+    @property
+    def sync_window_start(self) -> Optional[str]:
+        return self._config.get('sync_window_start')
+
+    @property
+    def sync_window_end(self) -> Optional[str]:
+        return self._config.get('sync_window_end')
 
     @property
     def download_on_startup(self) -> bool:
@@ -2095,6 +2150,11 @@ def wrol_mode_enabled() -> bool:
     return get_wrolpi_config().wrol_mode
 
 
+def is_secondary() -> bool:
+    """Return True if this WROLPi copies its library from a primary WROLPi (see wrolpi.sync)."""
+    return get_wrolpi_config().role == 'secondary'
+
+
 def wrol_mode_check(func):
     """Wraps a function so that it cannot be called when WROL Mode is enabled."""
 
@@ -2120,6 +2180,9 @@ def enable_wrol_mode():
     get_wrolpi_config().wrol_mode = True
     from wrolpi.downloader import download_manager
     download_manager.stop()
+    # A secondary in WROL Mode is in use; a running sync stops between pages.
+    from wrolpi.sync.lib import request_sync_cancel
+    request_sync_cancel()
 
 
 async def disable_wrol_mode():

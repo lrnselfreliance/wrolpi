@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 from enum import Enum
 from typing import Union, List
 
@@ -216,3 +216,13 @@ def date_range_to_where(wheres: list, params: dict, from_year: int, to_year: int
         params['to_year'] = to_year
 
     return wheres, params
+
+
+def is_within_daily_window(start: str | None, end: str | None, current: time) -> bool:
+    """True if `current` is within the daily window from `start` to `end` ('HH:MM').  A window whose end is before
+    its start crosses midnight (e.g. 22:00-06:00).  Callers decide what a missing window means."""
+    start_time = datetime.strptime(start, '%H:%M').time()
+    end_time = datetime.strptime(end, '%H:%M').time()
+    if start_time <= end_time:
+        return start_time <= current < end_time
+    return current >= start_time or current < end_time

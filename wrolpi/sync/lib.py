@@ -24,6 +24,7 @@ import pathlib
 import re
 import shutil
 import ssl
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
@@ -54,6 +55,8 @@ DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 MIN_FREE_BYTES = 1024 ** 3
 # exFAT stores modification times in 2-second steps.
 MTIME_TOLERANCE_SECONDS = 2.0
+# How often a running sync reports its progress.
+PROGRESS_INTERVAL_SECONDS = 2.0
 # Within the sync window, sync again this long after the last sync finished (an idle sync only compares sizes).
 SYNC_WINDOW_REPEAT_SECONDS = 15 * 60
 REFRESH_TIMEOUT_SECONDS = 60 * 60
@@ -621,7 +624,7 @@ async def run_sync(force: bool = False) -> dict:
                     raise SyncError(f'{url} is not a primary WROLPi')
                 if (info.get('version') or '').strip() != __version__.strip():
                     logger.warning(f'The primary runs WROLPi {info.get("version")}, this is {__version__.strip()}')
-                update_sync_status(primary_version=info.get('version'))
+                update_sync_status(primary_version=(info.get('version') or '').strip() or None)
 
                 downloaded = await _sync_files(client)
                 _check_cancel()
@@ -664,9 +667,20 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
     bytes_downloaded = 0
     disk_full = False
 
+    last_report = 0.0
+
+    def report(force: bool = False):
+        nonlocal last_report
+        if force or time.monotonic() - last_report >= PROGRESS_INTERVAL_SECONDS:
+            last_report = time.monotonic()
+            update_sync_status(groups_seen=groups_seen, files_checked=files_checked,
+                               files_to_download=files_to_download, files_downloaded=len(downloaded),
+                               bytes_downloaded=bytes_downloaded, files_failed=files_failed, disk_full=disk_full)
+
     def count_bytes(n: int):
         nonlocal bytes_downloaded
         bytes_downloaded += n
+        report()
 
     async for page in client.iter_manifest():
         _check_cancel()
@@ -684,6 +698,8 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
                 if needs_download(destination, file):
                     wanted.append((file, destination))
         files_to_download += len(wanted)
+        update_sync_status(max_id=page.get('max_id') or 0)
+        report(force=True)
 
         page_downloaded = list()
         if wanted and not disk_full:
@@ -696,6 +712,7 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
                         return None
                     try:
                         await download_file(client, file_, destination_, count_bytes)
+                        downloaded.append(destination_)
                         return destination_
                     except SyncDiskFull as e:
                         disk_full = True
@@ -707,11 +724,9 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
             results = await asyncio.gather(*(download(f, d) for f, d in wanted))
             page_downloaded = [i for i in results if i]
             files_failed += sum(1 for i in results if i is False)
-            downloaded.extend(page_downloaded)
 
-        update_sync_status(groups_seen=groups_seen, max_id=page.get('max_id') or 0, files_checked=files_checked,
-                           files_to_download=files_to_download, files_downloaded=len(downloaded),
-                           bytes_downloaded=bytes_downloaded, files_failed=files_failed, disk_full=disk_full)
+        update_sync_status(max_id=page.get('max_id') or 0)
+        report(force=True)
 
         if page_downloaded:
             await _refresh(page_downloaded)

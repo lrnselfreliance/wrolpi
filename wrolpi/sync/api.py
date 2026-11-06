@@ -38,7 +38,9 @@ async def check_sync_api_lock(request: Request):
         return
     if request.method == 'OPTIONS' or (request.method, request.path.rstrip('/')) in SYNC_ALLOWED_REQUESTS:
         return
-    raise SyncInProgress()
+    # Answered here rather than raised: the UI polls while it waits, and each refusal would be logged as an error.
+    return json_response(dict(error=SyncInProgress.summary, code=SyncInProgress.code),
+                         SyncInProgress.status_code)
 
 
 @perpetual_signal(sleep=5)

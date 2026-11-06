@@ -1,9 +1,10 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
-import {cancelSync, runSync, saveSyncSettings, testSync} from "../../api";
+import {cancelBackup, cancelSync, runBackup, runSync, saveSyncSettings, testSync} from "../../api";
+import {getDisks} from "../../api/controller";
 import {humanFileSize, isoDatetimeToAgoPopup, useTitle} from "../Common";
 import {Link} from "react-router";
-import {useSyncRole, useWROLMode} from "../../hooks/customHooks";
+import {useDockerized, useSyncRole, useWROLMode} from "../../hooks/customHooks";
 import {Button, Header, Message, Panel, Progress, Select, TextInput, toast} from "../ui";
 
 const roleOptions = [
@@ -188,6 +189,9 @@ export function SyncSection() {
                 <TextInput placeholder='https://192.168.0.10' value={state.sync_primary_url} disabled={wrolMode}
                            onChange={e => setState({...state, sync_primary_url: e.currentTarget.value})}/>
             </div>
+        </>}
+
+        {(secondary || settings.backup_directory) && <>
             <div style={{display: 'flex', gap: '1em', flexWrap: 'wrap', margin: '0.5em 0'}}>
                 <div>
                     <label><b>Sync Window Start</b></label>
@@ -201,8 +205,8 @@ export function SyncSection() {
                 </div>
             </div>
             <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
-                Within the window, the secondary syncs every 15 minutes. Leave both empty to sync only with
-                "Sync Now".
+                Within the window, a secondary syncs every 15 minutes, and the backup drive is updated every hour.
+                Leave both empty to sync only with "Sync Now" and "Back Up Now".
             </p>
         </>}
 
@@ -227,11 +231,125 @@ export function SyncSection() {
 }
 
 
+/** The drives a backup can be written to: mounted under /media, and not the media drive. */
+export function backupDriveOptions(disks, mediaDirectory) {
+    const media = mediaDirectory || '/media/wrolpi';
+    return (disks || [])
+        .filter(d => d.mountpoint && d.uuid && d.mountpoint.startsWith('/media/')
+            && d.mountpoint !== media && d.mountpoint !== '/media/wrolpi_temp_onboarding')
+        .map(d => ({value: d.mountpoint, uuid: d.uuid, label: `${d.label || d.name} (${d.size}) at ${d.mountpoint}`}));
+}
+
+/** The progress and outcome of copying the media directory to the backup drive. */
+export function BackupStatus({backup, running}) {
+    if (!backup) {
+        return null;
+    }
+    return <div>
+        {running && <Progress percent={backup.percent}
+                              label={`${backup.phase === 'database' ? 'Copying the database'
+                                  : `${backup.files_transferred} files`} (${humanFileSize(backup.bytes_transferred)})`}/>}
+        <p>
+            <b>Last successful backup:</b> {backup.last_success_at
+            ? isoDatetimeToAgoPopup(backup.last_success_at) : 'Never'}
+        </p>
+        {backup.last_error && !running && <Message kind='error' icon='warning' title='Backup problem'>
+            {backup.last_error}
+        </Message>}
+        {backup.last_skip_reason && !running && <p style={{color: 'var(--muted)'}}>
+            Not backed up: {backup.last_skip_reason}
+        </p>}
+    </div>
+}
+
+/** The Sync tab's backup drive: a second drive this WROLPi copies its media directory to. */
+export function BackupDriveSection() {
+    const {settings, fetchSettings} = React.useContext(SettingsContext);
+    const {status} = React.useContext(StatusContext);
+    const wrolMode = useWROLMode();
+    const dockerized = useDockerized();
+    const [disks, setDisks] = React.useState(null);
+    const [disksError, setDisksError] = React.useState(null);
+    const [directory, setDirectory] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+
+    const savedDirectory = settings?.backup_directory || '';
+    React.useEffect(() => {
+        setDirectory(savedDirectory);
+    }, [savedDirectory]);
+
+    React.useEffect(() => {
+        if (dockerized === false) {
+            getDisks().then(setDisks).catch(e => setDisksError(e.message));
+        }
+    }, [dockerized]);
+
+    if (!settings || dockerized !== false) {
+        // Docker cannot reach other drives.
+        return null;
+    }
+
+    const options = backupDriveOptions(disks, settings.media_directory);
+    if (savedDirectory && !options.find(i => i.value === savedDirectory)) {
+        // The chosen drive is unplugged; keep showing it.
+        options.push({value: savedDirectory, uuid: settings.backup_device_uuid,
+            label: `${savedDirectory} (not mounted)`});
+    }
+    const data = [{value: 'none', label: 'None'}, ...options.map(({value, label}) => ({value, label}))];
+    const running = status?.flags?.backup_running === true;
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            const chosen = options.find(i => i.value === directory);
+            const response = await saveSyncSettings({
+                backup_directory: chosen ? chosen.value : '',
+                backup_device_uuid: chosen ? chosen.uuid : '',
+            });
+            if (response?.ok) {
+                toast({type: 'success', title: 'Backup drive saved', time: 3000});
+            }
+            await fetchSettings();
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const backUpNow = async () => {
+        const response = await runBackup();
+        if (response?.ok) {
+            toast({type: 'info', title: 'Backup requested', description: 'The backup starts in a few seconds.',
+                time: 3000});
+        }
+    };
+
+    return <Panel>
+        <Header as='h3' icon='hdd'>Backup Drive</Header>
+        <p>
+            Copy this WROLPi's media directory to a second drive, so the drive can replace the media drive if it
+            fails. Files deleted here are kept on the backup drive. The backup runs during the sync window.
+        </p>
+        {disksError && <Message kind='error' icon='warning' title='Could not list drives'>{disksError}</Message>}
+        <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
+            <label><b>Backup drive</b></label>
+            <Select data={data} value={directory || 'none'} allowDeselect={false} disabled={wrolMode}
+                    onChange={value => setDirectory(value === 'none' ? '' : value)}/>
+        </div>
+        <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
+            <Button color='violet' onClick={save} disabled={wrolMode || saving}>Save</Button>
+            {savedDirectory && !running && <Button onClick={backUpNow} disabled={wrolMode}>Back Up Now</Button>}
+            {running && <Button color='red' onClick={cancelBackup}>Stop Backup</Button>}
+        </div>
+        {savedDirectory && <BackupStatus backup={status?.backup} running={running}/>}
+    </Panel>
+}
+
 /** The Sync tab of /admin. */
 export function SyncPage() {
     useTitle('Sync');
     return <div className='wrolpi-stack'>
         <SecondaryRoleMessage/>
         <SyncSection/>
+        <BackupDriveSection/>
     </div>
 }

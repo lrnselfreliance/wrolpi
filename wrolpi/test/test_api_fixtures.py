@@ -218,22 +218,26 @@ async def test_downloads_summary_fixture_matches_the_download_manager(async_clie
     )
 
 
-def test_sync_status_fixture_matches_the_seed():
-    """statusFixture's `sync` is a secondary's sync progress, seeded by `default_sync_status` and declared by
-    SyncStatusResponse; the fixture, the seed and the declaration must name the same keys."""
+@pytest.mark.parametrize('fixture_name, seed_name, response_name', [
+    ('syncStatusFixture', 'default_sync_status', 'SyncStatusResponse'),
+    ('backupStatusFixture', 'default_backup_status', 'BackupStatusResponse'),
+])
+def test_sync_status_fixture_matches_the_seed(fixture_name, seed_name, response_name):
+    """statusFixture's `sync` and `backup` are seeded by wrolpi.sync.status and declared in wrolpi.schema; the
+    fixture, the seed and the declaration must name the same keys."""
     from dataclasses import fields
-    from wrolpi.schema import SyncStatusResponse
-    from wrolpi.sync.status import default_sync_status
+    from wrolpi import schema
+    from wrolpi.sync import status
 
-    seeded = set(default_sync_status())
-    declared = {i.name for i in fields(SyncStatusResponse)}
-    assert seeded == declared, f'seed and SyncStatusResponse differ: {sorted(seeded ^ declared)}'
+    seeded = set(getattr(status, seed_name)())
+    declared = {i.name for i in fields(getattr(schema, response_name))}
+    assert seeded == declared, f'seed and {response_name} differ: {sorted(seeded ^ declared)}'
 
     source = TEST_FIXTURES_JS.read_text()
-    block = re.search(r'^export const syncStatusFixture = .*?\n(.*?)\n    \.\.\.overrides', source, re.S | re.M)
-    assert block, 'syncStatusFixture is no longer in the expected form'
+    block = re.search(rf'^export const {fixture_name} = .*?\n(.*?)\n    \.\.\.overrides', source, re.S | re.M)
+    assert block, f'{fixture_name} is no longer in the expected form'
     fixture = set(re.findall(r'^    ([a-z0-9_]+):', block.group(1), re.M))
-    assert seeded == fixture, f'syncStatusFixture differs from the seed: {sorted(seeded ^ fixture)}'
+    assert seeded == fixture, f'{fixture_name} differs from the seed: {sorted(seeded ^ fixture)}'
 
 
 @pytest.mark.asyncio
@@ -267,10 +271,10 @@ async def test_which_fixtures_the_spec_can_vouch_for(async_client):
 
     source = TEST_FIXTURES_JS.read_text()
     api_fixtures = set(re.findall(r'^export const ([a-zA-Z]+Fixture) =', source, re.M))
-    # domainsFixture is a list built from domainFixture, syncStatusFixture is statusFixture's `sync`
-    # (test_sync_status_fixture_matches_the_seed holds it), and the *Context* fixtures are held to
+    # domainsFixture is a list built from domainFixture, syncStatusFixture and backupStatusFixture are
+    # statusFixture's `sync` and `backup` (test_sync_status_fixture_matches_the_seed holds them), and the *Context* fixtures are held to
     # their React contexts by the frontend's own test-fixtures.test.js.
-    api_fixtures -= {'domainsFixture', 'syncStatusFixture'}
+    api_fixtures -= {'domainsFixture', 'syncStatusFixture', 'backupStatusFixture'}
     api_fixtures = {n for n in api_fixtures if 'Context' not in n}
 
     assert api_fixtures == set(checked) | set(unchecked), (

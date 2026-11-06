@@ -45,6 +45,8 @@ import {defaultTheme} from './themes/names';
 /** GET /api/settings */
 export const settingsFixture = (overrides = {}) => ({
     archive_destination: 'archive/%(domain_tag)s/%(domain)s',
+    backup_device_uuid: null,
+    backup_directory: null,
     check_for_upgrades: true,
     download_daily_limit_global: null,
     download_daily_limit_per_domain: null,
@@ -115,6 +117,25 @@ export const syncStatusFixture = (overrides = {}) => ({
     ...overrides,
 });
 
+/** The `backup` of GET /api/status: a backup drive that has never been written. */
+export const backupStatusFixture = (overrides = {}) => ({
+    state: 'idle',
+    phase: null,
+    requested: false,
+    cancel_requested: false,
+    started_at: null,
+    finished_at: null,
+    last_success_at: null,
+    last_error: null,
+    last_skip_reason: null,
+    directory: null,
+    bytes_transferred: 0,
+    percent: 0,
+    files_transferred: 0,
+    files_to_check: 0,
+    ...overrides,
+});
+
 /**
  * GET /api/status
  *
@@ -154,6 +175,8 @@ export const statusFixture = (overrides = {}) => ({
     sanic_workers: {},
     // A secondary's sync (wrolpi.sync); idle on a primary.
     sync: syncStatusFixture(),
+    // A backup to a second drive (wrolpi.sync.backup); idle without one.
+    backup: backupStatusFixture(),
     version: '1.0.0',
     wrol_mode: false,
     // Upgrade info, seeded by the API and refreshed by its upgrade check.

@@ -46,6 +46,14 @@ export function handleEvents(events) {
             eventToast('Downloads Disabled', message);
         }
 
+        if (event === 'backup_completed') {
+            eventToast('Backup Completed', message, 'success');
+        }
+
+        if (event === 'backup_failed') {
+            eventToast('Backup Failed', message, 'error');
+        }
+
         if (event === 'sync_completed') {
             eventToast('Sync Completed', message, 'success');
         }

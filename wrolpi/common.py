@@ -1457,11 +1457,7 @@ class WROLPiConfigValidator:
     repos_destination: str = None
     require_cookies_unlocked: bool = None
     require_media_mounted: bool = None
-    role: str = None
     save_ffprobe_json: bool = None
-    sync_primary_url: str = None
-    sync_window_end: str = None
-    sync_window_start: str = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
     timezone: str = None
@@ -1523,6 +1519,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if bookmarks_config := get_bookmarks_config():
         all_configs[bookmarks_config.file_name] = bookmarks_config
 
+    from wrolpi.sync.config import get_sync_config
+    if sync_config := get_sync_config():
+        all_configs[sync_config.file_name] = sync_config
+
     from wrolpi.collections.config import get_playlists_config
     if playlists_config := get_playlists_config():
         all_configs[playlists_config.file_name] = playlists_config
@@ -1559,6 +1559,14 @@ async def import_file_configs():
         logger.debug('wrolpi config imported')
     except Exception as e:
         logger.warning(f'Failed to import wrolpi config: {e}')
+
+    # Whether this WROLPi is a secondary decides how the other configs import (see `ConfigFile.version_decision`).
+    from wrolpi.sync.config import get_sync_config
+    try:
+        await asyncio.to_thread(get_sync_config().import_config)
+        logger.debug('sync config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import sync config: {e}')
 
     if not wrolpi_config.successful_import:
         return
@@ -1758,13 +1766,7 @@ class WROLPiConfig(ConfigFile):
         repos_destination='repos/%(repo_tag)s/%(repo_name)s',
         require_cookies_unlocked=True,
         require_media_mounted=True,
-        # 'primary' or 'secondary'; a secondary copies its library from `sync_primary_url` (see wrolpi.sync).
-        role='primary',
         save_ffprobe_json=True,
-        sync_primary_url=None,
-        # A secondary syncs during this daily window ('HH:MM'); no window means only "Sync now".
-        sync_window_end=None,
-        sync_window_start=None,
         tags_directory=True,
         throttle_on_startup=False,
         timezone=None,
@@ -1832,22 +1834,6 @@ class WROLPiConfig(ConfigFile):
                 from wrolpi.events import Events
                 Events.send_config_import_failed(message)
             raise
-
-    @property
-    def role(self) -> str:
-        return self._config.get('role') or 'primary'
-
-    @property
-    def sync_primary_url(self) -> Optional[str]:
-        return self._config.get('sync_primary_url')
-
-    @property
-    def sync_window_start(self) -> Optional[str]:
-        return self._config.get('sync_window_start')
-
-    @property
-    def sync_window_end(self) -> Optional[str]:
-        return self._config.get('sync_window_end')
 
     @property
     def download_on_startup(self) -> bool:
@@ -2152,7 +2138,9 @@ def wrol_mode_enabled() -> bool:
 
 def is_secondary() -> bool:
     """Return True if this WROLPi copies its library from a primary WROLPi (see wrolpi.sync)."""
-    return get_wrolpi_config().role == 'secondary'
+    # wrolpi.sync.config imports this module.
+    from wrolpi.sync.config import get_sync_config
+    return get_sync_config().role == 'secondary'
 
 
 def wrol_mode_check(func):
@@ -2180,9 +2168,11 @@ def enable_wrol_mode():
     get_wrolpi_config().wrol_mode = True
     from wrolpi.downloader import download_manager
     download_manager.stop()
-    # A secondary in WROL Mode is in use; a running sync stops between pages.
+    # A secondary in WROL Mode is in use; a running sync stops between pages.  A backup stops too.
     from wrolpi.sync.lib import request_sync_cancel
+    from wrolpi.sync.backup import request_backup_cancel
     request_sync_cancel()
+    request_backup_cancel()
 
 
 async def disable_wrol_mode():

@@ -41,6 +41,7 @@ from wrolpi.jobs import jobs_bp
 from wrolpi.log_levels import int_to_name
 from wrolpi.speedtest import speedtest_bp
 from wrolpi.sync.api import sync_bp
+from wrolpi.sync.config import get_sync_config
 from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
@@ -166,6 +167,7 @@ async def echo(request: Request):
 )
 def get_settings(_: Request):
     wrolpi_config = get_wrolpi_config()
+    sync_config = get_sync_config()
 
     # Drop special directories (e.g. zims) that must never be ignored, if present from older configs.
     from wrolpi.files.lib import sanitize_ignored_directories
@@ -175,6 +177,8 @@ def get_settings(_: Request):
 
     settings = {
         'archive_destination': wrolpi_config.archive_destination,
+        'backup_device_uuid': sync_config.backup_device_uuid,
+        'backup_directory': sync_config.backup_directory,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
         'download_daily_limit_global': wrolpi_config.download_daily_limit_global,
@@ -207,11 +211,11 @@ def get_settings(_: Request):
         'zims_destination': wrolpi_config.zims_destination,
         'require_cookies_unlocked': wrolpi_config.require_cookies_unlocked,
         'require_media_mounted': wrolpi_config.require_media_mounted,
-        'role': wrolpi_config.role,
+        'role': sync_config.role,
         'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
-        'sync_primary_url': wrolpi_config.sync_primary_url,
-        'sync_window_end': wrolpi_config.sync_window_end,
-        'sync_window_start': wrolpi_config.sync_window_start,
+        'sync_primary_url': sync_config.primary_url,
+        'sync_window_end': sync_config.window_end,
+        'sync_window_start': sync_config.window_start,
         'timezone': wrolpi_config.timezone,
     }
     return json_response(settings)

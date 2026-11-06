@@ -41,6 +41,7 @@ from wrolpi.common import logger, get_media_directory, get_wrolpi_config, is_sec
     get_config_by_file_name, SYNCED_CONFIG_FILE_NAMES
 from wrolpi.dates import now, is_within_daily_window
 from wrolpi.events import Events
+from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_sync_status, update_sync_status
 from wrolpi.vars import DEFAULT_HTTP_HEADERS, PYTEST
 from wrolpi.version import __version__
@@ -69,7 +70,8 @@ PROTECTED_DIRECTORIES = frozenset({'config', 'tags'})
 # Files that are still being downloaded on the primary: aria2 and yt-dlp partials, and yt-dlp format files.
 INCOMPLETE_FILE = re.compile(r'(\.part|\.aria2|\.ytdl|\.temp)$|\.f\d{2,4}\.[^.]+$')
 
-# wrolpi.yaml keys that describe the library rather than this machine (hotspot, timezone, role, etc. stay local).
+# wrolpi.yaml keys that describe the library rather than this machine (hotspot, timezone, etc. stay local; the role
+# and other sync settings are in sync.yaml, which is never synced).
 SYNCED_WROLPI_CONFIG_KEYS = (
     'archive_destination',
     'ignore_outdated_zims',
@@ -165,7 +167,7 @@ def get_sync_info(session: Session) -> dict:
     from wrolpi.files.models import FileGroup
     return dict(
         version=__version__.strip(),
-        role=get_wrolpi_config().role,
+        role=get_sync_config().role,
         media_directory=str(get_media_directory()),
         max_file_group_id=session.execute(select(func.max(FileGroup.id))).scalar() or 0,
     )
@@ -549,19 +551,19 @@ async def _merge_wrolpi_config(client: PrimaryClient, primary_media_directory: s
 
 def sync_skip_reason() -> Optional[str]:
     """Why a sync cannot start now, or None."""
-    config = get_wrolpi_config()
+    config = get_sync_config()
     if not is_secondary():
         return 'This WROLPi is not a secondary'
     if wrol_mode_enabled():
         return 'WROL Mode is enabled'
-    if not config.sync_primary_url:
+    if not config.primary_url:
         return 'No primary is configured'
     if not PYTEST:
         if not flags.db_up.is_set():
             return 'The database is not up'
         if not flags.refresh_complete.is_set():
             return 'The first refresh has not finished'
-        if config.require_media_mounted and not flags.media_mounted.is_set():
+        if get_wrolpi_config().require_media_mounted and not flags.media_mounted.is_set():
             return 'The media directory is not mounted'
     if flags.sync_running.is_set():
         return 'A sync is already running'
@@ -607,7 +609,7 @@ async def run_sync(force: bool = False) -> dict:
         logger.info(f'Not syncing: {reason}')
         return update_sync_status(last_skip_reason=reason, force=False)
 
-    url = get_wrolpi_config().sync_primary_url
+    url = get_sync_config().primary_url
     started_at = now()
     update_sync_status(
         state='running', phase='files', force=False, cancel_requested=False, started_at=started_at.isoformat(),
@@ -744,10 +746,10 @@ async def _refresh(paths: List[pathlib.Path]):
         logger.error(f'Failed to refresh synced files: {e}')
 
 
-def sync_is_due(status: dict, local_now: datetime) -> bool:
-    """True if the sync window is open and the last sync finished long enough ago."""
-    config = get_wrolpi_config()
-    start, end = config.sync_window_start, config.sync_window_end
+def sync_is_due(status: dict, local_now: datetime, repeat_seconds: int = SYNC_WINDOW_REPEAT_SECONDS) -> bool:
+    """True if the sync window is open and the last run (described by `status`) finished `repeat_seconds` ago."""
+    config = get_sync_config()
+    start, end = config.window_start, config.window_end
     if not start or not end:
         # No window: only "Sync now".
         return False
@@ -756,7 +758,7 @@ def sync_is_due(status: dict, local_now: datetime) -> bool:
     if not status.get('finished_at'):
         return True
     finished_at = datetime.fromisoformat(status['finished_at'])
-    return (local_now - finished_at).total_seconds() >= SYNC_WINDOW_REPEAT_SECONDS
+    return (local_now - finished_at).total_seconds() >= repeat_seconds
 
 
 async def sync_tick():

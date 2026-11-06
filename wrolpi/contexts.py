@@ -5,7 +5,7 @@ import queue
 from sanic import Sanic
 
 from wrolpi.common import logger
-from wrolpi.sync.status import default_sync_status
+from wrolpi.sync.status import default_sync_status, default_backup_status
 from wrolpi.vars import LOG_LEVEL_INT
 
 logger = logger.getChild(__name__)
@@ -42,6 +42,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.map_pins_config = manager.dict()
     app.shared_ctx.flasher_config = manager.dict()
     app.shared_ctx.bookmarks_config = manager.dict()
+    app.shared_ctx.sync_config = manager.dict()
     app.shared_ctx.recently_viewed_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.uploaded_files = manager.dict()
@@ -157,6 +158,7 @@ def reset_shared_contexts(app: Sanic):
         commits_behind=0,
         git_branch=None,
         sync=default_sync_status(),
+        backup=default_backup_status(),
     ))
     app.shared_ctx.cache.clear()
     # Secure cookies
@@ -355,6 +357,12 @@ def initialize_configs_contexts(app: Sanic):
         BOOKMARKS_CONFIG.initialize(app.shared_ctx.bookmarks_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory bookmarks config: {e}')
+
+    try:
+        from wrolpi.sync.config import SYNC_CONFIG
+        SYNC_CONFIG.initialize(app.shared_ctx.sync_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory sync config: {e}')
 
     try:
         from wrolpi.files.progress import RECENTLY_VIEWED_CONFIG

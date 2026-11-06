@@ -11,8 +11,10 @@ from wrolpi.api_utils import api_app, json_response, perpetual_signal
 from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig, SecondaryRole, SyncInProgress, WROLModeEnabled
-from wrolpi.sync import lib, schema
-from wrolpi.sync.status import get_sync_status
+from wrolpi.sync import backup, lib, schema
+from wrolpi.sync.config import get_sync_config
+from wrolpi.sync.status import get_backup_status, get_sync_status
+from wrolpi.vars import DOCKERIZED
 
 sync_bp = Blueprint('Sync', '/api/sync')
 
@@ -45,7 +47,9 @@ async def check_sync_api_lock(request: Request):
 
 @perpetual_signal(sleep=5)
 async def perpetual_sync_worker():
+    # One loop, so a secondary's sync and its backup never run at once; the backup copies what the sync pulled.
     await lib.sync_tick()
+    await backup.backup_tick()
 
 
 @sync_bp.get('/info')
@@ -72,7 +76,8 @@ async def get_manifest(_: Request, query: schema.ManifestRequest):
 @sync_bp.get('/status')
 @openapi.definition(summary="The progress of this secondary's sync")
 async def get_status(_: Request):
-    return json_response(dict(sync=get_sync_status(), sync_running=bool(flags.sync_running.is_set())))
+    return json_response(dict(sync=get_sync_status(), sync_running=bool(flags.sync_running.is_set()),
+                              backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set())))
 
 
 @sync_bp.post('/run')
@@ -83,7 +88,7 @@ async def post_run(_: Request, body: schema.SyncRunRequest):
         raise SecondaryRole('Only a secondary WROLPi syncs from a primary')
     if flags.sync_running.is_set():
         raise SyncInProgress()
-    if not get_wrolpi_config().sync_primary_url:
+    if not get_sync_config().primary_url:
         raise InvalidConfig('No primary is configured')
     lib.request_sync(force=body.force)
     return response.empty(HTTPStatus.ACCEPTED)
@@ -99,7 +104,7 @@ async def post_cancel(_: Request):
 @sync_bp.get('/test')
 @openapi.definition(summary='Check that the configured primary answers')
 async def get_test(_: Request):
-    url = get_wrolpi_config().sync_primary_url
+    url = get_sync_config().primary_url
     if not url:
         raise InvalidConfig('No primary is configured')
     try:
@@ -122,23 +127,55 @@ async def put_settings(_: Request, body: schema.SyncSettingsRequest):
         changes['role'] = body.role
     if body.sync_primary_url is not None:
         try:
-            changes['sync_primary_url'] = lib.normalize_primary_url(body.sync_primary_url) \
+            changes['primary_url'] = lib.normalize_primary_url(body.sync_primary_url) \
                 if body.sync_primary_url else None
         except ValueError as e:
             raise InvalidConfig(str(e))
-    for key in ('sync_window_start', 'sync_window_end'):
-        value = getattr(body, key)
+    for request_key, config_key in (('sync_window_start', 'window_start'), ('sync_window_end', 'window_end')):
+        value = getattr(body, request_key)
         if value is None:
             continue
         if value and not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', value):
-            raise InvalidConfig(f'{key} must be in HH:MM format')
-        changes[key] = value or None
+            raise InvalidConfig(f'{request_key} must be in HH:MM format')
+        changes[config_key] = value or None
+    if body.backup_directory is not None or body.backup_device_uuid is not None:
+        changes.update(_backup_drive_changes(body.backup_directory, body.backup_device_uuid))
     if not changes:
         raise InvalidConfig('No settings to change')
 
-    get_wrolpi_config().update(changes)
+    get_sync_config().update(changes)
     if changes.get('role') == 'secondary':
         # A secondary's library comes from its primary.
         from wrolpi.downloader import download_manager
         download_manager.disable()
     return response.empty()
+
+
+def _backup_drive_changes(directory: str, uuid: str) -> dict:
+    if not directory and not uuid:
+        # No backup drive.
+        return dict(backup_directory=None, backup_device_uuid=None)
+    if DOCKERIZED:
+        raise InvalidConfig('Backup drives are not supported in Docker')
+    if reason := backup.check_backup_target(directory, uuid):
+        raise InvalidConfig(reason)
+    return dict(backup_directory=directory.rstrip('/'), backup_device_uuid=uuid)
+
+
+@sync_bp.post('/backup/run')
+@openapi.definition(summary='Copy the media directory to the backup drive now')
+@wrol_mode_check
+async def post_backup_run(_: Request):
+    if not get_sync_config().backup_directory:
+        raise InvalidConfig('No backup drive is configured')
+    if flags.backup_running.is_set():
+        raise InvalidConfig('A backup is already running')
+    backup.request_backup()
+    return response.empty(HTTPStatus.ACCEPTED)
+
+
+@sync_bp.post('/backup/cancel')
+@openapi.definition(summary='Stop the running backup')
+async def post_backup_cancel(_: Request):
+    backup.request_backup_cancel()
+    return response.empty(HTTPStatus.ACCEPTED)

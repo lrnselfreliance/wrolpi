@@ -2,12 +2,14 @@ import json
 from http import HTTPStatus
 
 import pytest
+import yaml
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.common import get_wrolpi_config, enable_wrol_mode
 from wrolpi.downloader import download_manager
 from wrolpi.sync import lib
+from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_sync_status, update_sync_status
 
 
@@ -52,15 +54,20 @@ async def test_run(async_client, test_wrolpi_config, make_secondary):
 
 
 @pytest.mark.asyncio
-async def test_settings(async_client, test_wrolpi_config, test_download_manager, await_switches):
+async def test_settings(async_client, test_directory, test_wrolpi_config, test_download_manager, await_switches):
     body = dict(role='secondary', sync_primary_url=' https://10.0.0.5:8443/ ', sync_window_start='01:00',
                 sync_window_end='05:00')
     request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    config = get_wrolpi_config()
+    config = get_sync_config()
     assert config.role == 'secondary'
-    assert config.sync_primary_url == 'https://10.0.0.5:8443'
-    assert (config.sync_window_start, config.sync_window_end) == ('01:00', '05:00')
+    assert config.primary_url == 'https://10.0.0.5:8443'
+    assert (config.window_start, config.window_end) == ('01:00', '05:00')
+    # Saved to sync.yaml, not wrolpi.yaml.
+    await await_switches()
+    saved = yaml.safe_load((test_directory / 'config/sync.yaml').read_text())
+    assert (saved['role'], saved['primary_url']) == ('secondary', 'https://10.0.0.5:8443')
+    assert 'role' not in get_wrolpi_config().dict()
     assert download_manager.is_disabled, 'a secondary does not download'
 
     request, response = await async_client.get('/api/settings')
@@ -74,7 +81,7 @@ async def test_settings(async_client, test_wrolpi_config, test_download_manager,
     body = dict(sync_window_start='', sync_window_end='')
     request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert config.sync_window_start is None
+    assert config.window_start is None
 
     for body in (dict(role='tertiary'), dict(sync_primary_url='ftp://primary'),
                  dict(sync_primary_url='https://user:password@primary'),

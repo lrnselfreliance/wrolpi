@@ -9,6 +9,7 @@ from wrolpi.common import get_wrolpi_config, set_test_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
 from wrolpi.sync import lib
+from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.conftest import manifest_page
 from wrolpi.sync.status import get_sync_status, update_sync_status
 from wrolpi.tags import get_tags_config, Tag, TagFile
@@ -365,7 +366,7 @@ async def test_sync_configs_wrolpi_yaml(async_client, primary, secondary_directo
     config = get_wrolpi_config()
     assert config.videos_destination == 'my videos/%(channel_name)s'
     assert config.ignored_directories == ['config', 'tags', 'private']
-    assert config.role == 'secondary'
+    assert get_sync_config().role == 'secondary', 'the role is in sync.yaml, which is never synced'
     assert config.hotspot_ssid == 'WROLPi'
     assert config.nav_color == 'violet'
 

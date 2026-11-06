@@ -13,6 +13,7 @@ import pytest
 
 from wrolpi.common import get_wrolpi_config, set_test_media_directory
 from wrolpi.sync import lib
+from wrolpi.sync.config import get_sync_config
 
 
 class CaddyLikeHandler(http.server.SimpleHTTPRequestHandler):
@@ -119,8 +120,7 @@ def make_secondary(test_wrolpi_config):
     """Make this WROLPi a secondary of `url`."""
 
     def make(url: str = 'http://127.0.0.1:1'):
-        config = get_wrolpi_config()
-        config._config.update(role='secondary', sync_primary_url=url)
+        get_sync_config()._config.update(role='secondary', primary_url=url)
 
     return make
 

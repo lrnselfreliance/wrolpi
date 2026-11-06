@@ -10,6 +10,7 @@ from wrolpi.dates import is_within_daily_window
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.sync import lib
+from wrolpi.sync.config import get_sync_config
 from wrolpi.tags import get_tags_config
 
 
@@ -18,6 +19,8 @@ def test_synced_configs_exist(test_channels_config):
     assert SYNCED_CONFIG_FILE_NAMES - {'inventory/catalog.yaml'} <= set(get_all_configs())
     assert 'repos.yaml' not in SYNCED_CONFIG_FILE_NAMES, 'git clones are not synced'
     assert 'wrolpi.yaml' not in SYNCED_CONFIG_FILE_NAMES, 'wrolpi.yaml is merged, it holds local settings'
+    assert 'sync.yaml' not in SYNCED_CONFIG_FILE_NAMES, "a secondary's role is its own"
+    assert 'sync.yaml' in get_all_configs()
 
 
 @pytest.mark.asyncio
@@ -87,12 +90,12 @@ def test_is_within_daily_window(start, end, current, expected):
 
 
 def test_sync_is_due(test_wrolpi_config):
-    config = get_wrolpi_config()
+    config = get_sync_config()
     local_now = datetime(2026, 11, 5, 2, 0, tzinfo=timezone.utc)
     never = dict(finished_at=None)
     assert not lib.sync_is_due(never, local_now), 'no window is "Sync now" only'
 
-    config._config.update(sync_window_start='01:00', sync_window_end='05:00')
+    config._config.update(window_start='01:00', window_end='05:00')
     assert lib.sync_is_due(never, local_now)
     assert not lib.sync_is_due(never, local_now.replace(hour=6)), 'outside the window'
 

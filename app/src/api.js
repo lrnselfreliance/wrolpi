@@ -466,6 +466,19 @@ export async function cancelSync() {
     return await apiPost(`${API_URI}/sync/cancel`);
 }
 
+export async function runBackup() {
+    const response = await apiPost(`${API_URI}/sync/backup/run`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not start the backup.');
+        toast({type: 'error', title: 'Backup Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function cancelBackup() {
+    return await apiPost(`${API_URI}/sync/backup/cancel`);
+}
+
 export async function testSync() {
     const response = await apiGet(`${API_URI}/sync/test`);
     if (response.ok) {

@@ -41,6 +41,14 @@ class Events:
         send_event('downloads_disabled', message, subject='downloads')
 
     @staticmethod
+    def send_backup_completed(message: str):
+        send_event('backup_completed', message, subject='backup')
+
+    @staticmethod
+    def send_backup_failed(message: str):
+        send_event('backup_failed', message, subject='backup')
+
+    @staticmethod
     def send_sync_completed(message: str):
         send_event('sync_completed', message, subject='sync')
 

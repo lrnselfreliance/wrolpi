@@ -9,6 +9,8 @@ from wrolpi.errors import InvalidDownload, ValidationError
 
 @dataclass
 class SettingsResponse:
+    backup_device_uuid: Optional[str]
+    backup_directory: Optional[str]
     download_manager_disabled: bool
     download_manager_stopped: bool
     download_daily_limit_global: Optional[int]
@@ -120,6 +122,7 @@ class SettingsRequest:
 
 @dataclass
 class FlagsStatusResponse:
+    backup_running: bool
     db_up: bool
     file_worker_busy: bool
     file_worker_cleanup: bool
@@ -219,6 +222,25 @@ class SyncStatusResponse:
 
 
 @dataclass
+class BackupStatusResponse:
+    """The progress of copying this WROLPi's media directory to its backup drive (see wrolpi.sync.backup)."""
+    state: str  # 'idle', 'running', or 'error'
+    phase: Optional[str]  # 'files', 'database', or None
+    requested: bool
+    cancel_requested: bool
+    started_at: Optional[str]
+    finished_at: Optional[str]
+    last_success_at: Optional[str]
+    last_error: Optional[str]
+    last_skip_reason: Optional[str]
+    directory: Optional[str]
+    bytes_transferred: int
+    percent: int
+    files_transferred: int
+    files_to_check: int
+
+
+@dataclass
 class StatusResponse:
     """The response of GET /api/status.
 
@@ -232,6 +254,7 @@ class StatusResponse:
     `disk_bandwidth_stats` and `nic_bandwidth_stats` were declared here after the handler had
     stopped returning them; hotspot and throttle moved to the Controller.
     """
+    backup: BackupStatusResponse
     cpu_stats: CPUStatusResponse
     dockerized: bool
     # Declared `int` for a long time while the handler sent the summary object, so the published

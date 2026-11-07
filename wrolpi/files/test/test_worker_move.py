@@ -1,11 +1,16 @@
 """Tests for the FileWorker move task."""
+import asyncio
 import contextlib
+import time
 
 import pytest
+from sqlalchemy import event, text
 
 from wrolpi.conftest import production_like_sessions, write_lock_held_briefly
+from wrolpi.db import get_db_session
+from wrolpi.files import move as move_module
 from wrolpi.files import worker as worker_module
-from wrolpi.files.lib import _move_file_group_files
+from wrolpi.files.lib import _move_file_group_files, MOVE_CHUNK_SIZE
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.files.worker import file_worker, FileTask, FileTaskType, FileWorkerJobFailed, build_move_plan_bulk
 
@@ -719,3 +724,86 @@ async def test_file_worker_move_survives_concurrent_writer(
         session = maker()
         fg = session.query(FileGroup).one()
         assert fg.primary_path == dest / 'file1.txt', 'FileGroup was not updated to the new path'
+
+
+@pytest.mark.asyncio
+async def test_file_worker_move_does_not_stall_writers_on_the_event_loop(
+        async_client, test_session, test_directory, make_files_structure, monkeypatch
+):
+    """A move's write transaction must not need the event loop to finish.
+
+    The process that moves files also downloads.  A download's write that waits on the move's lock blocks the event
+    loop; if the move's transaction yielded to the event loop (between chunks), it could not resume, and the write
+    would wait out the whole busy_timeout and then fail with "database is locked"."""
+    files = make_files_structure([f'source/{i}.txt' for i in range(MOVE_CHUNK_SIZE + 50)])
+    for file in files:
+        FileGroup.from_paths(test_session, file)
+    test_session.commit()
+    dest = test_directory / 'destination'
+    dest.mkdir()
+
+    file_worker.private_queue.put_nowait(FileTask(FileTaskType.move, files, destination=dest))
+    # Production runs the move in a thread; the fresh connections from `production_like_sessions` allow that here.
+    monkeypatch.setattr(move_module, 'PYTEST', False)
+
+    move_done = asyncio.Event()
+    errors = []
+
+    async def writer():
+        # Writes alongside the move, as a download does.
+        while not move_done.is_set():
+            try:
+                with get_db_session(commit=True):
+                    pass
+            except Exception as e:
+                errors.append(e)
+                return
+            await asyncio.sleep(0.01)
+
+    with production_like_sessions(test_session) as maker:
+        writer_task = asyncio.create_task(writer())
+        start = time.monotonic()
+        try:
+            await file_worker.process_queue()
+        finally:
+            move_done.set()
+            await writer_task
+        elapsed = time.monotonic() - start
+
+        assert not errors, errors
+        assert elapsed < 15, f'the move and the writer took {elapsed:.0f}s; the event loop waited on the move\'s lock'
+        assert sorted(i.name for i in dest.iterdir()) == sorted(i.name for i in files)
+        session = maker()
+        assert {fg.directory for fg in session.query(FileGroup)} == {dest}
+
+
+@pytest.mark.asyncio
+async def test_build_move_plan_does_not_scan_every_file_group(async_client, test_session, test_directory,
+                                                              make_files_structure):
+    """Planning looks up the moved files by primary_path, rather than reading all of file_group (gigabytes on a large
+    library, which made planning a 109 file move take over a minute)."""
+    files = make_files_structure(['source/one.txt', 'source/two.txt'])
+    for file in files:
+        FileGroup.from_paths(test_session, file)
+    for i in range(50):
+        test_session.add(FileGroup(primary_path=test_directory / f'other/{i}.txt', directory=test_directory / 'other'))
+    test_session.commit()
+    # A real library has statistics (PRAGMA optimize), with which SQLite chose to scan file_group for a plain JOIN.
+    test_session.execute(text('ANALYZE'))
+
+    plans = []
+
+    def explain_lookup(conn, cursor, statement, parameters, context, executemany):
+        if 'SELECT fg.id' in statement and 'move_sources' in statement:
+            plans.extend(row[-1] for row in cursor.connection.execute(f'EXPLAIN QUERY PLAN {statement}'))
+
+    engine = test_session.get_bind()
+    event.listen(engine, 'after_cursor_execute', explain_lookup)
+    try:
+        plan, _ = await build_move_plan_bulk(files, test_directory / 'destination')
+    finally:
+        event.remove(engine, 'after_cursor_execute', explain_lookup)
+
+    assert len(plan) == 2
+    assert plans, 'the FileGroup lookup was not run'
+    assert not [i for i in plans if i.startswith('SCAN fg')], plans

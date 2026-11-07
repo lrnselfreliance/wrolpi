@@ -26,6 +26,7 @@ from wrolpi.files.lib import (
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     get_normalized_ignored_directories, remove_files_in_ignored_directories,
 )
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -163,11 +164,13 @@ async def build_move_plan_bulk(
                     [{"path": str(p), "type": 'deleted', "dir": str(p.parent)} for p in deleted_sources],
                 )
 
-            # Single bulk query to get all FileGroups matching our sources
+            # Single bulk query to get all FileGroups matching our sources.  CROSS JOIN makes SQLite read
+            # move_sources first and look each path up in file_group's primary_path index; the temp table has no
+            # statistics, so a plain JOIN scans all of file_group (gigabytes on a large library).
             result = session.execute(text("""
                                           SELECT fg.id, fg.primary_path, fg.directory, ms.source_path, ms.source_type
-                                          FROM file_group fg
-                                                   JOIN move_sources ms ON fg.primary_path = ms.source_path
+                                          FROM move_sources ms
+                                                   CROSS JOIN file_group fg ON fg.primary_path = ms.source_path
                                           """))
 
             # Build lookup of found FileGroups
@@ -293,7 +296,53 @@ class FileMoveMixin:
             return False
         return True
 
-    async def _execute_move_chunks(
+    def _execute_move_plan(
+            self,
+            plan: Dict[pathlib.Path, pathlib.Path],
+            created_directories: Set[pathlib.Path],
+            revert_plan: Dict[pathlib.Path, pathlib.Path],
+    ) -> None:
+        """Move the files and update the DB in one transaction, which commits when this returns.
+
+        This reads FileGroups/Directories then updates them, so it must begin as a writer; a deferred
+        transaction's lock upgrade fails instantly when anything else is writing (see `build_move_plan_bulk`)."""
+        with flags.file_worker_discovery:
+            with get_db_session(commit=True) as session:
+                self._execute_move_chunks(plan, session, created_directories, revert_plan)
+
+    async def _execute_move_plan_off_loop(
+            self,
+            plan: Dict[pathlib.Path, pathlib.Path],
+            created_directories: Set[pathlib.Path],
+            revert_plan: Dict[pathlib.Path, pathlib.Path],
+    ) -> None:
+        """Run `_execute_move_plan` in a thread, so the event loop never waits while the move holds the write lock.
+
+        The process that moves files also downloads.  If the move's transaction yielded to the event loop, a
+        download's write would wait out the whole busy_timeout synchronously -- the event loop cannot resume the
+        move that holds the lock -- and then fail.  In a thread, the move keeps going and the other writer gets the
+        lock when it commits.
+
+        Tests share one connection, which is not safe to use from two threads, so tests run it inline."""
+        if PYTEST:
+            self._execute_move_plan(plan, created_directories, revert_plan)
+            return
+
+        work = asyncio.ensure_future(asyncio.to_thread(self._execute_move_plan, plan, created_directories, revert_plan))
+        try:
+            await asyncio.shield(work)
+        except asyncio.CancelledError:
+            # A thread cannot be interrupted.  Wait for it so a revert never races it; if it committed, the files and
+            # the DB agree, and there is nothing to revert.
+            try:
+                await work
+            except Exception:
+                pass  # It rolled back; the caller reverts the files it moved.
+            else:
+                revert_plan.clear()
+            raise
+
+    def _execute_move_chunks(
             self,
             plan: Dict[pathlib.Path, pathlib.Path],
             session,
@@ -378,7 +427,6 @@ class FileMoveMixin:
                 operation_processed=processed,
                 operation_percent=percent,
             )
-            await asyncio.sleep(0)  # Yield for cancellation
 
         return new_directories
 
@@ -553,14 +601,7 @@ class FileMoveMixin:
                 operation_total=len(plan),
             )
 
-            # Execute the plan in chunks.  This reads FileGroups/Directories then updates them, so
-            # it must begin as a writer; a deferred transaction's lock upgrade fails instantly when
-            # anything else is writing (see `build_move_plan_bulk`).
-            with flags.file_worker_discovery:
-                with get_db_session(commit=True) as session:
-                    await self._execute_move_chunks(
-                        plan, session, created_directories, revert_plan
-                    )
+            await self._execute_move_plan_off_loop(plan, created_directories, revert_plan)
 
             self._cleanup_old_directories(sources, old_directories)
             await self._apply_post_processing()

@@ -1,6 +1,7 @@
 """Tests for the FileWorker move task."""
 import asyncio
 import contextlib
+import threading
 import time
 
 import pytest
@@ -807,3 +808,61 @@ async def test_build_move_plan_does_not_scan_every_file_group(async_client, test
     assert len(plan) == 2
     assert plans, 'the FileGroup lookup was not run'
     assert not [i for i in plans if i.startswith('SCAN fg')], plans
+
+
+def _cancel_like_shutdown(mover, revert_plan, thread_finished):
+    """Run a move in a fresh event loop, and stop it the way the perpetual process shuts down: `run_loops` cancels
+    the file worker loop, stops waiting for it, and `asyncio.run` then cancels every pending task again.
+
+    Returns what the move's caller (`handle_move`) would see when the CancelledError reaches it."""
+    seen = dict()
+
+    async def handle_move():
+        try:
+            await mover._execute_move_plan_off_loop({}, set(), revert_plan)
+        except asyncio.CancelledError:
+            seen['thread_finished'] = thread_finished.is_set()
+            seen['revert_plan'] = dict(revert_plan)
+            raise
+
+    async def serve():
+        task = asyncio.create_task(handle_move())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.wait([task], timeout=0.05)
+
+    asyncio.run(serve())
+    return seen
+
+
+def test_move_thread_is_not_reverted_after_it_commits(monkeypatch):
+    """However often shutdown cancels a move, the caller sees the cancellation only after the move's thread has left
+    its transaction; when it committed, there is nothing to revert."""
+    monkeypatch.setattr(move_module, 'PYTEST', False)
+    mover = move_module.FileMoveMixin()
+    thread_finished = threading.Event()
+
+    def commit_slowly(plan, created_directories, revert_plan):
+        time.sleep(0.5)
+        thread_finished.set()
+
+    mover._execute_move_plan = commit_slowly
+    seen = _cancel_like_shutdown(mover, {'new.txt': 'old.txt'}, thread_finished)
+    assert seen == dict(thread_finished=True, revert_plan={})
+
+
+def test_move_thread_that_rolls_back_is_reverted_after_it_finishes(monkeypatch):
+    """A cancelled move whose thread rolled back keeps its revert plan, so the caller moves the files back, but only
+    after the thread is done moving them."""
+    monkeypatch.setattr(move_module, 'PYTEST', False)
+    mover = move_module.FileMoveMixin()
+    thread_finished = threading.Event()
+
+    def fail_slowly(plan, created_directories, revert_plan):
+        time.sleep(0.5)
+        thread_finished.set()
+        raise RuntimeError('the transaction rolled back')
+
+    mover._execute_move_plan = fail_slowly
+    seen = _cancel_like_shutdown(mover, {'new.txt': 'old.txt'}, thread_finished)
+    assert seen == dict(thread_finished=True, revert_plan={'new.txt': 'old.txt'})

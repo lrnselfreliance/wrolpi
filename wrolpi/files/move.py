@@ -10,6 +10,7 @@ import os
 import pathlib
 import shutil
 import stat as stat_module
+import threading
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, List, Set, Tuple
@@ -29,6 +30,9 @@ from wrolpi.files.lib import (
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
+
+# How often a move waits for its thread to leave the transaction.
+MOVE_THREAD_POLL_SECONDS = 0.05
 
 
 async def build_move_plan_bulk(
@@ -328,19 +332,40 @@ class FileMoveMixin:
             self._execute_move_plan(plan, created_directories, revert_plan)
             return
 
-        work = asyncio.ensure_future(asyncio.to_thread(self._execute_move_plan, plan, created_directories, revert_plan))
-        try:
-            await asyncio.shield(work)
-        except asyncio.CancelledError:
-            # A thread cannot be interrupted.  Wait for it so a revert never races it; if it committed, the files and
-            # the DB agree, and there is nothing to revert.
+        # A thread cannot be interrupted, and the caller reverts `revert_plan` when this raises.  So this returns or
+        # raises only after the thread has left its transaction, however often this task is cancelled meanwhile.
+        # (Shutdown cancels it more than once: the perpetual loops are cancelled, then asyncio.run cancels every
+        # pending task, including any asyncio future of the thread, which then reads "done" while the thread runs.)
+        # The thread's own Event is the only signal that its transaction is over.
+        finished = threading.Event()
+        outcome = dict()
+
+        def run():
             try:
-                await work
-            except Exception:
-                pass  # It rolled back; the caller reverts the files it moved.
-            else:
-                revert_plan.clear()
-            raise
+                self._execute_move_plan(plan, created_directories, revert_plan)
+            except BaseException as e:
+                outcome['error'] = e
+            finally:
+                finished.set()
+
+        asyncio.get_running_loop().run_in_executor(None, run)
+        cancelled = False
+        while not finished.is_set():
+            try:
+                await asyncio.sleep(MOVE_THREAD_POLL_SECONDS)
+            except asyncio.CancelledError:
+                cancelled = True
+                asyncio.current_task().uncancel()
+
+        if error := outcome.get('error'):
+            # It rolled back; the caller reverts the files it moved.
+            if cancelled:
+                raise asyncio.CancelledError() from error
+            raise error
+        if cancelled:
+            # It committed; the files and the DB agree, so there is nothing to revert.
+            revert_plan.clear()
+            raise asyncio.CancelledError()
 
     def _execute_move_chunks(
             self,

@@ -80,6 +80,31 @@ async def test_stop_per_worker_tasks_without_start():
 
 
 @pytest.mark.asyncio
+async def test_finalizing_signals_again_adds_no_routes(test_session, async_client):
+    """Each start of the app finalizes the signal router again (the test client, Sanic's startup, and
+    `finalize_signals_after_auto_routes`).  Sanic's finalize appends a `sanic.__signal__.__init__` handler before it
+    checks whether the router is finalized, so every start left routes behind; after a few hundred tests in one
+    process the compiled router was too deep to compile (RecursionError)."""
+    await async_client.get('/api/echo')
+    before = len(api_app.signal_router.routes)
+
+    # An app that is already started.
+    api_app.signalize()
+    api_app.signalize()
+    assert len(api_app.signal_router.routes) == before
+
+    # What each start does (see `unfinalize_signals_for_auto_routes`).
+    api_app.signal_router.reset()
+    api_app.signalize()
+    assert len(api_app.signal_router.routes) == before
+    assert api_app.signal_router.finalized
+
+    # Signals still dispatch.
+    request, response = await async_client.get('/api/echo')
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_server_start_finalizes_signals_once(test_session, async_client):
     """sanic-ext's automatic HEAD and OPTIONS routes must not re-finalize the signal router once per route; each
     finalize also left one more `sanic.__signal__` route behind."""

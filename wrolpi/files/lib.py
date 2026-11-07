@@ -2099,6 +2099,9 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
                            write: Callable[[], ContextManager[Session]] = None) -> pathlib.Path:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory.
 
+    A Collection's directory is renamed before this returns.  Any other directory is renamed by a queued file worker
+    move, which this does not wait for.
+
     `session` is used to read.  Collections are changed in `write()` (`request.ctx.db.write` in a request), which
     begins as a writer; the files are moved outside it.  Without `write`, Collections are changed in `session`."""
     from wrolpi.files.worker import file_worker
@@ -2121,33 +2124,10 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
         with write() as session:
             await collection.move_collection(new_directory, session, send_events=send_events)
     else:
-        # Regular directory rename - move all paths into the new directory.
-        paths = list(directory.iterdir())
-        try:
-            job_id = file_worker.queue_move(new_directory, paths)
-            await file_worker.wait_for_job(job_id)
-            if send_events:
-                Events.send_file_move_completed(f'Directory has been renamed: {directory}')
-        except Exception:
-            if send_events:
-                Events.send_file_move_failed(f'Directory rename has failed: {directory}')
-            raise
-
-        # Update nested Collections (files already moved by file_worker above).  Read them in the write: the move
-        # took a while, and a transaction begun before it cannot write after another connection has.
-        directory_str = str(directory)
-        with write() as session:
-            nested_collections = session.query(Collection).filter(
-                Collection.directory.like(f'{directory_str}/%')
-            ).all()
-            for coll in nested_collections:
-                relative = coll.directory.relative_to(directory)
-                new_coll_dir = new_directory / relative
-                await coll.move_collection(new_coll_dir, session, send_events=send_events, with_files=False)
-
-        # Remove the old directory (recursive=True to clean up any empty subdirectories
-        # that remained after files were moved out).
-        delete_directory(directory, recursive=True)
+        # Regular directory rename: the file worker moves the contents, updates nested Collections, and removes the
+        # old directory.  This does not wait; a large rename outlasts a request, and the job reports its own
+        # progress and result.
+        file_worker.queue_move(new_directory, list(directory.iterdir()), rename_from=directory)
 
     return new_directory
 

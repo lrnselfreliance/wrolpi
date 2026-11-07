@@ -22,7 +22,7 @@ from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.events import Events
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, get_unique_files_by_stem, glob_shared_stem,
-    group_files_by_stem, delete_directory,
+    group_files_by_stem, delete_directory, directory_or_descendant,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     get_normalized_ignored_directories, remove_files_in_ignored_directories,
 )
@@ -446,6 +446,37 @@ class FileMoveMixin:
                 curs.execute('DELETE FROM directory WHERE path IN (SELECT value FROM json_each(:paths))',
                              {'paths': json.dumps(deleted_dirs_for_db)})
 
+    async def _finish_directory_rename(self, old_directory: pathlib.Path, new_directory: pathlib.Path,
+                                       send_events: bool = True) -> None:
+        """Finish a directory rename after its contents were moved: point nested Collections at the new directory,
+        and remove the old directory.
+
+        Only empty directories are removed, so anything added to the old directory during the move is kept."""
+        # Avoid a circular import; collections.models imports the file worker.
+        from wrolpi.collections.models import Collection
+
+        with get_db_session(commit=True) as session:
+            nested_collections = session.query(Collection).filter(
+                directory_or_descendant(Collection.directory, old_directory),
+                Collection.directory != str(old_directory),
+            ).all()
+            for collection in nested_collections:
+                new_collection_directory = new_directory / collection.directory.relative_to(old_directory)
+                # The files were already moved, so this only updates the Collection and its config.
+                await collection.move_collection(new_collection_directory, session, send_events=send_events,
+                                                 with_files=False)
+
+        if not old_directory.is_dir():
+            return
+        # Deepest first, so a directory is empty once its emptied children are removed.
+        for dirpath, _, _ in os.walk(old_directory, topdown=False):
+            try:
+                delete_directory(pathlib.Path(dirpath))
+            except OSError:
+                pass  # Not empty; something was added during the move.
+        if old_directory.is_dir():
+            logger.warning(f'Renamed directory was not empty after its contents were moved: {old_directory}')
+
     def _revert_move(
             self,
             revert_plan: Dict[pathlib.Path, pathlib.Path],
@@ -501,8 +532,10 @@ class FileMoveMixin:
 
         destination = task.destination
         sources = task.paths
+        rename_from = task.rename_from
 
-        if not destination or not sources:
+        # An empty directory can be renamed; there is nothing to move.
+        if not destination or not (sources or rename_from):
             logger.error('Invalid move task: missing destination or sources')
             self._fail_job(task.job_id, 'Invalid move task: missing destination or sources')
             self.reset_status()
@@ -510,7 +543,8 @@ class FileMoveMixin:
 
         media_directory = get_media_directory()
 
-        if not self._validate_move_paths(sources, destination, media_directory):
+        if not self._validate_move_paths(sources + ([rename_from] if rename_from else []), destination,
+                                         media_directory):
             self._fail_job(task.job_id, 'Move paths are not within the media directory')
             return
 
@@ -522,6 +556,7 @@ class FileMoveMixin:
             task_type='move',
             paths=[str(p) for p in sources],
             destination=str(destination),
+            rename_from=str(rename_from) if rename_from else None,
             operation_total=planning_total,
             operation_processed=0,
             operation_percent=0,
@@ -561,12 +596,19 @@ class FileMoveMixin:
                     await self._execute_move_chunks(
                         plan, session, created_directories, revert_plan
                     )
+            # The move committed; the files and the DB agree, so a later failure must not move the files back.
+            revert_plan.clear()
 
             self._cleanup_old_directories(sources, old_directories)
+            if rename_from:
+                await self._finish_directory_rename(rename_from, destination, send_events=task.send_events)
             await self._apply_post_processing()
 
             logger.info(f'Move completed: {len(plan)} items moved to {destination}')
-            Events.send_file_move_completed(f'Moved {len(sources)} items to {destination}')
+            if rename_from:
+                Events.send_file_move_completed(f'Renamed {rename_from.name} to {destination.name}')
+            else:
+                Events.send_file_move_completed(f'Moved {len(sources)} items to {destination}')
             self._complete_job(task.job_id)
 
         except asyncio.CancelledError:
@@ -583,6 +625,9 @@ class FileMoveMixin:
             self.update_status(status='reverting', error=str(e))
             self._revert_move(revert_plan, created_directories, destination, destination_existed)
             self._fail_job(task.job_id, e)
-            Events.send_file_move_failed(f'Move to {destination} failed: {e}')
+            if rename_from:
+                Events.send_file_move_failed(f'Renaming {rename_from.name} to {destination.name} failed: {e}')
+            else:
+                Events.send_file_move_failed(f'Move to {destination} failed: {e}')
         finally:
             self.reset_status()

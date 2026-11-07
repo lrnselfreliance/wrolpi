@@ -34,6 +34,7 @@ import {BulkTagModal} from "./BulkTagModal";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {UploadModal} from "./Upload";
+import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -328,6 +329,31 @@ export function FileBrowser() {
         }
     }, [browseFiles]);
 
+    // A move or directory rename finishes in the file worker after its request returns (the Files page shows its
+    // progress), so fetch the files again once the file worker is done.
+    const {status: fileWorkerStatus, setFastPolling} = useFileWorkerStatus();
+    const fileWorkerBusy = !!fileWorkerStatus && fileWorkerStatus.status !== 'idle';
+    const fileWorkerWasBusy = React.useRef(false);
+    const awaitingFileWorker = React.useRef(false);
+    useEffect(() => {
+        if (!fileWorkerStatus) {
+            return;
+        }
+        // A job may finish between polls, so a submitted change also fetches at the first idle poll.
+        if (!fileWorkerBusy && (fileWorkerWasBusy.current || awaitingFileWorker.current)) {
+            awaitingFileWorker.current = false;
+            setFastPolling(false);
+            fetchFiles();
+        }
+        fileWorkerWasBusy.current = fileWorkerBusy;
+    }, [fileWorkerStatus]);
+
+    const afterFileWorkerChange = async () => {
+        awaitingFileWorker.current = true;
+        setFastPolling(true);
+        await reset();
+    }
+
     // Clear loading states when file data updates
     useEffect(() => {
         if (loadingFolders.size > 0) {
@@ -413,7 +439,7 @@ export function FileBrowser() {
                 onClose={() => setRenameOpen(false)}
                 onPending={setPending}
                 path={selectedPaths[0]}
-                onSubmit={reset}
+                onSubmit={afterFileWorkerChange}
             /> : null}
         <Button icon={IconArrowsMove}
                 color='teal'
@@ -424,7 +450,7 @@ export function FileBrowser() {
             <MoveModal open={moveOpen}
                        onClose={() => setMoveOpen(false)}
                        paths={selectedPaths}
-                       onSubmit={reset}
+                       onSubmit={afterFileWorkerChange}
             /> : null}
         <Button
             color='blue'

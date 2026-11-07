@@ -360,6 +360,7 @@ async def post_rename(request: Request, body: schema.Rename):
     elif new_path.exists():
         raise FileConflict(f'File already exists: {new_path}')
 
+    is_directory = path.is_dir()
     try:
         await lib.rename(request.ctx.session, path, body.new_name, send_events=True, write=request.ctx.db.write)
     except Exception as e:
@@ -367,12 +368,14 @@ async def post_rename(request: Request, body: schema.Rename):
         cause = str(e).split('\n', 1)[0]
         raise FileConflict(f'Failed to rename {path} to {new_path}: {cause}') from e
 
-    # Refresh the parent directory instead of individual files.
-    # This ensures all related files (e.g., subtitles, posters) are discovered together.
-    # Refreshing individual files causes the FileGroup's files list to be overwritten
-    # with only the specified file, losing track of associated files.
-    parent_dir = new_path.parent
-    file_worker.queue_refresh([parent_dir])
+    if not is_directory:
+        # Refresh the parent directory instead of individual files.
+        # This ensures all related files (e.g., subtitles, posters) are discovered together.
+        # Refreshing individual files causes the FileGroup's files list to be overwritten
+        # with only the specified file, losing track of associated files.
+        # A directory's move keeps its FileGroups up to date, and may still be queued; the file worker runs the
+        # newest task first, so a refresh queued now would scan the directory before it is renamed.
+        file_worker.queue_refresh([new_path.parent])
 
     return response.empty(HTTPStatus.NO_CONTENT)
 

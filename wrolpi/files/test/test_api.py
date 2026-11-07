@@ -1264,10 +1264,108 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
+async def test_rename_directory_does_not_depend_on_the_request(test_session, test_directory, make_files_structure,
+                                                              async_client, refresh_files, await_background_tasks):
+    """A directory rename is finished by the file worker; the request only queues it.
+
+    A large rename outlasts Sanic's RESPONSE_TIMEOUT.  When the request also removed the old directory after the move,
+    a timed-out request left the old directory and its emptied subdirectories behind."""
+    make_files_structure({
+        'models/tools/trowel.stl': 'trowel',
+        'models/tools/tweezers/tweezers.stl': 'tweezers',
+        'models/tools/push block/push block.stl': 'push block',
+    })
+    await refresh_files()
+
+    content = dict(path='models/tools', new_name='hand tools')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_background_tasks()
+    assert (test_directory / 'models/hand tools/trowel.stl').read_text() == 'trowel'
+    assert (test_directory / 'models/hand tools/tweezers/tweezers.stl').read_text() == 'tweezers'
+    assert (test_directory / 'models/hand tools/push block/push block.stl').read_text() == 'push block'
+    left = sorted(str(i.relative_to(test_directory)) for i in (test_directory / 'models').iterdir())
+    assert left == ['models/hand tools'], 'the old directory (and its emptied subdirectories) should be gone'
+    directories = {d.path for d in test_session.query(Directory)}
+    assert not {str(test_directory / 'models/tools'), str(test_directory / 'models/tools/tweezers')} & directories
+    assert {fg.primary_path for fg in test_session.query(FileGroup)} == {
+        test_directory / 'models/hand tools/trowel.stl',
+        test_directory / 'models/hand tools/tweezers/tweezers.stl',
+        test_directory / 'models/hand tools/push block/push block.stl',
+    }
+
+
+@pytest.mark.asyncio
+async def test_rename_directory_finishes_when_the_request_is_cancelled(test_session, test_directory,
+                                                                       make_files_structure, refresh_files,
+                                                                       await_background_tasks):
+    """The rename finishes, and leaves no old directory behind, even if the request is cancelled (as Sanic does on
+    RESPONSE_TIMEOUT) while the move job runs."""
+    import asyncio
+    from wrolpi.files import lib
+    from wrolpi.files.worker import file_worker
+
+    make_files_structure({
+        'models/tools/trowel.stl': 'trowel',
+        'models/tools/tweezers/tweezers.stl': 'tweezers',
+    })
+    await refresh_files()
+
+    real_wait_for_job = file_worker.wait_for_job
+
+    async def wait_then_cancel(job_id, *args, **kwargs):
+        # The job finishes in the file worker, but the request waiting on it is cancelled.
+        await real_wait_for_job(job_id, *args, **kwargs)
+        raise asyncio.CancelledError()
+
+    with mock.patch.object(file_worker, 'wait_for_job', wait_then_cancel):
+        try:
+            await lib.rename(test_session, test_directory / 'models/tools', 'hand tools')
+        except asyncio.CancelledError:
+            pass
+    await await_background_tasks()
+
+    assert (test_directory / 'models/hand tools/tweezers/tweezers.stl').read_text() == 'tweezers'
+    left = sorted(str(i.relative_to(test_directory)) for i in (test_directory / 'models').iterdir())
+    assert left == ['models/hand tools'], 'the old directory (and its emptied subdirectories) should be gone'
+
+
+@pytest.mark.asyncio
+async def test_rename_directory_keeps_what_was_added_during_the_move(test_session, test_directory, make_files_structure,
+                                                                     refresh_files, await_background_tasks):
+    """The old directory is only removed when it is empty; a file added while the rename was queued is kept."""
+    from wrolpi.files import lib
+
+    make_files_structure({'models/tools/trowel.stl': 'trowel'})
+    await refresh_files()
+
+    await lib.rename(test_session, test_directory / 'models/tools', 'hand tools')
+    (test_directory / 'models/tools/late.stl').write_text('late')
+    await await_background_tasks()
+
+    assert (test_directory / 'models/hand tools/trowel.stl').read_text() == 'trowel'
+    assert (test_directory / 'models/tools/late.stl').read_text() == 'late'
+
+
+@pytest.mark.asyncio
+async def test_rename_empty_directory(test_session, test_directory, async_client, await_background_tasks):
+    (test_directory / 'empty').mkdir()
+
+    content = dict(path='empty', new_name='still empty')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_background_tasks()
+
+    assert not (test_directory / 'empty').exists()
+    assert (test_directory / 'still empty').is_dir()
+
+
+@pytest.mark.asyncio
 async def test_rename_directory_stale_destination_fails_promptly(
-        test_session, test_directory, make_files_structure, async_client, refresh_files
+        test_session, test_directory, make_files_structure, async_client, refresh_files, await_background_tasks,
+        events_fixture,
 ):
-    """A directory rename that collides with a stale FileGroup must fail promptly.
+    """A directory rename that collides with a stale FileGroup must fail promptly, and report the move's error.
 
     Regression: the move's IntegrityError left the job 'pending', so
     POST /api/files/rename hung until wait_for_job's 300s timeout.
@@ -1281,6 +1379,7 @@ async def test_rename_directory_stale_destination_fails_promptly(
     content = dict(path='dir-a', new_name='dir-b')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_background_tasks()
 
     # Remove dest on disk without refreshing; recreate the old source.
     shutil.rmtree(test_directory / 'dir-b')
@@ -1291,10 +1390,16 @@ async def test_rename_directory_stale_destination_fails_promptly(
         async_client.post('/api/files/rename', content=json.dumps(content)),
         timeout=5,
     )
-    assert response.status_code == HTTPStatus.CONFLICT, response.json
-    error = (response.json or {}).get('error') or ''
-    # The recorded move error, not just "Failed to rename …".
-    assert 'UNIQUE' in error.upper() or 'constraint' in error.lower(), response.json
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    await asyncio.wait_for(await_background_tasks(), timeout=5)
+
+    # The rename job reports the recorded move error, and the files are moved back.
+    failed = events_fixture.get_by_name('file_move_failed')
+    assert failed, events_fixture.events
+    error = failed[0]['message']
+    assert 'Renaming dir-a to dir-b failed' in error
+    assert 'UNIQUE' in error.upper() or 'constraint' in error.lower(), error
+    assert (test_directory / 'dir-a/one.txt').read_text() == 'hello'
 
 
 @pytest.mark.asyncio

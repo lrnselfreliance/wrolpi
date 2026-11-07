@@ -6,6 +6,8 @@ import {FileBrowser, filterBrowseFiles} from './FileBrowser';
 import {renderWithProviders} from '../test-utils';
 import {SettingsContext} from '../contexts/contexts';
 import {FilePreviewContext} from './FilePreview';
+import {FileWorkerStatusContext} from '../contexts/FileWorkerStatusContext';
+import {fileWorkerStatusFixture} from '../test-fixtures';
 
 // Mock the API functions
 jest.mock('../api', () => ({
@@ -59,8 +61,13 @@ jest.mock('react-dropzone', () => ({
 // Import mocked hooks for manipulation
 import {useBrowseFiles, useElementWidth, useWROLMode} from '../hooks/customHooks';
 
+// Set by the wrapper so a test can change the file worker's status, as a poll would.
+let setFileWorkerStatus;
+
 // Create wrapper with all required contexts
 const AllContextsWrapper = ({children}) => {
+    const [fileWorkerStatus, setStatus] = React.useState({status: 'idle'});
+    setFileWorkerStatus = setStatus;
     const settingsValue = {
         settings: {ignored_directories: []},
         fetchSettings: jest.fn(),
@@ -71,11 +78,13 @@ const AllContextsWrapper = ({children}) => {
     };
 
     return (
-        <SettingsContext.Provider value={settingsValue}>
-            <FilePreviewContext.Provider value={filePreviewValue}>
-                {children}
-            </FilePreviewContext.Provider>
-        </SettingsContext.Provider>
+        <FileWorkerStatusContext.Provider value={fileWorkerStatusFixture({status: fileWorkerStatus})}>
+            <SettingsContext.Provider value={settingsValue}>
+                <FilePreviewContext.Provider value={filePreviewValue}>
+                    {children}
+                </FilePreviewContext.Provider>
+            </SettingsContext.Provider>
+        </FileWorkerStatusContext.Provider>
     );
 };
 
@@ -396,6 +405,57 @@ describe('FileBrowser', () => {
             const checkboxes = screen.getAllByRole('checkbox');
             expect(checkboxes.length).toBe(3);
             checkboxes.forEach(cb => expect(cb).not.toBeChecked());
+        });
+    });
+
+    describe('File worker changes', () => {
+        it('fetches the files again when the file worker finishes', async () => {
+            const mockFetchFiles = jest.fn();
+            useBrowseFiles.mockReturnValue({
+                browseFiles: mockBrowseFiles,
+                openFolders: [],
+                setOpenFolders: jest.fn(),
+                fetchFiles: mockFetchFiles,
+            });
+            renderFileBrowser(<FileBrowser/>);
+
+            await act(async () => setFileWorkerStatus({status: 'moving', rename_from: '/media/wrolpi/testdir'}));
+            expect(mockFetchFiles).not.toHaveBeenCalled();
+
+            await act(async () => setFileWorkerStatus({status: 'idle'}));
+            expect(mockFetchFiles).toHaveBeenCalledTimes(1);
+        });
+
+        it('fetches the files again after a rename, even when the job finished between polls', async () => {
+            const mockFetchFiles = jest.fn();
+            require('../api').renamePath.mockResolvedValue();
+            useBrowseFiles.mockReturnValue({
+                browseFiles: mockBrowseFiles,
+                openFolders: [],
+                setOpenFolders: jest.fn(),
+                fetchFiles: mockFetchFiles,
+            });
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select testdir/ (the second checkbox) and rename it.
+            await act(async () => fireEvent.click(screen.getAllByRole('checkbox')[1]));
+            const renameButton = document.querySelector('.tabler-icon-cursor-text').closest('button');
+            await act(async () => fireEvent.click(renameButton));
+            const nameInput = await screen.findByDisplayValue(/^testdir/);
+            await act(async () => fireEvent.change(nameInput, {target: {value: 'newdir'}}));
+            await act(async () => fireEvent.click(screen.getByRole('button', {name: 'Rename'})));
+
+            expect(require('../api').renamePath).toHaveBeenCalledWith('testdir/', 'newdir');
+            // The request returned; fetched once, before the file worker moved anything.
+            expect(mockFetchFiles).toHaveBeenCalledTimes(1);
+
+            // The next poll finds the file worker idle; the job may already be done, so fetch again.
+            await act(async () => setFileWorkerStatus({status: 'idle'}));
+            expect(mockFetchFiles).toHaveBeenCalledTimes(2);
+
+            // Later idle polls do not fetch.
+            await act(async () => setFileWorkerStatus({status: 'idle'}));
+            expect(mockFetchFiles).toHaveBeenCalledTimes(2);
         });
     });
 

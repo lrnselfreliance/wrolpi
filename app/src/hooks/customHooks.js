@@ -1083,14 +1083,22 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 export const useBrowseFiles = () => {
     const [browseFiles, setBrowseFiles] = useState(null);
     const [openFolders, setOpenFolders] = useAllQuery('folders');
+    // Only the latest fetch may set the files; an older one that settles late would show files that have since
+    // been moved or renamed.
+    const latestFetchRef = React.useRef(0);
 
     const fetchFiles = async () => {
+        const fetchId = ++latestFetchRef.current;
         try {
             const files = await getFiles(openFolders);
-            setBrowseFiles(files);
+            if (fetchId === latestFetchRef.current) {
+                setBrowseFiles(files);
+            }
         } catch (e) {
             console.error(e);
-            setBrowseFiles(undefined); // Display error.
+            if (fetchId === latestFetchRef.current) {
+                setBrowseFiles(undefined); // Display error.
+            }
         }
     }
 

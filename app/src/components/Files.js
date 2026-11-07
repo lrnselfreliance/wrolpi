@@ -915,7 +915,12 @@ export function FilesSearchView({
     </>
 }
 
-function getPhaseLabel(status) {
+function getPhaseLabel(status, renameFrom) {
+    if (renameFrom && (status === 'planning' || status === 'moving')) {
+        // A directory rename is a move of the directory's contents.
+        const name = renameFrom.split('/').filter(Boolean).pop();
+        return `Rename ${name}: ${status === 'planning' ? 'Planning' : 'Moving'}`;
+    }
     switch (status) {
         case 'counting':
             return 'Counting';
@@ -1037,8 +1042,8 @@ export function RefreshSteps({progress}) {
     </div>
 }
 
-function RefreshProgressBar({status, operation_total, operation_processed, operation_percent, error}) {
-    const phaseLabel = getPhaseLabel(status);
+function RefreshProgressBar({status, operation_total, operation_processed, operation_percent, error, rename_from}) {
+    const phaseLabel = getPhaseLabel(status, rename_from);
 
     if (!phaseLabel) {
         return null;
@@ -1064,7 +1069,7 @@ export function FilesRefreshProgress() {
         return null;
     }
 
-    const {status, operation_total, operation_processed, operation_percent, error} = progress;
+    const {status, operation_total, operation_processed, operation_percent, error, rename_from} = progress;
 
     // Show Steps component AND progress bar for global refresh operations
     if (isGlobalRefresh(progress)) {
@@ -1080,13 +1085,14 @@ export function FilesRefreshProgress() {
         </>;
     }
 
-    // Show just progress bar for other operations (moves, reorganize, targeted refresh)
+    // Show just progress bar for other operations (moves, renames, reorganize, targeted refresh)
     return <RefreshProgressBar
         status={status}
         operation_total={operation_total}
         operation_processed={operation_processed}
         operation_percent={operation_percent}
         error={error}
+        rename_from={rename_from}
     />;
 }
 

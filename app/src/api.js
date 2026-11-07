@@ -1927,13 +1927,31 @@ export async function searchDirectories(path) {
     }
 }
 
+/**
+ * Returns the file worker job id of a queued rename (a directory), or null when the rename is already done.
+ */
 export async function renamePath(path, newName) {
     const body = {path, new_name: newName};
     const response = await apiPost(`${API_URI}/files/rename`, body);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Failed to rename!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
+        return null;
     }
+    const json = await response.json();
+    return json['job_id'] || null;
+}
+
+/**
+ * Returns a file worker job's status ('pending', 'complete', or 'failed'), or null if it is unknown.
+ */
+export async function fetchFileWorkerJobStatus(jobId) {
+    const response = await apiGet(`${API_URI}/files/jobs/${encodeURIComponent(jobId)}`);
+    if (!response.ok) {
+        return null;
+    }
+    const json = await response.json();
+    return json['status'];
 }
 
 export async function movePaths(destination, paths) {

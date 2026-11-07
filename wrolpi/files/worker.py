@@ -84,6 +84,8 @@ class FileTask:
     task_type: FileTaskType
     paths: list[pathlib.Path]
     destination: pathlib.Path = None  # For move tasks
+    # For a directory rename's move: the renamed directory, which the move removes once its contents are moved.
+    rename_from: pathlib.Path = None
     count: int = None
     found_directories: set[pathlib.Path] = None  # Directories found during count phase
     unchanged_files: bool = None
@@ -136,6 +138,7 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
             task_type=None,
             paths=[],
             destination=None,
+            rename_from=None,
             error=None,
             operation_total=0,
             operation_processed=0,
@@ -268,19 +271,22 @@ class FileWorker(FileMoveMixin, FileReorganizeMixin):
         logger.info('Refreshing all files because no refresh has completed')
         return self.queue_refresh([get_media_directory()])
 
-    def queue_move(self, destination: pathlib.Path, sources: list[pathlib.Path]) -> str:
+    def queue_move(self, destination: pathlib.Path, sources: list[pathlib.Path],
+                   rename_from: pathlib.Path = None) -> str:
         """Queue a move task for background processing.
 
         Args:
             destination: Target directory (absolute path)
             sources: List of files/directories to move (absolute paths)
+            rename_from: The directory being renamed to `destination` (`sources` are its contents).  The move
+                finishes the whole rename, so it does not depend on the request that queued it.
 
         Returns:
             Job ID for tracking completion
         """
         import uuid
         job_id = f'move-{uuid.uuid4().hex[:8]}'
-        task = FileTask(FileTaskType.move, sources, destination=destination, job_id=job_id)
+        task = FileTask(FileTaskType.move, sources, destination=destination, job_id=job_id, rename_from=rename_from)
         self._set_job_status(job_id, 'pending')
         self.public_queue.put_nowait(task)
         return job_id

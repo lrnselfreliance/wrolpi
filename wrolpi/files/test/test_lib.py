@@ -1363,7 +1363,7 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
 
 @pytest.mark.asyncio
 async def test_move_directory(async_client, test_session, test_directory, make_files_structure,
-                              assert_directories, refresh_files):
+                              assert_directories, refresh_files, await_background_tasks):
     """A Directory record is deleted when it's directory is deleted."""
     make_files_structure({
         'foo/one.txt': 'one',
@@ -1373,6 +1373,7 @@ async def test_move_directory(async_client, test_session, test_directory, make_f
 
     bar = test_directory / 'bar'
     await lib.rename(test_session, test_directory / 'foo', 'bar')
+    await await_background_tasks()
     assert (bar / 'one.txt').read_text() == 'one'
     assert_directories({'bar'})
 

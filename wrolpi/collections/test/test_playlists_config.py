@@ -306,7 +306,7 @@ async def test_rename_file_updates_playlists_config(
 
     request, response = await async_client.post(
         '/api/files/rename', json=dict(path='guide.pdf', new_name='manual.pdf'))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     await await_switches()
 
     await _assert_playlist_survives_reimport(test_session, playlists_config, 'manual.pdf')

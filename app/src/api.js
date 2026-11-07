@@ -392,6 +392,8 @@ export async function getSettings() {
         const content = await response.json();
         return {
             archive_destination: content.archive_destination,
+            backup_device_uuid: content.backup_device_uuid,
+            backup_directory: content.backup_directory,
             download_manager_disabled: content.download_manager_disabled,
             download_manager_stopped: content.download_manager_stopped,
             download_daily_limit_global: content.download_daily_limit_global,
@@ -427,6 +429,7 @@ export async function getSettings() {
             throttle_on_startup: content.throttle_on_startup,
             throttle_status: content.throttle_status,
             timezone: content.timezone,
+            version: content.version,
             videos_destination: content.videos_destination,
             wrol_mode: content.wrol_mode,
             zims_destination: content.zims_destination,

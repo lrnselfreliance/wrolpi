@@ -351,7 +351,7 @@ def test_is_excluded():
 
 
 def test_list_local_directories(test_directory):
-    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'zims'):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'zims', 'lost+found'):
         (test_directory / i).mkdir(parents=True)
     (test_directory / 'file.txt').write_text('a file')
     (test_directory / 'link').symlink_to(test_directory / 'Movies')
@@ -366,7 +366,7 @@ def test_list_local_directories(test_directory):
 
 @pytest.mark.asyncio
 async def test_list_primary_directories(primary, secondary_directory, make_secondary):
-    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden'):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'lost+found'):
         (primary.directory / i).mkdir(parents=True)
     (primary.directory / 'file.txt').write_text('a file')
     set_test_media_directory(secondary_directory)

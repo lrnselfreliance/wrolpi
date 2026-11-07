@@ -71,6 +71,8 @@ MAX_EXCLUDED_DIRECTORIES = 500
 # Top-level directories never written by a sync: the configs and database, and the Tags Directory (hard links that
 # the secondary rebuilds from tags.yaml).
 PROTECTED_DIRECTORIES = frozenset({'config', 'tags'})
+# Top-level folders never offered for exclusion: the protected ones, and the root-only folder of every ext4 drive.
+UNLISTED_DIRECTORIES = PROTECTED_DIRECTORIES | {'lost+found'}
 # Files that are still being downloaded on the primary: aria2 and yt-dlp partials, and yt-dlp format files.
 INCOMPLETE_FILE = re.compile(r'(\.part|\.aria2|\.ytdl|\.temp)$|\.f\d{2,4}\.[^.]+$')
 
@@ -237,7 +239,7 @@ def list_local_directories(path: str) -> List[dict]:
         for entry in entries:
             if entry.name.startswith('.') or not entry.is_dir(follow_symlinks=False):
                 continue
-            if not path and entry.name in PROTECTED_DIRECTORIES:
+            if not path and entry.name in UNLISTED_DIRECTORIES:
                 continue
             directories.append(dict(name=entry.name, path=f'{path}/{entry.name}' if path else entry.name))
     return sorted(directories, key=lambda i: i['name'].lower())
@@ -255,7 +257,7 @@ async def list_primary_directories(path: str) -> List[dict]:
         name = (entry.get('name') or '').rstrip('/')
         if not entry.get('is_dir') or not name or name.startswith('.') or '/' in name:
             continue
-        if not path and name in PROTECTED_DIRECTORIES:
+        if not path and name in UNLISTED_DIRECTORIES:
             continue
         directories.append(dict(name=name, path=f'{path}/{name}' if path else name))
     return sorted(directories, key=lambda i: i['name'].lower())

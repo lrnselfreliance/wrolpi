@@ -134,7 +134,7 @@ async def test_settings_excluded_directories(async_client, test_directory, test_
 
 @pytest.mark.asyncio
 async def test_directories(async_client, test_directory, test_wrolpi_config):
-    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden'):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'lost+found'):
         (test_directory / i).mkdir(parents=True, exist_ok=True)
 
     request, response = await async_client.post('/api/sync/directories', content=json.dumps(dict(path='')))

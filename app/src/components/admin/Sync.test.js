@@ -2,7 +2,9 @@ import React from 'react';
 import {fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../../test-utils';
 import {backupStatusFixture, settingsFixture, statusFixture, syncStatusFixture} from '../../test-fixtures';
-import {BackupDriveSection, backupDriveOptions, SecondaryRoleMessage, SyncingOverlay, SyncSection} from './Sync';
+import {
+    BackupDriveSection, backupDriveOptions, SecondaryRoleMessage, splitBackupDirectory, SyncingOverlay, SyncSection,
+} from './Sync';
 
 jest.mock('../../api/controller', () => ({
     getDisks: jest.fn(),
@@ -172,6 +174,68 @@ describe('BackupDriveSection', () => {
         renderWithProviders(<BackupDriveSection/>, {status: {status: statusFixture({dockerized: true})}});
         expect(screen.queryByText('Backup Drive')).not.toBeInTheDocument();
         expect(getDisks).not.toHaveBeenCalled();
+    });
+});
+
+describe('splitBackupDirectory', () => {
+    const options = [
+        {value: '/media/backup', uuid: 'uuid-backup'},
+        {value: '/media/backup/nested', uuid: 'uuid-nested'},
+    ];
+
+    it('finds the drive and the folder on it', () => {
+        expect(splitBackupDirectory('/media/backup', 'uuid-backup', options))
+            .toEqual({drive: '/media/backup', folder: ''});
+        expect(splitBackupDirectory('/media/backup/wrolpi/library', 'uuid-backup', options))
+            .toEqual({drive: '/media/backup', folder: 'wrolpi/library'});
+    });
+
+    it('prefers the drive with the saved UUID', () => {
+        expect(splitBackupDirectory('/media/backup/nested/wrolpi', 'uuid-nested', options))
+            .toEqual({drive: '/media/backup/nested', folder: 'wrolpi'});
+        expect(splitBackupDirectory('/media/backup/nested/wrolpi', 'uuid-backup', options))
+            .toEqual({drive: '/media/backup', folder: 'nested/wrolpi'});
+    });
+
+    it('does not mistake a similarly named drive', () => {
+        expect(splitBackupDirectory('/media/backup2/wrolpi', 'x', options)).toEqual({drive: '/media/backup2/wrolpi', folder: ''});
+    });
+
+    it('is empty without a backup', () => {
+        expect(splitBackupDirectory('', '', options)).toEqual({drive: '', folder: ''});
+    });
+});
+
+describe('BackupDriveSection folder', () => {
+    it('saves a folder on the chosen drive', async () => {
+        renderWithProviders(<BackupDriveSection/>);
+        await waitFor(() => expect(getDisks).toHaveBeenCalled());
+        fireEvent.click(screen.getByDisplayValue('None'));
+        fireEvent.click(await screen.findByText('Decay2of2 (9.1T) at /media/wrolpi_backup'));
+        fireEvent.change(screen.getByPlaceholderText('The whole drive'), {target: {value: '/wrolpi/library/'}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
+            backup_directory: '/media/wrolpi_backup/wrolpi/library', backup_device_uuid: 'uuid-backup',
+        }));
+    });
+
+    it('shows the saved folder', async () => {
+        const settings = {settings: settingsFixture({backup_directory: '/media/wrolpi_backup/wrolpi',
+                backup_device_uuid: 'uuid-backup'})};
+        renderWithProviders(<BackupDriveSection/>, {settings});
+        expect(await screen.findByDisplayValue('Decay2of2 (9.1T) at /media/wrolpi_backup')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('The whole drive')).toHaveValue('wrolpi');
+    });
+});
+
+describe('BackupDriveSection database phase', () => {
+    it('cannot be stopped while the database is copied', async () => {
+        const settings = {settings: settingsFixture({backup_directory: '/media/wrolpi_backup',
+                backup_device_uuid: 'uuid-backup'})};
+        const status = {status: statusFixture({flags: {backup_running: true},
+                backup: backupStatusFixture({state: 'running', phase: 'database'})})};
+        renderWithProviders(<BackupDriveSection/>, {settings, status});
+        expect((await screen.findByText('Stop Backup')).closest('button')).toBeDisabled();
     });
 });
 

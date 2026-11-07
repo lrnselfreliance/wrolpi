@@ -240,6 +240,21 @@ export function backupDriveOptions(disks, mediaDirectory) {
         .map(d => ({value: d.mountpoint, uuid: d.uuid, label: `${d.label || d.name} (${d.size}) at ${d.mountpoint}`}));
 }
 
+/** Split a saved backup directory into the drive it is on (its option) and the folder on that drive. */
+export function splitBackupDirectory(directory, uuid, options) {
+    if (!directory) {
+        return {drive: '', folder: ''};
+    }
+    const onDrive = options.filter(i => directory === i.value || directory.startsWith(`${i.value}/`));
+    // The drive with the saved UUID, else the deepest mount point that holds the directory.
+    const drive = onDrive.find(i => i.uuid === uuid)
+        || onDrive.sort((a, b) => b.value.length - a.value.length)[0];
+    if (!drive) {
+        return {drive: directory, folder: ''};
+    }
+    return {drive: drive.value, folder: directory.slice(drive.value.length).replace(/^\/+/, '')};
+}
+
 /** The progress and outcome of copying the media directory to the backup drive. */
 export function BackupStatus({backup, running}) {
     if (!backup) {
@@ -247,7 +262,7 @@ export function BackupStatus({backup, running}) {
     }
     return <div>
         {running && <Progress percent={backup.percent}
-                              label={`${backup.phase === 'database' ? 'Copying the database'
+                              label={`${backup.phase === 'database' ? 'Copying the database (this finishes first)'
                                   : `${backup.files_transferred} files`} (${humanFileSize(backup.bytes_transferred)})`}/>}
         <p>
             <b>Last successful backup:</b> {backup.last_success_at
@@ -270,13 +285,18 @@ export function BackupDriveSection() {
     const dockerized = useDockerized();
     const [disks, setDisks] = React.useState(null);
     const [disksError, setDisksError] = React.useState(null);
-    const [directory, setDirectory] = React.useState('');
+    const [drive, setDrive] = React.useState('');
+    const [folder, setFolder] = React.useState('');
     const [saving, setSaving] = React.useState(false);
 
     const savedDirectory = settings?.backup_directory || '';
+    const savedUuid = settings?.backup_device_uuid || '';
+    const options = backupDriveOptions(disks, settings?.media_directory);
+    const saved = splitBackupDirectory(savedDirectory, savedUuid, options);
     React.useEffect(() => {
-        setDirectory(savedDirectory);
-    }, [savedDirectory]);
+        setDrive(saved.drive);
+        setFolder(saved.folder);
+    }, [saved.drive, saved.folder]);
 
     React.useEffect(() => {
         if (dockerized === false) {
@@ -289,11 +309,9 @@ export function BackupDriveSection() {
         return null;
     }
 
-    const options = backupDriveOptions(disks, settings.media_directory);
-    if (savedDirectory && !options.find(i => i.value === savedDirectory)) {
+    if (saved.drive && !options.find(i => i.value === saved.drive)) {
         // The chosen drive is unplugged; keep showing it.
-        options.push({value: savedDirectory, uuid: settings.backup_device_uuid,
-            label: `${savedDirectory} (not mounted)`});
+        options.push({value: saved.drive, uuid: savedUuid, label: `${saved.drive} (not mounted)`});
     }
     const data = [{value: 'none', label: 'None'}, ...options.map(({value, label}) => ({value, label}))];
     const running = status?.flags?.backup_running === true;
@@ -301,9 +319,10 @@ export function BackupDriveSection() {
     const save = async () => {
         setSaving(true);
         try {
-            const chosen = options.find(i => i.value === directory);
+            const chosen = options.find(i => i.value === drive);
+            const cleanFolder = folder.trim().replace(/^\/+|\/+$/g, '');
             const response = await saveSyncSettings({
-                backup_directory: chosen ? chosen.value : '',
+                backup_directory: chosen ? (cleanFolder ? `${chosen.value}/${cleanFolder}` : chosen.value) : '',
                 backup_device_uuid: chosen ? chosen.uuid : '',
             });
             if (response?.ok) {
@@ -332,13 +351,24 @@ export function BackupDriveSection() {
         {disksError && <Message kind='error' icon='warning' title='Could not list drives'>{disksError}</Message>}
         <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
             <label><b>Backup drive</b></label>
-            <Select data={data} value={directory || 'none'} allowDeselect={false} disabled={wrolMode}
-                    onChange={value => setDirectory(value === 'none' ? '' : value)}/>
+            <Select data={data} value={drive || 'none'} allowDeselect={false} disabled={wrolMode}
+                    onChange={value => setDrive(value === 'none' ? '' : value)}/>
         </div>
+        {drive && <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
+            <label><b>Folder on the drive</b></label>
+            <TextInput placeholder='The whole drive' value={folder} disabled={wrolMode}
+                       onChange={e => setFolder(e.currentTarget.value)}/>
+            <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
+                The media directory is copied into this folder; leave it empty to use the whole drive.
+            </p>
+        </div>}
         <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
             <Button color='violet' onClick={save} disabled={wrolMode || saving}>Save</Button>
             {savedDirectory && !running && <Button onClick={backUpNow} disabled={wrolMode}>Back Up Now</Button>}
-            {running && <Button color='red' onClick={cancelBackup}>Stop Backup</Button>}
+            {/* The database snapshot runs to the end; a half-written database is worse than waiting for it. */}
+            {running && <Button color='red' onClick={cancelBackup} disabled={status?.backup?.phase === 'database'}>
+                Stop Backup
+            </Button>}
         </div>
         {savedDirectory && <BackupStatus backup={status?.backup} running={running}/>}
     </Panel>

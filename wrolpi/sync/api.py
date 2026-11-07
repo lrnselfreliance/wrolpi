@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from http import HTTPStatus
 
@@ -159,7 +160,7 @@ def _backup_drive_changes(directory: str, uuid: str) -> dict:
         raise InvalidConfig('Backup drives are not supported in Docker')
     if reason := backup.check_backup_target(directory, uuid):
         raise InvalidConfig(reason)
-    return dict(backup_directory=directory.rstrip('/'), backup_device_uuid=uuid)
+    return dict(backup_directory=os.path.normpath(directory), backup_device_uuid=uuid)
 
 
 @sync_bp.post('/backup/run')

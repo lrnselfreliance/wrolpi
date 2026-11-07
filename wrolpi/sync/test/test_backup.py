@@ -8,6 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 
 import pytest
+import yaml
 
 from wrolpi.common import get_wrolpi_config
 from wrolpi.sync import backup
@@ -71,53 +72,81 @@ def test_parse_progress(line, expected):
 
 @pytest.fixture
 def fake_mounts(test_directory, monkeypatch, tmp_path):
-    """Pretend `/media/backup` is a mounted drive with UUID `uuid-1` (device /dev/sdb1)."""
-    drive = tmp_path / 'backup'
-    drive.mkdir()
+    """Pretend `<mount root>/backup` is a mounted drive with UUID `uuid-1` (device /dev/sdb1).  The mount root is a
+    temporary directory standing in for /media, so folders can be made on the "drive"."""
+    mount_root = (tmp_path / 'media').resolve()
+    drive = mount_root / 'backup'
+    drive.mkdir(parents=True)
     media = test_directory.resolve()
-    real_resolve = pathlib.Path.resolve
+    monkeypatch.setattr(backup, 'MOUNT_ROOT', mount_root)
 
-    def resolve(self, strict=False):
-        if str(self) == '/media/backup':
-            return drive
-        return real_resolve(self, strict=strict)
-
-    state = dict(mounted=True, device=2, uuid_device='/dev/sdb1', source='/dev/sdb1')
-    monkeypatch.setattr(pathlib.Path, 'resolve', resolve)
-    monkeypatch.setattr(backup, 'is_mount', lambda path: state['mounted'] if path == drive else False)
-    monkeypatch.setattr(backup, 'device_id', lambda path: state['device'] if path == drive else
-                        (1 if path == media else 0))
+    state = dict(mounted=True, device=2, uuid_device='/dev/sdb1', source='/dev/sdb1', nested=None)
+    monkeypatch.setattr(backup, 'is_mount', lambda path: (path == drive and state['mounted'])
+                                                         or path == state['nested'] or path == pathlib.Path('/'))
+    monkeypatch.setattr(backup, 'device_id', lambda path: {drive: state['device'], media: 1}.get(
+        pathlib.Path(path), 3 if pathlib.Path(path) == state['nested'] else 0))
     monkeypatch.setattr(backup, 'uuid_device', lambda uuid: state['uuid_device'] if uuid == 'uuid-1' else None)
-    monkeypatch.setattr(backup, 'mount_source', lambda path: state['source'] if path == str(drive) else None)
+    monkeypatch.setattr(backup, 'mount_source', lambda path: {str(drive): state['source']}.get(
+        path, '/dev/sdz1' if path == str(state['nested']) else None))
+    state['drive'] = drive
+    state['root'] = mount_root
     return state
 
 
 def test_check_backup_target(test_directory, fake_mounts):
-    assert backup.check_backup_target('/media/backup', 'uuid-1') is None
+    drive, root = str(fake_mounts['drive']), fake_mounts['root']
+    assert backup.check_backup_target(drive, 'uuid-1') is None
 
     assert backup.check_backup_target(None, None) == 'No backup drive is configured'
-    assert backup.check_backup_target('backup', 'uuid-1') == 'backup is not under /media'
-    assert backup.check_backup_target('/mnt/backup', 'uuid-1') == '/mnt/backup is not under /media'
-    assert backup.check_backup_target('/media/wrolpi_temp_onboarding', 'uuid-1') \
-           == '/media/wrolpi_temp_onboarding cannot be a backup drive'
+    assert backup.check_backup_target('backup', 'uuid-1') == 'backup is not a valid directory'
+    assert backup.check_backup_target(f'{drive}/../backup', 'uuid-1') == f'{drive}/../backup is not a valid directory'
+    assert backup.check_backup_target('/opt/backup', 'uuid-1') == f'/opt/backup is not under {root}'
+    (root / 'wrolpi_temp_onboarding').mkdir()
+    fake_mounts['nested'] = root / 'wrolpi_temp_onboarding'
+    assert backup.check_backup_target(str(root / 'wrolpi_temp_onboarding'), 'uuid-1') \
+           == f'{root}/wrolpi_temp_onboarding cannot be a backup drive'
+    fake_mounts['nested'] = None
 
     fake_mounts['mounted'] = False
-    assert backup.check_backup_target('/media/backup', 'uuid-1') == 'No drive is mounted at /media/backup', \
+    assert backup.check_backup_target(drive, 'uuid-1') == f'No drive is mounted at {drive}', \
         'an unplugged drive leaves a directory on the system drive'
     fake_mounts['mounted'] = True
 
     fake_mounts['device'] = 1
-    assert backup.check_backup_target('/media/backup', 'uuid-1') == 'The backup drive is the media drive'
+    assert backup.check_backup_target(drive, 'uuid-1') == 'The backup drive is the media drive'
     fake_mounts['device'] = 0
-    assert backup.check_backup_target('/media/backup', 'uuid-1') == 'The backup drive is the system drive'
+    assert backup.check_backup_target(drive, 'uuid-1') == 'The backup drive is the system drive'
     fake_mounts['device'] = 2
 
     fake_mounts['source'] = '/dev/sdc1'
-    assert backup.check_backup_target('/media/backup', 'uuid-1') \
-           == 'The chosen drive is not mounted at /media/backup', 'another drive mounted at the same place'
+    assert backup.check_backup_target(drive, 'uuid-1') \
+           == f'The chosen drive is not mounted at {drive}', 'another drive mounted at the same place'
     fake_mounts['source'] = '/dev/sdb1'
-    assert backup.check_backup_target('/media/backup', 'uuid-2') \
-           == 'The chosen drive is not mounted at /media/backup', 'the drive is not plugged in'
+    assert backup.check_backup_target(drive, 'uuid-2') \
+           == f'The chosen drive is not mounted at {drive}', 'the drive is not plugged in'
+
+
+def test_check_backup_target_folder(test_directory, fake_mounts):
+    """The backup may go to a folder on the chosen drive; the drive is checked through the folder's mount point."""
+    drive = fake_mounts['drive']
+    (drive / 'wrolpi').mkdir()
+    assert backup.check_backup_target(str(drive / 'wrolpi'), 'uuid-1') is None
+    assert backup.check_backup_target(str(drive / 'not' / 'made' / 'yet'), 'uuid-1') is None, \
+        'the backup creates the folder'
+
+    # The folder is checked through the drive: wrong drive, unplugged drive.
+    assert backup.check_backup_target(str(drive / 'wrolpi'), 'uuid-2') \
+           == f'The chosen drive is not mounted at {drive}'
+    fake_mounts['mounted'] = False
+    assert backup.check_backup_target(str(drive / 'wrolpi'), 'uuid-1') == f'No drive is mounted at {drive}/wrolpi', \
+        'a folder left on the system drive by an unplugged drive is not written'
+    fake_mounts['mounted'] = True
+
+    # Another drive mounted inside the chosen drive is not the chosen drive.
+    (drive / 'other').mkdir()
+    fake_mounts['nested'] = drive / 'other'
+    assert backup.check_backup_target(str(drive / 'other' / 'wrolpi'), 'uuid-1') \
+           == f'The chosen drive is not mounted at {drive}/other'
 
 
 def test_mount_source(monkeypatch, tmp_path):
@@ -194,11 +223,31 @@ async def test_run_backup(async_client, test_directory, backup_drive, events_fix
     with sqlite3.connect(backup_drive / 'config/wrolpi.db') as copy:
         assert copy.execute('SELECT v FROM t').fetchall() == [('row',)]
     assert status['files_transferred'] == 3
+    assert status['cancel_requested'] is False
     events_fixture.assert_has_event('backup_completed')
 
     status = await backup.run_backup()
     assert status['state'] == 'idle', status['last_error']
     assert status['files_transferred'] == 0
+
+
+@requires_rsync
+@pytest.mark.asyncio
+async def test_run_backup_to_folder(async_client, test_directory, backup_drive):
+    """A backup to a folder on the drive creates the folder and mirrors the media directory inside it."""
+    (test_directory / 'videos').mkdir()
+    (test_directory / 'config').mkdir(exist_ok=True)
+    (test_directory / 'videos/video.mp4').write_bytes(b'video')
+    with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
+        db.execute('CREATE TABLE t (v TEXT)')
+    get_sync_config()._config.update(backup_directory=str(backup_drive / 'wrolpi' / 'library'))
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert (backup_drive / 'wrolpi/library/videos/video.mp4').read_bytes() == b'video'
+    assert (backup_drive / 'wrolpi/library/config/wrolpi.db').is_file()
+    assert not (backup_drive / 'videos').exists()
 
 
 @requires_rsync
@@ -273,3 +322,46 @@ def test_request_backup_cancel(async_client):
     update_backup_status(state='running')
     backup.request_backup_cancel()
     assert get_backup_status()['cancel_requested'] is True
+
+
+@pytest.mark.asyncio
+async def test_last_success_is_kept(async_client, test_directory, test_wrolpi_config, monkeypatch, await_switches):
+    """When the last backup succeeded is saved in sync.yaml, and known again after a restart (its status is in
+    memory)."""
+    async def fake_rsync(command, target, uuid):
+        return 0, []
+
+    monkeypatch.setattr(backup, 'backup_skip_reason', lambda: None)
+    monkeypatch.setattr(backup, 'check_backup_target', lambda directory, uuid: None)
+    monkeypatch.setattr(backup, '_run_rsync', fake_rsync)
+    monkeypatch.setattr(backup, 'snapshot_database', lambda target: None)
+    drive = test_directory / 'drive'
+    get_sync_config()._config.update(backup_directory=str(drive), backup_device_uuid='uuid-1')
+
+    status = await backup.run_backup()
+    await await_switches()
+
+    assert status['last_success_at']
+    saved = yaml.safe_load((test_directory / 'config/sync.yaml').read_text())
+    assert saved['backup_last_success_at'] == status['last_success_at']
+
+    # A restart: the status is new, the config is imported.
+    update_backup_status(last_success_at=None)
+    get_sync_config().import_config()
+    assert get_backup_status()['last_success_at'] == status['last_success_at']
+
+
+@pytest.mark.asyncio
+async def test_failed_backup_keeps_last_success(async_client, test_directory, test_wrolpi_config, monkeypatch):
+    async def failing_rsync(command, target, uuid):
+        return 12, ['rsync: connection unexpectedly closed']
+
+    monkeypatch.setattr(backup, 'backup_skip_reason', lambda: None)
+    monkeypatch.setattr(backup, '_run_rsync', failing_rsync)
+    get_sync_config()._config.update(backup_directory=str(test_directory / 'drive'), backup_device_uuid='uuid-1',
+                                     backup_last_success_at='2026-11-01T02:00:00+00:00')
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'error'
+    assert get_sync_config().backup_last_success_at == '2026-11-01T02:00:00+00:00'

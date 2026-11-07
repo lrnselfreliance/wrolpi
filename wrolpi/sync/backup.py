@@ -45,8 +45,10 @@ RSYNC_PARTIAL = 23
 # How often a running backup checks that its drive is still mounted.
 MOUNT_CHECK_SECONDS = 5.0
 PROC_MOUNTS = pathlib.Path('/proc/mounts')
-# Mount points that are never a backup drive.
-RESERVED_MOUNT_POINTS = frozenset({'/media/wrolpi_temp_onboarding'})
+# Backup drives are mounted in this directory (the Controller mounts drives here).
+MOUNT_ROOT = pathlib.Path('/media')
+# Mount points (in MOUNT_ROOT) that are never a backup drive.
+RESERVED_MOUNT_NAMES = frozenset({'wrolpi_temp_onboarding'})
 
 # `--info=progress2` lines: "  1234567  45%   10.5MB/s    0:01:23 (xfr#12, to-chk=100/2000)"
 PROGRESS_LINE = re.compile(r'^\s*([\d,]+)\s+(\d+)%\s+\S+\s+\S+(?:\s+\(xfr#(\d+), (?:ir|to)-chk=(\d+)/(\d+)\))?')
@@ -96,34 +98,54 @@ def is_mount(path) -> bool:
     return os.path.ismount(path)
 
 
+def find_mount_point(path: pathlib.Path) -> pathlib.Path:
+    """The mount point of the filesystem that holds `path` (an existing, resolved path)."""
+    while not is_mount(path) and path != path.parent:
+        path = path.parent
+    return path
+
+
 def check_backup_target(directory: Optional[str], uuid: Optional[str]) -> Optional[str]:
-    """Why `directory` must not be written as the backup drive, or None if it is the drive with `uuid`, mounted
-    there, and not the media drive or the system drive."""
+    """Why `directory` must not be written as the backup, or None if it is on the drive with `uuid`, and that drive is
+    mounted, and is not the media drive or the system drive.
+
+    `directory` is the drive's mount point, or a folder on the drive.  The folder may not exist yet (the backup
+    creates it); the drive is checked through its nearest existing folder, so a folder on an unplugged drive (which
+    would be on the system drive) is refused."""
     if not directory or not uuid:
         return 'No backup drive is configured'
     path = pathlib.Path(directory)
-    if not path.is_absolute() or len(path.parts) < 3 or path.parts[1] != 'media':
-        return f'{directory} is not under /media'
-    if str(path) in RESERVED_MOUNT_POINTS:
-        return f'{directory} cannot be a backup drive'
-    media_directory = get_media_directory().resolve()
+    if not path.is_absolute() or any(i in ('.', '..') for i in path.parts):
+        return f'{directory} is not a valid directory'
+    existing = path
+    while not existing.exists() and existing != existing.parent:
+        existing = existing.parent
     try:
-        resolved = path.resolve(strict=True)
+        resolved_existing = existing.resolve(strict=True)
     except (FileNotFoundError, RuntimeError):
         return f'{directory} does not exist'
+    resolved = resolved_existing.joinpath(path.relative_to(existing))
+    mount_root = MOUNT_ROOT.resolve()
+    if mount_root not in resolved.parents:
+        return f'{directory} is not under {MOUNT_ROOT}'
+    media_directory = get_media_directory().resolve()
     if resolved == media_directory or media_directory in resolved.parents or resolved in media_directory.parents:
         return 'The backup drive cannot be the media directory'
-    if not is_mount(resolved):
+    mount_point = find_mount_point(resolved_existing)
+    if mount_root not in mount_point.parents:
+        # The folder is not on a drive mounted in MOUNT_ROOT; e.g. the drive is unplugged.
         return f'No drive is mounted at {directory}'
-    if device_id(resolved) == device_id(media_directory):
+    if mount_point.parent == mount_root and mount_point.name in RESERVED_MOUNT_NAMES:
+        return f'{mount_point} cannot be a backup drive'
+    if device_id(mount_point) == device_id(media_directory):
         return 'The backup drive is the media drive'
-    if device_id(resolved) == device_id('/'):
+    if device_id(mount_point) == device_id('/'):
         return 'The backup drive is the system drive'
     expected = uuid_device(uuid)
-    source = mount_source(str(resolved))
+    source = mount_source(str(mount_point))
     if not expected or not source or os.path.realpath(source) != expected:
-        return f'The chosen drive is not mounted at {directory}'
-    if not os.access(resolved, os.W_OK):
+        return f'The chosen drive is not mounted at {mount_point}'
+    if not os.access(resolved_existing, os.W_OK):
         return f'{directory} is not writable'
     return None
 
@@ -298,6 +320,8 @@ async def run_backup() -> dict:
     warning = None
     try:
         with flags.backup_running:
+            # A folder on the drive is created once the drive has been checked (`backup_skip_reason`).
+            target.mkdir(parents=True, exist_ok=True)
             command = build_rsync_command(get_media_directory(), target, get_wrolpi_config().playlists_destination)
             code, errors = await _run_rsync(command, target, uuid)
             if code == RSYNC_PARTIAL:
@@ -324,13 +348,17 @@ async def run_backup() -> dict:
 
     finished_at = now()
     status = get_backup_status()
+    if not warning:
+        get_sync_config().update({'backup_last_success_at': finished_at.isoformat()})
     message = f'Backed up {status["files_transferred"]} files to {target}'
     logger.warning(f'{message} in {(finished_at - started_at).total_seconds():.0f}s')
     if status['files_transferred'] or warning:
         Events.send_backup_completed(message + (f'; {warning}' if warning else ''))
     return update_backup_status(state='idle', phase=None, finished_at=finished_at.isoformat(),
                                 last_success_at=finished_at.isoformat() if not warning else status['last_success_at'],
-                                last_error=warning, percent=100)
+                                last_error=warning, percent=100,
+                                # A request to stop during the database snapshot (which runs to the end) is done.
+                                cancel_requested=False)
 
 
 async def backup_tick():

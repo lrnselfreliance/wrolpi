@@ -8,6 +8,7 @@ from typing import Optional
 
 from wrolpi.common import ConfigFile
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
+from wrolpi.sync.status import get_backup_status, update_backup_status
 
 
 @dataclass
@@ -23,6 +24,8 @@ class SyncConfigValidator:
     # that must be mounted there.
     backup_directory: str = None
     backup_device_uuid: str = None
+    # When a backup last finished without errors (ISO 8601); kept so it is known after a restart.
+    backup_last_success_at: str = None
 
 
 class SyncConfig(ConfigFile):
@@ -35,8 +38,15 @@ class SyncConfig(ConfigFile):
         window_end=None,
         backup_directory=None,
         backup_device_uuid=None,
+        backup_last_success_at=None,
     )
     validator = SyncConfigValidator
+
+    def import_config(self, file=None, send_events=False):
+        super().import_config(file, send_events)
+        # The backup's status lives in memory; a restart would otherwise forget when the last backup succeeded.
+        if self.backup_last_success_at and not get_backup_status()['last_success_at']:
+            update_backup_status(last_success_at=self.backup_last_success_at)
 
     @property
     def role(self) -> str:
@@ -61,6 +71,10 @@ class SyncConfig(ConfigFile):
     @property
     def backup_device_uuid(self) -> Optional[str]:
         return self._config.get('backup_device_uuid')
+
+    @property
+    def backup_last_success_at(self) -> Optional[str]:
+        return self._config.get('backup_last_success_at')
 
 
 SYNC_CONFIG: SyncConfig = SyncConfig()

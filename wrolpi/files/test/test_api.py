@@ -1085,7 +1085,7 @@ async def test_directory_crud(test_session, async_client, test_directory, assert
     # Can rename the directory.
     content = dict(path='foo/bar', new_name='baz')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/baz').exists()
     assert (test_directory / 'foo/baz/asdf.txt').exists()
@@ -1172,7 +1172,7 @@ async def test_rename_file(test_session, test_directory, make_files_structure, a
     # mv foo/bar/baz.txt foo/bar/qux.txt
     content = dict(path='foo/bar/baz.txt', new_name='qux.txt')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     assert not foo_file.exists()
     assert (test_directory / 'foo/bar/qux.txt').is_file()
     assert (test_directory / 'foo/bar/qux.txt').read_text() == 'asdf'
@@ -1203,7 +1203,7 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     # First rename via API: "example.mp4" -> "example 2.mp4"
     content = dict(path='example.mp4', new_name='example 2.mp4')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
 
     # Verify first rename - both files should be renamed
     new_video_1 = test_directory / 'example 2.mp4'
@@ -1224,7 +1224,7 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     # Second rename via API: "example 2.mp4" -> "example.mp4"
     content = dict(path='example 2.mp4', new_name='example.mp4')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
 
     # Verify second rename - BOTH files should be renamed back
     final_video = test_directory / 'example.mp4'
@@ -1255,7 +1255,7 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
     # mv foo/bar foo/qux
     content = dict(path='foo/bar', new_name='qux')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/qux/baz.txt').is_file()
     assert (test_directory / 'foo/qux/baz.txt').read_text() == 'asdf'
@@ -1279,7 +1279,7 @@ async def test_rename_directory_does_not_depend_on_the_request(test_session, tes
 
     content = dict(path='models/tools', new_name='hand tools')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     await await_background_tasks()
     assert (test_directory / 'models/hand tools/trowel.stl').read_text() == 'trowel'
     assert (test_directory / 'models/hand tools/tweezers/tweezers.stl').read_text() == 'tweezers'
@@ -1296,12 +1296,13 @@ async def test_rename_directory_does_not_depend_on_the_request(test_session, tes
 
 
 @pytest.mark.asyncio
-async def test_rename_directory_finishes_when_the_request_is_cancelled(test_session, test_directory,
-                                                                       make_files_structure, refresh_files,
-                                                                       await_background_tasks):
-    """The rename finishes, and leaves no old directory behind, even if the request is cancelled (as Sanic does on
-    RESPONSE_TIMEOUT) while the move job runs."""
-    import asyncio
+async def test_rename_directory_is_finished_by_the_file_worker(test_session, test_directory, make_files_structure,
+                                                              refresh_files, await_background_tasks):
+    """The request only queues a directory rename; the file worker does all of it.
+
+    A large rename outlasts Sanic's RESPONSE_TIMEOUT (60 s), which cancels the request.  When the request waited for
+    the move and then removed the old directory itself, a cancelled request left the old directory and its emptied
+    subdirectories behind.  So nothing may happen in the request after the move is queued."""
     from wrolpi.files import lib
     from wrolpi.files.worker import file_worker
 
@@ -1311,23 +1312,51 @@ async def test_rename_directory_finishes_when_the_request_is_cancelled(test_sess
     })
     await refresh_files()
 
-    real_wait_for_job = file_worker.wait_for_job
+    with mock.patch.object(file_worker, 'wait_for_job', side_effect=AssertionError('the request must not wait')):
+        job_id = await lib.rename(test_session, test_directory / 'models/tools', 'hand tools')
 
-    async def wait_then_cancel(job_id, *args, **kwargs):
-        # The job finishes in the file worker, but the request waiting on it is cancelled.
-        await real_wait_for_job(job_id, *args, **kwargs)
-        raise asyncio.CancelledError()
+    # The request is done (or cancelled); nothing has been moved or removed yet.
+    assert file_worker.get_job_status(job_id) == 'pending'
+    assert (test_directory / 'models/tools/trowel.stl').read_text() == 'trowel'
+    assert (test_directory / 'models/tools/tweezers/tweezers.stl').read_text() == 'tweezers'
+    assert not (test_directory / 'models/hand tools').exists()
 
-    with mock.patch.object(file_worker, 'wait_for_job', wait_then_cancel):
-        try:
-            await lib.rename(test_session, test_directory / 'models/tools', 'hand tools')
-        except asyncio.CancelledError:
-            pass
+    # The file worker alone finishes the rename.
     await await_background_tasks()
-
+    assert file_worker.get_job_status(job_id) == 'complete'
     assert (test_directory / 'models/hand tools/tweezers/tweezers.stl').read_text() == 'tweezers'
     left = sorted(str(i.relative_to(test_directory)) for i in (test_directory / 'models').iterdir())
     assert left == ['models/hand tools'], 'the old directory (and its emptied subdirectories) should be gone'
+
+
+@pytest.mark.asyncio
+async def test_get_file_worker_job(test_session, test_directory, make_files_structure, async_client, refresh_files,
+                                   await_background_tasks):
+    """A queued rename's job can be polled until it is done.  (Its pending status is checked by
+    `test_rename_directory_is_finished_by_the_file_worker`; the test client runs queued jobs during requests.)"""
+    make_files_structure({'tools/trowel.stl': 'trowel'})
+    await refresh_files()
+
+    content = dict(path='tools', new_name='hand tools')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    job_id = response.json['job_id']
+    assert job_id
+
+    await await_background_tasks()
+    request, response = await async_client.get(f'/api/files/jobs/{job_id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == dict(job_id=job_id, status='complete', error=None)
+    assert (test_directory / 'hand tools/trowel.stl').is_file()
+
+    # A file rename is done when the request returns; there is no job.
+    content = dict(path='hand tools/trowel.stl', new_name='spade.stl')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == dict(job_id=None)
+
+    request, response = await async_client.get('/api/files/jobs/move-unknown')
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
@@ -1353,7 +1382,7 @@ async def test_rename_empty_directory(test_session, test_directory, async_client
 
     content = dict(path='empty', new_name='still empty')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     await await_background_tasks()
 
     assert not (test_directory / 'empty').exists()
@@ -1378,7 +1407,7 @@ async def test_rename_directory_stale_destination_fails_promptly(
 
     content = dict(path='dir-a', new_name='dir-b')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     await await_background_tasks()
 
     # Remove dest on disk without refreshing; recreate the old source.
@@ -1390,7 +1419,7 @@ async def test_rename_directory_stale_destination_fails_promptly(
         async_client.post('/api/files/rename', content=json.dumps(content)),
         timeout=5,
     )
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
     await asyncio.wait_for(await_background_tasks(), timeout=5)
 
     # The rename job reports the recorded move error, and the files are moved back.
@@ -1422,7 +1451,7 @@ async def test_rename_collection_directory(test_session, test_directory, make_fi
     # Rename the directory
     content = dict(path='my_collection', new_name='renamed_collection')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
 
     # Verify Collection.directory was updated
     collection = test_session.query(Collection).filter_by(id=collection_id).one()
@@ -1466,7 +1495,7 @@ async def test_rename_directory_with_nested_collections(test_session, test_direc
     # Rename the parent directory
     content = dict(path='videos', new_name='my_videos')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.OK
 
     # Verify nested Collection directories were updated
     coll_a = test_session.query(Collection).filter_by(id=coll_a_id).one()
@@ -1799,7 +1828,7 @@ async def test_rename_directory_with_collection_waits_for_a_concurrent_writer(
         with write_lock_held_briefly(db_file, seconds=3):
             _, response = await async_client.post('/api/files/rename',
                                                   content=json.dumps(dict(path=rename, new_name=new_name)))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+        assert response.status_code == HTTPStatus.OK, response.body
 
         assert (expected / 'notes.txt').is_file()
         with maker() as session:

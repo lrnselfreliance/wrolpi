@@ -12,6 +12,7 @@ import {fileWorkerStatusFixture} from '../test-fixtures';
 // Mock the API functions
 jest.mock('../api', () => ({
     deleteFile: jest.fn(),
+    fetchFileWorkerJobStatus: jest.fn(),
     ignoreDirectory: jest.fn(),
     makeDirectory: jest.fn(),
     movePaths: jest.fn(),
@@ -426,9 +427,22 @@ describe('FileBrowser', () => {
             expect(mockFetchFiles).toHaveBeenCalledTimes(1);
         });
 
-        it('fetches the files again after a rename, even when the job finished between polls', async () => {
+        const renameTestdir = async () => {
+            // Select testdir/ (the second checkbox) and rename it.
+            await act(async () => fireEvent.click(screen.getAllByRole('checkbox')[1]));
+            const renameButton = document.querySelector('.tabler-icon-cursor-text').closest('button');
+            await act(async () => fireEvent.click(renameButton));
+            const nameInput = await screen.findByDisplayValue(/^testdir/);
+            await act(async () => fireEvent.change(nameInput, {target: {value: 'newdir'}}));
+            await act(async () => fireEvent.click(screen.getByRole('button', {name: 'Rename'})));
+        };
+
+        it('fetches the files once a queued rename job is done, even if no poll saw it running', async () => {
             const mockFetchFiles = jest.fn();
-            require('../api').renamePath.mockResolvedValue();
+            const api = require('../api');
+            api.renamePath.mockResolvedValue('move-1234');
+            // The job is still queued at the first check, and done at the second.
+            api.fetchFileWorkerJobStatus.mockResolvedValueOnce('pending').mockResolvedValue('complete');
             useBrowseFiles.mockReturnValue({
                 browseFiles: mockBrowseFiles,
                 openFolders: [],
@@ -437,25 +451,32 @@ describe('FileBrowser', () => {
             });
             renderFileBrowser(<FileBrowser/>);
 
-            // Select testdir/ (the second checkbox) and rename it.
-            await act(async () => fireEvent.click(screen.getAllByRole('checkbox')[1]));
-            const renameButton = document.querySelector('.tabler-icon-cursor-text').closest('button');
-            await act(async () => fireEvent.click(renameButton));
-            const nameInput = await screen.findByDisplayValue(/^testdir/);
-            await act(async () => fireEvent.change(nameInput, {target: {value: 'newdir'}}));
-            await act(async () => fireEvent.click(screen.getByRole('button', {name: 'Rename'})));
+            await renameTestdir();
+            expect(api.renamePath).toHaveBeenCalledWith('testdir/', 'newdir');
+            // Nothing is fetched while the rename is only queued.
+            expect(mockFetchFiles).not.toHaveBeenCalled();
 
-            expect(require('../api').renamePath).toHaveBeenCalledWith('testdir/', 'newdir');
-            // The request returned; fetched once, before the file worker moved anything.
+            // The file worker's status never left idle; the job is what says the rename is done.
+            await waitFor(() => expect(mockFetchFiles).toHaveBeenCalledTimes(1), {timeout: 3000});
+            expect(api.fetchFileWorkerJobStatus).toHaveBeenCalledWith('move-1234');
+            expect(api.fetchFileWorkerJobStatus).toHaveBeenCalledTimes(2);
+        });
+
+        it('fetches the files right away after a rename that was not queued', async () => {
+            const mockFetchFiles = jest.fn();
+            const api = require('../api');
+            api.renamePath.mockResolvedValue(null);
+            useBrowseFiles.mockReturnValue({
+                browseFiles: mockBrowseFiles,
+                openFolders: [],
+                setOpenFolders: jest.fn(),
+                fetchFiles: mockFetchFiles,
+            });
+            renderFileBrowser(<FileBrowser/>);
+
+            await renameTestdir();
             expect(mockFetchFiles).toHaveBeenCalledTimes(1);
-
-            // The next poll finds the file worker idle; the job may already be done, so fetch again.
-            await act(async () => setFileWorkerStatus({status: 'idle'}));
-            expect(mockFetchFiles).toHaveBeenCalledTimes(2);
-
-            // Later idle polls do not fetch.
-            await act(async () => setFileWorkerStatus({status: 'idle'}));
-            expect(mockFetchFiles).toHaveBeenCalledTimes(2);
+            expect(api.fetchFileWorkerJobStatus).not.toHaveBeenCalled();
         });
     });
 

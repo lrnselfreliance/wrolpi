@@ -362,7 +362,8 @@ async def post_rename(request: Request, body: schema.Rename):
 
     is_directory = path.is_dir()
     try:
-        await lib.rename(request.ctx.session, path, body.new_name, send_events=True, write=request.ctx.db.write)
+        job_id = await lib.rename(request.ctx.session, path, body.new_name, send_events=True,
+                                  write=request.ctx.db.write)
     except Exception as e:
         logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
         cause = str(e).split('\n', 1)[0]
@@ -377,7 +378,20 @@ async def post_rename(request: Request, body: schema.Rename):
         # newest task first, so a refresh queued now would scan the directory before it is renamed.
         file_worker.queue_refresh([new_path.parent])
 
-    return response.empty(HTTPStatus.NO_CONTENT)
+    # A queued rename's `job_id` can be polled (`/api/files/jobs/<job_id>`) to know when it is done.
+    return json_response(dict(job_id=job_id))
+
+
+@files_bp.get('/jobs/<job_id:str>')
+@openapi.definition(
+    summary='Get the status of a queued file worker job: pending, complete, or failed (with its error).',
+)
+async def get_file_worker_job(_: Request, job_id: str):
+    try:
+        status = file_worker.get_job_status(job_id)
+    except RuntimeError:
+        return json_response(dict(error=f'Unknown job: {job_id}'), HTTPStatus.NOT_FOUND)
+    return json_response(dict(job_id=job_id, status=status, error=file_worker.get_job_error(job_id)))
 
 
 @files_bp.post('/tag')

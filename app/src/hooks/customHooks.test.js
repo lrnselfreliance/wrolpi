@@ -2,11 +2,11 @@ import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
 import {
-    usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSearchRecentFiles, useSettings,
-    useStatistics, useStatus, useVideoExtras,
+    useBrowseFiles, usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSearchRecentFiles,
+    useSettings, useStatistics, useStatus, useVideoExtras,
 } from './customHooks';
 import {
-    ApiDownError, filesSearch, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription,
+    ApiDownError, filesSearch, getFiles, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription,
     searchChannels,
 } from '../api';
 import {getControllerStats} from '../api/controller';
@@ -50,6 +50,7 @@ jest.mock('../api', () => ({
     getStatus: jest.fn(),
     getSettings: jest.fn(),
     filesSearch: jest.fn(),
+    getFiles: jest.fn(),
 }));
 
 jest.mock('../api/controller', () => ({
@@ -734,5 +735,37 @@ describe('useSearchRecentFiles', () => {
 
         await act(async () => continuing.resolve([[], 0]));
         expect(result.current.searchFiles).toEqual([]);
+    });
+});
+
+
+describe('useBrowseFiles', () => {
+    it('ignores a fetch that settles after a newer one', async () => {
+        // The mount's fetch, then a fetch from before a rename, then one from after it.
+        let resolveBeforeRename;
+        getFiles
+            .mockResolvedValueOnce([{path: 'mounted/'}])
+            .mockReturnValueOnce(new Promise(resolve => {
+                resolveBeforeRename = resolve;
+            }))
+            .mockResolvedValueOnce([{path: 'renamed/'}]);
+
+        const {result} = renderHook(() => useBrowseFiles(), {wrapper: makeWrapper()});
+        await act(async () => {});
+        expect(result.current.browseFiles).toEqual([{path: 'mounted/'}]);
+
+        let beforeRename;
+        await act(async () => {
+            beforeRename = result.current.fetchFiles();
+            await result.current.fetchFiles();
+        });
+        expect(result.current.browseFiles).toEqual([{path: 'renamed/'}]);
+
+        // The older fetch settles last; the newer files stay.
+        await act(async () => {
+            resolveBeforeRename([{path: 'old-name/'}]);
+            await beforeRename;
+        });
+        expect(result.current.browseFiles).toEqual([{path: 'renamed/'}]);
     });
 });

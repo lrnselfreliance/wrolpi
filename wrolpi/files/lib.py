@@ -2096,11 +2096,11 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
 
 
 async def rename_directory(session: Session, directory: pathlib.Path, new_name: str, send_events: bool = False,
-                           write: Callable[[], ContextManager[Session]] = None) -> pathlib.Path:
+                           write: Callable[[], ContextManager[Session]] = None) -> str | None:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory.
 
-    A Collection's directory is renamed before this returns.  Any other directory is renamed by a queued file worker
-    move, which this does not wait for.
+    A Collection's directory is renamed before this returns (returns None).  Any other directory is renamed by a queued
+    file worker move, which this does not wait for; returns the move's job id.
 
     `session` is used to read.  Collections are changed in `write()` (`request.ctx.db.write` in a request), which
     begins as a writer; the files are moved outside it.  Without `write`, Collections are changed in `session`."""
@@ -2123,22 +2123,25 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
         # for the move.
         with write() as session:
             await collection.move_collection(new_directory, session, send_events=send_events)
-    else:
-        # Regular directory rename: the file worker moves the contents, updates nested Collections, and removes the
-        # old directory.  This does not wait; a large rename outlasts a request, and the job reports its own
-        # progress and result.
-        file_worker.queue_move(new_directory, list(directory.iterdir()), rename_from=directory)
+        return None
 
-    return new_directory
+    # Regular directory rename: the file worker moves the contents, updates nested Collections, and removes the old
+    # directory.  This does not wait; a large rename outlasts a request, and the job reports its own progress and
+    # result.
+    return file_worker.queue_move(new_directory, list(directory.iterdir()), rename_from=directory)
 
 
 async def rename(session: Session, path: pathlib.Path, new_name: str, send_events: bool = False,
-                 write: Callable[[], ContextManager[Session]] = None) -> pathlib.Path:
-    """Rename a directory or file.  Preserve any tags."""
+                 write: Callable[[], ContextManager[Session]] = None) -> str | None:
+    """Rename a directory or file.  Preserve any tags.
+
+    Returns the file worker job id when the rename was queued (see `rename_directory`), otherwise None; the rename is
+    done."""
     if path.is_dir():
         return await rename_directory(session, path, new_name, send_events=send_events, write=write)
 
-    return await rename_file(path, new_name)
+    await rename_file(path, new_name)
+    return None
 
 
 def get_special_directories() -> List[pathlib.Path]:

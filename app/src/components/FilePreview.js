@@ -577,6 +577,7 @@ export function FilePreviewProvider({children}) {
         setPreviewModal(<Modal size='fullscreen'
                                open={true}
                                onClose={e => handleClose(e)}
+                               classNames={{content: 'file-preview-modal-content'}}
         >
             {pathContent}
             <Modal.Actions>

@@ -71,4 +71,19 @@ function binaryStlBase64() {
         openPreview('binary.stl');
         expectTriangleDimensions();
     });
+
+    it('shows the action buttons without scrolling the preview', () => {
+        cy.viewport(1280, 720);
+        openPreview('binary.stl');
+        // The dimensions line is the last thing the preview adds, so the layout is final.
+        expectTriangleDimensions();
+        cy.get('.mantine-Modal-content').should(([content]) => {
+            expect(content.scrollHeight, 'preview modal content scrolls')
+                .to.be.at.most(content.clientHeight);
+        });
+        cy.get('.wrolpi-modal-actions').should(([actions]) => {
+            expect(actions.getBoundingClientRect().bottom, 'action buttons bottom edge')
+                .to.be.at.most(actions.ownerDocument.defaultView.innerHeight);
+        });
+    });
 });

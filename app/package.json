@@ -70,8 +70,11 @@
     "webpack-dev-server": "^5.2.7"
   },
   "jest": {
+    "transform": {
+      "^.+\\.(js|jsx|mjs|cjs|ts|tsx)$": "<rootDir>/jest/babelTransform.js"
+    },
     "transformIgnorePatterns": [
-      "node_modules/(?!(react-hotkeys-hook)/)"
+      "node_modules/(?!(react-hotkeys-hook|three|three-stdlib)/)"
     ]
   },
   "overrides": {
@@ -91,9 +94,10 @@
     "@babel/template": "7.28.6",
     "@babel/traverse": "7.29.0",
     "@babel/types": "7.29.0",
+    "fork-ts-checker-webpack-plugin": "^6.5.3",
     "react-scripts": {
       "typescript": "$typescript"
     },
-    "fork-ts-checker-webpack-plugin": "^6.5.3"
+    "three-stdlib": "2.36.1"
   }
 }

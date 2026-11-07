@@ -125,16 +125,14 @@ async function expectTriangleDimensions({height, length}) {
     expect(line).toContain('Bounding Radius: 1.12');
 }
 
-// STLs are Z-up, so the flat triangle lies down: its Y extent reads as Length.
-const STL_DIMENSIONS = {height: '0.00', length: '1.00'};
-// 3MFs are shown as stored: the triangle's Y extent reads as Height.
-const THREE_MF_DIMENSIONS = {height: '1.00', length: '0.00'};
+// Models are Z-up, so the flat triangle lies down: its Y extent reads as Length.
+const TRIANGLE_DIMENSIONS = {height: '0.00', length: '1.00'};
 
 describe('STL preview', () => {
     it('loads an ASCII STL file', async () => {
         serve(ASCII_STL);
         await act(async () => renderWithProviders(<STLPreviewModal previewFile={{path: 'models/part.stl'}}/>));
-        await expectTriangleDimensions(STL_DIMENSIONS);
+        await expectTriangleDimensions(TRIANGLE_DIMENSIONS);
         // three's FileLoader fetches a Request.
         expect(global.fetch.mock.calls[0][0].url).toContain('/media/models/part.stl');
     });
@@ -142,7 +140,7 @@ describe('STL preview', () => {
     it('loads a binary STL file', async () => {
         serve(binaryStl());
         await act(async () => renderWithProviders(<STLPreviewModal previewFile={{path: 'models/part.stl'}}/>));
-        await expectTriangleDimensions(STL_DIMENSIONS);
+        await expectTriangleDimensions(TRIANGLE_DIMENSIONS);
     });
 });
 
@@ -150,6 +148,6 @@ describe('3MF preview', () => {
     it('loads a 3MF file', async () => {
         serve(threeMF());
         await act(async () => renderWithProviders(<ThreeMFPreviewModal previewFile={{path: 'models/part.3mf'}}/>));
-        await expectTriangleDimensions(THREE_MF_DIMENSIONS);
+        await expectTriangleDimensions(TRIANGLE_DIMENSIONS);
     });
 });

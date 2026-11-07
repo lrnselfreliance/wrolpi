@@ -217,7 +217,8 @@ function getAudioPreviewModal(previewFile) {
     </React.Fragment>
 }
 
-// Each 3D format's loader ships with three, so it always matches the installed three.
+// Each 3D format's loader ships with three, so it always matches the installed three.  Every
+// format is Z-up.
 const MODEL_FORMATS = {
     '3mf': {
         label: '3MF',
@@ -228,9 +229,8 @@ const MODEL_FORMATS = {
     stl: {
         label: 'STL',
         loader: async () => new (await import('three/examples/jsm/loaders/STLLoader.js')).STLLoader(),
-        // An STL loads as a single geometry.  STLs are Z-up (the 3D printing convention) and three
-        // is Y-up, so turn the model upright: model Z reads as Height, model Y as Length.
-        toObject: (THREE, geometry) => new THREE.Mesh(geometry.rotateX(-Math.PI / 2)),
+        // An STL loads as a single geometry.
+        toObject: (THREE, geometry) => new THREE.Mesh(geometry),
     },
 };
 
@@ -291,6 +291,9 @@ function ModelPreviewModal({previewFile, format}) {
                         if (cancelled) return;
                         const group = toObject(THREE, result);
                         loadedGroup = group;
+                        // STL and 3MF are Z-up (the 3D printing convention) and three is Y-up, so
+                        // stand the model upright: model Z reads as Height, model Y as Length.
+                        group.rotation.x = -Math.PI / 2;
 
                         // One violet for every model, so models without authored materials
                         // are visible against either theme's background.

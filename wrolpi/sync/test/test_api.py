@@ -101,6 +101,67 @@ async def test_settings(async_client, test_directory, test_wrolpi_config, test_d
 
 
 @pytest.mark.asyncio
+async def test_settings_excluded_directories(async_client, test_directory, test_wrolpi_config, await_switches):
+    """Each panel has its own excluded folders, normalized and saved to sync.yaml."""
+    body = dict(sync_excluded_directories=['/Movies/', 'Movies/deep'], backup_excluded_directories=['videos/Movies'])
+    request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    config = get_sync_config()
+    assert config.sync_excluded_directories == ['Movies']
+    assert config.backup_excluded_directories == ['videos/Movies']
+    await await_switches()
+    saved = yaml.safe_load((test_directory / 'config/sync.yaml').read_text())
+    assert saved['sync_excluded_directories'] == ['Movies']
+    assert saved['backup_excluded_directories'] == ['videos/Movies']
+
+    request, response = await async_client.get('/api/settings')
+    assert response.json['sync_excluded_directories'] == ['Movies']
+    assert response.json['backup_excluded_directories'] == ['videos/Movies']
+
+    # Changing one list leaves the other alone; [] clears.
+    request, response = await async_client.put('/api/sync/settings',
+                                               content=json.dumps(dict(backup_excluded_directories=[])))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.backup_excluded_directories == []
+    assert config.sync_excluded_directories == ['Movies']
+
+    for value in (['../etc'], ['config'], ['.hidden'], [''], 'Movies'):
+        body = dict(sync_excluded_directories=value)
+        request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, value
+    assert config.sync_excluded_directories == ['Movies']
+
+
+@pytest.mark.asyncio
+async def test_directories(async_client, test_directory, test_wrolpi_config):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden'):
+        (test_directory / i).mkdir(parents=True, exist_ok=True)
+
+    request, response = await async_client.post('/api/sync/directories', content=json.dumps(dict(path='')))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['directories'] == [dict(name='Movies', path='Movies'), dict(name='videos', path='videos')]
+
+    body = dict(path='videos', source='local')
+    request, response = await async_client.post('/api/sync/directories', content=json.dumps(body))
+    assert response.json['directories'] == [dict(name='channel', path='videos/channel')]
+
+    for body in (dict(path='../'), dict(path='missing'), dict(source='elsewhere'),
+                 dict(source='primary')):  # A primary has no primary.
+        request, response = await async_client.post('/api/sync/directories', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, body
+
+
+@pytest.mark.asyncio
+async def test_directories_primary_unreachable(async_client, test_wrolpi_config, make_secondary):
+    """A primary that does not answer is reported, not raised."""
+    make_secondary('https://127.0.0.1:1')
+    body = dict(path='', source='primary')
+    request, response = await async_client.post('/api/sync/directories', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.BAD_GATEWAY
+    assert response.json['error']
+
+
+@pytest.mark.asyncio
 async def test_api_locked_while_syncing(async_client, test_wrolpi_config, flags_lock, make_secondary):
     """While a secondary syncs, its API refuses everything but the sync's own progress."""
     make_secondary()

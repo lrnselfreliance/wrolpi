@@ -56,6 +56,17 @@ def test_build_rsync_command(monkeypatch):
     assert not any(i.startswith('--exclude=/playlists') for i in command)
 
 
+def test_build_rsync_command_excluded_directories(monkeypatch):
+    """Excluded folders are anchored at the media directory and matched literally."""
+    monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/rsync' if name == 'rsync' else None)
+    command = backup.build_rsync_command(pathlib.Path('/media/wrolpi'), pathlib.Path('/media/backup'), None,
+                                         ['Movies', 'videos/Movies [HD]', 'a*b?'])
+    assert '--exclude=/Movies/' in command
+    assert '--exclude=/videos/Movies \\[HD]/' in command
+    assert '--exclude=/a\\*b\\?/' in command
+    assert command[-2:] == ['/media/wrolpi/', '/media/backup/'], 'excludes come before the paths'
+
+
 @pytest.mark.parametrize('line, expected', [
     ('     32,768   0%    0.00kB/s    0:00:00 (xfr#1, ir-chk=1018/1023)',
      dict(bytes_transferred=32768, percent=0, files_transferred=1, files_to_check=1023)),
@@ -229,6 +240,33 @@ async def test_run_backup(async_client, test_directory, backup_drive, events_fix
     status = await backup.run_backup()
     assert status['state'] == 'idle', status['last_error']
     assert status['files_transferred'] == 0
+
+
+@requires_rsync
+@pytest.mark.asyncio
+async def test_run_backup_excluded_directories(async_client, test_directory, backup_drive):
+    """Excluded folders are not copied, even when their names hold rsync wildcards; what the drive already has in
+    them is kept."""
+    files = ['Movies/a.mp4', 'Movies [HD]/b.mp4', 'Movies2/c.mp4', 'videos/Movies/d.mp4', 'Mo*/e.mp4']
+    for path in files:
+        (test_directory / path).parent.mkdir(parents=True, exist_ok=True)
+        (test_directory / path).write_bytes(b'file')
+    (test_directory / 'config').mkdir(exist_ok=True)
+    with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
+        db.execute('CREATE TABLE t (v TEXT)')
+    (backup_drive / 'Movies').mkdir()
+    (backup_drive / 'Movies/old.mp4').write_bytes(b'old')
+    get_sync_config()._config['backup_excluded_directories'] = ['Movies', 'Movies [HD]', 'Mo*']
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert not (backup_drive / 'Movies/a.mp4').exists()
+    assert not (backup_drive / 'Movies [HD]').exists()
+    assert not (backup_drive / 'Mo*').exists()
+    assert (backup_drive / 'Movies2/c.mp4').read_bytes() == b'file', 'only the folder itself is excluded'
+    assert (backup_drive / 'videos/Movies/d.mp4').read_bytes() == b'file', 'excludes are anchored'
+    assert (backup_drive / 'Movies/old.mp4').read_bytes() == b'old', 'nothing is deleted'
 
 
 @requires_rsync

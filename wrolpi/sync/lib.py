@@ -21,6 +21,7 @@ import contextlib
 import json
 import os
 import pathlib
+import posixpath
 import re
 import shutil
 import ssl
@@ -40,6 +41,7 @@ from wrolpi import flags
 from wrolpi.common import logger, get_media_directory, get_wrolpi_config, is_secondary, wrol_mode_enabled, \
     get_config_by_file_name, SYNCED_CONFIG_FILE_NAMES
 from wrolpi.dates import now, is_within_daily_window
+from wrolpi.errors import InvalidConfig
 from wrolpi.events import Events
 from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_sync_status, update_sync_status
@@ -63,6 +65,8 @@ SYNC_WINDOW_REPEAT_SECONDS = 15 * 60
 REFRESH_TIMEOUT_SECONDS = 60 * 60
 # Configs and directory listings are small; never read more than this from the primary.
 MAX_CONFIG_BYTES = 64 * 1024 * 1024
+# Enough for any real library; keeps a pasted list from growing without bound.
+MAX_EXCLUDED_DIRECTORIES = 500
 
 # Top-level directories never written by a sync: the configs and database, and the Tags Directory (hard links that
 # the secondary rebuilds from tags.yaml).
@@ -193,6 +197,68 @@ def resolve_destination(media_directory: pathlib.Path, path: str) -> Optional[pa
     if pathlib.Path(os.path.realpath(destination)) != destination:
         return None
     return destination
+
+
+def normalize_excluded_directories(values: List[str]) -> List[str]:
+    """Excluded folders as '/'-separated paths relative to the media directory, without duplicates or folders that
+    are already inside another excluded folder."""
+    if len(values) > MAX_EXCLUDED_DIRECTORIES:
+        raise InvalidConfig(f'No more than {MAX_EXCLUDED_DIRECTORIES} folders can be excluded')
+    directories = set()
+    for value in values:
+        if not isinstance(value, str) or '\\' in value or '\x00' in value:
+            raise InvalidConfig(f'Invalid folder: {value!r}')
+        stripped = value.strip().strip('/')
+        # Reject '..' before normalizing, which would quietly resolve it.
+        parts = [i for i in stripped.split('/') if i] if stripped else []
+        directory = posixpath.normpath(stripped) if stripped else ''
+        if not parts or any(i.startswith('.') for i in parts):
+            raise InvalidConfig(f'Invalid folder: {value!r}')
+        if parts[0] in PROTECTED_DIRECTORIES:
+            raise InvalidConfig(f'{parts[0]} is never copied')
+        directories.add(directory)
+    return sorted(i for i in directories if not any(is_excluded(i, {j}) for j in directories if j != i))
+
+
+def is_excluded(path: str, excluded_directories) -> bool:
+    """True if `path` (relative, '/'-separated) is an excluded folder or inside one."""
+    return any(path == i or path.startswith(f'{i}/') for i in excluded_directories)
+
+
+def list_local_directories(path: str) -> List[dict]:
+    """The folders directly inside `path` (relative to the media directory) that a user may exclude."""
+    media_directory = get_media_directory().resolve()
+    path = (path or '').strip('/')
+    directory = resolve_destination(media_directory, path) if path else media_directory
+    if directory is None or not directory.is_dir():
+        raise InvalidConfig(f'Not a folder: {path!r}')
+    directories = list()
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            if entry.name.startswith('.') or not entry.is_dir(follow_symlinks=False):
+                continue
+            if not path and entry.name in PROTECTED_DIRECTORIES:
+                continue
+            directories.append(dict(name=entry.name, path=f'{path}/{entry.name}' if path else entry.name))
+    return sorted(directories, key=lambda i: i['name'].lower())
+
+
+async def list_primary_directories(path: str) -> List[dict]:
+    """The folders directly inside `path` in the primary's media directory (Caddy's browse listing)."""
+    path = (path or '').strip('/')
+    if path and resolve_destination(get_media_directory(), path) is None:
+        raise InvalidConfig(f'Not a folder: {path!r}')
+    async with PrimaryClient(get_sync_config().primary_url) as client:
+        entries = await client.list_directory(path)
+    directories = list()
+    for entry in entries:
+        name = (entry.get('name') or '').rstrip('/')
+        if not entry.get('is_dir') or not name or name.startswith('.') or '/' in name:
+            continue
+        if not path and name in PROTECTED_DIRECTORIES:
+            continue
+        directories.append(dict(name=name, path=f'{path}/{name}' if path else name))
+    return sorted(directories, key=lambda i: i['name'].lower())
 
 
 def needs_download(destination: pathlib.Path, file: ManifestFile) -> bool:
@@ -615,7 +681,7 @@ async def run_sync(force: bool = False) -> dict:
         state='running', phase='files', force=False, cancel_requested=False, started_at=started_at.isoformat(),
         finished_at=None, last_error=None, last_skip_reason=None, primary_url=url, primary_version=None,
         groups_seen=0, max_id=0, files_checked=0, files_to_download=0, files_downloaded=0, bytes_downloaded=0,
-        files_failed=0, configs_imported=[], disk_full=False,
+        files_failed=0, files_excluded=0, configs_imported=[], disk_full=False,
     )
     logger.warning(f'Syncing from the primary {url}')
     try:
@@ -665,7 +731,8 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
     """Download the files this secondary lacks, and refresh them a page at a time.  Returns the files downloaded."""
     media_directory = get_media_directory()
     downloaded = list()
-    groups_seen = files_checked = files_to_download = files_failed = 0
+    groups_seen = files_checked = files_to_download = files_failed = files_excluded = 0
+    excluded_directories = set(get_sync_config().sync_excluded_directories)
     bytes_downloaded = 0
     disk_full = False
 
@@ -677,7 +744,8 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
             last_report = time.monotonic()
             update_sync_status(groups_seen=groups_seen, files_checked=files_checked,
                                files_to_download=files_to_download, files_downloaded=len(downloaded),
-                               bytes_downloaded=bytes_downloaded, files_failed=files_failed, disk_full=disk_full)
+                               bytes_downloaded=bytes_downloaded, files_failed=files_failed,
+                               files_excluded=files_excluded, disk_full=disk_full)
 
     def count_bytes(n: int):
         nonlocal bytes_downloaded
@@ -692,6 +760,9 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
             for entry in group['paths']:
                 files_checked += 1
                 file = ManifestFile(entry['path'], int(entry['size']), float(entry['mtime']))
+                if excluded_directories and is_excluded(file.path, excluded_directories):
+                    files_excluded += 1
+                    continue
                 destination = resolve_destination(media_directory, file.path)
                 if destination is None:
                     logger.warning(f'Refusing to sync {repr(file.path)}')

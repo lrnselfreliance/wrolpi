@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 from wrolpi.errors import ValidationError
 
@@ -25,6 +25,18 @@ class SyncRunRequest:
 
 
 @dataclass
+class SyncDirectoriesRequest:
+    # The folder whose sub-folders are listed, relative to the media directory ('' is the media directory).
+    path: str = ''
+    # 'local' lists this WROLPi's media directory, 'primary' lists its primary's.
+    source: str = 'local'
+
+    def __post_init__(self):
+        if self.source not in ('local', 'primary'):
+            raise ValidationError("source must be 'local' or 'primary'")
+
+
+@dataclass
 class SyncSettingsRequest:
     role: Optional[str] = None
     sync_primary_url: Optional[str] = None
@@ -35,6 +47,9 @@ class SyncSettingsRequest:
     backup_device_uuid: Optional[str] = None
     backup_window_start: Optional[str] = None
     backup_window_end: Optional[str] = None
+    # Folders, relative to the media directory, never copied ([] clears).
+    sync_excluded_directories: Optional[List[str]] = None
+    backup_excluded_directories: Optional[List[str]] = None
 
     def __post_init__(self):
         if self.role is not None and self.role not in ('primary', 'secondary'):

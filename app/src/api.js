@@ -394,6 +394,7 @@ export async function getSettings() {
             archive_destination: content.archive_destination,
             backup_device_uuid: content.backup_device_uuid,
             backup_directory: content.backup_directory,
+            backup_excluded_directories: content.backup_excluded_directories,
             backup_window_end: content.backup_window_end,
             backup_window_start: content.backup_window_start,
             download_manager_disabled: content.download_manager_disabled,
@@ -424,6 +425,7 @@ export async function getSettings() {
             require_media_mounted: content.require_media_mounted,
             role: content.role,
             save_ffprobe_json: content.save_ffprobe_json,
+            sync_excluded_directories: content.sync_excluded_directories,
             sync_primary_url: content.sync_primary_url,
             sync_window_end: content.sync_window_end,
             sync_window_start: content.sync_window_start,
@@ -456,6 +458,24 @@ export async function saveSyncSettings(settings) {
         toast({type: 'error', title: 'Saving Sync Settings Failed', description: message, time: 5000});
     }
     return response;
+}
+
+export class PrimaryUnreachableError extends Error {
+}
+
+/** The folders directly inside `path`; `source` is 'local' (this WROLPi) or 'primary' (its primary). */
+export async function getSyncDirectories(path, source) {
+    const response = await apiPost(`${API_URI}/sync/directories`, {path: path || '', source});
+    if (response.ok) {
+        const {directories} = await response.json();
+        return directories;
+    }
+    if (response.status === 502) {
+        const {error} = await response.json();
+        throw new PrimaryUnreachableError(error || 'The primary did not answer');
+    }
+    const message = await getErrorMessage(response, 'Could not list the folders.');
+    throw new Error(message);
 }
 
 export async function runSync(force = false) {

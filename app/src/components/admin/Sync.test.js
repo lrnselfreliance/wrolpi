@@ -3,7 +3,8 @@ import {fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../../test-utils';
 import {backupStatusFixture, settingsFixture, statusFixture, syncStatusFixture} from '../../test-fixtures';
 import {
-    BackupDriveSection, backupDriveOptions, SecondaryRoleMessage, splitBackupDirectory, SyncingOverlay, SyncSection,
+    BackupDriveSection, backupDriveOptions, ExcludedDirectories, isExcludedPath, SecondaryRoleMessage, simplifyExcluded,
+    splitBackupDirectory, SyncingOverlay, SyncSection,
 } from './Sync';
 
 jest.mock('../../api/controller', () => ({
@@ -17,9 +18,14 @@ jest.mock('../../api', () => ({
     runSync: jest.fn(),
     saveSyncSettings: jest.fn(),
     testSync: jest.fn(),
+    getSyncDirectories: jest.fn(),
+    PrimaryUnreachableError: class PrimaryUnreachableError extends Error {
+    },
 }));
 
-import {cancelBackup, cancelSync, runBackup, runSync, saveSyncSettings, testSync} from '../../api';
+import {
+    cancelBackup, cancelSync, getSyncDirectories, PrimaryUnreachableError, runBackup, runSync, saveSyncSettings, testSync,
+} from '../../api';
 import {getDisks} from '../../api/controller';
 
 beforeEach(() => {
@@ -31,7 +37,14 @@ beforeEach(() => {
     runBackup.mockResolvedValue({ok: true});
     cancelBackup.mockResolvedValue({ok: true});
     getDisks.mockResolvedValue(disks);
+    getSyncDirectories.mockImplementation(async path => folderTree[path] || []);
 });
+
+const folderTree = {
+    '': [{name: 'Movies', path: 'Movies'}, {name: 'videos', path: 'videos'}],
+    'videos': [{name: 'channel', path: 'videos/channel'}],
+    'videos/channel': [],
+};
 
 const disks = [
     {name: 'sda1', size: '9.1T', mountpoint: '/media/wrolpi_backup', label: 'Decay2of2', uuid: 'uuid-backup'},
@@ -114,7 +127,7 @@ describe('SyncSection', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             role: 'secondary', sync_primary_url: 'https://192.168.0.10', sync_window_start: '01:00',
-            sync_window_end: '',
+            sync_window_end: '', sync_excluded_directories: [],
         }));
     });
 
@@ -142,7 +155,7 @@ describe('BackupDriveSection', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
-            backup_window_start: '', backup_window_end: '',
+            backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
         }));
     });
 
@@ -220,7 +233,7 @@ describe('BackupDriveSection folder', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup/wrolpi/library', backup_device_uuid: 'uuid-backup',
-            backup_window_start: '', backup_window_end: '',
+            backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
         }));
     });
 
@@ -255,8 +268,76 @@ describe('BackupDriveSection window', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
-            backup_window_start: '01:00', backup_window_end: '04:30',
+            backup_window_start: '01:00', backup_window_end: '04:30', backup_excluded_directories: [],
         }));
     });
 });
 
+
+describe('excluded folders', () => {
+    it('isExcludedPath matches a folder and what is inside it, not a similar name', () => {
+        expect(isExcludedPath('Movies', ['Movies'])).toBe(true);
+        expect(isExcludedPath('Movies/a', ['Movies'])).toBe(true);
+        expect(isExcludedPath('Movies2', ['Movies'])).toBe(false);
+    });
+
+    it('simplifyExcluded drops folders inside another', () => {
+        expect(simplifyExcluded(['videos/channel', 'Movies', 'videos', 'Movies'])).toEqual(['Movies', 'videos']);
+    });
+
+    it('lists the excluded folders and removes one', () => {
+        const onChange = jest.fn();
+        renderWithProviders(<ExcludedDirectories value={['Movies', 'videos/channel']} onChange={onChange}
+                                                 source='local'/>);
+        expect(screen.getByText('Movies')).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText('Copy Movies again'));
+        expect(onChange).toHaveBeenCalledWith(['videos/channel']);
+    });
+
+    it('chooses folders in the tree; a folder inside a checked folder is excluded with it', async () => {
+        const onChange = jest.fn();
+        renderWithProviders(<ExcludedDirectories value={[]} onChange={onChange} source='primary'/>);
+        expect(screen.getByText('Nothing excluded; every folder is copied.')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Choose Folders'));
+        await screen.findByLabelText('videos');
+        expect(getSyncDirectories).toHaveBeenCalledWith('', 'primary');
+
+        fireEvent.click(screen.getByLabelText('Open videos'));
+        const child = await screen.findByLabelText('videos/channel');
+        expect(getSyncDirectories).toHaveBeenCalledWith('videos', 'primary');
+        fireEvent.click(child);
+        fireEvent.click(screen.getByLabelText('videos'));
+        await waitFor(() => expect(screen.getByLabelText('videos/channel')).toBeDisabled());
+        expect(screen.getByLabelText('videos/channel')).toBeChecked();
+        expect(screen.getByText('excluded with its parent')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByText('Done'));
+        expect(onChange).toHaveBeenCalledWith(['videos']);
+    });
+
+    it('says when the primary does not answer', async () => {
+        getSyncDirectories.mockRejectedValue(new PrimaryUnreachableError('connection refused'));
+        renderWithProviders(<ExcludedDirectories value={[]} onChange={jest.fn()} source='primary'/>);
+        fireEvent.click(screen.getByText('Choose Folders'));
+        expect(await screen.findByText('The primary did not answer: connection refused')).toBeInTheDocument();
+    });
+
+    it('a secondary saves its excluded folders', async () => {
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_excluded_directories: ['Movies']})});
+        expect(screen.getByText('Movies')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({sync_excluded_directories: ['Movies']})));
+    });
+
+    it('the backup drive saves its own excluded folders', async () => {
+        const settings = {settings: settingsFixture({backup_directory: '/media/wrolpi_backup',
+                backup_device_uuid: 'uuid-backup', backup_excluded_directories: ['Movies']})};
+        renderWithProviders(<BackupDriveSection/>, {settings});
+        await screen.findByDisplayValue('Decay2of2 (9.1T) at /media/wrolpi_backup');
+        fireEvent.click(screen.getByLabelText('Copy Movies again'));
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({backup_excluded_directories: []})));
+    });
+});

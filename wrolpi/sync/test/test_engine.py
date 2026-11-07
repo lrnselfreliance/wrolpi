@@ -7,6 +7,7 @@ import yaml
 
 from wrolpi.common import get_wrolpi_config, set_test_media_directory
 from wrolpi.db import get_db_session
+from wrolpi.errors import InvalidConfig
 from wrolpi.files.models import FileGroup
 from wrolpi.sync import lib
 from wrolpi.sync.config import get_sync_config
@@ -291,6 +292,91 @@ async def test_run_sync_refuses_unsafe_paths(async_client, primary, secondary_di
     assert not (secondary_directory / 'config/wrolpi.db').exists()
     assert not (secondary_directory.parent / 'escape.txt').exists()
     assert not (secondary_directory / 'tags').exists()
+
+
+@pytest.mark.asyncio
+async def test_run_sync_excluded_directories(async_client, primary, secondary_directory, make_secondary,
+                                             fake_primary_api):
+    """A secondary never downloads files inside its excluded folders, and keeps what it already has in them."""
+    wanted = [write_primary_file(primary, i, b'wanted') for i in ('Movies2/a.mp4', 'docs/Movies/b.txt', 'c.txt')]
+    excluded = [write_primary_file(primary, i, b'excluded') for i in ('Movies/a.mp4', 'Movies/deep/b.mp4',
+                                                                      'Movies [HD]/c.mp4')]
+    pages = [manifest_page(*((i.path, i.size, i.mtime) for i in wanted + excluded))]
+    fake_primary_api(pages, primary.directory)
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+    get_sync_config()._config['sync_excluded_directories'] = ['Movies', 'Movies [HD]']
+    # Copied before the folder was excluded.
+    (secondary_directory / 'Movies').mkdir()
+    (secondary_directory / 'Movies/old.mp4').write_bytes(b'old')
+
+    status = await lib.run_sync()
+
+    assert status['last_error'] is None
+    assert status['files_excluded'] == 3
+    assert status['files_downloaded'] == 3
+    for file in wanted:
+        assert (secondary_directory / file.path).read_bytes() == b'wanted'
+    for file in excluded:
+        assert not (secondary_directory / file.path).exists()
+    assert (secondary_directory / 'Movies/old.mp4').read_bytes() == b'old', 'nothing is deleted'
+
+
+@pytest.mark.parametrize('values, expected', [
+    ([], []),
+    (['Movies'], ['Movies']),
+    (['/Movies/', ' Movies ', 'Movies//'], ['Movies']),
+    (['videos/Movies', 'videos'], ['videos']),
+    (['Movies', 'Movies2', 'Movies/deep'], ['Movies', 'Movies2']),
+    (['a//b'], ['a/b']),
+    (['Movies [HD]'], ['Movies [HD]']),
+])
+def test_normalize_excluded_directories(values, expected):
+    assert lib.normalize_excluded_directories(values) == expected
+
+
+@pytest.mark.parametrize('value', ['', '/', '..', 'a/../b', '../a', 'a/./b', '.hidden', 'a/.hidden', 'config',
+                                   'config/x', 'tags', 'a\\b', None])
+def test_normalize_excluded_directories_rejects(value):
+    with pytest.raises(InvalidConfig):
+        lib.normalize_excluded_directories([value])
+
+
+def test_is_excluded():
+    assert lib.is_excluded('Movies/a.mp4', {'Movies'})
+    assert lib.is_excluded('Movies', {'Movies'})
+    assert not lib.is_excluded('Movies2/a.mp4', {'Movies'})
+    assert not lib.is_excluded('docs/Movies/a.mp4', {'Movies'})
+    assert lib.is_excluded('docs/Movies/a.mp4', {'docs/Movies'})
+
+
+def test_list_local_directories(test_directory):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'zims'):
+        (test_directory / i).mkdir(parents=True)
+    (test_directory / 'file.txt').write_text('a file')
+    (test_directory / 'link').symlink_to(test_directory / 'Movies')
+
+    assert lib.list_local_directories('') == [
+        dict(name='Movies', path='Movies'), dict(name='videos', path='videos'), dict(name='zims', path='zims')]
+    assert lib.list_local_directories('/videos/') == [dict(name='channel', path='videos/channel')]
+    for path in ('../', 'videos/../..', 'file.txt', 'missing', 'link'):
+        with pytest.raises(InvalidConfig):
+            lib.list_local_directories(path)
+
+
+@pytest.mark.asyncio
+async def test_list_primary_directories(primary, secondary_directory, make_secondary):
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden'):
+        (primary.directory / i).mkdir(parents=True)
+    (primary.directory / 'file.txt').write_text('a file')
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+
+    assert await lib.list_primary_directories('') == [
+        dict(name='Movies', path='Movies'), dict(name='videos', path='videos')]
+    assert await lib.list_primary_directories('videos') == [dict(name='channel', path='videos/channel')]
+    with pytest.raises(InvalidConfig):
+        await lib.list_primary_directories('../etc')
 
 
 @pytest.mark.asyncio

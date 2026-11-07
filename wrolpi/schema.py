@@ -11,6 +11,7 @@ from wrolpi.errors import InvalidDownload, ValidationError
 class SettingsResponse:
     backup_device_uuid: Optional[str]
     backup_directory: Optional[str]
+    backup_excluded_directories: List[str]
     backup_window_end: Optional[str]
     backup_window_start: Optional[str]
     download_manager_disabled: bool
@@ -44,6 +45,7 @@ class SettingsResponse:
     require_cookies_unlocked: bool
     role: str
     sync_primary_url: Optional[str]
+    sync_excluded_directories: List[str]
     sync_window_end: Optional[str]
     sync_window_start: Optional[str]
     require_media_mounted: bool
@@ -219,6 +221,7 @@ class SyncStatusResponse:
     files_downloaded: int
     bytes_downloaded: int
     files_failed: int
+    files_excluded: int
     configs_imported: List[str]
     disk_full: bool
 

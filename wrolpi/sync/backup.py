@@ -150,7 +150,13 @@ def check_backup_target(directory: Optional[str], uuid: Optional[str]) -> Option
     return None
 
 
-def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_destination: str = None) -> List[str]:
+def rsync_literal(path: str) -> str:
+    """`path` as an rsync pattern that matches only itself (rsync reads `* ? [ \\` as wildcards)."""
+    return re.sub(r'([*?\[\\])', r'\\\1', path)
+
+
+def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_destination: str = None,
+                        excluded_directories: List[str] = None) -> List[str]:
     """The rsync that copies `source` (the media directory) to `target` (the backup drive), never deleting."""
     command = list()
     # The backup should not slow the WROLPi down.
@@ -174,6 +180,10 @@ def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_de
     ])
     if playlists_destination and (playlists := playlists_destination.strip('/')):
         command.append(f'--exclude=/{playlists}/')
+    # Folders the user chose not to back up.
+    for directory in excluded_directories or []:
+        if directory := directory.strip('/'):
+            command.append(f'--exclude=/{rsync_literal(directory)}/')
     command.extend([f'{source}/', f'{target}/'])
     return command
 
@@ -322,7 +332,8 @@ async def run_backup() -> dict:
         with flags.backup_running:
             # A folder on the drive is created once the drive has been checked (`backup_skip_reason`).
             target.mkdir(parents=True, exist_ok=True)
-            command = build_rsync_command(get_media_directory(), target, get_wrolpi_config().playlists_destination)
+            command = build_rsync_command(get_media_directory(), target, get_wrolpi_config().playlists_destination,
+                                          config.backup_excluded_directories)
             code, errors = await _run_rsync(command, target, uuid)
             if code == RSYNC_PARTIAL:
                 # Unreadable files; everything else was copied.

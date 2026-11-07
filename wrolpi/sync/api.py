@@ -118,6 +118,24 @@ async def get_test(_: Request):
     return json_response(dict(ok=ok, info=info, error=None if ok else f'{url} is not a primary WROLPi'))
 
 
+@sync_bp.post('/directories')
+@openapi.definition(summary='List the folders inside a folder, to choose which are not copied',
+                    body=schema.SyncDirectoriesRequest, validate=True)
+async def post_directories(_: Request, body: schema.SyncDirectoriesRequest):
+    if body.source == 'local':
+        return json_response(dict(directories=lib.list_local_directories(body.path)))
+    if not is_secondary() or not get_sync_config().primary_url:
+        raise InvalidConfig('Only a secondary with a primary can list its primary\'s folders')
+    try:
+        directories = await asyncio.wait_for(lib.list_primary_directories(body.path), timeout=15)
+    except InvalidConfig:
+        raise
+    except Exception as e:
+        logger.warning(f'Could not list the primary\'s folder {body.path!r}', exc_info=e)
+        return json_response(dict(error=str(e) or type(e).__name__), status=HTTPStatus.BAD_GATEWAY)
+    return json_response(dict(directories=directories))
+
+
 @sync_bp.put('/settings')
 @openapi.definition(summary="Set this WROLPi's role and its primary", body=schema.SyncSettingsRequest, validate=True)
 async def put_settings(_: Request, body: schema.SyncSettingsRequest):
@@ -141,6 +159,9 @@ async def put_settings(_: Request, body: schema.SyncSettingsRequest):
         if value and not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', value):
             raise InvalidConfig(f'{request_key} must be in HH:MM format')
         changes[config_key] = value or None
+    for key in ('sync_excluded_directories', 'backup_excluded_directories'):
+        if (value := getattr(body, key)) is not None:
+            changes[key] = lib.normalize_excluded_directories(value)
     if body.backup_directory is not None or body.backup_device_uuid is not None:
         changes.update(_backup_drive_changes(body.backup_directory, body.backup_device_uuid))
     if not changes:

@@ -1,11 +1,33 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
-import {cancelBackup, cancelSync, runBackup, runSync, saveSyncSettings, testSync} from "../../api";
+import {
+    cancelBackup,
+    cancelSync,
+    getSyncDirectories,
+    PrimaryUnreachableError,
+    runBackup,
+    runSync,
+    saveSyncSettings,
+    testSync
+} from "../../api";
 import {getDisks} from "../../api/controller";
 import {humanFileSize, isoDatetimeToAgoPopup, useTitle} from "../Common";
 import {Link} from "react-router";
 import {useDockerized, useSyncRole, useWROLMode} from "../../hooks/customHooks";
-import {Button, Header, Message, Panel, Progress, Select, TextInput, toast} from "../ui";
+import {
+    Button,
+    Checkbox,
+    Header,
+    Icon,
+    IconButton,
+    Message,
+    Modal,
+    Panel,
+    Progress,
+    Select,
+    TextInput,
+    toast
+} from "../ui";
 
 const roleOptions = [
     {value: 'primary', label: 'Primary'},
@@ -64,6 +86,7 @@ export function SyncStatus({sync, running}) {
         {!running && sync.finished_at && <p>
             <b>Last sync:</b> {sync.files_downloaded} files downloaded
             ({humanFileSize(sync.bytes_downloaded)}), {sync.files_failed} failed
+            {sync.files_excluded > 0 && <>, {sync.files_excluded} excluded</>}
         </p>}
         {sync.disk_full && <Message kind='error' icon='hdd' title='The drive is full'>
             Some files were not synced because the drive is nearly full.
@@ -109,6 +132,126 @@ export function SyncingPanel({sync, onCancel}) {
 }
 
 /** The Settings panel: this WROLPi's role, and (for a secondary) its primary and sync window. */
+/** Is `path` an excluded folder, or inside one? */
+export function isExcludedPath(path, excluded) {
+    return (excluded || []).some(i => path === i || path.startsWith(`${i}/`));
+}
+
+/** Excluded folders without the ones already inside another excluded folder, sorted. */
+export function simplifyExcluded(excluded) {
+    const unique = Array.from(new Set(excluded || []));
+    return unique.filter(i => !unique.some(j => j !== i && i.startsWith(`${j}/`))).sort();
+}
+
+function ExcludeFolderRow({folder, depth, source, chosen, onToggle}) {
+    const [open, setOpen] = React.useState(false);
+    const [children, setChildren] = React.useState(null);
+    const [error, setError] = React.useState(null);
+
+    const checked = chosen.has(folder.path);
+    // A folder inside a chosen folder is excluded with it, whether or not it was chosen itself.
+    const inherited = isExcludedPath(folder.path, Array.from(chosen).filter(i => i !== folder.path));
+
+    const toggleOpen = async () => {
+        if (!open && children === null) {
+            try {
+                setChildren(await getSyncDirectories(folder.path, source));
+            } catch (e) {
+                setError(e.message);
+            }
+        }
+        setOpen(!open);
+    };
+
+    return <>
+        <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', paddingLeft: `${depth * 1.5}em`}}
+             data-testid='exclude-folder-row'>
+            <IconButton icon={open ? 'chevron down' : 'chevron right'} size='xs' onClick={toggleOpen}
+                        label={`${open ? 'Close' : 'Open'} ${folder.name}`}/>
+            <Checkbox checked={checked || inherited} disabled={inherited} aria-label={folder.path}
+                      onChange={() => onToggle(folder.path)}
+                      label={<span><Icon name='folder'/> {folder.name}</span>}/>
+            {inherited && <span style={{color: 'var(--muted)', fontSize: '0.85em'}}>excluded with its parent</span>}
+        </div>
+        {open && error && <p style={{paddingLeft: `${(depth + 1) * 1.5}em`, color: 'var(--muted)'}}>{error}</p>}
+        {open && children && children.length === 0 && <p
+            style={{paddingLeft: `${(depth + 1) * 1.5 + 2}em`, color: 'var(--muted)', margin: 0}}>No folders</p>}
+        {open && children && children.map(child => <ExcludeFolderRow key={child.path} folder={child} depth={depth + 1}
+                                                                     source={source} chosen={chosen}
+                                                                     onToggle={onToggle}/>)}
+    </>
+}
+
+/** Choose folders in a tree; `source` is 'local' (this WROLPi's media directory) or 'primary'. */
+export function ExcludeFolderModal({open, onClose, value, onSubmit, source}) {
+    const [chosen, setChosen] = React.useState(new Set());
+    const [folders, setFolders] = React.useState(null);
+    const [error, setError] = React.useState(null);
+
+    React.useEffect(() => {
+        if (!open) {
+            return;
+        }
+        setChosen(new Set(value || []));
+        setFolders(null);
+        setError(null);
+        getSyncDirectories('', source)
+            .then(setFolders)
+            .catch(e => setError(e instanceof PrimaryUnreachableError
+                ? `The primary did not answer: ${e.message}` : e.message));
+    }, [open, source, value]);
+
+    const onToggle = path => {
+        const next = new Set(chosen);
+        next.has(path) ? next.delete(path) : next.add(path);
+        setChosen(next);
+    };
+
+    return <Modal open={open} onClose={onClose}>
+        <Modal.Header>{source === 'primary' ? "Exclude the primary's folders" : 'Exclude folders'}</Modal.Header>
+        <Modal.Content>
+            <p>Checked folders, and everything inside them, are not copied.</p>
+            {error && <Message kind='error' icon='warning' title='Could not list the folders'>{error}</Message>}
+            {!error && folders === null && <p>Loading folders...</p>}
+            {folders && folders.length === 0 && <p>No folders</p>}
+            {folders && folders.map(folder => <ExcludeFolderRow key={folder.path} folder={folder} depth={0}
+                                                                source={source} chosen={chosen}
+                                                                onToggle={onToggle}/>)}
+        </Modal.Content>
+        <Modal.Actions>
+            <Button role='cancel' style={{marginRight: 'auto'}} onClick={onClose}>Cancel</Button>
+            <Button color='violet' onClick={() => onSubmit(simplifyExcluded(Array.from(chosen)))}>Done</Button>
+        </Modal.Actions>
+    </Modal>
+}
+
+/** The folders a sync or a backup does not copy, and the button that chooses them. */
+export function ExcludedDirectories({value, onChange, source, disabled}) {
+    const [open, setOpen] = React.useState(false);
+    const excluded = value || [];
+    return <div style={{margin: '0.5em 0'}}>
+        <label><b>Excluded folders</b></label>
+        {excluded.length === 0
+            ? <p style={{color: 'var(--muted)', margin: '0.25em 0'}}>Nothing excluded; every folder is copied.</p>
+            : <ul style={{listStyle: 'none', padding: 0, margin: '0.25em 0'}}>
+                {excluded.map(path => <li key={path} style={{display: 'flex', alignItems: 'center', gap: '0.5em'}}>
+                    <Icon name='folder'/> <span>{path}</span>
+                    <IconButton icon='close' size='xs' label={`Copy ${path} again`} disabled={disabled}
+                                onClick={() => onChange(excluded.filter(i => i !== path))}/>
+                </li>)}
+            </ul>}
+        <Button icon='folder open' onClick={() => setOpen(true)} disabled={disabled}>Choose Folders</Button>
+        <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
+            Files already copied into an excluded folder are kept; delete them yourself to free space.
+        </p>
+        <ExcludeFolderModal open={open} onClose={() => setOpen(false)} value={excluded} source={source}
+                            onSubmit={chosen => {
+                                onChange(chosen);
+                                setOpen(false);
+                            }}/>
+    </div>
+}
+
 export function SyncSection() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {status} = React.useContext(StatusContext);
@@ -123,6 +266,7 @@ export function SyncSection() {
     const primaryUrl = settings?.sync_primary_url;
     const windowStart = settings?.sync_window_start;
     const windowEnd = settings?.sync_window_end;
+    const excludedKey = JSON.stringify(settings?.sync_excluded_directories || []);
     React.useEffect(() => {
         if (loaded) {
             setState({
@@ -130,9 +274,10 @@ export function SyncSection() {
                 sync_primary_url: primaryUrl || '',
                 sync_window_start: windowStart || '',
                 sync_window_end: windowEnd || '',
+                sync_excluded_directories: JSON.parse(excludedKey),
             });
         }
-    }, [loaded, role, primaryUrl, windowStart, windowEnd]);
+    }, [loaded, role, primaryUrl, windowStart, windowEnd, excludedKey]);
 
     if (!settings) {
         return null;
@@ -209,6 +354,14 @@ export function SyncSection() {
                 "Sync Now".
             </p>
         </>}
+
+        {/* The primary's folders can only be listed once this WROLPi knows its primary. */}
+        {secondary && saved && <ExcludedDirectories value={state.sync_excluded_directories} source='primary'
+                                                    disabled={wrolMode}
+                                                    onChange={value => setState({
+                                                        ...state,
+                                                        sync_excluded_directories: value
+                                                    })}/>}
 
         <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
             <Button color='violet' onClick={save} disabled={wrolMode || saving}>Save</Button>
@@ -289,6 +442,7 @@ export function BackupDriveSection() {
     const [folder, setFolder] = React.useState('');
     const [windowStart, setWindowStart] = React.useState('');
     const [windowEnd, setWindowEnd] = React.useState('');
+    const [excluded, setExcluded] = React.useState([]);
     const [saving, setSaving] = React.useState(false);
 
     const savedDirectory = settings?.backup_directory || '';
@@ -306,6 +460,11 @@ export function BackupDriveSection() {
         setWindowStart(savedWindowStart);
         setWindowEnd(savedWindowEnd);
     }, [savedWindowStart, savedWindowEnd]);
+
+    const savedExcluded = JSON.stringify(settings?.backup_excluded_directories || []);
+    React.useEffect(() => {
+        setExcluded(JSON.parse(savedExcluded));
+    }, [savedExcluded]);
 
     React.useEffect(() => {
         if (dockerized === false) {
@@ -335,6 +494,7 @@ export function BackupDriveSection() {
                 backup_device_uuid: chosen ? chosen.uuid : '',
                 backup_window_start: chosen ? windowStart : '',
                 backup_window_end: chosen ? windowEnd : '',
+                backup_excluded_directories: excluded,
             });
             if (response?.ok) {
                 toast({type: 'success', title: 'Backup drive saved', time: 3000});
@@ -390,6 +550,7 @@ export function BackupDriveSection() {
                 Within the window, the backup drive is updated every hour. Leave both empty to back up only with
                 "Back Up Now".
             </p>
+            <ExcludedDirectories value={excluded} onChange={setExcluded} source='local' disabled={wrolMode}/>
         </>}
         <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
             <Button color='violet' onClick={save} disabled={wrolMode || saving}>Save</Button>

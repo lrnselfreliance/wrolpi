@@ -27,6 +27,7 @@ def default_sync_status() -> dict:
         files_downloaded=0,
         bytes_downloaded=0,
         files_failed=0,
+        files_excluded=0,
         configs_imported=[],
         disk_full=False,
     )

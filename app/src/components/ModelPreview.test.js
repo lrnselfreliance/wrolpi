@@ -4,7 +4,7 @@
 import React from 'react';
 import {act, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../test-utils';
-import {STLPreviewModal, ThreeMFPreviewModal} from './FilePreview';
+import {modelCameraDistance, STLPreviewModal, ThreeMFPreviewModal} from './FilePreview';
 import {zipSync} from 'three/examples/jsm/libs/fflate.module.js';
 
 jest.mock('three', () => {
@@ -149,5 +149,31 @@ describe('3MF preview', () => {
         serve(threeMF());
         await act(async () => renderWithProviders(<ThreeMFPreviewModal previewFile={{path: 'models/part.3mf'}}/>));
         await expectTriangleDimensions(TRIANGLE_DIMENSIONS);
+    });
+});
+
+describe('modelCameraDistance', () => {
+    // Half the angle a sphere of `radius` fills when seen from `distance`.
+    const sphereHalfAngle = (radius, distance) => Math.asin(radius / distance);
+    const halfVertical = (fov) => (fov * Math.PI) / 360;
+    const halfHorizontal = (fov, aspect) => Math.atan(Math.tan(halfVertical(fov)) * aspect);
+
+    it.each([
+        ['a wide viewer', 2],
+        ['a square viewer', 1],
+        ['a tall, narrow viewer', 0.5],
+    ])('fits the whole bounding sphere in %s, with little to spare', (_, aspect) => {
+        const radius = 24;
+        const fov = 50;
+        const distance = modelCameraDistance(radius, fov, aspect);
+        const narrowest = Math.min(halfVertical(fov), halfHorizontal(fov, aspect));
+        // Every point of the sphere is in view...
+        expect(sphereHalfAngle(radius, distance)).toBeLessThanOrEqual(narrowest);
+        // ...and the sphere fills at least 90% of the narrower field of view.
+        expect(sphereHalfAngle(radius, distance)).toBeGreaterThan(narrowest * 0.9);
+    });
+
+    it('stands back in proportion to the model', () => {
+        expect(modelCameraDistance(10, 50, 1.5)).toBeCloseTo(modelCameraDistance(1, 50, 1.5) * 10);
     });
 });

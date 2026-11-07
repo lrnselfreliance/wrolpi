@@ -234,6 +234,17 @@ const MODEL_FORMATS = {
     },
 };
 
+/**
+ * How far a camera must stand from a sphere of `radius` for the whole sphere to be in view, with
+ * `margin` to spare.  The narrower of the vertical and horizontal fields of view decides: a tall,
+ * narrow viewer is limited by its width.
+ */
+export function modelCameraDistance(radius, verticalFovDegrees, aspect, margin = 1.02) {
+    const halfVertical = (verticalFovDegrees * Math.PI) / 360;
+    const halfHorizontal = Math.atan(Math.tan(halfVertical) * aspect);
+    return (radius / Math.sin(Math.min(halfVertical, halfHorizontal))) * margin;
+}
+
 function ModelPreviewModal({previewFile, format}) {
     const {label, loader: getLoader, toObject} = MODEL_FORMATS[format];
     const containerRef = React.useRef(null);
@@ -256,6 +267,7 @@ function ModelPreviewModal({previewFile, format}) {
             try {
                 THREE = await import('three');
                 const {OrbitControls} = await import('three/examples/jsm/controls/OrbitControls.js');
+                const {toCreasedNormals} = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
                 const loader = await getLoader();
                 if (cancelled) return;
 
@@ -274,13 +286,14 @@ function ModelPreviewModal({previewFile, format}) {
                 renderer.setSize(width, height);
                 container.appendChild(renderer.domElement);
 
-                scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                dirLight.position.set(1, 1, 1);
-                scene.add(dirLight);
-                const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-                dirLight2.position.set(-1, -1, -1);
-                scene.add(dirLight2);
+                // Sky above, darker ground below, so top and bottom read differently.  The headlight
+                // follows the camera, so whichever side the user orbits to is lit; it shines from a
+                // little above and left of the camera so faces turned toward the viewer still shade
+                // differently.
+                scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 2));
+                const headlight = new THREE.DirectionalLight(0xffffff, 2.5);
+                scene.add(headlight);
+                const headlightOffset = new THREE.Vector3();
 
                 controls = new OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
@@ -297,12 +310,16 @@ function ModelPreviewModal({previewFile, format}) {
 
                         // One violet for every model, so models without authored materials
                         // are visible against either theme's background.
-                        // Geometry may lack vertex normals — compute them so
+                        // Geometry may lack vertex normals (3MF stores none) — compute them so
                         // MeshPhongMaterial can shade faces instead of rendering flat black.
+                        // Creased: curves are smoothed, but an edge sharper than 30 degrees stays
+                        // sharp, so flat faces do not shade into their neighbors.
                         group.traverse((obj) => {
                             if (obj.isMesh) {
                                 if (obj.geometry && !obj.geometry.attributes.normal) {
-                                    obj.geometry.computeVertexNormals();
+                                    const creased = toCreasedNormals(obj.geometry, Math.PI / 6);
+                                    obj.geometry.dispose();
+                                    obj.geometry = creased;
                                 }
                                 obj.material = new THREE.MeshPhongMaterial({
                                     color: 0x7353a8,
@@ -313,7 +330,9 @@ function ModelPreviewModal({previewFile, format}) {
 
                         scene.add(group);
 
-                        // Frame the model: center it, then pull camera back along Z by bounding radius.
+                        // Frame the model: center it, then view it from the front, raised and a little
+                        // to the right, far enough back that its bounding sphere (every point of it)
+                        // fills the viewer.
                         const box = new THREE.Box3().setFromObject(group);
                         const size = new THREE.Vector3();
                         const center = new THREE.Vector3();
@@ -321,11 +340,11 @@ function ModelPreviewModal({previewFile, format}) {
                         box.getCenter(center);
                         group.position.sub(center);
 
-                        const boundingRadius = Math.max(size.x, size.y, size.z) / 2 || 1;
-                        const fitDistance = boundingRadius / Math.tan((Math.PI * camera.fov) / 360);
-                        camera.position.set(0, 0, fitDistance * 2.2);
-                        camera.near = Math.max(0.1, fitDistance / 1000);
-                        camera.far = fitDistance * 100;
+                        const boundingRadius = size.length() / 2 || 1;
+                        const distance = modelCameraDistance(boundingRadius, camera.fov, camera.aspect);
+                        camera.position.set(0.6, 0.5, 1).normalize().multiplyScalar(distance);
+                        camera.near = distance / 100;
+                        camera.far = distance * 100;
                         camera.updateProjectionMatrix();
                         controls.target.set(0, 0, 0);
                         controls.update();
@@ -347,6 +366,9 @@ function ModelPreviewModal({previewFile, format}) {
                 const animate = () => {
                     animationId = requestAnimationFrame(animate);
                     controls.update();
+                    headlightOffset.set(-0.4, 0.6, 0).applyQuaternion(camera.quaternion)
+                        .multiplyScalar(camera.position.length());
+                    headlight.position.copy(camera.position).add(headlightOffset);
                     renderer.render(scene, camera);
                 };
                 animate();

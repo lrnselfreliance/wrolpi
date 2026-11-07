@@ -132,7 +132,9 @@ async def put_settings(_: Request, body: schema.SyncSettingsRequest):
                 if body.sync_primary_url else None
         except ValueError as e:
             raise InvalidConfig(str(e))
-    for request_key, config_key in (('sync_window_start', 'window_start'), ('sync_window_end', 'window_end')):
+    for request_key, config_key in (('sync_window_start', 'window_start'), ('sync_window_end', 'window_end'),
+                                    ('backup_window_start', 'backup_window_start'),
+                                    ('backup_window_end', 'backup_window_end')):
         value = getattr(body, request_key)
         if value is None:
             continue

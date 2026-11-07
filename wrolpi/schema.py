@@ -11,6 +11,8 @@ from wrolpi.errors import InvalidDownload, ValidationError
 class SettingsResponse:
     backup_device_uuid: Optional[str]
     backup_directory: Optional[str]
+    backup_window_end: Optional[str]
+    backup_window_start: Optional[str]
     download_manager_disabled: bool
     download_manager_stopped: bool
     download_daily_limit_global: Optional[int]

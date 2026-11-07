@@ -77,6 +77,15 @@ async def test_settings(async_client, test_directory, test_wrolpi_config, test_d
     request, response = await async_client.post('/api/download/enable')
     assert response.status_code == HTTPStatus.FORBIDDEN
 
+    # The backup drive has its own window.
+    body = dict(backup_window_start='02:00', backup_window_end='04:00')
+    request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert (config.backup_window_start, config.backup_window_end) == ('02:00', '04:00')
+    assert (config.window_start, config.window_end) == ('01:00', '05:00')
+    request, response = await async_client.get('/api/settings')
+    assert (response.json['backup_window_start'], response.json['backup_window_end']) == ('02:00', '04:00')
+
     # Clearing the window leaves only "Sync now".
     body = dict(sync_window_start='', sync_window_end='')
     request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
@@ -85,7 +94,8 @@ async def test_settings(async_client, test_directory, test_wrolpi_config, test_d
 
     for body in (dict(role='tertiary'), dict(sync_primary_url='ftp://primary'),
                  dict(sync_primary_url='https://user:password@primary'),
-                 dict(sync_primary_url='https://primary/media'), dict(sync_window_start='25:00'), dict()):
+                 dict(sync_primary_url='https://primary/media'), dict(sync_window_start='25:00'),
+                 dict(backup_window_end='5pm'), dict()):
         request, response = await async_client.put('/api/sync/settings', content=json.dumps(body))
         assert response.status_code == HTTPStatus.BAD_REQUEST, body
 

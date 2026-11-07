@@ -29,7 +29,7 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_file
 from wrolpi.events import Events
 from wrolpi.sync.config import get_sync_config
-from wrolpi.sync.lib import sync_is_due, PROGRESS_INTERVAL_SECONDS
+from wrolpi.sync.lib import window_is_due, PROGRESS_INTERVAL_SECONDS
 from wrolpi.sync.status import get_backup_status, update_backup_status
 from wrolpi.vars import DOCKERIZED, PYTEST
 
@@ -361,6 +361,13 @@ async def run_backup() -> dict:
                                 cancel_requested=False)
 
 
+def backup_is_due(status: dict, local_now) -> bool:
+    """True if the backup window is open and the last backup finished long enough ago."""
+    config = get_sync_config()
+    return window_is_due(status, local_now, config.backup_window_start, config.backup_window_end,
+                         BACKUP_REPEAT_SECONDS)
+
+
 async def backup_tick():
     """Start a backup when one was requested, or when it is due."""
     status = get_backup_status()
@@ -370,7 +377,7 @@ async def backup_tick():
             update_backup_status(requested=False, last_skip_reason=reason)
         return
     from wrolpi.downloader import DownloadManager
-    if not status['requested'] and not sync_is_due(status, DownloadManager._get_local_now(), BACKUP_REPEAT_SECONDS):
+    if not status['requested'] and not backup_is_due(status, DownloadManager._get_local_now()):
         return
     update_backup_status(requested=False)
     await run_backup()

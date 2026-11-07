@@ -179,6 +179,8 @@ def get_settings(_: Request):
         'archive_destination': wrolpi_config.archive_destination,
         'backup_device_uuid': sync_config.backup_device_uuid,
         'backup_directory': sync_config.backup_directory,
+        'backup_window_end': sync_config.backup_window_end,
+        'backup_window_start': sync_config.backup_window_start,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
         'download_daily_limit_global': wrolpi_config.download_daily_limit_global,

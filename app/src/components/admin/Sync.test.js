@@ -92,9 +92,12 @@ describe('SyncingOverlay', () => {
 
 describe('SyncSection', () => {
     it('a primary shows only its role', () => {
-        renderWithProviders(<SyncSection/>);
+        // Even with a backup drive: the backup has its own window, in its own panel.
+        renderWithProviders(<SyncSection/>, {settings: {settings: settingsFixture({
+                backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup'})}});
         expect(screen.getByText('This WROLPi is')).toBeInTheDocument();
         expect(screen.queryByText('Primary address')).not.toBeInTheDocument();
+        expect(screen.queryByText('Sync Window Start')).not.toBeInTheDocument();
         expect(screen.queryByText('Sync Now')).not.toBeInTheDocument();
     });
 
@@ -139,6 +142,7 @@ describe('BackupDriveSection', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
+            backup_window_start: '', backup_window_end: '',
         }));
     });
 
@@ -216,6 +220,7 @@ describe('BackupDriveSection folder', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup/wrolpi/library', backup_device_uuid: 'uuid-backup',
+            backup_window_start: '', backup_window_end: '',
         }));
     });
 
@@ -236,6 +241,22 @@ describe('BackupDriveSection database phase', () => {
                 backup: backupStatusFixture({state: 'running', phase: 'database'})})};
         renderWithProviders(<BackupDriveSection/>, {settings, status});
         expect((await screen.findByText('Stop Backup')).closest('button')).toBeDisabled();
+    });
+});
+
+describe('BackupDriveSection window', () => {
+    it('saves its own window with the drive', async () => {
+        const settings = {settings: settingsFixture({backup_directory: '/media/wrolpi_backup',
+                backup_device_uuid: 'uuid-backup', backup_window_start: '01:00', backup_window_end: '05:00'})};
+        renderWithProviders(<BackupDriveSection/>, {settings});
+        await screen.findByDisplayValue('Decay2of2 (9.1T) at /media/wrolpi_backup');
+        expect(screen.getByLabelText('Backup Window Start')).toHaveValue('01:00');
+        fireEvent.change(screen.getByLabelText('Backup Window End'), {target: {value: '04:30'}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
+            backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
+            backup_window_start: '01:00', backup_window_end: '04:30',
+        }));
     });
 });
 

@@ -47,6 +47,8 @@ export const settingsFixture = (overrides = {}) => ({
     archive_destination: 'archive/%(domain_tag)s/%(domain)s',
     backup_device_uuid: null,
     backup_directory: null,
+    backup_window_end: null,
+    backup_window_start: null,
     check_for_upgrades: true,
     download_daily_limit_global: null,
     download_daily_limit_per_domain: null,

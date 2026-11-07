@@ -33,6 +33,8 @@ class SyncSettingsRequest:
     # The mount point of the backup drive, and the UUID of the drive that must be mounted there ('' clears both).
     backup_directory: Optional[str] = None
     backup_device_uuid: Optional[str] = None
+    backup_window_start: Optional[str] = None
+    backup_window_end: Optional[str] = None
 
     def __post_init__(self):
         if self.role is not None and self.role not in ('primary', 'secondary'):

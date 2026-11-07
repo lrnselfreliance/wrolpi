@@ -394,6 +394,8 @@ export async function getSettings() {
             archive_destination: content.archive_destination,
             backup_device_uuid: content.backup_device_uuid,
             backup_directory: content.backup_directory,
+            backup_window_end: content.backup_window_end,
+            backup_window_start: content.backup_window_start,
             download_manager_disabled: content.download_manager_disabled,
             download_manager_stopped: content.download_manager_stopped,
             download_daily_limit_global: content.download_daily_limit_global,

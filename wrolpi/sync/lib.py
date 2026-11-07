@@ -746,12 +746,11 @@ async def _refresh(paths: List[pathlib.Path]):
         logger.error(f'Failed to refresh synced files: {e}')
 
 
-def sync_is_due(status: dict, local_now: datetime, repeat_seconds: int = SYNC_WINDOW_REPEAT_SECONDS) -> bool:
-    """True if the sync window is open and the last run (described by `status`) finished `repeat_seconds` ago."""
-    config = get_sync_config()
-    start, end = config.window_start, config.window_end
+def window_is_due(status: dict, local_now: datetime, start: Optional[str], end: Optional[str],
+                  repeat_seconds: int) -> bool:
+    """True if the daily window from `start` to `end` is open and the last run (described by `status`) finished
+    `repeat_seconds` ago.  No window: never (only on request)."""
     if not start or not end:
-        # No window: only "Sync now".
         return False
     if not is_within_daily_window(start, end, local_now.time()):
         return False
@@ -759,6 +758,12 @@ def sync_is_due(status: dict, local_now: datetime, repeat_seconds: int = SYNC_WI
         return True
     finished_at = datetime.fromisoformat(status['finished_at'])
     return (local_now - finished_at).total_seconds() >= repeat_seconds
+
+
+def sync_is_due(status: dict, local_now: datetime) -> bool:
+    """True if the sync window is open and the last sync finished long enough ago."""
+    config = get_sync_config()
+    return window_is_due(status, local_now, config.window_start, config.window_end, SYNC_WINDOW_REPEAT_SECONDS)
 
 
 async def sync_tick():

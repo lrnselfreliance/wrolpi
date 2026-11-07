@@ -191,7 +191,7 @@ export function SyncSection() {
             </div>
         </>}
 
-        {(secondary || settings.backup_directory) && <>
+        {secondary && <>
             <div style={{display: 'flex', gap: '1em', flexWrap: 'wrap', margin: '0.5em 0'}}>
                 <div>
                     <label><b>Sync Window Start</b></label>
@@ -205,8 +205,8 @@ export function SyncSection() {
                 </div>
             </div>
             <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
-                Within the window, a secondary syncs every 15 minutes, and the backup drive is updated every hour.
-                Leave both empty to sync only with "Sync Now" and "Back Up Now".
+                Within the window, this secondary syncs every 15 minutes. Leave both empty to sync only with
+                "Sync Now".
             </p>
         </>}
 
@@ -287,6 +287,8 @@ export function BackupDriveSection() {
     const [disksError, setDisksError] = React.useState(null);
     const [drive, setDrive] = React.useState('');
     const [folder, setFolder] = React.useState('');
+    const [windowStart, setWindowStart] = React.useState('');
+    const [windowEnd, setWindowEnd] = React.useState('');
     const [saving, setSaving] = React.useState(false);
 
     const savedDirectory = settings?.backup_directory || '';
@@ -297,6 +299,13 @@ export function BackupDriveSection() {
         setDrive(saved.drive);
         setFolder(saved.folder);
     }, [saved.drive, saved.folder]);
+
+    const savedWindowStart = settings?.backup_window_start || '';
+    const savedWindowEnd = settings?.backup_window_end || '';
+    React.useEffect(() => {
+        setWindowStart(savedWindowStart);
+        setWindowEnd(savedWindowEnd);
+    }, [savedWindowStart, savedWindowEnd]);
 
     React.useEffect(() => {
         if (dockerized === false) {
@@ -324,6 +333,8 @@ export function BackupDriveSection() {
             const response = await saveSyncSettings({
                 backup_directory: chosen ? (cleanFolder ? `${chosen.value}/${cleanFolder}` : chosen.value) : '',
                 backup_device_uuid: chosen ? chosen.uuid : '',
+                backup_window_start: chosen ? windowStart : '',
+                backup_window_end: chosen ? windowEnd : '',
             });
             if (response?.ok) {
                 toast({type: 'success', title: 'Backup drive saved', time: 3000});
@@ -346,7 +357,7 @@ export function BackupDriveSection() {
         <Header as='h3' icon='hdd'>Backup Drive</Header>
         <p>
             Copy this WROLPi's media directory to a second drive, so the drive can replace the media drive if it
-            fails. Files deleted here are kept on the backup drive. The backup runs during the sync window.
+            fails. Files deleted here are kept on the backup drive.
         </p>
         {disksError && <Message kind='error' icon='warning' title='Could not list drives'>{disksError}</Message>}
         <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
@@ -362,6 +373,24 @@ export function BackupDriveSection() {
                 The media directory is copied into this folder; leave it empty to use the whole drive.
             </p>
         </div>}
+        {drive && <>
+            <div style={{display: 'flex', gap: '1em', flexWrap: 'wrap', margin: '0.5em 0'}}>
+                <div>
+                    <label><b>Backup Window Start</b></label>
+                    <TextInput type='time' value={windowStart} disabled={wrolMode} aria-label='Backup Window Start'
+                               onChange={e => setWindowStart(e.currentTarget.value)}/>
+                </div>
+                <div>
+                    <label><b>Backup Window End</b></label>
+                    <TextInput type='time' value={windowEnd} disabled={wrolMode} aria-label='Backup Window End'
+                               onChange={e => setWindowEnd(e.currentTarget.value)}/>
+                </div>
+            </div>
+            <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
+                Within the window, the backup drive is updated every hour. Leave both empty to back up only with
+                "Back Up Now".
+            </p>
+        </>}
         <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>
             <Button color='violet' onClick={save} disabled={wrolMode || saving}>Save</Button>
             {savedDirectory && !running && <Button onClick={backUpNow} disabled={wrolMode}>Back Up Now</Button>}

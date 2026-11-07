@@ -293,9 +293,8 @@ pre.wrap-text {
     }
 }
 
-/* Caps preview content to fit inside the file-preview Modal.
-   300px reserves room for pathContent <pre>, Modal.Header, Modal.Actions row,
-   inner content (e.g. STL dimensions banner), and modal padding.
+/* Caps preview content to fit inside a Modal (e.g. the Zim entry preview): 18.75rem is a guess at
+   everything else in the modal.  The file-preview Modal does not guess; see below.
    Use 100dvh so mobile browser chrome (URL bar) is accounted for. */
 .preview-fit {
     width: 100%;
@@ -307,6 +306,36 @@ pre.wrap-text {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* In the file-preview Modal, a .preview-fit takes whatever height the rest of the modal leaves
+   (path, header, a 3D model's dimensions line, the action buttons however they wrap) rather
+   than reserving a fixed amount, so the buttons are always on screen without scrolling.
+   The modal fills Mantine's maximum height only when it frames a .preview-fit; other previews
+   keep the height of their content. */
+.file-preview-modal-content:has(.preview-fit) {
+    height: calc(100dvh - var(--modal-y-offset) * 2);
+    display: flex;
+    flex-direction: column;
+}
+
+.file-preview-modal-content:has(.preview-fit) > .mantine-Modal-header {
+    flex: none;
+}
+
+.file-preview-modal-content:has(.preview-fit) > .mantine-Modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* The .preview-fit (a direct child of the body: MediaGate renders fragments) takes the leftover
+   height.  The other children keep theirs: a flex item never shrinks below its content. */
+.file-preview-modal-content .preview-fit {
+    flex: 1 1 0;
+    height: auto;
+    max-height: none;
 }
 
 /* Fresnel (Media) wraps iframes in a div which would otherwise shrink to the

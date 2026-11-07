@@ -1,6 +1,6 @@
 'use strict';
 
-// Replaces CRA's JS transform so Jest can load three.js.  three (and three-stdlib) ship ES modules
+// Replaces CRA's JS transform so Jest can load three.js.  three ships ES modules
 // with static class blocks, which babel-preset-react-app's class-properties plugin rejects at our
 // pinned Babel version.  Those files only need their imports converted to CommonJS; every other
 // file goes through CRA's transform unchanged.
@@ -13,7 +13,7 @@ const threeTransform = babelJest.createTransformer({
     plugins: [require.resolve('@babel/plugin-transform-modules-commonjs')],
 });
 
-const THREE_PATH = /[\\/]node_modules[\\/]three(-stdlib)?[\\/]/;
+const THREE_PATH = /[\\/]node_modules[\\/]three[\\/]/;
 
 function pick(sourcePath) {
     return THREE_PATH.test(sourcePath) ? threeTransform : craTransform;

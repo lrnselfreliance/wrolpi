@@ -5,7 +5,6 @@ import {encodeMediaPath, isSupportedArchive, useLocalStorage} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
-import {StlViewer} from "react-stl-viewer";
 import {Button, ButtonGroup, Header, Icon, IconButton, MediaGate, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
 import {useEpubProgress, useMediaProgress} from "../hooks/useFileProgress";
@@ -218,7 +217,36 @@ function getAudioPreviewModal(previewFile) {
     </React.Fragment>
 }
 
-function ThreeMFPreviewModal({previewFile}) {
+// Each 3D format's loader ships with three, so it always matches the installed three.  Every
+// format is Z-up.
+const MODEL_FORMATS = {
+    '3mf': {
+        label: '3MF',
+        loader: async () => new (await import('three/examples/jsm/loaders/3MFLoader.js')).ThreeMFLoader(),
+        // A 3MF loads as a group of meshes.
+        toObject: (THREE, group) => group,
+    },
+    stl: {
+        label: 'STL',
+        loader: async () => new (await import('three/examples/jsm/loaders/STLLoader.js')).STLLoader(),
+        // An STL loads as a single geometry.
+        toObject: (THREE, geometry) => new THREE.Mesh(geometry),
+    },
+};
+
+/**
+ * How far a camera must stand from a sphere of `radius` for the whole sphere to be in view, with
+ * `margin` to spare.  The narrower of the vertical and horizontal fields of view decides: a tall,
+ * narrow viewer is limited by its width.
+ */
+export function modelCameraDistance(radius, verticalFovDegrees, aspect, margin = 1.02) {
+    const halfVertical = (verticalFovDegrees * Math.PI) / 360;
+    const halfHorizontal = Math.atan(Math.tan(halfVertical) * aspect);
+    return (radius / Math.sin(Math.min(halfVertical, halfHorizontal))) * margin;
+}
+
+function ModelPreviewModal({previewFile, format}) {
+    const {label, loader: getLoader, toObject} = MODEL_FORMATS[format];
     const containerRef = React.useRef(null);
     const [dimensions, setDimensions] = React.useState(null);
     const [error, setError] = React.useState(null);
@@ -227,7 +255,7 @@ function ThreeMFPreviewModal({previewFile}) {
     const name = path.replace(/^.*[\\\/]/, '');
 
     React.useEffect(() => {
-        // Imperative three.js viewer — mirrors react-stl-viewer behavior for .3mf files.
+        // Imperative three.js viewer.
         let cancelled = false;
         const container = containerRef.current;
         if (!container) return;
@@ -239,12 +267,12 @@ function ThreeMFPreviewModal({previewFile}) {
             try {
                 THREE = await import('three');
                 const {OrbitControls} = await import('three/examples/jsm/controls/OrbitControls.js');
-                const {ThreeMFLoader} = await import('three/examples/jsm/loaders/3MFLoader.js');
+                const {toCreasedNormals} = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+                const loader = await getLoader();
                 if (cancelled) return;
 
                 scene = new THREE.Scene();
-                // Transparent background so the modal/theme color shows through,
-                // matching react-stl-viewer's behavior.
+                // Transparent background so the modal/theme color shows through.
 
                 const width = container.clientWidth || 1;
                 const height = container.clientHeight || 1;
@@ -258,32 +286,40 @@ function ThreeMFPreviewModal({previewFile}) {
                 renderer.setSize(width, height);
                 container.appendChild(renderer.domElement);
 
-                scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                dirLight.position.set(1, 1, 1);
-                scene.add(dirLight);
-                const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-                dirLight2.position.set(-1, -1, -1);
-                scene.add(dirLight2);
+                // Sky above, darker ground below, so top and bottom read differently.  The headlight
+                // follows the camera, so whichever side the user orbits to is lit; it shines from a
+                // little above and left of the camera so faces turned toward the viewer still shade
+                // differently.
+                scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 2));
+                const headlight = new THREE.DirectionalLight(0xffffff, 2.5);
+                scene.add(headlight);
+                const headlightOffset = new THREE.Vector3();
 
                 controls = new OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
 
-                const loader = new ThreeMFLoader();
                 loader.load(
                     url,
-                    (group) => {
+                    (result) => {
                         if (cancelled) return;
+                        const group = toObject(THREE, result);
                         loadedGroup = group;
+                        // STL and 3MF are Z-up (the 3D printing convention) and three is Y-up, so
+                        // stand the model upright: model Z reads as Height, model Y as Length.
+                        group.rotation.x = -Math.PI / 2;
 
-                        // Match react-stl-viewer's violet so 3MFs without authored
-                        // materials are visible against either theme's background.
-                        // 3MF geometry often lacks vertex normals — compute them so
+                        // One violet for every model, so models without authored materials
+                        // are visible against either theme's background.
+                        // Geometry may lack vertex normals (3MF stores none) — compute them so
                         // MeshPhongMaterial can shade faces instead of rendering flat black.
+                        // Creased: curves are smoothed, but an edge sharper than 30 degrees stays
+                        // sharp, so flat faces do not shade into their neighbors.
                         group.traverse((obj) => {
                             if (obj.isMesh) {
                                 if (obj.geometry && !obj.geometry.attributes.normal) {
-                                    obj.geometry.computeVertexNormals();
+                                    const creased = toCreasedNormals(obj.geometry, Math.PI / 6);
+                                    obj.geometry.dispose();
+                                    obj.geometry = creased;
                                 }
                                 obj.material = new THREE.MeshPhongMaterial({
                                     color: 0x7353a8,
@@ -294,7 +330,9 @@ function ThreeMFPreviewModal({previewFile}) {
 
                         scene.add(group);
 
-                        // Frame the model: center it, then pull camera back along Z by bounding radius.
+                        // Frame the model: center it, then view it from the front, raised and a little
+                        // to the right, far enough back that its bounding sphere (every point of it)
+                        // fills the viewer.
                         const box = new THREE.Box3().setFromObject(group);
                         const size = new THREE.Vector3();
                         const center = new THREE.Vector3();
@@ -302,11 +340,11 @@ function ThreeMFPreviewModal({previewFile}) {
                         box.getCenter(center);
                         group.position.sub(center);
 
-                        const boundingRadius = Math.max(size.x, size.y, size.z) / 2 || 1;
-                        const fitDistance = boundingRadius / Math.tan((Math.PI * camera.fov) / 360);
-                        camera.position.set(0, 0, fitDistance * 2.2);
-                        camera.near = Math.max(0.1, fitDistance / 1000);
-                        camera.far = fitDistance * 100;
+                        const boundingRadius = size.length() / 2 || 1;
+                        const distance = modelCameraDistance(boundingRadius, camera.fov, camera.aspect);
+                        camera.position.set(0.6, 0.5, 1).normalize().multiplyScalar(distance);
+                        camera.near = distance / 100;
+                        camera.far = distance * 100;
                         camera.updateProjectionMatrix();
                         controls.target.set(0, 0, 0);
                         controls.update();
@@ -320,14 +358,17 @@ function ThreeMFPreviewModal({previewFile}) {
                     },
                     undefined,
                     (err) => {
-                        console.error('Failed to load 3MF', err);
-                        if (!cancelled) setError('Failed to load 3MF file.');
+                        console.error(`Failed to load ${label}`, err);
+                        if (!cancelled) setError(`Failed to load ${label} file.`);
                     },
                 );
 
                 const animate = () => {
                     animationId = requestAnimationFrame(animate);
                     controls.update();
+                    headlightOffset.set(-0.4, 0.6, 0).applyQuaternion(camera.quaternion)
+                        .multiplyScalar(camera.position.length());
+                    headlight.position.copy(camera.position).add(headlightOffset);
                     renderer.render(scene, camera);
                 };
                 animate();
@@ -341,8 +382,8 @@ function ThreeMFPreviewModal({previewFile}) {
                 });
                 resizeObserver.observe(container);
             } catch (err) {
-                console.error('3MF viewer init failed', err);
-                if (!cancelled) setError('Failed to initialize 3MF viewer.');
+                console.error(`${label} viewer init failed`, err);
+                if (!cancelled) setError(`Failed to initialize ${label} viewer.`);
             }
         })();
 
@@ -370,7 +411,7 @@ function ThreeMFPreviewModal({previewFile}) {
                 }
             }
         };
-    }, [url]);
+    }, [url, label, getLoader, toObject]);
 
     return <React.Fragment>
         <Modal.Header>{name}</Modal.Header>
@@ -395,35 +436,12 @@ function ThreeMFPreviewModal({previewFile}) {
     </React.Fragment>
 }
 
-function STLPreviewModal({previewFile}) {
-    const [dimensions, setDimensions] = React.useState(null);
-    const url = getMediaPathURL(previewFile);
-    const path = previewFile.primary_path ?? previewFile.path;
-    const name = path.replace(/^.*[\\\/]/, '');
-    return <React.Fragment>
-        <Modal.Header>{name}</Modal.Header>
-        <Modal.Content>
-            {dimensions && <div style={{marginBottom: '1em', textAlign: 'center'}}>
-                <b>Width:</b> {dimensions.width.toFixed(2)}
-                {' | '}
-                <b>Height:</b> {dimensions.height.toFixed(2)}
-                {' | '}
-                <b>Length:</b> {dimensions.length.toFixed(2)}
-                {' | '}
-                <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
-            </div>}
-            <InlineErrorBoundary>
-                <div className='preview-fit'>
-                    <StlViewer orbitControls shadows
-                               url={url}
-                               style={{height: '100%', width: '100%'}}
-                               modelProps={{color: '#7353a8'}}
-                               onFinishLoading={(dims) => setDimensions(dims)}
-                    />
-                </div>
-            </InlineErrorBoundary>
-        </Modal.Content>
-    </React.Fragment>
+export function ThreeMFPreviewModal({previewFile}) {
+    return <ModelPreviewModal previewFile={previewFile} format='3mf'/>;
+}
+
+export function STLPreviewModal({previewFile}) {
+    return <ModelPreviewModal previewFile={previewFile} format='stl'/>;
 }
 
 function getGenericPreviewModal(previewFile) {
@@ -581,6 +599,7 @@ export function FilePreviewProvider({children}) {
         setPreviewModal(<Modal size='fullscreen'
                                open={true}
                                onClose={e => handleClose(e)}
+                               classNames={{content: 'file-preview-modal-content'}}
         >
             {pathContent}
             <Modal.Actions>

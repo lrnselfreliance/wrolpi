@@ -22,9 +22,14 @@ function sandboxPath(relativePath) {
   return resolved;
 }
 
+function fileContent(content) {
+  return content && content.base64 !== undefined ? Buffer.from(content.base64, "base64") : (content ?? "");
+}
+
 const fileBrowserTasks = {
   // Wipe the sandbox (including leftovers from a crashed run) and create the given files.
   // `files` maps sandbox-relative paths to file content; a trailing '/' makes a bare directory.
+  // Content is text, or `{base64: '...'}` for a binary file.
   "fb:reset": ({ files }) => {
     fs.rmSync(SANDBOX_DIR, { recursive: true, force: true });
     fs.mkdirSync(SANDBOX_DIR, { recursive: true });
@@ -34,7 +39,7 @@ const fileBrowserTasks = {
       } else {
         const filePath = sandboxPath(relativePath);
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        fs.writeFileSync(filePath, content ?? "");
+        fs.writeFileSync(filePath, fileContent(content));
       }
     }
     return SANDBOX_NAME;

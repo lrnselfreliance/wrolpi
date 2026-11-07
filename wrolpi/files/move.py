@@ -10,6 +10,7 @@ import os
 import pathlib
 import shutil
 import stat as stat_module
+import threading
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Dict, List, Set, Tuple
@@ -26,8 +27,12 @@ from wrolpi.files.lib import (
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
     get_normalized_ignored_directories, remove_files_in_ignored_directories,
 )
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
+
+# How often a move waits for its thread to leave the transaction.
+MOVE_THREAD_POLL_SECONDS = 0.05
 
 
 async def build_move_plan_bulk(
@@ -163,11 +168,13 @@ async def build_move_plan_bulk(
                     [{"path": str(p), "type": 'deleted', "dir": str(p.parent)} for p in deleted_sources],
                 )
 
-            # Single bulk query to get all FileGroups matching our sources
+            # Single bulk query to get all FileGroups matching our sources.  CROSS JOIN makes SQLite read
+            # move_sources first and look each path up in file_group's primary_path index; the temp table has no
+            # statistics, so a plain JOIN scans all of file_group (gigabytes on a large library).
             result = session.execute(text("""
                                           SELECT fg.id, fg.primary_path, fg.directory, ms.source_path, ms.source_type
-                                          FROM file_group fg
-                                                   JOIN move_sources ms ON fg.primary_path = ms.source_path
+                                          FROM move_sources ms
+                                                   CROSS JOIN file_group fg ON fg.primary_path = ms.source_path
                                           """))
 
             # Build lookup of found FileGroups
@@ -293,7 +300,74 @@ class FileMoveMixin:
             return False
         return True
 
-    async def _execute_move_chunks(
+    def _execute_move_plan(
+            self,
+            plan: Dict[pathlib.Path, pathlib.Path],
+            created_directories: Set[pathlib.Path],
+            revert_plan: Dict[pathlib.Path, pathlib.Path],
+    ) -> None:
+        """Move the files and update the DB in one transaction, which commits when this returns.
+
+        This reads FileGroups/Directories then updates them, so it must begin as a writer; a deferred
+        transaction's lock upgrade fails instantly when anything else is writing (see `build_move_plan_bulk`)."""
+        with flags.file_worker_discovery:
+            with get_db_session(commit=True) as session:
+                self._execute_move_chunks(plan, session, created_directories, revert_plan)
+
+    async def _execute_move_plan_off_loop(
+            self,
+            plan: Dict[pathlib.Path, pathlib.Path],
+            created_directories: Set[pathlib.Path],
+            revert_plan: Dict[pathlib.Path, pathlib.Path],
+    ) -> None:
+        """Run `_execute_move_plan` in a thread, so the event loop never waits while the move holds the write lock.
+
+        The process that moves files also downloads.  If the move's transaction yielded to the event loop, a
+        download's write would wait out the whole busy_timeout synchronously -- the event loop cannot resume the
+        move that holds the lock -- and then fail.  In a thread, the move keeps going and the other writer gets the
+        lock when it commits.
+
+        Tests share one connection, which is not safe to use from two threads, so tests run it inline."""
+        if PYTEST:
+            self._execute_move_plan(plan, created_directories, revert_plan)
+            return
+
+        # A thread cannot be interrupted, and the caller reverts `revert_plan` when this raises.  So this returns or
+        # raises only after the thread has left its transaction, however often this task is cancelled meanwhile.
+        # (Shutdown cancels it more than once: the perpetual loops are cancelled, then asyncio.run cancels every
+        # pending task, including any asyncio future of the thread, which then reads "done" while the thread runs.)
+        # The thread's own Event is the only signal that its transaction is over.
+        finished = threading.Event()
+        outcome = dict()
+
+        def run():
+            try:
+                self._execute_move_plan(plan, created_directories, revert_plan)
+            except BaseException as e:
+                outcome['error'] = e
+            finally:
+                finished.set()
+
+        asyncio.get_running_loop().run_in_executor(None, run)
+        cancelled = False
+        while not finished.is_set():
+            try:
+                await asyncio.sleep(MOVE_THREAD_POLL_SECONDS)
+            except asyncio.CancelledError:
+                cancelled = True
+                asyncio.current_task().uncancel()
+
+        if error := outcome.get('error'):
+            # It rolled back; the caller reverts the files it moved.
+            if cancelled:
+                raise asyncio.CancelledError() from error
+            raise error
+        if cancelled:
+            # It committed; the files and the DB agree, so there is nothing to revert.
+            revert_plan.clear()
+            raise asyncio.CancelledError()
+
+    def _execute_move_chunks(
             self,
             plan: Dict[pathlib.Path, pathlib.Path],
             session,
@@ -378,7 +452,6 @@ class FileMoveMixin:
                 operation_processed=processed,
                 operation_percent=percent,
             )
-            await asyncio.sleep(0)  # Yield for cancellation
 
         return new_directories
 
@@ -588,14 +661,7 @@ class FileMoveMixin:
                 operation_total=len(plan),
             )
 
-            # Execute the plan in chunks.  This reads FileGroups/Directories then updates them, so
-            # it must begin as a writer; a deferred transaction's lock upgrade fails instantly when
-            # anything else is writing (see `build_move_plan_bulk`).
-            with flags.file_worker_discovery:
-                with get_db_session(commit=True) as session:
-                    await self._execute_move_chunks(
-                        plan, session, created_directories, revert_plan
-                    )
+            await self._execute_move_plan_off_loop(plan, created_directories, revert_plan)
             # The move committed; the files and the DB agree, so a later failure must not move the files back.
             revert_plan.clear()
 

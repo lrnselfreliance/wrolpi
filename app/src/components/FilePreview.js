@@ -228,8 +228,9 @@ const MODEL_FORMATS = {
     stl: {
         label: 'STL',
         loader: async () => new (await import('three/examples/jsm/loaders/STLLoader.js')).STLLoader(),
-        // An STL loads as a single geometry.
-        toObject: (THREE, geometry) => new THREE.Mesh(geometry),
+        // An STL loads as a single geometry.  STLs are Z-up (the 3D printing convention) and three
+        // is Y-up, so turn the model upright: model Z reads as Height, model Y as Length.
+        toObject: (THREE, geometry) => new THREE.Mesh(geometry.rotateX(-Math.PI / 2)),
     },
 };
 

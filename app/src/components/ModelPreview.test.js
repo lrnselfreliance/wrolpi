@@ -114,21 +114,27 @@ afterEach(() => {
     delete global.fetch;
 });
 
-async function expectTriangleDimensions() {
-    // The triangle spans 2 x 1 x 0; its bounding radius is half the box diagonal.
+// The triangle spans 2 along X and 1 along Y, and is flat in Z; its bounding radius is half the
+// box diagonal.  Which extent reads as Height depends on how the viewer orients the model.
+async function expectTriangleDimensions({height, length}) {
     await waitFor(() => expect(screen.getByText(/Width:/)).toBeInTheDocument(), {timeout: 5000});
     const line = screen.getByText(/Width:/).closest('div').textContent;
     expect(line).toContain('Width: 2.00');
-    expect(line).toContain('Height: 1.00');
-    expect(line).toContain('Length: 0.00');
+    expect(line).toContain(`Height: ${height}`);
+    expect(line).toContain(`Length: ${length}`);
     expect(line).toContain('Bounding Radius: 1.12');
 }
+
+// STLs are Z-up, so the flat triangle lies down: its Y extent reads as Length.
+const STL_DIMENSIONS = {height: '0.00', length: '1.00'};
+// 3MFs are shown as stored: the triangle's Y extent reads as Height.
+const THREE_MF_DIMENSIONS = {height: '1.00', length: '0.00'};
 
 describe('STL preview', () => {
     it('loads an ASCII STL file', async () => {
         serve(ASCII_STL);
         await act(async () => renderWithProviders(<STLPreviewModal previewFile={{path: 'models/part.stl'}}/>));
-        await expectTriangleDimensions();
+        await expectTriangleDimensions(STL_DIMENSIONS);
         // three's FileLoader fetches a Request.
         expect(global.fetch.mock.calls[0][0].url).toContain('/media/models/part.stl');
     });
@@ -136,7 +142,7 @@ describe('STL preview', () => {
     it('loads a binary STL file', async () => {
         serve(binaryStl());
         await act(async () => renderWithProviders(<STLPreviewModal previewFile={{path: 'models/part.stl'}}/>));
-        await expectTriangleDimensions();
+        await expectTriangleDimensions(STL_DIMENSIONS);
     });
 });
 
@@ -144,6 +150,6 @@ describe('3MF preview', () => {
     it('loads a 3MF file', async () => {
         serve(threeMF());
         await act(async () => renderWithProviders(<ThreeMFPreviewModal previewFile={{path: 'models/part.3mf'}}/>));
-        await expectTriangleDimensions();
+        await expectTriangleDimensions(THREE_MF_DIMENSIONS);
     });
 });

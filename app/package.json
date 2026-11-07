@@ -30,7 +30,6 @@
     "react-qr-code": "^2.2.0",
     "react-router": "^7.18.5",
     "react-scripts": "5.0.1",
-    "react-stl-viewer": "^2.5.0",
     "three": "^0.186",
     "web-vitals": "^6.2.3"
   },
@@ -74,7 +73,7 @@
       "^.+\\.(js|jsx|mjs|cjs|ts|tsx)$": "<rootDir>/jest/babelTransform.js"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(react-hotkeys-hook|three|three-stdlib)/)"
+      "node_modules/(?!(react-hotkeys-hook|three)/)"
     ]
   },
   "overrides": {
@@ -97,7 +96,6 @@
     "fork-ts-checker-webpack-plugin": "^6.5.3",
     "react-scripts": {
       "typescript": "$typescript"
-    },
-    "three-stdlib": "2.36.1"
+    }
   }
 }

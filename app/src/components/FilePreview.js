@@ -5,7 +5,6 @@ import {encodeMediaPath, isSupportedArchive, useLocalStorage} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
-import {StlViewer} from "react-stl-viewer";
 import {Button, ButtonGroup, Header, Icon, IconButton, MediaGate, Menu, Modal, toast} from "./ui";
 import {useOneQuery} from "../hooks/customHooks";
 import {useEpubProgress, useMediaProgress} from "../hooks/useFileProgress";
@@ -218,7 +217,24 @@ function getAudioPreviewModal(previewFile) {
     </React.Fragment>
 }
 
-function ThreeMFPreviewModal({previewFile}) {
+// Each 3D format's loader ships with three, so it always matches the installed three.
+const MODEL_FORMATS = {
+    '3mf': {
+        label: '3MF',
+        loader: async () => new (await import('three/examples/jsm/loaders/3MFLoader.js')).ThreeMFLoader(),
+        // A 3MF loads as a group of meshes.
+        toObject: (THREE, group) => group,
+    },
+    stl: {
+        label: 'STL',
+        loader: async () => new (await import('three/examples/jsm/loaders/STLLoader.js')).STLLoader(),
+        // An STL loads as a single geometry.
+        toObject: (THREE, geometry) => new THREE.Mesh(geometry),
+    },
+};
+
+function ModelPreviewModal({previewFile, format}) {
+    const {label, loader: getLoader, toObject} = MODEL_FORMATS[format];
     const containerRef = React.useRef(null);
     const [dimensions, setDimensions] = React.useState(null);
     const [error, setError] = React.useState(null);
@@ -227,7 +243,7 @@ function ThreeMFPreviewModal({previewFile}) {
     const name = path.replace(/^.*[\\\/]/, '');
 
     React.useEffect(() => {
-        // Imperative three.js viewer — mirrors react-stl-viewer behavior for .3mf files.
+        // Imperative three.js viewer.
         let cancelled = false;
         const container = containerRef.current;
         if (!container) return;
@@ -239,12 +255,11 @@ function ThreeMFPreviewModal({previewFile}) {
             try {
                 THREE = await import('three');
                 const {OrbitControls} = await import('three/examples/jsm/controls/OrbitControls.js');
-                const {ThreeMFLoader} = await import('three/examples/jsm/loaders/3MFLoader.js');
+                const loader = await getLoader();
                 if (cancelled) return;
 
                 scene = new THREE.Scene();
-                // Transparent background so the modal/theme color shows through,
-                // matching react-stl-viewer's behavior.
+                // Transparent background so the modal/theme color shows through.
 
                 const width = container.clientWidth || 1;
                 const height = container.clientHeight || 1;
@@ -269,16 +284,16 @@ function ThreeMFPreviewModal({previewFile}) {
                 controls = new OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
 
-                const loader = new ThreeMFLoader();
                 loader.load(
                     url,
-                    (group) => {
+                    (result) => {
                         if (cancelled) return;
+                        const group = toObject(THREE, result);
                         loadedGroup = group;
 
-                        // Match react-stl-viewer's violet so 3MFs without authored
-                        // materials are visible against either theme's background.
-                        // 3MF geometry often lacks vertex normals — compute them so
+                        // One violet for every model, so models without authored materials
+                        // are visible against either theme's background.
+                        // Geometry may lack vertex normals — compute them so
                         // MeshPhongMaterial can shade faces instead of rendering flat black.
                         group.traverse((obj) => {
                             if (obj.isMesh) {
@@ -320,8 +335,8 @@ function ThreeMFPreviewModal({previewFile}) {
                     },
                     undefined,
                     (err) => {
-                        console.error('Failed to load 3MF', err);
-                        if (!cancelled) setError('Failed to load 3MF file.');
+                        console.error(`Failed to load ${label}`, err);
+                        if (!cancelled) setError(`Failed to load ${label} file.`);
                     },
                 );
 
@@ -341,8 +356,8 @@ function ThreeMFPreviewModal({previewFile}) {
                 });
                 resizeObserver.observe(container);
             } catch (err) {
-                console.error('3MF viewer init failed', err);
-                if (!cancelled) setError('Failed to initialize 3MF viewer.');
+                console.error(`${label} viewer init failed`, err);
+                if (!cancelled) setError(`Failed to initialize ${label} viewer.`);
             }
         })();
 
@@ -370,7 +385,7 @@ function ThreeMFPreviewModal({previewFile}) {
                 }
             }
         };
-    }, [url]);
+    }, [url, label, getLoader, toObject]);
 
     return <React.Fragment>
         <Modal.Header>{name}</Modal.Header>
@@ -395,35 +410,12 @@ function ThreeMFPreviewModal({previewFile}) {
     </React.Fragment>
 }
 
-function STLPreviewModal({previewFile}) {
-    const [dimensions, setDimensions] = React.useState(null);
-    const url = getMediaPathURL(previewFile);
-    const path = previewFile.primary_path ?? previewFile.path;
-    const name = path.replace(/^.*[\\\/]/, '');
-    return <React.Fragment>
-        <Modal.Header>{name}</Modal.Header>
-        <Modal.Content>
-            {dimensions && <div style={{marginBottom: '1em', textAlign: 'center'}}>
-                <b>Width:</b> {dimensions.width.toFixed(2)}
-                {' | '}
-                <b>Height:</b> {dimensions.height.toFixed(2)}
-                {' | '}
-                <b>Length:</b> {dimensions.length.toFixed(2)}
-                {' | '}
-                <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
-            </div>}
-            <InlineErrorBoundary>
-                <div className='preview-fit'>
-                    <StlViewer orbitControls shadows
-                               url={url}
-                               style={{height: '100%', width: '100%'}}
-                               modelProps={{color: '#7353a8'}}
-                               onFinishLoading={(dims) => setDimensions(dims)}
-                    />
-                </div>
-            </InlineErrorBoundary>
-        </Modal.Content>
-    </React.Fragment>
+export function ThreeMFPreviewModal({previewFile}) {
+    return <ModelPreviewModal previewFile={previewFile} format='3mf'/>;
+}
+
+export function STLPreviewModal({previewFile}) {
+    return <ModelPreviewModal previewFile={previewFile} format='stl'/>;
 }
 
 function getGenericPreviewModal(previewFile) {

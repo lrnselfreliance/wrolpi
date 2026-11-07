@@ -10,6 +10,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
+from sanic.signals import SignalRouter
 from sanic_ext.config import PRIORITY as SANIC_EXT_PRIORITY
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
@@ -38,8 +39,30 @@ def _reset_inherited_signal_handlers():
 
 os.register_at_fork(after_in_child=_reset_inherited_signal_handlers)
 
+# Sanic's internal signal, see `SignalRouterFinalizedOnce`.
+SIGNAL_INIT_EVENT = 'sanic.__signal__.__init__'
+
+
+class SignalRouterFinalizedOnce(SignalRouter):
+    """Sanic's SignalRouter, which finalizing again leaves unchanged.
+
+    `SignalRouter.finalize` appends a `sanic.__signal__.__init__` handler before it checks whether the router is
+    already finalized; an app that is started again (every test, or `finalize_signals_after_auto_routes`) gained a
+    route each time, until the compiled router was too deep to compile."""
+
+    def add(self, handler, event, *args, **kwargs):
+        if str(event) == SIGNAL_INIT_EVENT and (existing := self.name_index.get(SIGNAL_INIT_EVENT)):
+            return existing
+        return super().add(handler, event, *args, **kwargs)
+
+    def finalize(self, *args, **kwargs):
+        if self.finalized:
+            return self
+        return super().finalize(*args, **kwargs)
+
+
 # The only Sanic App, this is imported all over.
-api_app = Sanic(name='api_app', log_config=LOGGING_CONFIG)
+api_app = Sanic(name='api_app', log_config=LOGGING_CONFIG, signal_router=SignalRouterFinalizedOnce())
 
 # sanic-ext adds the automatic HEAD and OPTIONS routes one at a time in a `before_server_start` listener at
 # SANIC_EXT_PRIORITY.  Each route re-finalizes the finalized signal router (`Sanic.amend`), so a worker rebuilt it once

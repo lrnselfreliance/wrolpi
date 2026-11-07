@@ -23,7 +23,15 @@ import {
 import React, {useContext, useEffect, useState} from "react";
 import {IconArrowsMove, IconChevronsUp, IconCursorText, IconTags} from "@tabler/icons-react";
 import {useHotkeys} from "react-hotkeys-hook";
-import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
+import {
+    deleteFile,
+    fetchFileWorkerJobStatus,
+    ignoreDirectory,
+    makeDirectory,
+    movePaths,
+    renamePath,
+    unignoreDirectory
+} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useElementWidth, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
@@ -34,6 +42,7 @@ import {BulkTagModal} from "./BulkTagModal";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {UploadModal} from "./Upload";
+import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -228,6 +237,8 @@ function SkeletonFileRow({depth}) {
 // Below this footer width (px) the action buttons are icon-only; at or above it they expand to show labels.
 // The eight labeled buttons need ~1020px to fit on a single row; this leaves a small buffer.
 const FOOTER_LABELS_MIN_WIDTH = 1050;
+// How often a queued rename's job is checked.
+const RENAME_JOB_POLL_MS = 500;
 
 export function FileBrowser() {
     const [selectedPaths, setSelectedPaths] = React.useState([]);
@@ -328,6 +339,46 @@ export function FileBrowser() {
         }
     }, [browseFiles]);
 
+    // A move finishes in the file worker after its request returns (the Files page shows its progress), so fetch
+    // the files again when the file worker is done.
+    const {status: fileWorkerStatus, setFastPolling} = useFileWorkerStatus();
+    const fileWorkerBusy = !!fileWorkerStatus && fileWorkerStatus.status !== 'idle';
+    const fileWorkerWasBusy = React.useRef(false);
+    useEffect(() => {
+        if (fileWorkerWasBusy.current && !fileWorkerBusy) {
+            fetchFiles();
+        }
+        fileWorkerWasBusy.current = fileWorkerBusy;
+    }, [fileWorkerBusy]);
+
+    // A queued rename (a directory) returns its job; wait for that job, rather than inferring it from the file
+    // worker's status (a short job can start and finish between two polls).
+    const mountedRef = React.useRef(true);
+    useEffect(() => () => {
+        mountedRef.current = false;
+    }, []);
+    const afterRename = async (jobId) => {
+        if (!jobId) {
+            await reset();
+            return;
+        }
+        setSelectedPaths([]);
+        setFastPolling(true);  // Update the progress bar while the rename runs.
+        try {
+            while (mountedRef.current) {
+                await new Promise(resolve => setTimeout(resolve, RENAME_JOB_POLL_MS));
+                if (await fetchFileWorkerJobStatus(jobId) !== 'pending') {
+                    break;
+                }
+            }
+        } finally {
+            setFastPolling(false);
+        }
+        if (mountedRef.current) {
+            await reset();
+        }
+    }
+
     // Clear loading states when file data updates
     useEffect(() => {
         if (loadingFolders.size > 0) {
@@ -413,7 +464,7 @@ export function FileBrowser() {
                 onClose={() => setRenameOpen(false)}
                 onPending={setPending}
                 path={selectedPaths[0]}
-                onSubmit={reset}
+                onSubmit={afterRename}
             /> : null}
         <Button icon={IconArrowsMove}
                 color='teal'
@@ -619,15 +670,16 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
         if (e) {
             e.preventDefault();
         }
+        let jobId = null;
         try {
             console.log(`Renaming: ${path} to ${value}`);
             onPending(true);
-            await renamePath(path, value);
+            jobId = await renamePath(path, value);
         } finally {
             onClose();
             onPending(false);
             if (onSubmit) {
-                await onSubmit();
+                await onSubmit(jobId);
             }
         }
     }

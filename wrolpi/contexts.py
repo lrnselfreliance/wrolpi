@@ -229,6 +229,7 @@ def reset_shared_contexts(app: Sanic):
         task_type=None,
         paths=[],
         destination=None,
+        rename_from=None,
         error=None,
         operation_total=0,
         operation_processed=0,

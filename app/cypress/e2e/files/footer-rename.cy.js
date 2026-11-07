@@ -108,22 +108,29 @@ import {
         selectRow('fb-alpha');
         footerButton('Rename').click();
 
-        drainQueuedRefresh(() => {
+        // A directory rename is a file-worker move job; the request returns once it is queued, and the job
+        // reports when it is done.  No refresh is queued.
+        cy.serverNow().then((since) => {
             dialog().within(() => {
                 cy.get('input').clear().type('fb-alpha-renamed');
                 cy.contains('button', 'Rename').click();
             });
-
-            // A directory rename runs as a file-worker move job; the modal stays open until
-            // the job finishes, which takes longer than the default timeout.
-            cy.get('[role="dialog"]', {timeout: 30000}).should('not.exist');
-            row('fb-alpha-renamed').should('be.visible');
-            // The folder row's text is just the name, so anchoring excludes 'fb-alpha-renamed'.
-            cy.contains('tr', /fb-alpha$/).should('not.exist');
-
-            cy.task('fb:readdir', 'fb-alpha-renamed')
-                .should('deep.equal', ['fb-one.txt', 'fb-two.txt']);
-            cy.task('fb:exists', 'fb-alpha').should('be.false');
+            dialog().should('not.exist');
+            cy.waitForEvent({
+                since,
+                event: 'file_move_completed',
+                message: 'Renamed fb-alpha to fb-alpha-renamed',
+                failureEvent: 'file_move_failed',
+            });
         });
+
+        // The table is fetched again once the file worker is idle.
+        cy.contains('tr', 'fb-alpha-renamed', {timeout: 10000}).should('be.visible');
+        // The folder row's text is just the name, so anchoring excludes 'fb-alpha-renamed'.
+        cy.contains('tr', /fb-alpha$/).should('not.exist');
+
+        cy.task('fb:readdir', 'fb-alpha-renamed')
+            .should('deep.equal', ['fb-one.txt', 'fb-two.txt']);
+        cy.task('fb:exists', 'fb-alpha').should('be.false');
     });
 });

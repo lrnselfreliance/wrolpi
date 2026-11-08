@@ -182,6 +182,80 @@ def get_script_status() -> dict:
     return {"running": False}
 
 
+def get_script_result(name: str) -> Optional[dict]:
+    """
+    Report how the last run of a script ended, so a page waiting on it can tell success from failure.
+
+    A failed upgrade restarts the services it stopped, so the services coming back up does not mean it succeeded.
+
+    systemd keeps Result and the exit status across the daemon-reload an upgrade does, but not the run's
+    timestamps, so a run is known to have ended if it has an exit timestamp or ended badly.
+
+    Returns None for an unknown script, otherwise a dict with:
+        script_name: str
+        running: bool - Whether the script is running now
+        finished: bool - Whether a run is known to have ended (False while running, or if it never ran)
+        success: Optional[bool] - Whether the last run exited cleanly; None unless finished
+        result: Optional[str] - systemd's Result (e.g. "success", "exit-code")
+        exit_status: Optional[int] - The script's exit status
+        finished_at: Optional[str] - ISO timestamp when the last run ended
+    """
+    if name not in AVAILABLE_SCRIPTS:
+        return None
+
+    result = {
+        "script_name": name,
+        "running": False,
+        "finished": False,
+        "success": None,
+        "result": None,
+        "exit_status": None,
+        "finished_at": None,
+    }
+    if is_docker_mode():
+        return result
+
+    service = AVAILABLE_SCRIPTS[name]["service_name"]
+    try:
+        # A Unix timestamp, because systemd prints dates in the local timezone.
+        proc = subprocess.run(
+            ["systemctl", "show", service, "--property=Result,ExecMainStatus,ActiveState,ExecMainExitTimestamp",
+             "--timestamp=unix"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        return result
+    if proc.returncode != 0:
+        return result
+
+    properties = dict(line.partition("=")[::2] for line in proc.stdout.splitlines() if "=" in line)
+    if properties.get("ActiveState") in ("activating", "active", "reloading"):
+        result["running"] = True
+        return result
+
+    try:
+        result["exit_status"] = int(properties.get("ExecMainStatus", ""))
+    except ValueError:
+        pass
+    result["result"] = properties.get("Result") or None
+    failed = result["result"] not in (None, "success") or result["exit_status"] not in (0, None)
+
+    exit_timestamp = properties.get("ExecMainExitTimestamp", "").lstrip("@")
+    if exit_timestamp:
+        try:
+            result["finished_at"] = datetime.fromtimestamp(float(exit_timestamp), timezone.utc).isoformat()
+        except ValueError:
+            pass
+
+    # A clean Result with no exit timestamp is also what a service that never ran reports.
+    if failed or result["finished_at"]:
+        result["finished"] = True
+        result["success"] = not failed
+    return result
+
+
 def _get_service_timing(service: str) -> tuple[Optional[str], Optional[int]]:
     """
     Get timing info for a running service.

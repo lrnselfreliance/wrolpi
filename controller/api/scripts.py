@@ -12,6 +12,7 @@ from controller.api.schemas import (
     BranchResponse,
     ScriptInfo,
     ScriptOutputResponse,
+    ScriptResultResponse,
     ScriptStartRequest,
     ScriptStartResponse,
     ScriptStatusResponse,
@@ -20,6 +21,7 @@ from controller.lib.config import is_docker_mode
 from controller.lib.scripts import (
     get_current_branch,
     get_script_output,
+    get_script_result,
     get_script_status,
     list_available_scripts,
     start_script,
@@ -88,3 +90,18 @@ async def scripts_output(name: str, lines: int = 100) -> ScriptOutputResponse:
     lines = min(max(1, lines), 5000)
     result = get_script_output(name, lines)
     return ScriptOutputResponse(**result)
+
+
+@router.get("/api/scripts/{name}/result", response_model=ScriptResultResponse)
+async def scripts_result(name: str) -> ScriptResultResponse:
+    """How the last run of a script ended."""
+    if is_docker_mode():
+        raise HTTPException(
+            status_code=501,
+            detail="Scripts are not available in Docker mode"
+        )
+
+    result = get_script_result(name)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Unknown script: {name}")
+    return ScriptResultResponse(**result)

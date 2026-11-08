@@ -13,6 +13,7 @@ class TestDockerModeRejectsScriptsEndpoints:
     @pytest.mark.parametrize("method,endpoint", [
         ("post", "/api/scripts/repair/start"),
         ("get", "/api/scripts/repair/output"),
+        ("get", "/api/scripts/upgrade/result"),
     ])
     def test_action_rejected_in_docker(self, test_client_docker_mode, method, endpoint):
         response = getattr(test_client_docker_mode, method)(endpoint)
@@ -166,3 +167,22 @@ class TestScriptsOutputEndpoint:
 
 
 # OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.
+
+
+class TestScriptResultEndpoint:
+    """Tests for /api/scripts/{name}/result, which the upgrade page reads before calling an upgrade done."""
+
+    def test_reports_failed_upgrade(self, test_client):
+        result = {
+            "script_name": "upgrade", "running": False, "finished": True, "success": False, "result": "exit-code", "exit_status": 5,
+            "finished_at": "2026-11-08T15:22:32+00:00",
+        }
+        with mock.patch("controller.api.scripts.get_script_result", return_value=result):
+            response = test_client.get("/api/scripts/upgrade/result")
+        assert response.status_code == 200
+        assert response.json() == result
+
+    def test_unknown_script_is_404(self, test_client):
+        with mock.patch("controller.api.scripts.get_script_result", return_value=None):
+            response = test_client.get("/api/scripts/nonexistent/result")
+        assert response.status_code == 404

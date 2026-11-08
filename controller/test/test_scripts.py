@@ -2,6 +2,7 @@
 Unit tests for controller.lib.scripts module.
 """
 
+import json
 import subprocess
 import time
 from unittest import mock
@@ -375,6 +376,25 @@ def _systemctl_show(stdout: str):
     return mock.Mock(returncode=0, stdout=stdout)
 
 
+# systemd's message IDs for a unit that ended cleanly or failed.
+UNIT_SUCCESS = "7ad2d189f7e94e70a38c781354912448"
+UNIT_FAILURE = "d9b373ed55a64feb8242e02dbe79a49c"
+
+
+def _fake_run(systemctl_stdout: str, journal_stdout: str = ""):
+    """Answer `systemctl show` and `journalctl` calls with their own output."""
+
+    def run(args, **kwargs):
+        stdout = journal_stdout if args[0] == "journalctl" else systemctl_stdout
+        return mock.Mock(returncode=0, stdout=stdout)
+
+    return run
+
+
+def _journal_entry(message_id: str, realtime_us: int) -> str:
+    return json.dumps({"MESSAGE_ID": message_id, "__REALTIME_TIMESTAMP": str(realtime_us)}) + "\n"
+
+
 class TestGetScriptResult:
     """How the last run of a script ended, read from systemd."""
 
@@ -416,32 +436,57 @@ class TestGetScriptResult:
         assert result["finished_at"] is None
 
     def test_failed_run_after_daemon_reload(self):
-        """An upgrade reloads systemd, which clears the run's timestamps but keeps its Result and exit status."""
+        """An upgrade reloads systemd, which clears the run's timestamps but keeps its Result and exit status. The
+        journal still has when it ended."""
         stdout = "Result=exit-code\nExecMainStatus=5\nActiveState=failed\nExecMainExitTimestamp=\n"
+        journal = _journal_entry(UNIT_FAILURE, 1794151352500000)
         with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
-                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+                mock.patch("controller.lib.scripts.subprocess.run", side_effect=_fake_run(stdout, journal)):
             result = get_script_result("upgrade")
         assert result["running"] is False
         assert result["finished"] is True
         assert result["success"] is False
         assert result["exit_status"] == 5
-        assert result["finished_at"] is None
+        assert result["finished_at"] == "2026-11-08T15:22:32.500000+00:00"
 
     def test_successful_run_after_daemon_reload(self):
-        """A clean run whose timestamps were cleared is not running and not failed; the upgrade page redirects."""
+        """A clean run whose timestamps were cleared looks like a service that never ran, so the journal decides."""
         stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=\n"
+        journal = _journal_entry(UNIT_SUCCESS, 1794151352500000)
         with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
-                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+                mock.patch("controller.lib.scripts.subprocess.run", side_effect=_fake_run(stdout, journal)) as run:
             result = get_script_result("upgrade")
         assert result["running"] is False
-        assert result["success"] is not False
+        assert result["finished"] is True
+        assert result["success"] is True
+        assert result["finished_at"] == "2026-11-08T15:22:32.500000+00:00"
+        journal_args = run.call_args_list[-1].args[0]
+        assert journal_args[0] == "journalctl"
+        assert "UNIT=wrolpi-upgrade.service" in journal_args
 
     def test_never_run(self):
-        """A service that has never run has no result."""
+        """A service that has never run has no result, and nothing in the journal."""
         stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=\n"
         with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
-                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+                mock.patch("controller.lib.scripts.subprocess.run", side_effect=_fake_run(stdout, "")):
             result = get_script_result("upgrade")
+        assert result["finished"] is False
+        assert result["success"] is None
+        assert result["finished_at"] is None
+
+    def test_journal_unreadable(self):
+        """Without the journal, a clean run with cleared timestamps is reported as not known to have finished."""
+        stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=\n"
+
+        def run(args, **kwargs):
+            if args[0] == "journalctl":
+                raise FileNotFoundError
+            return _systemctl_show(stdout)
+
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", side_effect=run):
+            result = get_script_result("upgrade")
+        assert result["running"] is False
         assert result["finished"] is False
         assert result["success"] is None
 

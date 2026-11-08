@@ -5,6 +5,7 @@ Manages maintenance scripts that run as systemd services (like repair.sh).
 Uses systemd oneshot services for process survival across controller restarts.
 """
 
+import json
 import logging
 import re
 import subprocess
@@ -189,7 +190,7 @@ def get_script_result(name: str) -> Optional[dict]:
     A failed upgrade restarts the services it stopped, so the services coming back up does not mean it succeeded.
 
     systemd keeps Result and the exit status across the daemon-reload an upgrade does, but not the run's
-    timestamps, so a run is known to have ended if it has an exit timestamp or ended badly.
+    timestamps, so when the exit timestamp is missing the journal's record of the run's end is used instead.
 
     Returns None for an unknown script, otherwise a dict with:
         script_name: str
@@ -249,11 +250,51 @@ def get_script_result(name: str) -> Optional[dict]:
         except ValueError:
             pass
 
-    # A clean Result with no exit timestamp is also what a service that never ran reports.
+    if not result["finished_at"]:
+        # A clean Result with no exit timestamp is also what a service that never ran reports, so ask the journal.
+        journal_outcome, result["finished_at"] = _get_last_journal_outcome(service)
+        failed = failed or journal_outcome is False
+        if journal_outcome is None and not failed:
+            return result
+
     if failed or result["finished_at"]:
         result["finished"] = True
         result["success"] = not failed
     return result
+
+
+# systemd's journal message IDs for a unit that ended cleanly, or failed.
+UNIT_SUCCESS_MESSAGE_ID = "7ad2d189f7e94e70a38c781354912448"
+UNIT_FAILURE_MESSAGE_ID = "d9b373ed55a64feb8242e02dbe79a49c"
+
+
+def _get_last_journal_outcome(service: str) -> tuple[Optional[bool], Optional[str]]:
+    """
+    Read how the service's last run ended from the journal, which keeps it across a daemon-reload.
+
+    Returns:
+        Tuple of (whether it succeeded, ISO timestamp when it ended); (None, None) if the journal has no record.
+    """
+    try:
+        proc = subprocess.run(
+            ["journalctl", "--no-pager", "-n", "1", "-o", "json", "--output-fields=MESSAGE_ID",
+             f"UNIT={service}", f"MESSAGE_ID={UNIT_SUCCESS_MESSAGE_ID}", "+",
+             f"UNIT={service}", f"MESSAGE_ID={UNIT_FAILURE_MESSAGE_ID}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        return None, None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None, None
+
+    try:
+        entry = json.loads(proc.stdout.strip().splitlines()[-1])
+        ended_at = datetime.fromtimestamp(int(entry["__REALTIME_TIMESTAMP"]) / 1_000_000, timezone.utc)
+    except (ValueError, KeyError, TypeError):
+        return None, None
+    return entry.get("MESSAGE_ID") == UNIT_SUCCESS_MESSAGE_ID, ended_at.isoformat()
 
 
 def _get_service_timing(service: str) -> tuple[Optional[str], Optional[int]]:

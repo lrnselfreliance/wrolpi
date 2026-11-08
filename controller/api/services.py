@@ -159,6 +159,8 @@ async def service_logs(
         result = get_service_logs(name, lines, since)
 
     if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+        # A since journalctl cannot parse is the caller's mistake.
+        status_code = 400 if result.get("invalid_since") else 500
+        raise HTTPException(status_code=status_code, detail=result["error"])
 
     return ServiceLogsResponse(**result)

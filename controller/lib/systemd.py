@@ -528,10 +528,11 @@ def get_service_logs(name: str, lines: int = 100, since: Optional[str] = None) -
     Args:
         name: Service name from config
         lines: Number of lines to return
-        since: Time specification (e.g., "1h", "30m", "2024-01-01")
+        since: journalctl time specification (e.g., "-1h", "1 hour ago", "2024-01-01 09:00").  A bare "1h" is
+            not one.
 
     Returns:
-        dict with logs and metadata
+        dict with logs and metadata, or an "error" (with "invalid_since" when journalctl could not parse `since`)
     """
     systemd_name = _get_systemd_name(name)
     if not systemd_name:
@@ -543,6 +544,10 @@ def get_service_logs(name: str, lines: int = 100, since: Optional[str] = None) -
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            # journalctl prints nothing to stdout when it fails; that must not read as "no logs".
+            error = (result.stderr or "").strip() or f"journalctl exited with {result.returncode}"
+            return {"error": error, "invalid_since": bool(since) and "Failed to parse timestamp" in error}
         return {
             "service": name,
             "lines": lines,

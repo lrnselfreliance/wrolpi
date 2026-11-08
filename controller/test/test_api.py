@@ -261,3 +261,27 @@ class TestCertDownloadReadiness:
                 assert response.status_code == 200
                 assert body.encode() in response.content
                 assert "attachment" in response.headers.get("content-disposition", "")
+
+
+class TestServiceLogsEndpoint:
+    """A since journalctl cannot parse is the caller's mistake (400), not empty logs."""
+
+    def test_unparseable_since_is_a_bad_request(self, test_client):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=1, stdout="", stderr="Failed to parse timestamp: 1h\n")
+            response = test_client.get("/api/services/wrolpi-api/logs", params={"since": "1h"})
+        assert response.status_code == 400
+        assert "Failed to parse timestamp: 1h" in response.json()["detail"]
+
+    def test_journalctl_failure_is_a_server_error(self, test_client):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=1, stdout="", stderr="Failed to open journal\n")
+            response = test_client.get("/api/services/wrolpi-api/logs")
+        assert response.status_code == 500
+
+    def test_logs(self, test_client):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="log line\n", stderr="")
+            response = test_client.get("/api/services/wrolpi-api/logs", params={"since": "-1h"})
+        assert response.status_code == 200
+        assert response.json()["logs"] == "log line\n"

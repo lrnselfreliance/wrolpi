@@ -679,6 +679,23 @@
             margin-top: 1rem;
         }
 
+        .script-running-banner.failed {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .script-running-banner.failed .loading {
+            display: none;
+        }
+
+        .script-failed-message {
+            display: none;
+            margin: 0.5rem 0 0 0;
+        }
+
+        .script-running-banner.failed .script-failed-message {
+            display: block;
+        }
+
         .warning-list {
             background: #1a1a2e;
             border: 1px solid #ff6b6b;
@@ -914,8 +931,10 @@
 <div id="script-running-banner" class="script-running-banner">
     <h2 id="script-running-name">Script Running</h2>
     <span class="loading"></span>
+    <p id="script-failed-message" class="script-failed-message"></p>
     <div class="actions">
         <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
+        <a id="script-failed-return" class="btn btn-success" style="display: none;" href="#">Return to WROLPi</a>
     </div>
 </div>
 {% endif %}
@@ -2643,9 +2662,81 @@
             // Two-phase upgrade detection:
             // Phase 1: Wait for services to go DOWN (confirms upgrade actually started).
             // Phase 2: Wait for services to come back UP (upgrade complete).
+            // A failed upgrade also restarts the services, so the upgrade's own result decides between
+            // redirecting and showing the failure.  Only a run this page has seen start counts: the
+            // result of an earlier run is still reported until the new run begins.
             let upgradeServicesWentDown = sessionStorage.getItem('upgradeServicesWentDown') === 'true';
+            let upgradeSeenRunning = sessionStorage.getItem('upgradeSeenRunning') === 'true';
+            let upgradeInterval = null;
+            let upgradeDone = false;
+
+            const markUpgradeStarted = (key) => {
+                if (key === 'upgradeServicesWentDown') upgradeServicesWentDown = true;
+                if (key === 'upgradeSeenRunning') upgradeSeenRunning = true;
+                sessionStorage.setItem(key, 'true');
+            };
+
+            const finishUpgradeWatch = () => {
+                upgradeDone = true;
+                if (upgradeInterval) clearInterval(upgradeInterval);
+                sessionStorage.removeItem('upgradeServicesWentDown');
+                sessionStorage.removeItem('upgradeSeenRunning');
+            };
+
+            const showUpgradeFailed = (result) => {
+                finishUpgradeWatch();
+                const banner = document.getElementById('script-running-banner');
+                banner.classList.add('show', 'failed');
+                document.getElementById('script-running-name').textContent = 'WROLPi Upgrade Failed';
+                const code = result.exit_status !== null && result.exit_status !== undefined
+                    ? ` (exit code ${result.exit_status})` : '';
+                document.getElementById('script-failed-message').textContent =
+                    `The upgrade did not complete${code}. See the output for the reason.`;
+                const returnLink = document.getElementById('script-failed-return');
+                returnLink.href = `${upgradeHttpsBase}/`;
+                returnLink.style.display = '';
+                showScriptOutput();
+            };
+
+            // The upgrade's result, or null if it cannot be read (the Controller restarts during an upgrade).
+            const fetchUpgradeResult = async () => {
+                try {
+                    const resp = await fetch('api/scripts/upgrade/result', {
+                        headers: {'Accept': 'application/json'},
+                        signal: AbortSignal.timeout(5000)
+                    });
+                    return resp.ok ? await resp.json() : null;
+                } catch (e) {
+                    return null;
+                }
+            };
 
             const checkUpgradeComplete = async () => {
+                if (upgradeDone) return;
+
+                if (!upgradeSeenRunning) {
+                    try {
+                        const resp = await fetch('api/scripts/status', {
+                            headers: {'Accept': 'application/json'},
+                            signal: AbortSignal.timeout(5000)
+                        });
+                        const status = resp.ok ? await resp.json() : null;
+                        if (status && status.running && status.script_name === 'upgrade') {
+                            markUpgradeStarted('upgradeSeenRunning');
+                        }
+                    } catch (e) {
+                        // The ready check below handles an unreachable Controller.
+                    }
+                }
+
+                if (upgradeSeenRunning || upgradeServicesWentDown) {
+                    const result = await fetchUpgradeResult();
+                    if (result && result.finished && result.success === false) {
+                        showUpgradeFailed(result);
+                        return;
+                    }
+                }
+
                 try {
                     const resp = await fetch('api/ready', {
                         method: 'GET',
@@ -2656,26 +2747,31 @@
                         const data = await resp.json();
                         if (!upgradeServicesWentDown) {
                             if (!data.api || !data.app) {
-                                upgradeServicesWentDown = true;
-                                sessionStorage.setItem('upgradeServicesWentDown', 'true');
+                                markUpgradeStarted('upgradeServicesWentDown');
                             }
                         } else if (data.api && data.app) {
-                            sessionStorage.removeItem('upgradeServicesWentDown');
-                            setTimeout(() => {
-                                window.location.href = `${upgradeHttpsBase}/`;
-                            }, 2000);
+                            // The services are back; redirect only once the upgrade itself has finished well.
+                            const result = await fetchUpgradeResult();
+                            if (result && result.finished && result.success === false) {
+                                showUpgradeFailed(result);
+                            } else if (result && !result.finished) {
+                                // Still running (e.g. restarting services); check again on the next poll.
+                            } else {
+                                finishUpgradeWatch();
+                                setTimeout(() => {
+                                    window.location.href = `${upgradeHttpsBase}/`;
+                                }, 2000);
+                            }
                         }
                     } else {
-                        upgradeServicesWentDown = true;
-                        sessionStorage.setItem('upgradeServicesWentDown', 'true');
+                        markUpgradeStarted('upgradeServicesWentDown');
                     }
                 } catch (e) {
-                    upgradeServicesWentDown = true;
-                    sessionStorage.setItem('upgradeServicesWentDown', 'true');
+                    markUpgradeStarted('upgradeServicesWentDown');
                 }
             };
 
-            setInterval(checkUpgradeComplete, 3000);
+            upgradeInterval = setInterval(checkUpgradeComplete, 3000);
             checkUpgradeComplete();
         }
     } catch (e) {

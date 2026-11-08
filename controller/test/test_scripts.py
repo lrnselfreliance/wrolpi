@@ -13,6 +13,7 @@ from controller.lib.scripts import (
     AVAILABLE_SCRIPTS,
     get_current_branch,
     get_script_output,
+    get_script_result,
     get_script_status,
     list_available_scripts,
     start_script,
@@ -368,3 +369,66 @@ class TestGetServiceTiming:
         completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="ExecMainStartTimestamp=\n")
         with mock.patch("controller.lib.scripts.subprocess.run", return_value=completed):
             assert _get_service_timing("wrolpi-upgrade.service") == (None, None)
+
+
+def _systemctl_show(stdout: str):
+    return mock.Mock(returncode=0, stdout=stdout)
+
+
+class TestGetScriptResult:
+    """How the last run of a script ended, read from systemd."""
+
+    def test_failed_run(self):
+        """An upgrade that exited non-zero is reported as failed, with its exit status and when it finished."""
+        stdout = "Result=exit-code\nExecMainStatus=5\nActiveState=failed\nExecMainExitTimestamp=@1794151352.5\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)) as run:
+            result = get_script_result("upgrade")
+        assert result == {
+            "script_name": "upgrade",
+            "finished": True,
+            "success": False,
+            "result": "exit-code",
+            "exit_status": 5,
+            "finished_at": "2026-11-08T15:22:32.500000+00:00",
+        }
+        assert "wrolpi-upgrade.service" in run.call_args[0][0]
+
+    def test_successful_run(self):
+        stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=@1762615352\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+            result = get_script_result("upgrade")
+        assert result["finished"] is True
+        assert result["success"] is True
+        assert result["exit_status"] == 0
+
+    def test_running(self):
+        """A run in progress has not finished, so it has neither succeeded nor failed."""
+        stdout = "Result=success\nExecMainStatus=0\nActiveState=activating\nExecMainExitTimestamp=\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+            result = get_script_result("upgrade")
+        assert result["finished"] is False
+        assert result["success"] is None
+        assert result["finished_at"] is None
+
+    def test_never_run(self):
+        """A service that has never run has no result."""
+        stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+            result = get_script_result("upgrade")
+        assert result["finished"] is False
+        assert result["success"] is None
+
+    def test_systemctl_missing(self):
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", side_effect=FileNotFoundError):
+            result = get_script_result("upgrade")
+        assert result["finished"] is False
+        assert result["success"] is None
+
+    def test_unknown_script(self):
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False):
+            assert get_script_result("nonexistent") is None

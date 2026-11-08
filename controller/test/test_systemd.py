@@ -342,6 +342,23 @@ class TestGetServiceLogs:
             assert "1h" in call_args
 
 
+    def test_unparseable_since_is_an_error(self):
+        """journalctl exits 1 and prints nothing to stdout for a since it cannot parse (like a bare "1h");
+        that is an invalid since, not an empty log."""
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=1, stdout="", stderr="Failed to parse timestamp: 1h\n")
+            result = get_service_logs("wrolpi-api", lines=50, since="1h")
+            assert result["error"] == "Failed to parse timestamp: 1h"
+            assert result["invalid_since"] is True
+
+    def test_journalctl_failure_is_an_error(self):
+        """Any other failure of journalctl is reported, not returned as empty logs."""
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=1, stdout="", stderr="Failed to open journal\n")
+            result = get_service_logs("wrolpi-api", lines=50)
+            assert result["error"] == "Failed to open journal"
+            assert not result.get("invalid_since")
+
 class TestDiscoverRunningWrolpiServices:
     """Tests for discover_wrolpi_services function."""
 

@@ -188,9 +188,13 @@ def get_script_result(name: str) -> Optional[dict]:
 
     A failed upgrade restarts the services it stopped, so the services coming back up does not mean it succeeded.
 
+    systemd keeps Result and the exit status across the daemon-reload an upgrade does, but not the run's
+    timestamps, so a run is known to have ended if it has an exit timestamp or ended badly.
+
     Returns None for an unknown script, otherwise a dict with:
         script_name: str
-        finished: bool - Whether a run has ended (False while running, or if it never ran)
+        running: bool - Whether the script is running now
+        finished: bool - Whether a run is known to have ended (False while running, or if it never ran)
         success: Optional[bool] - Whether the last run exited cleanly; None unless finished
         result: Optional[str] - systemd's Result (e.g. "success", "exit-code")
         exit_status: Optional[int] - The script's exit status
@@ -201,6 +205,7 @@ def get_script_result(name: str) -> Optional[dict]:
 
     result = {
         "script_name": name,
+        "running": False,
         "finished": False,
         "success": None,
         "result": None,
@@ -226,22 +231,28 @@ def get_script_result(name: str) -> Optional[dict]:
         return result
 
     properties = dict(line.partition("=")[::2] for line in proc.stdout.splitlines() if "=" in line)
-    exit_timestamp = properties.get("ExecMainExitTimestamp", "").lstrip("@")
-    # Neither a run in progress nor a service that never ran has an outcome.
-    if properties.get("ActiveState") in ("activating", "active", "reloading") or not exit_timestamp:
+    if properties.get("ActiveState") in ("activating", "active", "reloading"):
+        result["running"] = True
         return result
 
-    try:
-        result["finished_at"] = datetime.fromtimestamp(float(exit_timestamp), timezone.utc).isoformat()
-    except ValueError:
-        return result
     try:
         result["exit_status"] = int(properties.get("ExecMainStatus", ""))
     except ValueError:
         pass
     result["result"] = properties.get("Result") or None
-    result["finished"] = True
-    result["success"] = result["result"] == "success" and result["exit_status"] in (0, None)
+    failed = result["result"] not in (None, "success") or result["exit_status"] not in (0, None)
+
+    exit_timestamp = properties.get("ExecMainExitTimestamp", "").lstrip("@")
+    if exit_timestamp:
+        try:
+            result["finished_at"] = datetime.fromtimestamp(float(exit_timestamp), timezone.utc).isoformat()
+        except ValueError:
+            pass
+
+    # A clean Result with no exit timestamp is also what a service that never ran reports.
+    if failed or result["finished_at"]:
+        result["finished"] = True
+        result["success"] = not failed
     return result
 
 

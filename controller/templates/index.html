@@ -2731,7 +2731,7 @@
 
                 if (upgradeSeenRunning || upgradeServicesWentDown) {
                     const result = await fetchUpgradeResult();
-                    if (result && result.finished && result.success === false) {
+                    if (result && result.success === false) {
                         showUpgradeFailed(result);
                         return;
                     }
@@ -2752,9 +2752,9 @@
                         } else if (data.api && data.app) {
                             // The services are back; redirect only once the upgrade itself has finished well.
                             const result = await fetchUpgradeResult();
-                            if (result && result.finished && result.success === false) {
+                            if (result && result.success === false) {
                                 showUpgradeFailed(result);
-                            } else if (result && !result.finished) {
+                            } else if (result && result.running) {
                                 // Still running (e.g. restarting services); check again on the next poll.
                             } else {
                                 finishUpgradeWatch();

@@ -453,7 +453,8 @@ class ScriptResultResponse(BaseModel):
     """Response model for how the last run of a script ended."""
 
     script_name: str = Field(description="Name of the script")
-    finished: bool = Field(description="Whether a run has ended (false while running, or if it never ran)")
+    running: bool = Field(description="Whether the script is running now")
+    finished: bool = Field(description="Whether a run is known to have ended (false while running, or if it never ran)")
     success: Optional[bool] = Field(default=None, description="Whether the last run exited cleanly")
     result: Optional[str] = Field(default=None, description="systemd's Result, e.g. 'success' or 'exit-code'")
     exit_status: Optional[int] = Field(default=None, description="The script's exit status")

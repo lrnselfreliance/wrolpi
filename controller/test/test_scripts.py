@@ -386,6 +386,7 @@ class TestGetScriptResult:
             result = get_script_result("upgrade")
         assert result == {
             "script_name": "upgrade",
+            "running": False,
             "finished": True,
             "success": False,
             "result": "exit-code",
@@ -409,9 +410,31 @@ class TestGetScriptResult:
         with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
                 mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
             result = get_script_result("upgrade")
+        assert result["running"] is True
         assert result["finished"] is False
         assert result["success"] is None
         assert result["finished_at"] is None
+
+    def test_failed_run_after_daemon_reload(self):
+        """An upgrade reloads systemd, which clears the run's timestamps but keeps its Result and exit status."""
+        stdout = "Result=exit-code\nExecMainStatus=5\nActiveState=failed\nExecMainExitTimestamp=\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+            result = get_script_result("upgrade")
+        assert result["running"] is False
+        assert result["finished"] is True
+        assert result["success"] is False
+        assert result["exit_status"] == 5
+        assert result["finished_at"] is None
+
+    def test_successful_run_after_daemon_reload(self):
+        """A clean run whose timestamps were cleared is not running and not failed; the upgrade page redirects."""
+        stdout = "Result=success\nExecMainStatus=0\nActiveState=inactive\nExecMainExitTimestamp=\n"
+        with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.scripts.subprocess.run", return_value=_systemctl_show(stdout)):
+            result = get_script_result("upgrade")
+        assert result["running"] is False
+        assert result["success"] is not False
 
     def test_never_run(self):
         """A service that has never run has no result."""

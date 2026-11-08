@@ -174,7 +174,7 @@ class TestScriptResultEndpoint:
 
     def test_reports_failed_upgrade(self, test_client):
         result = {
-            "script_name": "upgrade", "finished": True, "success": False, "result": "exit-code", "exit_status": 5,
+            "script_name": "upgrade", "running": False, "finished": True, "success": False, "result": "exit-code", "exit_status": 5,
             "finished_at": "2026-11-08T15:22:32+00:00",
         }
         with mock.patch("controller.api.scripts.get_script_result", return_value=result):

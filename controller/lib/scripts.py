@@ -6,6 +6,7 @@ Uses systemd oneshot services for process survival across controller restarts.
 """
 
 import logging
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,22 @@ from typing import Optional
 from controller.lib.config import is_docker_mode
 
 logger = logging.getLogger(__name__)
+
+# A branch is written into the systemd env file and passed to `upgrade.sh -b`, so only plain git branch names are
+# accepted: no whitespace (a newline would add an env variable), no leading dash (an option), no `..`.
+# Matches `wrolpi.upgrade.validate_branch`.
+BRANCH_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*(/[A-Za-z0-9_][A-Za-z0-9_.\-]*)*")
+MAX_BRANCH_LENGTH = 200
+
+
+def is_valid_branch(branch: str) -> bool:
+    """Return True if `branch` is a branch name `upgrade.sh` may be given."""
+    return isinstance(branch, str) \
+        and len(branch) <= MAX_BRANCH_LENGTH \
+        and BRANCH_PATTERN.fullmatch(branch) is not None \
+        and ".." not in branch \
+        and not branch.endswith((".", ".lock"))
+
 
 # Available scripts with their configurations
 # Parameters define inputs that scripts accept:
@@ -254,6 +271,15 @@ def start_script(name: str, params: Optional[dict] = None) -> dict:
     env_file = script_config.get("env_file")
     if env_file:
         values = {key: value for key, value in (params or {}).items() if value}
+        for parameter in parameters:
+            value = values.get(parameter["name"])
+            if value is None:
+                continue
+            # Each value is one line of the env file.
+            if parameter["type"] == "branch" and not is_valid_branch(value):
+                return {"success": False, "error": f"Invalid branch name: {value!r}"}
+            if "\n" in str(value) or "\r" in str(value):
+                return {"success": False, "error": f"Invalid {parameter['label']}: must be a single line"}
         for parameter in parameters:
             if parameter["type"] == "branch" and not values.get(parameter["name"]):
                 # upgrade.sh upgrades the current branch when it is not given one.

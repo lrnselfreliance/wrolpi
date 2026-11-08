@@ -6,6 +6,8 @@ import subprocess
 import time
 from unittest import mock
 
+import pytest
+
 from controller.lib.scripts import (
     _get_service_timing,
     AVAILABLE_SCRIPTS,
@@ -278,6 +280,26 @@ class TestStartScript:
         assert "brnch" in result["error"]
         assert not env_file.exists()
         popen.assert_not_called()
+
+
+    @pytest.mark.parametrize("branch", [
+        "master\nEVIL=1", "master\rEVIL=1", "-b", "a..b", "a b", "foo.lock", "foo/", "/foo", "a//b", "a$b", "x" * 256,
+    ])
+    def test_invalid_branch_is_rejected(self, tmp_path, branch):
+        """The branch is written into the systemd env file and passed to `upgrade.sh -b`; a branch name git would
+        refuse, or one that could add a line to the env file, never starts an upgrade."""
+        result, env_file, popen = self._start_upgrade(tmp_path, {"branch": branch})
+        assert result["success"] is False
+        assert "branch" in result["error"].lower()
+        assert not env_file.exists()
+        popen.assert_not_called()
+
+    @pytest.mark.parametrize("branch", ["master", "release", "feature/new-thing", "v1.2_fix"])
+    def test_valid_branch_is_written(self, tmp_path, branch):
+        result, env_file, popen = self._start_upgrade(tmp_path, {"branch": branch})
+        assert result["success"] is True
+        assert env_file.read_text() == f"BRANCH={branch}\n"
+        popen.assert_called_once()
 
 
 class TestGetScriptOutput:

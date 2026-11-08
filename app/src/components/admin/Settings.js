@@ -17,6 +17,7 @@ import {ConfigsTable} from "./Configs";
 import {navColorHexMap} from "../Vars";
 import {Link} from "react-router";
 import {
+    Autocomplete,
     Button,
     Divider,
     Grid,
@@ -101,11 +102,34 @@ export function ShutdownButton() {
     </APIButton>
 }
 
+// The branches offered in the upgrade branch picker; any other branch name can be typed.
+const UPGRADE_BRANCHES = ['master', 'release'];
+
+export function UpgradeBranchInput({currentBranch, value, onChange, disabled}) {
+    const data = [...new Set([currentBranch, ...UPGRADE_BRANCHES].filter(Boolean))];
+    return <Autocomplete
+        label='Branch'
+        description='Choose a branch, or type the name of another.'
+        data={data}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        // Always list every branch; the typed value is a choice of its own, not a search.
+        filter={({options}) => options}
+        style={{maxWidth: '20em', marginBottom: '1em'}}
+    />;
+}
+
 export function UpgradeSegment() {
     const {status, fetchStatus, loaded} = React.useContext(StatusContext);
     const dockerized = useDockerized();
     const [upgrading, setUpgrading] = React.useState(false);
     const [checking, setChecking] = React.useState(false);
+    const currentBranch = status?.git_branch;
+    // null until the user picks a branch, so the current branch is shown once status arrives.
+    const [chosenBranch, setChosenBranch] = React.useState(null);
+    const branch = (chosenBranch ?? currentBranch ?? '').trim();
+    const switchingBranch = Boolean(branch) && branch !== currentBranch;
 
     const handleCheckUpgrade = async () => {
         setChecking(true);
@@ -126,10 +150,12 @@ export function UpgradeSegment() {
     const handleUpgrade = async () => {
         setUpgrading(true);
         try {
-            const response = await triggerUpgrade();
+            const response = await triggerUpgrade(branch || null);
             if (response.ok) {
                 // Redirect to Controller UI for upgrade status
                 window.location.href = '/controller/?upgrade=true';
+            } else {
+                setUpgrading(false);
             }
         } catch (e) {
             setUpgrading(false);
@@ -152,13 +178,35 @@ export function UpgradeSegment() {
         </Panel>;
     }
 
+    const branchInput = <UpgradeBranchInput
+        currentBranch={currentBranch}
+        value={branch}
+        onChange={setChosenBranch}
+        disabled={upgrading}
+    />;
+
+    const upgradeButton = <APIButton
+        role='save'
+        size='big'
+        onClick={handleUpgrade}
+        disabled={upgrading || !branch}
+        confirmContent={switchingBranch
+            ? `This will switch WROLPi from branch ${currentBranch || 'unknown'} to ${branch}. `
+            + 'The system will be temporarily unavailable during the upgrade. Are you sure?'
+            : 'This will upgrade WROLPi. The system will be temporarily unavailable during the upgrade. Are you sure?'}
+        confirmButton='Start Upgrade'
+    >
+        {upgrading ? 'Starting Upgrade...' : switchingBranch ? `Upgrade to ${branch}` : 'Upgrade Now'}
+    </APIButton>;
+
     // No update available
     if (!status?.update_available) {
         return <Panel id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Your WROLPi is up to date.</p>
-            <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong>
+            <p>Version: <strong>v{status?.version}</strong> on branch <strong>{currentBranch || 'unknown'}</strong>
             </p>
+            {branchInput}
             <APIButton
                 role='primary'
                 onClick={handleCheckUpgrade}
@@ -166,6 +214,8 @@ export function UpgradeSegment() {
             >
                 {checking ? 'Checking...' : 'Check for Upgrades'}
             </APIButton>
+            {/* An up-to-date branch has nothing to upgrade; another branch can still be switched to. */}
+            {switchingBranch && upgradeButton}
         </Panel>;
     }
 
@@ -174,21 +224,13 @@ export function UpgradeSegment() {
         <Header as='h3' icon='arrow alternate circle up'>
             Upgrade Available
         </Header>
-        <p>Branch: <strong>{status?.git_branch}</strong></p>
+        <p>Branch: <strong>{currentBranch}</strong></p>
         <p>Current commit: <strong>{status?.current_commit}</strong></p>
         <p>Latest commit: <strong>{status?.latest_commit}</strong></p>
         <p><strong>{status?.commits_behind}</strong> commit(s) behind</p>
 
-        <APIButton
-            role='save'
-            size='big'
-            onClick={handleUpgrade}
-            disabled={upgrading}
-            confirmContent='This will upgrade WROLPi. The system will be temporarily unavailable during the upgrade. Are you sure?'
-            confirmButton='Start Upgrade'
-        >
-            {upgrading ? 'Starting Upgrade...' : 'Upgrade Now'}
-        </APIButton>
+        {branchInput}
+        {upgradeButton}
     </Panel>;
 }
 

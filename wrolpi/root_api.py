@@ -770,7 +770,7 @@ async def get_upgrade_check(request: Request):
 @openapi.definition(description='Start WROLPi upgrade')
 @native_only
 @wrol_mode_check
-async def post_upgrade_start(_: Request):
+async def post_upgrade_start(request: Request):
     """
     Trigger the WROLPi upgrade process.
 
@@ -780,12 +780,16 @@ async def post_upgrade_start(_: Request):
     3. Run upgrade scripts
     4. Restart services
 
+    The optional JSON body `{"branch": "master"}` upgrades from that branch; without it the current branch is
+    upgraded.
+
     The frontend should redirect to the maintenance page after calling this.
     Returns 202 Accepted as the upgrade runs asynchronously.
     """
     from wrolpi.upgrade import start_upgrade
 
-    await start_upgrade()
+    body = request.json if isinstance(request.json, dict) else {}
+    await start_upgrade(body.get('branch') or None)
     return response.empty(HTTPStatus.ACCEPTED)
 
 

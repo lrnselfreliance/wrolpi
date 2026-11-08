@@ -6,15 +6,41 @@ with the remote origin branch, and to trigger the upgrade process.
 """
 import asyncio
 import pathlib
+import re
 import subprocess
 
 from wrolpi.common import logger, wrol_mode_check
+from wrolpi.errors import ValidationError
 from wrolpi.vars import DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild(__name__)
 
 # Path to the upgrade script.
 UPGRADE_SCRIPT = PROJECT_DIR / 'upgrade.sh'
+
+# The env file systemd reads for wrolpi-upgrade.service.
+UPGRADE_ENV_FILE = '/tmp/wrolpi-upgrade.env'
+
+# A branch is written into the systemd env file and passed to `upgrade.sh -b`, so only plain git branch names are
+# accepted: no whitespace (a newline would add an env variable), no leading dash (an option), no `..`.
+BRANCH_PATTERN = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.\-]*(/[A-Za-z0-9_][A-Za-z0-9_.\-]*)*')
+MAX_BRANCH_LENGTH = 200
+
+
+def validate_branch(branch: str) -> str:
+    """Return `branch` if it is a branch name `upgrade.sh` may be given, otherwise raise ValidationError."""
+    if not isinstance(branch, str) \
+            or len(branch) > MAX_BRANCH_LENGTH \
+            or not BRANCH_PATTERN.fullmatch(branch) \
+            or '..' in branch \
+            or branch.endswith(('.', '.lock')):
+        raise ValidationError(f'Invalid branch name: {branch!r}')
+    return branch
+
+
+def write_upgrade_env(branch: str):
+    """Write the branch for the systemd upgrade service to read."""
+    pathlib.Path(UPGRADE_ENV_FILE).write_text(f'BRANCH={branch}\n')
 
 
 def git_fetch() -> bool:
@@ -228,14 +254,14 @@ async def refresh_update_status(status, fetch: bool = True) -> dict:
     return result
 
 
-async def start_upgrade():
+async def start_upgrade(branch: str = None):
     """
     Start the WROLPi upgrade process.
 
     This executes /opt/wrolpi/upgrade.sh in a detached subprocess so it survives
     the API shutdown (upgrade.sh stops the API service).
 
-    The upgrade will use the currently checked out branch (e.g., 'release' or 'master').
+    The upgrade will use `branch`, or the currently checked out branch (e.g., 'release' or 'master') when none is given.
 
     The frontend should redirect to the maintenance page after calling this.
     """
@@ -249,20 +275,21 @@ async def start_upgrade():
         logger.error(f'Upgrade script not found: {UPGRADE_SCRIPT}')
         return
 
-    # Get current branch to upgrade from the same branch
-    branch = get_current_branch()
-    if not branch:
-        logger.error('Could not determine current branch, defaulting to release')
-        branch = 'release'
+    if branch:
+        validate_branch(branch)
+    else:
+        # Upgrade from the same branch.
+        branch = get_current_branch()
+        if not branch:
+            logger.error('Could not determine current branch, defaulting to release')
+            branch = 'release'
 
     logger.warning(f'Starting WROLPi upgrade on branch: {branch}')
 
     # Send event to notify frontend
     Events.send_upgrade_started(f'WROLPi upgrade is starting on branch {branch}. Please wait...')
 
-    # Write branch to environment file for the systemd service to read.
-    env_file = pathlib.Path('/tmp/wrolpi-upgrade.env')
-    env_file.write_text(f'BRANCH={branch}\n')
+    write_upgrade_env(branch)
 
     # Use systemd to run the upgrade service. This ensures the upgrade process
     # survives when the API is stopped, as systemd manages it independently.

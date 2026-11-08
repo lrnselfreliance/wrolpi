@@ -2,10 +2,12 @@
 Tests for the WROLPi upgrade system.
 """
 import subprocess
+from http import HTTPStatus
 from unittest.mock import patch, MagicMock
 
 import pytest
 
+from wrolpi.errors import ValidationError
 from wrolpi.upgrade import (
     check_for_update,
     get_current_branch,
@@ -297,6 +299,57 @@ class TestStartUpgrade:
             assert call_args == ['sudo', 'systemctl', 'start', 'wrolpi-upgrade.service']
 
     @pytest.mark.asyncio
+    async def test_start_upgrade_chosen_branch(self, tmp_path):
+        """A branch the user chose is upgraded instead of the current branch."""
+        mock_script_path = MagicMock()
+        mock_script_path.is_file.return_value = True
+
+        env_file = tmp_path / 'wrolpi-upgrade.env'
+
+        with patch('wrolpi.upgrade.DOCKERIZED', False), \
+                patch('wrolpi.upgrade.UPGRADE_SCRIPT', mock_script_path), \
+                patch('wrolpi.upgrade.get_current_branch', return_value='release'), \
+                patch('wrolpi.upgrade.subprocess.Popen') as mock_popen, \
+                patch('wrolpi.upgrade.pathlib.Path', return_value=env_file), \
+                patch('wrolpi.events.Events.send_upgrade_started'):
+            await start_upgrade('feature/new-thing')
+
+            assert env_file.read_text() == 'BRANCH=feature/new-thing\n'
+            mock_popen.assert_called_once()
+
+    @pytest.mark.parametrize('branch', [
+        'master\nEVIL=1',
+        '-b',
+        'a..b',
+        'a b',
+        'foo.lock',
+        'foo/',
+        '/foo',
+        'a//b',
+        'a$b',
+        'x' * 256,
+    ])
+    @pytest.mark.asyncio
+    async def test_start_upgrade_rejects_invalid_branch(self, tmp_path, branch):
+        """A branch name git would refuse, or one that could escape the env file, never starts an upgrade."""
+        mock_script_path = MagicMock()
+        mock_script_path.is_file.return_value = True
+
+        env_file = tmp_path / 'wrolpi-upgrade.env'
+
+        with patch('wrolpi.upgrade.DOCKERIZED', False), \
+                patch('wrolpi.upgrade.UPGRADE_SCRIPT', mock_script_path), \
+                patch('wrolpi.upgrade.subprocess.Popen') as mock_popen, \
+                patch('wrolpi.upgrade.pathlib.Path', return_value=env_file), \
+                patch('wrolpi.events.Events.send_upgrade_started') as mock_event:
+            with pytest.raises(ValidationError):
+                await start_upgrade(branch)
+
+            assert not env_file.exists()
+            mock_popen.assert_not_called()
+            mock_event.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_start_upgrade_skipped_in_docker(self):
         """start_upgrade does nothing in Docker environment."""
         with patch('wrolpi.upgrade.DOCKERIZED', True), \
@@ -412,3 +465,33 @@ async def test_refresh_update_status_can_skip_fetch():
         await refresh_update_status({}, fetch=False)
         await refresh_update_status({})
     assert seen == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_upgrade_start_api_branch(async_client):
+    """The upgrade endpoint passes the chosen branch on, and refuses an invalid one."""
+    with patch('wrolpi.common.DOCKERIZED', False), \
+            patch('wrolpi.upgrade.DOCKERIZED', False), \
+            patch('wrolpi.upgrade.UPGRADE_SCRIPT') as mock_script_path, \
+            patch('wrolpi.upgrade.subprocess.Popen') as mock_popen, \
+            patch('wrolpi.upgrade.write_upgrade_env') as mock_write, \
+            patch('wrolpi.events.Events.send_upgrade_started'):
+        mock_script_path.is_file.return_value = True
+
+        request, response = await async_client.post('/api/upgrade/start', json={'branch': 'master'})
+        assert response.status_code == HTTPStatus.ACCEPTED
+        mock_write.assert_called_once_with('master')
+        mock_popen.assert_called_once()
+
+        mock_write.reset_mock()
+        mock_popen.reset_mock()
+        request, response = await async_client.post('/api/upgrade/start', json={'branch': 'master\nEVIL=1'})
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        mock_write.assert_not_called()
+        mock_popen.assert_not_called()
+
+        # No body upgrades the current branch, as before.
+        with patch('wrolpi.upgrade.get_current_branch', return_value='release'):
+            request, response = await async_client.post('/api/upgrade/start')
+        assert response.status_code == HTTPStatus.ACCEPTED
+        mock_write.assert_called_once_with('release')

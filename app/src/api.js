@@ -2226,8 +2226,10 @@ export async function checkUpgrade(force = false) {
     return null;
 }
 
-export async function triggerUpgrade() {
-    const response = await apiPost(`${API_URI}/upgrade/start`);
+// `branch` upgrades from that branch; without it the current branch is upgraded.
+export async function triggerUpgrade(branch = null) {
+    const body = branch ? {branch} : undefined;
+    const response = await apiPost(`${API_URI}/upgrade/start`, body);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Failed to start upgrade. See server logs.');
         toast({

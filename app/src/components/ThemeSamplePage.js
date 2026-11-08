@@ -2,6 +2,7 @@ import React, {useContext, useState} from 'react';
 import {ThemeContext} from '../contexts/contexts';
 import {
     ActionInput,
+    Autocomplete,
     Button,
     Card,
     CardGroup,
@@ -789,7 +790,11 @@ export function ThemeSamplePage() {
                     <NumberInput label='Depth' description='Follow links this far.'
                                  defaultValue={2} min={1} max={4}/>
                 </div>
-                <div style={{marginTop: 12}}>
+                <div style={{marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12}}>
+                    {/* A dropdown that also takes a typed value; open it to check the dropdown. */}
+                    <Autocomplete label='Branch' description='Choose a branch, or type another.'
+                                  defaultValue='release' data={['release', 'master']}
+                                  filter={({options}) => options}/>
                     <Textarea label='Notes' placeholder='Notes about this download…' minRows={2}/>
                 </div>
                 <div style={{marginTop: 12}}>

@@ -1,5 +1,6 @@
 import React, {forwardRef, useId} from 'react';
 import {
+    Autocomplete,
     Checkbox as MCheckbox,
     MultiSelect,
     NumberInput,
@@ -215,6 +216,7 @@ export function ColoredInput({
 }
 
 export {
+    Autocomplete,
     MTextInput as TextInput,
     MTextarea as Textarea,
     MSelect as Select,

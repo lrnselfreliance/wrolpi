@@ -150,13 +150,23 @@ def build_manifest_page(session: Session, after_id: int = 0, limit: int = MANIFE
     return dict(groups=groups, next_after_id=next_after_id, max_id=max_id, limit=limit)
 
 
+def _is_protected(name: str) -> bool:
+    """True if the top-level folder `name` is a protected one.  Case is ignored: on a drive that ignores case (exFAT,
+    NTFS, macOS) 'Config' is the real config folder."""
+    return name.casefold() in PROTECTED_DIRECTORIES
+
+
+def _is_unlisted(name: str) -> bool:
+    return name.casefold() in UNLISTED_DIRECTORIES
+
+
 def _manifest_file(media_directory: pathlib.Path, path: pathlib.Path) -> Optional[ManifestFile]:
     try:
         relative = path.relative_to(media_directory)
     except ValueError:
         return None
     parts = relative.parts
-    if not parts or any(i.startswith('.') for i in parts) or parts[0] in PROTECTED_DIRECTORIES:
+    if not parts or any(i.startswith('.') for i in parts) or _is_protected(parts[0]):
         return None
     if INCOMPLETE_FILE.search(path.name):
         return None
@@ -191,7 +201,7 @@ def resolve_destination(media_directory: pathlib.Path, path: str) -> Optional[pa
     parts = pathlib.PurePosixPath(path).parts
     if not parts or any(i in ('.', '..') or i.startswith('.') for i in parts):
         return None
-    if parts[0] in PROTECTED_DIRECTORIES:
+    if _is_protected(parts[0]):
         return None
     media_directory = media_directory.resolve()
     destination = media_directory.joinpath(*parts)
@@ -216,7 +226,7 @@ def normalize_excluded_directories(values: List[str]) -> List[str]:
         directory = posixpath.normpath(stripped) if stripped else ''
         if not parts or any(i.startswith('.') for i in parts):
             raise InvalidConfig(f'Invalid folder: {value!r}')
-        if parts[0] in PROTECTED_DIRECTORIES:
+        if _is_protected(parts[0]):
             raise InvalidConfig(f'{parts[0]} is never copied')
         directories.add(directory)
     return sorted(i for i in directories if not any(is_excluded(i, {j}) for j in directories if j != i))
@@ -239,7 +249,7 @@ def list_local_directories(path: str) -> List[dict]:
         for entry in entries:
             if entry.name.startswith('.') or not entry.is_dir(follow_symlinks=False):
                 continue
-            if not path and entry.name in UNLISTED_DIRECTORIES:
+            if not path and _is_unlisted(entry.name):
                 continue
             directories.append(dict(name=entry.name, path=f'{path}/{entry.name}' if path else entry.name))
     return sorted(directories, key=lambda i: i['name'].lower())
@@ -257,7 +267,7 @@ async def list_primary_directories(path: str) -> List[dict]:
         name = (entry.get('name') or '').rstrip('/')
         if not entry.get('is_dir') or not name or name.startswith('.') or '/' in name:
             continue
-        if not path and name in UNLISTED_DIRECTORIES:
+        if not path and _is_unlisted(name):
             continue
         directories.append(dict(name=name, path=f'{path}/{name}' if path else name))
     return sorted(directories, key=lambda i: i['name'].lower())

@@ -27,6 +27,10 @@ from wrolpi.tags import get_tags_config, Tag, TagFile
     ('config/wrolpi.db', False),
     ('config/tags.yaml', False),
     ('tags/one/video.mp4', False),
+    # A drive that ignores case (exFAT, NTFS, macOS) would write these into the real config and tags folders.
+    ('Config/wrolpi.db', False),
+    ('CONFIG/tags.yaml', False),
+    ('Tags/one/video.mp4', False),
     ('videos\\video.mp4', False),
     ('', False),
 ])
@@ -336,7 +340,7 @@ def test_normalize_excluded_directories(values, expected):
 
 
 @pytest.mark.parametrize('value', ['', '/', '..', 'a/../b', '../a', 'a/./b', '.hidden', 'a/.hidden', 'config',
-                                   'config/x', 'tags', 'a\\b', None])
+                                   'config/x', 'tags', 'Config', 'TAGS/x', 'a\\b', None])
 def test_normalize_excluded_directories_rejects(value):
     with pytest.raises(InvalidConfig):
         lib.normalize_excluded_directories([value])
@@ -351,8 +355,11 @@ def test_is_excluded():
 
 
 def test_list_local_directories(test_directory):
-    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'zims', 'lost+found'):
-        (test_directory / i).mkdir(parents=True)
+    for i in ('Movies', 'videos/channel', 'config', 'tags', '.hidden', 'zims', 'lost+found', 'Tags'):
+        try:
+            (test_directory / i).mkdir(parents=True)
+        except FileExistsError:
+            pass  # 'Tags' is 'tags' on a filesystem that ignores case.
     (test_directory / 'file.txt').write_text('a file')
     (test_directory / 'link').symlink_to(test_directory / 'Movies')
 

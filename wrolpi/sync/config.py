@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from wrolpi.common import ConfigFile
-from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.sync.status import get_backup_status, update_backup_status
 
 
@@ -109,11 +108,3 @@ SYNC_CONFIG: SyncConfig = SyncConfig()
 
 def get_sync_config() -> SyncConfig:
     return SYNC_CONFIG
-
-
-@register_switch_handler('save_sync_config')
-def save_sync_config():
-    get_sync_config().save()
-
-
-save_sync_config: ActivateSwitchMethod

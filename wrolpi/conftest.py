@@ -52,6 +52,7 @@ from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
 from wrolpi.files.worker import file_worker
 from wrolpi.switches import await_switches as await_switches_
+from wrolpi.sync.config import get_sync_config
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
 
@@ -234,6 +235,15 @@ def test_directory() -> Generator[Path, Any, None]:
         assert tmp_path.is_dir()
         set_test_media_directory(tmp_path)
         yield tmp_path
+
+
+@pytest.fixture(autouse=True)
+def test_sync_config():
+    """Every test starts as a primary with no sync settings (sync.yaml is in memory unless a test saves it)."""
+    config = get_sync_config()
+    config._config.update(copy.deepcopy(config.default_config))
+    yield
+    config._config.update(copy.deepcopy(config.default_config))
 
 
 @pytest.fixture

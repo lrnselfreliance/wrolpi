@@ -6,6 +6,7 @@ import {SettingsPage} from "./Settings";
 import {StatusPage} from "./Status";
 import {ControllerPage} from "./ControllerPage";
 import {ExtensionPage} from "./ExtensionPage";
+import {SyncPage} from "./Sync";
 
 export default function AdminRoute() {
 
@@ -13,6 +14,7 @@ export default function AdminRoute() {
         {text: 'Downloads', to: '/admin', key: 'admin', end: true},
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
         {text: 'Status', to: '/admin/status', key: 'status'},
+        {text: 'Sync', to: '/admin/sync', key: 'sync'},
         {text: 'Control', to: '/admin/controller', key: 'controller'},
         {text: 'Extension', to: '/admin/extension', key: 'extension'},
     ];
@@ -23,6 +25,7 @@ export default function AdminRoute() {
             <Route path='/' exact element={<DownloadsPage/>}/>
             <Route path='settings' exact element={<SettingsPage/>}/>
             <Route path='status' exact element={<StatusPage/>}/>
+            <Route path='sync' exact element={<SyncPage/>}/>
             <Route path='controller' exact element={<ControllerPage/>}/>
             <Route path='extension' exact element={<ExtensionPage/>}/>
         </Routes>

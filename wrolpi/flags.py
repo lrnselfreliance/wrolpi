@@ -161,6 +161,11 @@ map_search_building = Flag('map_search_building')
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
 
+# A secondary WROLPi is copying its library from its primary (see wrolpi.sync).  Its API refuses requests meanwhile.
+sync_running = Flag('sync_running')
+# This WROLPi is copying its media directory to its backup drive (see wrolpi.sync.backup).
+backup_running = Flag('backup_running')
+
 # Cookies flags for yt-dlp.
 cookies_exist = Flag('cookies_exist')
 cookies_unlocked = Flag('cookies_unlocked')
@@ -171,6 +176,7 @@ def get_flags() -> dict:
     flags = dict(
         cookies_exist=cookies_exist.is_set(),
         cookies_unlocked=cookies_unlocked.is_set(),
+        backup_running=backup_running.is_set(),
         db_up=db_up.is_set(),
         file_worker_busy=file_worker_busy.is_set(),
         file_worker_cleanup=file_worker_cleanup.is_set(),
@@ -184,6 +190,7 @@ def get_flags() -> dict:
         media_mounted=media_mounted.is_set(),
         outdated_zims=outdated_zims.is_set(),
         refresh_complete=refresh_complete.is_set(),
+        sync_running=sync_running.is_set(),
     )
     return flags
 

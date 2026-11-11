@@ -45,6 +45,11 @@ import {defaultTheme} from './themes/names';
 /** GET /api/settings */
 export const settingsFixture = (overrides = {}) => ({
     archive_destination: 'archive/%(domain_tag)s/%(domain)s',
+    backup_device_uuid: null,
+    backup_directory: null,
+    backup_excluded_directories: [],
+    backup_window_end: null,
+    backup_window_start: null,
     check_for_upgrades: true,
     download_daily_limit_global: null,
     download_daily_limit_per_domain: null,
@@ -74,7 +79,12 @@ export const settingsFixture = (overrides = {}) => ({
     repos_destination: 'repos/%(repo_tag)s/%(repo_name)s',
     require_cookies_unlocked: false,
     require_media_mounted: false,
+    role: 'primary',
     save_ffprobe_json: true,
+    sync_excluded_directories: [],
+    sync_primary_url: null,
+    sync_window_end: null,
+    sync_window_start: null,
     tags_directory: true,
     throttle_on_startup: false,
     timezone: null,
@@ -82,6 +92,52 @@ export const settingsFixture = (overrides = {}) => ({
     videos_destination: 'videos/%(channel_tag)s/%(channel_name)s',
     wrol_mode: false,
     zims_destination: 'zims',
+    ...overrides,
+});
+
+/** The `sync` of GET /api/status: a secondary that has never synced. */
+export const syncStatusFixture = (overrides = {}) => ({
+    state: 'idle',
+    phase: null,
+    requested: false,
+    force: false,
+    cancel_requested: false,
+    started_at: null,
+    finished_at: null,
+    last_success_at: null,
+    last_error: null,
+    last_skip_reason: null,
+    primary_url: null,
+    primary_version: null,
+    groups_seen: 0,
+    max_id: 0,
+    files_checked: 0,
+    files_to_download: 0,
+    files_downloaded: 0,
+    bytes_downloaded: 0,
+    files_failed: 0,
+    files_excluded: 0,
+    configs_imported: [],
+    disk_full: false,
+    ...overrides,
+});
+
+/** The `backup` of GET /api/status: a backup drive that has never been written. */
+export const backupStatusFixture = (overrides = {}) => ({
+    state: 'idle',
+    phase: null,
+    requested: false,
+    cancel_requested: false,
+    started_at: null,
+    finished_at: null,
+    last_success_at: null,
+    last_error: null,
+    last_skip_reason: null,
+    directory: null,
+    bytes_transferred: 0,
+    percent: 0,
+    files_transferred: 0,
+    files_to_check: 0,
     ...overrides,
 });
 
@@ -122,6 +178,10 @@ export const statusFixture = (overrides = {}) => ({
     memory_stats: {total: 4000000000, used: 1000000000, free: 3000000000, cached: 500000000},
     processes_stats: [],
     sanic_workers: {},
+    // A secondary's sync (wrolpi.sync); idle on a primary.
+    sync: syncStatusFixture(),
+    // A backup to a second drive (wrolpi.sync.backup); idle without one.
+    backup: backupStatusFixture(),
     version: '1.0.0',
     wrol_mode: false,
     // Upgrade info, seeded by the API and refreshed by its upgrade check.

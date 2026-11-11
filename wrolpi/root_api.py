@@ -28,18 +28,20 @@ from wrolpi.bookmarks_api import bookmarks_bp
 from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory, search_other_estimates, set_system_timezone
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates, set_system_timezone, is_secondary
 from wrolpi.config_api import config_bp
 from wrolpi.db_query import db_query_bp
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
+from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError, SecondaryRole
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
 from wrolpi.jobs import jobs_bp
 from wrolpi.log_levels import int_to_name
 from wrolpi.speedtest import speedtest_bp
+from wrolpi.sync.api import sync_bp
+from wrolpi.sync.config import get_sync_config
 from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
@@ -69,6 +71,7 @@ api_app.blueprint(jobs_bp)
 api_app.blueprint(map_bp)
 api_app.blueprint(repos_bp)
 api_app.blueprint(speedtest_bp)
+api_app.blueprint(sync_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
 
@@ -164,6 +167,7 @@ async def echo(request: Request):
 )
 def get_settings(_: Request):
     wrolpi_config = get_wrolpi_config()
+    sync_config = get_sync_config()
 
     # Drop special directories (e.g. zims) that must never be ignored, if present from older configs.
     from wrolpi.files.lib import sanitize_ignored_directories
@@ -173,6 +177,11 @@ def get_settings(_: Request):
 
     settings = {
         'archive_destination': wrolpi_config.archive_destination,
+        'backup_device_uuid': sync_config.backup_device_uuid,
+        'backup_directory': sync_config.backup_directory,
+        'backup_excluded_directories': sync_config.backup_excluded_directories,
+        'backup_window_end': sync_config.backup_window_end,
+        'backup_window_start': sync_config.backup_window_start,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
         'download_daily_limit_global': wrolpi_config.download_daily_limit_global,
@@ -205,7 +214,12 @@ def get_settings(_: Request):
         'zims_destination': wrolpi_config.zims_destination,
         'require_cookies_unlocked': wrolpi_config.require_cookies_unlocked,
         'require_media_mounted': wrolpi_config.require_media_mounted,
+        'role': sync_config.role,
         'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
+        'sync_primary_url': sync_config.primary_url,
+        'sync_excluded_directories': sync_config.sync_excluded_directories,
+        'sync_window_end': sync_config.window_end,
+        'sync_window_start': sync_config.window_start,
         'timezone': wrolpi_config.timezone,
     }
     return json_response(settings)
@@ -494,6 +508,8 @@ async def kill_downloads(_: Request):
 @api_bp.post('/download/enable')
 @openapi.description('Enable and start downloading.')
 async def enable_downloads(_: Request):
+    if is_secondary():
+        raise SecondaryRole('Downloads are disabled on a secondary WROLPi; its primary downloads.')
     await download_manager.enable()
     return response.empty()
 

@@ -34,6 +34,11 @@ export class ApiDownError extends Error {
 
 const apiDownError = new ApiDownError('API is down');
 
+// A secondary WROLPi refuses requests while it copies its library from its primary.  Like a down API, callers
+// treat it quietly; the app shows the sync's progress instead (see SyncingOverlay).
+export class SyncingError extends ApiDownError {
+}
+
 async function apiCall(url, method, body, ms = 60_000) {
     let init = {method};
     if (body !== undefined) {
@@ -58,8 +63,11 @@ async function apiCall(url, method, body, ms = 60_000) {
         // Request encountered an error.
         let copy = response.clone();
         const content = await copy.json();
-        console.error('API error response json', content);
         const code = content['code'];
+        if (response.status === 503 && code === 'SYNCING') {
+            throw new SyncingError('This WROLPi is syncing from its primary');
+        }
+        console.error('API error response json', content);
         if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({
                 type: 'error',
@@ -384,6 +392,11 @@ export async function getSettings() {
         const content = await response.json();
         return {
             archive_destination: content.archive_destination,
+            backup_device_uuid: content.backup_device_uuid,
+            backup_directory: content.backup_directory,
+            backup_excluded_directories: content.backup_excluded_directories,
+            backup_window_end: content.backup_window_end,
+            backup_window_start: content.backup_window_start,
             download_manager_disabled: content.download_manager_disabled,
             download_manager_stopped: content.download_manager_stopped,
             download_daily_limit_global: content.download_daily_limit_global,
@@ -410,11 +423,17 @@ export async function getSettings() {
             repos_destination: content.repos_destination,
             require_cookies_unlocked: content.require_cookies_unlocked,
             require_media_mounted: content.require_media_mounted,
+            role: content.role,
             save_ffprobe_json: content.save_ffprobe_json,
+            sync_excluded_directories: content.sync_excluded_directories,
+            sync_primary_url: content.sync_primary_url,
+            sync_window_end: content.sync_window_end,
+            sync_window_start: content.sync_window_start,
             tags_directory: content.tags_directory,
             throttle_on_startup: content.throttle_on_startup,
             throttle_status: content.throttle_status,
             timezone: content.timezone,
+            version: content.version,
             videos_destination: content.videos_destination,
             wrol_mode: content.wrol_mode,
             zims_destination: content.zims_destination,
@@ -428,6 +447,70 @@ export async function getSettings() {
             time: 5000,
         });
     }
+}
+
+// Sync: a secondary WROLPi copies its library from its primary.
+
+export async function saveSyncSettings(settings) {
+    const response = await apiPut(`${API_URI}/sync/settings`, settings);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not save sync settings.');
+        toast({type: 'error', title: 'Saving Sync Settings Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export class PrimaryUnreachableError extends Error {
+}
+
+/** The folders directly inside `path`; `source` is 'local' (this WROLPi) or 'primary' (its primary). */
+export async function getSyncDirectories(path, source) {
+    const response = await apiPost(`${API_URI}/sync/directories`, {path: path || '', source});
+    if (response.ok) {
+        const {directories} = await response.json();
+        return directories;
+    }
+    if (response.status === 502) {
+        const {error} = await response.json();
+        throw new PrimaryUnreachableError(error || 'The primary did not answer');
+    }
+    const message = await getErrorMessage(response, 'Could not list the folders.');
+    throw new Error(message);
+}
+
+export async function runSync(force = false) {
+    const response = await apiPost(`${API_URI}/sync/run`, {force});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not start the sync.');
+        toast({type: 'error', title: 'Sync Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function cancelSync() {
+    return await apiPost(`${API_URI}/sync/cancel`);
+}
+
+export async function runBackup() {
+    const response = await apiPost(`${API_URI}/sync/backup/run`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not start the backup.');
+        toast({type: 'error', title: 'Backup Failed', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function cancelBackup() {
+    return await apiPost(`${API_URI}/sync/backup/cancel`);
+}
+
+export async function testSync() {
+    const response = await apiGet(`${API_URI}/sync/test`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not reach the primary.');
+    return {ok: false, error: message};
 }
 
 export async function saveSettings(settings) {

@@ -1,3 +1,4 @@
+import contextlib
 import os
 import pathlib
 import re
@@ -195,6 +196,49 @@ def test_snapshot_database(test_directory, tmp_path):
     assert not (drive / 'config/.wrolpi.db.backup').exists()
     with sqlite3.connect(drive / 'config/wrolpi.db') as copy:
         assert copy.execute('SELECT v FROM t').fetchall() == [('in the WAL',)]
+
+
+def test_snapshot_database_only_when_changed(async_client, test_directory, tmp_path):
+    """The 2.5 GB snapshot is written again only when the live database, or the drive's copy, has changed."""
+    (test_directory / 'config').mkdir(exist_ok=True)
+    database = test_directory / 'config/wrolpi.db'
+    with contextlib.closing(sqlite3.connect(database)) as live:
+        live.execute('PRAGMA journal_mode=WAL')
+        live.execute('CREATE TABLE t (v TEXT)')
+        live.commit()
+    drive = tmp_path / 'drive'
+    copy = drive / 'config/wrolpi.db'
+
+    assert backup.snapshot_database_if_changed(drive) is True
+    written = copy.stat().st_mtime_ns
+    assert backup.snapshot_database_if_changed(drive) is False
+    assert copy.stat().st_mtime_ns == written
+
+    # Reading opens an empty WAL; nothing changed.
+    with contextlib.closing(sqlite3.connect(database)) as reader:
+        reader.execute('SELECT * FROM t').fetchall()
+        assert backup.snapshot_database_if_changed(drive) is False
+
+    # A write still in the WAL is a change.
+    with contextlib.closing(sqlite3.connect(database)) as live:
+        live.execute("INSERT INTO t VALUES ('new')")
+        live.commit()
+        assert (test_directory / 'config/wrolpi.db-wal').stat().st_size > 0
+        assert backup.snapshot_database_if_changed(drive) is True
+    with contextlib.closing(sqlite3.connect(copy)) as db:
+        assert db.execute('SELECT v FROM t').fetchall() == [('new',)]
+
+    # The live database changed when the WAL was checkpointed on close.
+    backup.snapshot_database_if_changed(drive)
+    assert backup.snapshot_database_if_changed(drive) is False
+
+    # The drive's copy is missing, or replaced by something else.
+    copy.unlink()
+    assert backup.snapshot_database_if_changed(drive) is True
+    copy.write_bytes(b'not the snapshot')
+    assert backup.snapshot_database_if_changed(drive) is True
+    # Another drive has no snapshot yet.
+    assert backup.snapshot_database_if_changed(tmp_path / 'other') is True
 
 
 @requires_rsync

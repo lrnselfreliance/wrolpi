@@ -217,6 +217,42 @@ def snapshot_database(target: pathlib.Path):
     os.replace(temporary, database)
 
 
+def database_fingerprint(database: pathlib.Path) -> Optional[list]:
+    """The size and modification time of a database and of its write-ahead log, or None if it does not exist.  A
+    commit changes one of them.  An empty WAL (opened by a reader) holds nothing, so it is ignored."""
+    try:
+        stat = database.stat()
+    except FileNotFoundError:
+        return None
+    fingerprint = [stat.st_size, stat.st_mtime_ns]
+    try:
+        wal = database.with_name(f'{database.name}-wal').stat()
+        if wal.st_size:
+            fingerprint.extend([wal.st_size, wal.st_mtime_ns])
+    except FileNotFoundError:
+        pass
+    return fingerprint
+
+
+def snapshot_database_if_changed(target: pathlib.Path) -> bool:
+    """Write the snapshot (see `snapshot_database`) unless the live database and the drive's copy are both unchanged
+    since the last snapshot.  Returns True if the snapshot was written.
+
+    The record is kept in memory, so the first backup after a restart always writes it."""
+    from wrolpi.api_utils import api_app
+    copy = target / 'config/wrolpi.db'
+    key = f'backup_database_snapshot:{copy}'
+    # Taken before the snapshot: a commit during the snapshot makes the next backup write it again.
+    source = database_fingerprint(get_db_file())
+    previous = api_app.shared_ctx.cache.get(key)
+    if previous and source and previous == [source, database_fingerprint(copy)]:
+        logger.info(f'The database has not changed; keeping the snapshot in {copy.parent}')
+        return False
+    snapshot_database(target)
+    api_app.shared_ctx.cache[key] = [source, database_fingerprint(copy)]
+    return True
+
+
 def backup_skip_reason() -> Optional[str]:
     """Why a backup cannot start now, or None."""
     config = get_sync_config()
@@ -346,7 +382,7 @@ async def run_backup() -> dict:
             update_backup_status(phase='database')
             if reason := check_backup_target(str(target), uuid):
                 raise BackupError(f'Stopped: {reason}')
-            await asyncio.to_thread(snapshot_database, target)
+            await asyncio.to_thread(snapshot_database_if_changed, target)
     except BackupCancelled as e:
         logger.warning(f'Backup stopped: {e}')
         return update_backup_status(state='idle', phase=None, finished_at=now().isoformat(), last_error=str(e),

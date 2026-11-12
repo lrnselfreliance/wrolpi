@@ -450,7 +450,8 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
     elif order_key == 'size':
         query = query.order_by(nullslast(direction(Doc.size)), direction(FileGroup.id))
     elif order_key == 'title':
-        query = query.order_by(nullslast(direction(FileGroup.a_text)), direction(FileGroup.id))
+        # The title the user sees, ignoring case (a_text is the indexed words, and may be empty).
+        query = query.order_by(nullslast(direction(FileGroup.title.collate('NOCASE'))), direction(FileGroup.id))
 
     browse_sql = _doc_browse_sql(order_by) if unfiltered else None
     if browse_sql:

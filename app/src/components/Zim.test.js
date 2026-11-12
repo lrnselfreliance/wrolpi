@@ -1,6 +1,8 @@
 import React from 'react';
 import {render, screen} from '../test-utils';
-import {ZimCatalogItemRow} from './Zim';
+import {ZimCatalogItemRow, ZimSearchView} from './Zim';
+import {TagsContext} from '../Tags';
+import {tagsContextFixture} from '../test-fixtures';
 import {Table} from './ui';
 
 /*
@@ -111,5 +113,20 @@ describe('the outdated Zims banner', () => {
         await waitFor(() => expect(getOutdatedZims).toHaveBeenCalledTimes(2));
         expect(await screen.findByText('zims/wikipedia_en_all_maxi_2023-12.zim')).toBeInTheDocument();
         expect(screen.getByText('zims/wikipedia_en_all_maxi_2024-01.zim')).toBeInTheDocument();
+    });
+});
+
+/*
+ * The Zim search tab's tag picker.  Zim search can filter by specific tags but has no "any tag" search, and
+ * picking "Any" there left no filter applied -- so the picker must not offer it.
+ */
+describe('the Zim search tag picker', () => {
+    it('does not offer Any', async () => {
+        render(<ZimSearchView suggestions={{zimsEstimates: []}} loading={false}/>, {
+            contexts: [[TagsContext, tagsContextFixture({tags: [{name: 'one'}]})]],
+        });
+        fireEvent.click(screen.getByLabelText('Add tag'));
+        expect(await screen.findByText('Applied Tags')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Any'})).toBeNull();
     });
 });

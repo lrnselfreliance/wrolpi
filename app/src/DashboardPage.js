@@ -432,6 +432,8 @@ export function DashboardPage() {
     } else if (activeTags && activeTags.length > 1) {
         const tagNames = activeTags.join(' & ');
         title = `Tags: ${tagNames} - Dashboard`;
+    } else if (anyTag) {
+        title = 'Any Tag - Dashboard';
     }
     useTitle(title);
 
@@ -444,7 +446,7 @@ export function DashboardPage() {
         <DashboardCalculators/>
         <DashboardRecentFiles/>
     </React.Fragment>;
-    if (searchStr || (activeTags && activeTags.length > 0)) {
+    if (searchStr || (activeTags && activeTags.length > 0) || anyTag) {
         // User has submitted and wants full search.
         body = <SearchView suggestions={suggestions} suggestionsSums={suggestionsSums} loading={loading}/>;
     }

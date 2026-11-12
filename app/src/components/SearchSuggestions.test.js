@@ -137,3 +137,23 @@ test('no Repos group when none match', async () => {
     });
     expect(results().repos).toBeUndefined();
 });
+
+function AnyTagProbe() {
+    hook = useSearchSuggestions('', [], true);
+    return null;
+}
+
+test('Any Tag alone counts the tagged files, without a search string', () => {
+    render(<AnyTagProbe/>, {
+        contexts: [[TagsContext, tagsContextFixture({fuzzyMatchTagsByName: () => []})]],
+    });
+    act(() => {
+        jest.advanceTimersByTime(DEBOUNCE);
+    });
+    expect(searchEstimateFiles).toHaveBeenCalledTimes(1);
+    expect(searchEstimateFiles.mock.calls[0][5]).toBe(true);
+    // Zims and the Other tab cannot search by "any tag"; without a search string they have nothing to count.
+    expect(searchEstimateZims).not.toHaveBeenCalled();
+    expect(searchEstimateOthers).not.toHaveBeenCalled();
+    expect(searchSuggestions).not.toHaveBeenCalled();
+});

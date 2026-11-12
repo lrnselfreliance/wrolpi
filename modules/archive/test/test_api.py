@@ -56,9 +56,9 @@ async def test_archives_search(test_session, archive_directory, archive_factory,
     test_session.commit()
 
     # Contents are d_text, so a deep search is required to match them.
-    # 1 and 2 contain "foo".
+    # 1 and 2 contain "foo" once; 1 is shorter, so it is more relevant.
     data = {'search_str': 'foo', 'deep': True}
-    await check_results(async_client, data, [2, 1])
+    await check_results(async_client, data, [1, 2])
 
     # The default (fast) search does not match contents.
     data = {'search_str': 'foo'}
@@ -120,6 +120,27 @@ async def test_search_archive_tags(test_session, async_client, archive_factory, 
 
 
 @pytest.mark.asyncio
+async def test_search_archive_defaults_to_rank(test_session, async_client, archive_factory):
+    """An Archive search without an order puts the most relevant Archives first."""
+    # archive_factory makes each Archive newer than the last, so date order would put the weak match first.
+    strong = archive_factory('example.com', title='foo foo foo', contents='foo foo foo')
+    weak = archive_factory('example.com', title='other', contents='foo bar baz qux quux corge grault garply')
+    test_session.commit()
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/archive/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        return [i['id'] for i in response.json['file_groups']]
+
+    best_first = [strong.file_group_id, weak.file_group_id]
+    assert await search_ids(search_str='foo', deep=True) == best_first
+    assert await search_ids(search_str='foo', deep=True, order_by='rank') == best_first
+    assert await search_ids(search_str='foo', deep=True, order_by='-published_datetime') == best_first[::-1]
+    # Without a search, newest first.
+    assert await search_ids() == best_first[::-1]
+
+
+@pytest.mark.asyncio
 async def test_search_archive_any_tag(test_session, async_client, archive_factory, tag_factory):
     """Archives can be filtered to those with any Tag."""
     tag1, tag2 = await tag_factory(), await tag_factory()
@@ -162,7 +183,7 @@ async def test_archives_search_headline(test_session, archive_directory, archive
     assert response.json['file_groups'][0]['d_headline'] is None
     assert response.json['file_groups'][1]['d_headline'] is None
 
-    content = dict(search_str='foo', headline=True, deep=True)
+    content = dict(search_str='foo', headline=True, deep=True, order_by='-published_datetime')
     request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
 

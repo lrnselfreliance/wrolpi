@@ -12,7 +12,7 @@ class DocSearchRequest:
     language: Optional[str] = None
     mimetype: Optional[str] = None
     tag_names: Optional[list] = dataclasses.field(default_factory=list)
-    order_by: Optional[str] = 'published_datetime'
+    order_by: Optional[str] = None  # Most relevant first when searching, otherwise newest first.
     limit: int = 20
     offset: int = 0
     deep: bool = False  # When True, search all text including document contents (d_text)

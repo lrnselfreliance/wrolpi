@@ -1344,6 +1344,10 @@ def search_archives(session: Session, search_str: str, domain: str, limit: int, 
                 fts.b_headline, fts.c_headline, fts.d_headline,
                 fg.title AS title_headline'''
 
+    if not order and file_group_search:
+        # A search without an order puts the most relevant Archives first.
+        order = 'rank'
+
     null_filter = None
     if order:
         try:

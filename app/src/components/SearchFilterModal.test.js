@@ -94,6 +94,31 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({order: '-size'});
     });
 
+    it('Rank always sorts the most relevant first, and has no direction', async () => {
+        const rankOrders = [{value: 'rank', text: 'Rank'}, ...videoOrders];
+        const spy = jest.fn();
+        // The previous sort was descending; Rank must not inherit it as `-rank` (least relevant first).
+        renderButton({sorts: rankOrders}, {order: '-size'}, spy);
+        fireEvent.click(screen.getByText('Filter'));
+        fireEvent.click(await screen.findByText('Rank'));
+        expect(screen.queryByText('Descending')).toBeNull();
+        expect(screen.queryByText('Ascending')).toBeNull();
+        fireEvent.click(screen.getByText('Done'));
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({order: 'rank'});
+    });
+
+    it('a sort chosen after Rank is descending', async () => {
+        const rankOrders = [{value: 'rank', text: 'Rank'}, ...videoOrders];
+        const spy = jest.fn();
+        renderButton({sorts: rankOrders}, {order: 'rank'}, spy);
+        fireEvent.click(screen.getByText('Filter'));
+        fireEvent.click(await screen.findByText('Size'));
+        expect(screen.getByText('Descending')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Done'));
+        expect(spy.mock.calls[0][0]).toMatchObject({order: '-size'});
+    });
+
     it('Clear All resets results-per-page to the default on close', async () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders}, {l: '96'}, spy);

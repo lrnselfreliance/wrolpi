@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from wrolpi import fts
 from wrolpi.collections.models import Collection
 from wrolpi.collections.types import collection_type_registry
-from wrolpi.errors import ValidationError
+from wrolpi.errors import ValidationError, InvalidOrderBy
 from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype, cached_search_total, \
     search_filter_cache_key
 from wrolpi.tags import TagFile, tag_names_to_file_group_sub_select
@@ -351,11 +351,13 @@ def _get_doc(session, file_group_id: int, skip_viewed: bool = False):
     return doc
 
 
+# The orders a Docs search accepts; a `-` prefix is descending, like the other searches.
+DOC_ORDERS = ('rank', '-rank', 'published_datetime', '-published_datetime', 'size', '-size', 'title', '-title')
+
 # ORDER BY clauses for the unfiltered docs browse.  Only orderings that walk a `file_group` index
 # qualify; the rest keep the ORM query.
 DOC_BROWSE_ORDERS = {
-    'published_datetime': 'fg.published_datetime DESC NULLS LAST, fg.id DESC',
-    'id': 'fg.id DESC',
+    '-published_datetime': 'fg.published_datetime DESC NULLS LAST, fg.id DESC',
 }
 
 
@@ -372,9 +374,13 @@ def _doc_browse_sql(order_by: str) -> Optional[str]:
 
 
 def _search_docs(session: Session, search_str=None, author=None, subject=None, language=None, mimetype=None,
-                 limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False, any_tag=False):
+                 limit=20, offset=0, order_by=None, tag_names=None, deep=False, any_tag=False):
+    """Search Docs.  Without `order_by`, the most relevant Docs are first when searching, otherwise the newest."""
     from .models import Doc
     from wrolpi.files.models import FileGroup
+
+    if order_by and order_by not in DOC_ORDERS:
+        raise InvalidOrderBy(f'Invalid order_by {order_by}')
 
     # Deep search matches all FTS columns (including d_text, the document contents); the default matches only
     # the much smaller a/b/c columns.
@@ -428,25 +434,25 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
         # Count before ORDER BY / LIMIT; cache by filters not page.
         total = cached_search_total(cache_key, lambda q=query: q.count())
 
-    # Ordering.
-    if order_by == 'rank' and fts_sq is not None:
-        query = query.order_by(
-            desc(fts_sq.c.ts_rank),
-            desc(FileGroup.id),
-        )
-    elif order_by == 'published_datetime':
-        query = query.order_by(nullslast(desc(FileGroup.published_datetime)), desc(FileGroup.id))
-    elif order_by == 'size':
-        query = query.order_by(nullslast(desc(Doc.size)))
-    elif order_by == 'title':
-        query = query.order_by(nullslast(asc(FileGroup.a_text)))
-    else:
-        query = query.order_by(desc(FileGroup.id))
+    # Ordering.  Rank needs a search; without one, the newest Docs are first.
+    if not order_by:
+        order_by = 'rank' if fts_sq is not None else '-published_datetime'
+    elif order_by in ('rank', '-rank') and fts_sq is None:
+        order_by = '-published_datetime'
+    direction = desc if order_by.startswith('-') else asc
+    order_key = order_by.lstrip('-')
+    if order_key == 'rank':
+        # `rank` is the most relevant first (highest ts_rank), `-rank` the least relevant first.
+        rank_direction = asc if order_by.startswith('-') else desc
+        query = query.order_by(rank_direction(fts_sq.c.ts_rank), rank_direction(FileGroup.id))
+    elif order_key == 'published_datetime':
+        query = query.order_by(nullslast(direction(FileGroup.published_datetime)), direction(FileGroup.id))
+    elif order_key == 'size':
+        query = query.order_by(nullslast(direction(Doc.size)), direction(FileGroup.id))
+    elif order_key == 'title':
+        query = query.order_by(nullslast(direction(FileGroup.a_text)), direction(FileGroup.id))
 
-    # `size` sorts on a doc column and `title` has no file_group index, so neither may fall back to `id`.
-    browse_sql = None
-    if unfiltered and order_by not in ('size', 'title'):
-        browse_sql = _doc_browse_sql(order_by if order_by in DOC_BROWSE_ORDERS else 'id')
+    browse_sql = _doc_browse_sql(order_by) if unfiltered else None
     if browse_sql:
         fg_ids = [i for i, in session.execute(text(browse_sql), dict(limit=limit, offset=offset)).fetchall()]
         by_id = {fg.id: fg for fg in session.query(FileGroup).options(*FileGroup.json_options())

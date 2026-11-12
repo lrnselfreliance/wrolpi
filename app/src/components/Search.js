@@ -91,7 +91,9 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     // archive/video/doc/etc.
     const model_ = searchParams.get('model') || model;
 
-    const anySearch = (!datesIsEmpty) || searchStr || (activeTags && activeTags.length > 0) || filter || model;
+    const anyTag = searchParams.get('anyTag') === 'true';
+    const anySearch = (!datesIsEmpty) || searchStr || (activeTags && activeTags.length > 0) || anyTag || filter
+        || model;
     const isEmpty = !anySearch;
 
     const setSearchStr = (value) => {
@@ -121,7 +123,6 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         setTags(newTags);
     }
 
-    const anyTag = searchParams.get('anyTag') === 'true';
     const setAnyTag = (value) => {
         updateQuery({tag: [], anyTag: value ? 'true' : null});
     }
@@ -163,7 +164,8 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
     const {data: mapData, sendRequest: sendMapRequest, loading: mapLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
-        if (searchStr || (tagNames && tagNames.length > 0)) {
+        const hasTags = tagNames && tagNames.length > 0;
+        if (searchStr || hasTags || anyTag) {
             const mimetypes = filterToMimetypes(filter);
             setSuggestions(defaultSuggestions);
             if (searchStr && searchStr.length > 0) {
@@ -173,8 +175,11 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             }
             // The files estimate always uses deep search server-side, so users know results are possible.
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
-            sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
-            sendOtherRequest(async () => await searchEstimateOthers(tagNames, searchStr));
+            if (searchStr || hasTags) {
+                // Zims and the Other tab have no "any tag" search; they need a search string or tag names.
+                sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
+                sendOtherRequest(async () => await searchEstimateOthers(tagNames, searchStr));
+            }
         }
     }, [
         searchStr,

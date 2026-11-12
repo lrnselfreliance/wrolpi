@@ -3,13 +3,14 @@ import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
 import {
     useBrowseFiles, usePages, useDriveTemperature, useDriveHealth, useSearchArchives, useSearchChannels,
-    useSearchDocs, useSearchRecentFiles, useSearchVideos, useSettings, useStatistics, useStatus, useVideoExtras,
+    useSearchDocs, useSearchFiles, useSearchRecentFiles, useSearchVideos, useSettings, useStatistics, useStatus, useVideoExtras,
 } from './customHooks';
 import {
     ApiDownError, fetchDomains, filesSearch, getFiles, getSettings, getStatistics, getStatus, getVideoComments,
     getVideoDescription, searchArchives, searchChannels, searchDocs, searchVideos,
 } from '../api';
 import {getControllerStats} from '../api/controller';
+import {MemoryRouter} from 'react-router';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -803,5 +804,41 @@ describe('module searches send the Any Tag filter', () => {
         await act(async () => {});
         expect(search).toHaveBeenCalled();
         expect(search.mock.calls.at(-1).at(-1)).toBe(false);
+    });
+});
+
+describe('useSearchFiles', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        filesSearch.mockResolvedValue([[], 0]);
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.clearAllMocks();
+    });
+
+    // `useSearch` navigates, so the hook needs a router as well as the QueryContext.
+    const routed = (params) => {
+        const Query = makeWrapper(params);
+        return ({children}) => <MemoryRouter><Query>{children}</Query></MemoryRouter>;
+    };
+
+    it('searches by Any Tag without a search string', async () => {
+        renderHook(() => useSearchFiles(), {wrapper: routed({anyTag: 'true'})});
+        await act(async () => {
+            jest.advanceTimersByTime(1000);
+        });
+        expect(filesSearch).toHaveBeenCalledTimes(1);
+        // `anyTag` is the eleventh argument of filesSearch.
+        expect(filesSearch.mock.calls[0][10]).toBe(true);
+    });
+
+    it('does not search without a search string, tags, or Any Tag', async () => {
+        renderHook(() => useSearchFiles(), {wrapper: routed({})});
+        await act(async () => {
+            jest.advanceTimersByTime(1000);
+        });
+        expect(filesSearch).not.toHaveBeenCalled();
     });
 });

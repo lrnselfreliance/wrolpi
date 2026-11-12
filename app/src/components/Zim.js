@@ -282,7 +282,8 @@ export const ZimSearchView = ({suggestions, loading}) => {
     }
 
     return <>
-        <TagsQuerySelector onChange={(i, j) => setTags(i)}/>
+        {/* Zim search filters by specific tags only; it has no "any tag" search. */}
+        <TagsQuerySelector showAny={false} onChange={(i) => setTags(i)}/>
         {body}
     </>
 }

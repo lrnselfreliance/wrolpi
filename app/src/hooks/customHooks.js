@@ -1050,7 +1050,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
     }, 1000);
 
     useEffect(() => {
-        if (searchStr || (activeTags && activeTags.length > 0)) {
+        if (searchStr || (activeTags && activeTags.length > 0) || anyTag) {
             setLoading(true);
             debouncedLocalSearchFiles();
         }

@@ -139,6 +139,30 @@ async def test_docs_search_orders(async_client, test_session, doc_factory):
 
 
 @pytest.mark.asyncio
+async def test_docs_search_title_order(async_client, test_session, doc_factory):
+    """Docs sort by the title the user sees, ignoring case; Docs without a title are last in both directions."""
+    awls, alps, bobby, naturalist, untitled = (doc_factory() for _ in range(5))
+    awls.file_group.title = awls.file_group.a_text = 'AWLS Cover'
+    alps.file_group.title = alps.file_group.a_text = 'Alps Cover'
+    bobby.file_group.title = bobby.file_group.a_text = 'bobby make believe'
+    # A title with no indexed words: it must sort by its title, not last.
+    naturalist.file_group.title = 'iNaturalist Field Book'
+    naturalist.file_group.a_text = None
+    untitled.file_group.title = None
+    untitled.file_group.a_text = None
+    test_session.commit()
+    awls, alps, bobby, naturalist, untitled = (i.file_group_id for i in (awls, alps, bobby, naturalist, untitled))
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/docs/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        return [i['id'] for i in response.json['file_groups']]
+
+    assert await search_ids(order_by='title') == [alps, awls, bobby, naturalist, untitled]
+    assert await search_ids(order_by='-title') == [naturalist, bobby, awls, alps, untitled]
+
+
+@pytest.mark.asyncio
 async def test_docs_search_defaults_to_rank(async_client, test_session, doc_factory):
     """A Docs search without an order puts the most relevant Docs first."""
     import datetime

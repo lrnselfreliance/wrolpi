@@ -99,6 +99,71 @@ async def test_docs_search_by_tag(async_client, test_session, doc_factory, tag_f
 
 
 @pytest.mark.asyncio
+async def test_docs_search_orders(async_client, test_session, doc_factory):
+    """Docs sort like the other searches: a `-` prefix is descending, and an unknown order is a 400."""
+    import datetime
+    utc = datetime.timezone.utc
+    # Each order puts these in a different sequence than their ids, so an ignored order cannot pass.
+    one = doc_factory(size=500)
+    two = doc_factory(size=10)
+    three = doc_factory(size=1000)
+    for doc, year, title in ((one, 2022, 'mmm'), (two, 2024, 'aaa'), (three, 2020, 'zzz')):
+        doc.file_group.published_datetime = datetime.datetime(year, 1, 1, tzinfo=utc)
+        doc.file_group.title = doc.file_group.a_text = title
+    test_session.commit()
+    one, two, three = one.file_group_id, two.file_group_id, three.file_group_id
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/docs/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        return [i['id'] for i in response.json['file_groups']]
+
+    expected = {
+        'size': [two, one, three],
+        '-size': [three, one, two],
+        'published_datetime': [three, one, two],
+        '-published_datetime': [two, one, three],
+        'title': [two, one, three],
+        '-title': [three, one, two],
+    }
+    for order_by, ids in expected.items():
+        assert await search_ids(order_by=order_by) == ids, order_by
+        # A filtered search orders the same as the unfiltered browse.
+        assert await search_ids(order_by=order_by, mimetype='application/pdf') == ids, order_by
+
+    # Without an order, the newest Docs are first.
+    assert await search_ids() == [two, one, three]
+
+    request, response = await async_client.post('/api/docs/search', content=json.dumps(dict(order_by='bogus')))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_docs_search_defaults_to_rank(async_client, test_session, doc_factory):
+    """A Docs search without an order puts the most relevant Docs first."""
+    import datetime
+    utc = datetime.timezone.utc
+    strong, weak = doc_factory(), doc_factory()
+    strong.file_group.published_datetime = datetime.datetime(2020, 1, 1, tzinfo=utc)
+    strong.file_group.title = strong.file_group.a_text = 'foo foo foo'
+    # The weak match is newer, so date order would put it first.
+    weak.file_group.published_datetime = datetime.datetime(2024, 1, 1, tzinfo=utc)
+    weak.file_group.title = weak.file_group.a_text = 'foo bar baz qux quux corge grault garply'
+    test_session.commit()
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/docs/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        return [i['id'] for i in response.json['file_groups']]
+
+    best_first = [strong.file_group_id, weak.file_group_id]
+    assert await search_ids(search_str='foo') == best_first
+    assert await search_ids(search_str='foo', order_by='rank') == best_first
+    assert await search_ids(search_str='foo', order_by='-rank') == best_first[::-1]
+    assert await search_ids(search_str='foo', order_by='-published_datetime') == best_first[::-1]
+
+
+@pytest.mark.asyncio
 async def test_docs_search_tag_names_and_any_tag(async_client, test_session, doc_factory, tag_factory):
     """Docs tag filtering matches the other searches: `tag_names` requires every tag, `any_tag` requires some tag."""
     tag1, tag2 = await tag_factory(), await tag_factory()

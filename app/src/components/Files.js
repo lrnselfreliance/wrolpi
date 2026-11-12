@@ -481,6 +481,9 @@ export function DocSearchFilterButton({size = 'medium'}) {
     return <SearchFilter filters={docMimetypeFilterOptions} size={size}/>
 }
 
+// The search relevance sort; see `SearchFilterModal`.
+const RANK_ORDER = 'rank';
+
 // The app-wide default page size (matches usePages' fallback); used to reset Results Per Page on Clear All.
 const DEFAULT_SEARCH_LIMIT = 24;
 
@@ -540,7 +543,8 @@ export function SearchFilterModal(
     // Seed the drafts from the URL each time the modal is opened.
     React.useEffect(() => {
         if (open) {
-            setDraftSort(sort || null);
+            // Rank has no direction here; an old `-rank` link becomes `rank` when the modal closes.
+            setDraftSort(sort === `-${RANK_ORDER}` ? RANK_ORDER : (sort || null));
             setDraftFilter(filter || null);
             setDraftTags(activeTags || []);
             setDraftAnyTag(anyTag || false);
@@ -614,17 +618,19 @@ export function SearchFilterModal(
         setDraftDeep(false);
     }
 
-    // Sort section (operates on the draft).
+    // Sort section (operates on the draft).  Rank has no direction: `rank` is always the most relevant first
+    // (`-rank` would be the least relevant first), and a sort chosen after it starts descending.
     const sortKey = draftSort ? draftSort.replace(/^-/, '') : (sorts ? sorts[0]['value'] : null);
-    const desc = draftSort ? draftSort.startsWith('-') : true;
+    const isRank = sortKey === RANK_ORDER;
+    const desc = draftSort && !isRank ? draftSort.startsWith('-') : true;
     const sortButtons = sorts && sorts.map(o =>
         <Button key={o['value']}
                 color={o['value'] === sortKey ? 'violet' : undefined}
-                onClick={() => setDraftSort(desc ? `-${o['value']}` : o['value'])}
+                onClick={() => setDraftSort(o['value'] === RANK_ORDER || !desc ? o['value'] : `-${o['value']}`)}
                 style={{margin: '0.2em'}}
         >{o['text']}</Button>
     );
-    const directionToggle = <Button icon={desc ? IconSortDescending : IconSortAscending}
+    const directionToggle = isRank ? null : <Button icon={desc ? IconSortDescending : IconSortAscending}
                                     onClick={() => {
                                         const base = sortKey || sorts[0]['value'];
                                         setDraftSort(desc ? base : `-${base}`);
@@ -658,7 +664,7 @@ export function SearchFilterModal(
             <Stack gap='lg'>
                 {sorts &&
                     <SearchFilterSection header='Sort By'>
-                        <div style={{marginBottom: '1em'}}>{directionToggle}</div>
+                        {directionToggle && <div style={{marginBottom: '1em'}}>{directionToggle}</div>}
                         <div>{sortButtons}</div>
                     </SearchFilterSection>}
 

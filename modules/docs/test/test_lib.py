@@ -361,7 +361,7 @@ async def test_search_docs_browse_walks_file_group_date_index(test_session, test
     docs[2].file_group.published_datetime = datetime(2021, 1, 1, tzinfo=timezone.utc)
     test_session.commit()
 
-    sql = _doc_browse_sql('published_datetime')
+    sql = _doc_browse_sql('-published_datetime')
     plan = ' '.join(row[3] for row in test_session.execute(text(f'EXPLAIN QUERY PLAN {sql}'),
                                                             dict(limit=20, offset=0)).fetchall())
     assert 'file_group_published_datetime_idx' in plan, plan

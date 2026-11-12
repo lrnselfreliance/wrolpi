@@ -197,6 +197,7 @@ def search_videos(
         headline: bool = False,
         censored: bool = False,
         deep: bool = False,
+        any_tag: bool = False,
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Search videos and audio-only files.
@@ -210,7 +211,8 @@ def search_videos(
     # Explicit JSON nulls bypass the schema defaults; SQLite rejects LIMIT/OFFSET NULL.
     limit = int(limit) if limit else 20
     offset = int(offset) if offset else 0
-    if not search_str and not tag_names and not channel_id and not censored and order in INDEXED_DATE_ORDERS:
+    if not search_str and not tag_names and not any_tag and not channel_id and not censored \
+            and order in INDEXED_DATE_ORDERS:
         # The Videos page with no filters, in date order.
         return _search_videos_by_date(session, order, limit, offset)
 
@@ -232,7 +234,7 @@ def search_videos(
     else:
         select_columns = 'fg.id'
 
-    wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
 
     if fts_search and headline:
         # The title headline is computed in Python by `handle_file_group_search_results`.
@@ -277,7 +279,7 @@ def search_videos(
     '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    unfiltered = (not search_str and not tag_names and not channel_id and not censored
+    unfiltered = (not search_str and not tag_names and not any_tag and not channel_id and not censored
                   and not null_filter)
     if unfiltered:
         total = cached_search_total(search_filter_cache_key('videos'), lambda: _count_videos(session))
@@ -300,7 +302,7 @@ def search_videos(
             count_stmt = f'SELECT COUNT(*) AS total FROM file_group fg {join} {where}'
             count_params = params
         cache_key = search_filter_cache_key(
-            'videos', search_str=search_str, channel_id=channel_id, tag_names=tag_names,
+            'videos', search_str=search_str, channel_id=channel_id, tag_names=tag_names, any_tag=any_tag,
             censored=censored, deep=deep, null_filter=null_filter,
         )
         total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, count_params))

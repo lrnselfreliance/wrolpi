@@ -543,6 +543,7 @@ export const useSearchArchives = (defaultLimit) => {
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order');
     const activeTags = searchParams.getAll('tag');
+    const anyTag = searchParams.get('anyTag') === 'true';
     const {view} = useSearchView();
     const headline = view === 'headline';
     const {deep} = useSearchDeep();
@@ -554,7 +555,7 @@ export const useSearchArchives = (defaultLimit) => {
         setArchives(null);
         try {
             let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline,
-                deep);
+                deep, anyTag);
             setArchives(archives_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -571,7 +572,7 @@ export const useSearchArchives = (defaultLimit) => {
 
     useEffect(() => {
         localSearchArchives();
-    }, [searchStr, limit, domain, order, offset, JSON.stringify(activeTags), headline, deep]);
+    }, [searchStr, limit, domain, order, offset, JSON.stringify(activeTags), anyTag, headline, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -615,6 +616,7 @@ export const useSearchDocs = (defaultLimit) => {
     const author = searchParams.get('author') || '';
     const subject = searchParams.get('subject') || '';
     const filter = searchParams.get('filter') || '';
+    const anyTag = searchParams.get('anyTag') === 'true';
     const {deep} = useSearchDeep();
 
     const [docs, setDocs] = useState(null);
@@ -625,7 +627,7 @@ export const useSearchDocs = (defaultLimit) => {
         try {
             const mimetype = docFilterToMimetype(filter);
             let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject,
-                mimetype, deep);
+                mimetype, deep, anyTag);
             setDocs(docs_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -636,7 +638,7 @@ export const useSearchDocs = (defaultLimit) => {
 
     useEffect(() => {
         localSearchDocs();
-    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject, filter, deep]);
+    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), anyTag, author, subject, filter, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -686,7 +688,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         setLoading(true);
         try {
             let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline,
-                censored, deep);
+                censored, deep, anyTag);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -699,7 +701,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
 
     useEffect(() => {
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline, censored, deep]);
+    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), anyTag, headline, censored, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});

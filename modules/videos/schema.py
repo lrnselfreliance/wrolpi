@@ -155,6 +155,11 @@ class VideoSearchRequest:
     headline: bool = False
     censored: bool = False
     deep: bool = False  # When True, search all text including captions (d_text)
+    any_tag: bool = False  # When True, only Videos with at least one Tag.
+
+    def __post_init__(self):
+        if self.any_tag and self.tag_names:
+            raise ValidationError('Cannot use both tag_names and any_tag.')
 
 
 @dataclass

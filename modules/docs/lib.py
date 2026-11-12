@@ -13,8 +13,9 @@ from wrolpi.collections.types import collection_type_registry
 from wrolpi.errors import ValidationError
 from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype, cached_search_total, \
     search_filter_cache_key
+from wrolpi.tags import TagFile, tag_names_to_file_group_sub_select
 
-logger = logging.getLogger(__name__)
+logger =logging.getLogger(__name__)
 
 # Register author and subject collection types.
 collection_type_registry.register(
@@ -371,7 +372,7 @@ def _doc_browse_sql(order_by: str) -> Optional[str]:
 
 
 def _search_docs(session: Session, search_str=None, author=None, subject=None, language=None, mimetype=None,
-                 limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False):
+                 limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False, any_tag=False):
     from .models import Doc
     from wrolpi.files.models import FileGroup
 
@@ -402,14 +403,18 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
     if mimetype:
         query = query.filter(FileGroup.mimetype.startswith(mimetype))
 
+    if any_tag and tag_names:
+        raise ValidationError('Cannot use both tag_names and any_tag.')
     if tag_names:
-        from wrolpi.tags import Tag, TagFile
-        tagged_fg_ids = session.query(TagFile.file_group_id) \
-            .join(Tag, Tag.id == TagFile.tag_id) \
-            .filter(Tag.name.in_(tag_names))
+        # A Doc must have every Tag, like the other searches.
+        tags_sub_select, tags_params = tag_names_to_file_group_sub_select(tag_names, dict())
+        tagged_fg_ids = text(tags_sub_select).bindparams(**tags_params) \
+            .columns(column('file_group_id', Integer))
         query = query.filter(FileGroup.id.in_(tagged_fg_ids))
+    elif any_tag:
+        query = query.filter(FileGroup.id.in_(session.query(TagFile.file_group_id)))
 
-    unfiltered = not (search_str or author or subject or language or mimetype or tag_names)
+    unfiltered = not (search_str or author or subject or language or mimetype or tag_names or any_tag)
     if unfiltered:
         total = cached_search_total(
             search_filter_cache_key('docs'),
@@ -418,7 +423,7 @@ def _search_docs(session: Session, search_str=None, author=None, subject=None, l
     else:
         cache_key = search_filter_cache_key(
             'docs', search_str=search_str, author=author, subject=subject,
-            language=language, mimetype=mimetype, tag_names=tag_names, deep=deep,
+            language=language, mimetype=mimetype, tag_names=tag_names, deep=deep, any_tag=any_tag,
         )
         # Count before ORDER BY / LIMIT; cache by filters not page.
         total = cached_search_total(cache_key, lambda q=query: q.count())

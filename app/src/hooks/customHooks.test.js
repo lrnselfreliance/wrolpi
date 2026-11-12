@@ -2,12 +2,12 @@ import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '../test-utils';
 import {
-    useBrowseFiles, usePages, useDriveTemperature, useDriveHealth, useSearchChannels, useSearchRecentFiles,
-    useSettings, useStatistics, useStatus, useVideoExtras,
+    useBrowseFiles, usePages, useDriveTemperature, useDriveHealth, useSearchArchives, useSearchChannels,
+    useSearchDocs, useSearchRecentFiles, useSearchVideos, useSettings, useStatistics, useStatus, useVideoExtras,
 } from './customHooks';
 import {
-    ApiDownError, filesSearch, getFiles, getSettings, getStatistics, getStatus, getVideoComments, getVideoDescription,
-    searchChannels,
+    ApiDownError, fetchDomains, filesSearch, getFiles, getSettings, getStatistics, getStatus, getVideoComments,
+    getVideoDescription, searchArchives, searchChannels, searchDocs, searchVideos,
 } from '../api';
 import {getControllerStats} from '../api/controller';
 import {QueryContext, StatusContext} from '../contexts/contexts';
@@ -51,6 +51,10 @@ jest.mock('../api', () => ({
     getSettings: jest.fn(),
     filesSearch: jest.fn(),
     getFiles: jest.fn(),
+    fetchDomains: jest.fn(),
+    searchArchives: jest.fn(),
+    searchDocs: jest.fn(),
+    searchVideos: jest.fn(),
 }));
 
 jest.mock('../api/controller', () => ({
@@ -767,5 +771,37 @@ describe('useBrowseFiles', () => {
             await beforeRename;
         });
         expect(result.current.browseFiles).toEqual([{path: 'renamed/'}]);
+    });
+});
+
+describe('module searches send the Any Tag filter', () => {
+    // `anyTag` is the last argument of each search helper.
+    const cases = [
+        ['useSearchVideos', () => useSearchVideos(), searchVideos],
+        ['useSearchArchives', () => useSearchArchives(), searchArchives],
+        ['useSearchDocs', () => useSearchDocs(), searchDocs],
+    ];
+
+    beforeEach(() => {
+        fetchDomains.mockResolvedValue([[], 0]);
+        searchVideos.mockResolvedValue([[], 0]);
+        searchArchives.mockResolvedValue([[], 0]);
+        searchDocs.mockResolvedValue([[], 0]);
+    });
+
+    afterEach(() => jest.clearAllMocks());
+
+    it.each(cases)('%s passes anyTag=true from the URL', async (_, hook, search) => {
+        renderHook(hook, {wrapper: makeWrapper({anyTag: 'true'})});
+        await act(async () => {});
+        expect(search).toHaveBeenCalled();
+        expect(search.mock.calls.at(-1).at(-1)).toBe(true);
+    });
+
+    it.each(cases)('%s passes anyTag=false without it', async (_, hook, search) => {
+        renderHook(hook, {wrapper: makeWrapper()});
+        await act(async () => {});
+        expect(search).toHaveBeenCalled();
+        expect(search.mock.calls.at(-1).at(-1)).toBe(false);
     });
 });

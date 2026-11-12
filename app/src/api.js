@@ -196,7 +196,7 @@ export async function tagChannelInfo(channelId, tagName) {
     });
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline, censored, deep) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline, censored, deep, anyTag) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -219,6 +219,9 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     }
     if (deep) {
         body['deep'] = true;
+    }
+    if (anyTag) {
+        body['any_tag'] = true;
     }
 
     console.debug('searching videos', body);
@@ -852,7 +855,7 @@ export async function saveCatalog(items) {
 }
 
 
-export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline, deep) {
+export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline, deep, anyTag) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -874,6 +877,9 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
     }
     if (deep) {
         body['deep'] = true;
+    }
+    if (anyTag) {
+        body['any_tag'] = true;
     }
 
     console.debug('searching archives', body);
@@ -2438,7 +2444,7 @@ export async function getDoc(fileGroupId) {
 }
 
 
-export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype, deep) {
+export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype, deep, anyTag) {
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
     let body = {offset, limit};
@@ -2462,6 +2468,9 @@ export async function searchDocs(offset, limit, searchStr, order, tagNames, auth
     }
     if (deep) {
         body['deep'] = true;
+    }
+    if (anyTag) {
+        body['any_tag'] = true;
     }
 
     console.debug('searching docs', body);

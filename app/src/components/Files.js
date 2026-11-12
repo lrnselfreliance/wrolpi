@@ -543,7 +543,8 @@ export function SearchFilterModal(
     // Seed the drafts from the URL each time the modal is opened.
     React.useEffect(() => {
         if (open) {
-            setDraftSort(sort || null);
+            // Rank has no direction here; an old `-rank` link becomes `rank` when the modal closes.
+            setDraftSort(sort === `-${RANK_ORDER}` ? RANK_ORDER : (sort || null));
             setDraftFilter(filter || null);
             setDraftTags(activeTags || []);
             setDraftAnyTag(anyTag || false);

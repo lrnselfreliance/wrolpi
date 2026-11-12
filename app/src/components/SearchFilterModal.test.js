@@ -108,6 +108,16 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({order: 'rank'});
     });
 
+    it('Done rewrites an old `-rank` link to the most relevant first', async () => {
+        const rankOrders = [{value: 'rank', text: 'Rank'}, ...videoOrders];
+        const spy = jest.fn();
+        renderButton({sorts: rankOrders}, {order: '-rank'}, spy);
+        fireEvent.click(screen.getByText('Filter'));
+        fireEvent.click(await screen.findByText('Done'));
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({order: 'rank'});
+    });
+
     it('a sort chosen after Rank is descending', async () => {
         const rankOrders = [{value: 'rank', text: 'Rank'}, ...videoOrders];
         const spy = jest.fn();

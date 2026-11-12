@@ -99,6 +99,36 @@ async def test_docs_search_by_tag(async_client, test_session, doc_factory, tag_f
 
 
 @pytest.mark.asyncio
+async def test_docs_search_tag_names_and_any_tag(async_client, test_session, doc_factory, tag_factory):
+    """Docs tag filtering matches the other searches: `tag_names` requires every tag, `any_tag` requires some tag."""
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    one_tag, both_tags, untagged = doc_factory(), doc_factory(), doc_factory()
+    one_tag.file_group.add_tag(test_session, tag1.id)
+    both_tags.file_group.add_tag(test_session, tag1.id)
+    both_tags.file_group.add_tag(test_session, tag2.id)
+    test_session.commit()
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/docs/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert response.json['totals']['file_groups'] == len(response.json['file_groups'])
+        return {i['id'] for i in response.json['file_groups']}
+
+    assert await search_ids(tag_names=[tag1.name]) == {one_tag.file_group_id, both_tags.file_group_id}
+    # Only one Doc has both Tags.
+    assert await search_ids(tag_names=[tag1.name, tag2.name]) == {both_tags.file_group_id}
+    # Any Tag excludes only the untagged Doc.
+    assert await search_ids(any_tag=True) == {one_tag.file_group_id, both_tags.file_group_id}
+    assert await search_ids(any_tag=False) == {one_tag.file_group_id, both_tags.file_group_id,
+                                               untagged.file_group_id}
+
+    # Cannot search for any_tag, and tag names.
+    content = dict(tag_names=[tag1.name], any_tag=True)
+    request, response = await async_client.post('/api/docs/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_delete_doc(async_client, test_session, test_directory, example_epub, refresh_files):
     """Docs can be deleted, including their on-disk files and FileGroup row."""
     from wrolpi.files.models import FileGroup

@@ -120,6 +120,31 @@ async def test_search_archive_tags(test_session, async_client, archive_factory, 
 
 
 @pytest.mark.asyncio
+async def test_search_archive_any_tag(test_session, async_client, archive_factory, tag_factory):
+    """Archives can be filtered to those with any Tag."""
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    one = archive_factory(domain='example.com', tag_names=[tag1.name, ])
+    two = archive_factory(domain='example.org', tag_names=[tag2.name, ])
+    untagged = archive_factory(domain='example.com')
+    test_session.commit()
+
+    async def search_ids(**body):
+        request, response = await async_client.post('/api/archive/search', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK, response.json
+        assert response.json['totals']['file_groups'] == len(response.json['file_groups'])
+        return {i['id'] for i in response.json['file_groups']}
+
+    assert await search_ids(any_tag=True) == {one.file_group_id, two.file_group_id}
+    assert await search_ids(any_tag=True, domain='example.com') == {one.file_group_id}
+    assert await search_ids() == {one.file_group_id, two.file_group_id, untagged.file_group_id}
+
+    # Cannot search for any_tag, and tag names.
+    content = dict(tag_names=[tag1.name], any_tag=True)
+    request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_archives_search_headline(test_session, archive_directory, archive_factory, async_client):
     """Headlines can be requested."""
     archive_factory('example.com', 'https://example.com/one', 'my archive', 'foo bar qux')

@@ -270,6 +270,32 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
     # No results, no total is returned from the DB.
     await assert_video_search(assert_total=0, assert_ids=[], tag_names=[tag1.name], offset=2)
 
+
+@pytest.mark.asyncio
+async def test_search_videos_any_tag(test_session, async_client, video_factory, assert_video_search, tag_factory):
+    """Videos can be filtered to those with any Tag, in the default date order and in every other order."""
+    vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
+    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2')
+    vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    vid1.add_tag(test_session, tag1.id)
+    vid3.add_tag(test_session, tag2.id)
+    test_session.commit()
+
+    # The untagged vid2 is excluded; date orders take the unfiltered browse path without `any_tag`.
+    await assert_video_search(assert_total=2, assert_ids=[vid3.id, vid1.id], order_by='-published_datetime',
+                              any_tag=True)
+    await assert_video_search(assert_total=2, assert_ids=[vid1.id, vid3.id], order_by='published_datetime',
+                              any_tag=True)
+    await assert_video_search(assert_total=1, assert_ids=[vid3.id], search_str='vid3', any_tag=True)
+    await assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='-published_datetime',
+                              any_tag=False)
+
+    # Cannot search for any_tag, and tag names.
+    content = dict(tag_names=[tag1.name], any_tag=True)
+    request, response = await async_client.post('/api/videos/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
     # Check all order_by.
     for order_by in video_lib.VIDEO_ORDERS:
         await assert_video_search(order_by=order_by)

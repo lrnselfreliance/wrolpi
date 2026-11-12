@@ -1310,7 +1310,7 @@ NO_NULL_ORDERS = {
 
 
 def search_archives(session: Session, search_str: str, domain: str, limit: int, offset: int, order: str,
-                    tag_names: List[str], headline: bool = False, deep: bool = False) \
+                    tag_names: List[str], headline: bool = False, deep: bool = False, any_tag: bool = False) \
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
@@ -1360,7 +1360,7 @@ def search_archives(session: Session, search_str: str, domain: str, limit: int, 
             else ARCHIVE_ORDERS['published_datetime']
 
     tag_names = tag_names or []
-    wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
 
     if domain:
         params['domain'] = domain
@@ -1394,7 +1394,7 @@ def search_archives(session: Session, search_str: str, domain: str, limit: int, 
         '''.strip()
     logger.debug(f'{stmt} {params}')
 
-    unfiltered = not search_str and not tag_names and not domain and not null_filter
+    unfiltered = not search_str and not tag_names and not any_tag and not domain and not null_filter
     if unfiltered:
         total = cached_search_total(
             search_filter_cache_key('archives'),
@@ -1417,7 +1417,7 @@ def search_archives(session: Session, search_str: str, domain: str, limit: int, 
             LEFT JOIN file_group fg ON fg.id = a.file_group_id'''
             count_stmt = f'SELECT COUNT(*) AS total {count_from} {where}'
         cache_key = search_filter_cache_key(
-            'archives', search_str=search_str, domain=domain, tag_names=tag_names,
+            'archives', search_str=search_str, domain=domain, tag_names=tag_names, any_tag=any_tag,
             deep=deep, null_filter=null_filter,
         )
         total = cached_search_total(cache_key, lambda: count_file_groups(session, count_stmt, params))

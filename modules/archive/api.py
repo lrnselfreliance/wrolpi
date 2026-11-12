@@ -67,7 +67,7 @@ async def search_archives(request: Request, body: schema.ArchiveSearchRequest):
 
     file_groups, total = await asyncio.to_thread(
         lib.search_archives, request.ctx.session, search_str, domain, limit, offset, body.order_by, body.tag_names,
-        body.headline, body.deep)
+        body.headline, body.deep, body.any_tag)
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)
 

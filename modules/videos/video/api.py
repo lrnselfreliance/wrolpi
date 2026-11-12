@@ -137,6 +137,7 @@ async def search_videos(request: Request, body: schema.VideoSearchRequest):
         body.headline,
         body.censored,
         body.deep,
+        body.any_tag,
     )
 
     ret = {'file_groups': list(file_groups), 'totals': {'file_groups': videos_total}}

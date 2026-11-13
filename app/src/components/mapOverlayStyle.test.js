@@ -226,6 +226,89 @@ describe('icons', () => {
         expect(JSON.stringify(value)).toContain(`"${SOURCE}:"`);
     });
 
+    describe('an image named by a property function', () => {
+        // The wrapping every image gets; `expression` is what gives the name.
+        const wrapped = expression => ['image', ['let', 'wrolpi_image', ['to-string', expression],
+            ['case', ['==', ['var', 'wrolpi_image'], ''], '',
+                ['concat', `${SOURCE}:`, ['var', 'wrolpi_image']]]]];
+        const iconOf = (fn) => {
+            const result = withIcon(fn);
+            // The layer is kept: its text is drawn whatever becomes of its image.
+            expect(result.skipped).toBe(0);
+            expect(result.layers).toHaveLength(1);
+            return byId(result, 'repeaters').layout['icon-image'];
+        };
+
+        test('the value of a property', () => {
+            expect(iconOf({type: 'identity', property: 'icon'}))
+                .toEqual(wrapped(['coalesce', ['get', 'icon'], '']));
+            expect(iconOf({type: 'identity', property: 'icon', default: 'pin'}))
+                .toEqual(wrapped(['coalesce', ['get', 'icon'], 'pin']));
+        });
+
+        test('a name for each value of a property', () => {
+            expect(iconOf({property: 'class', type: 'categorical', stops: [['hospital', 'cross'], ['fuel', 'pump']]}))
+                .toEqual(wrapped(['match', ['get', 'class'], 'hospital', 'cross', 'fuel', 'pump', '']));
+            expect(iconOf({property: 'rank', type: 'categorical', stops: [[1, 'big'], [2, 'small']], default: 'pin'}))
+                .toEqual(wrapped(['match', ['get', 'rank'], 1, 'big', 2, 'small', 'pin']));
+        });
+
+        test('a name for each range of a numeric property', () => {
+            expect(iconOf({property: 'height', stops: [[0, 'low'], [100, 'tall']]}))
+                .toEqual(wrapped(['step', ['to-number', ['get', 'height'], 0], 'low', 100, 'tall']));
+            // A single stop is one name.
+            expect(iconOf({property: 'height', type: 'interval', stops: [[10, 'only']]})).toBe(`${SOURCE}:only`);
+            expect(iconOf({stops: [[10, 'only']]})).toBe(`${SOURCE}:only`);
+        });
+
+        test('a name for each range of the zoom: each name is renamed, the zoom stays outermost', () => {
+            expect(iconOf({stops: [[0, 'dot'], [12, 'tower'], [15, '{class}_big']]}))
+                .toEqual(['step', ['zoom'], `${SOURCE}:dot`, 12, `${SOURCE}:tower`, 15, `${SOURCE}:{class}_big`]);
+        });
+
+        test('a function which cannot be rewritten: the layer is drawn without the image', () => {
+            for (const fn of [
+                // By zoom and property at once.
+                {property: 'rank', stops: [[{zoom: 0, value: 1}, 'a'], [{zoom: 10, value: 1}, 'b']]},
+                {property: 'on', type: 'categorical', stops: [[true, 'a'], [false, 'b']]},
+                {property: 'height', type: 'exponential', stops: [[0, 'a'], [1, 'b']]},
+                {property: 'height', stops: [[5, 'a'], [1, 'b']]},
+                {stops: []},
+                {},
+            ]) {
+                const style = {
+                    ...STYLE,
+                    layers: [{...STYLE.layers[6], layout: {'icon-image': fn, 'text-field': ['get', 'callsign']}}],
+                };
+                const result = adapted(style);
+                expect(result.layers).toHaveLength(1);
+                expect(byId(result, 'repeaters').layout['icon-image']).toBeUndefined();
+                expect(byId(result, 'repeaters').layout['text-field']).toEqual(['get', 'callsign']);
+            }
+        });
+
+        test('a pattern named by a function', () => {
+            const style = {
+                ...STYLE,
+                layers: [{
+                    id: 'parks', type: 'fill', source: 'features', 'source-layer': 'parks',
+                    paint: {'fill-pattern': {type: 'identity', property: 'pattern'}},
+                }],
+            };
+            const result = adapted(style);
+            expect(result.skipped).toBe(0);
+            expect(byId(result, 'parks').paint['fill-pattern']).toEqual(wrapped(['coalesce', ['get', 'pattern'], '']));
+        });
+    });
+
+    test('an image chosen by the zoom in an expression: the zoom stays outermost', () => {
+        const result = withIcon(['step', ['zoom'], 'dot', 12, ['match', ['get', 'class'], 'tower', 'tower', 'pin']]);
+        expect(result.skipped).toBe(0);
+        const value = byId(result, 'repeaters').layout['icon-image'];
+        expect(value.slice(0, 4)).toEqual(['step', ['zoom'], `${SOURCE}:dot`, 12]);
+        expect(JSON.stringify(value[4])).toContain(JSON.stringify(['match', ['get', 'class'], 'tower', 'tower', 'pin']));
+    });
+
     test('a pattern is an image too', () => {
         const style = {
             ...STYLE,

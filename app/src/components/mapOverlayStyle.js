@@ -69,12 +69,64 @@ export function overlaySpriteUrl(file) {
     return `${window.location.origin}/api/map/files/sprite/${path}`;
 }
 
+const isZoom = value => Array.isArray(value) && value.length === 1 && value[0] === "zoom";
+
+// An image may be named by a property function (the older form of an expression: an object with
+// `stops`, or `type: "identity"`).  It is rewritten as the expression which gives the same name,
+// so that the name can be pointed at the overlay's sprite.  Returns undefined for a function
+// this does not know how to rewrite.
+function imageFunctionExpression(fn) {
+    const fallback = typeof fn.default === "string" ? fn.default : "";
+    if (fn.type === "identity" && typeof fn.property === "string") {
+        return ["coalesce", ["get", fn.property], fallback];
+    }
+
+    const stops = fn.stops;
+    if (!Array.isArray(stops) || !stops.length || !stops.every(i => Array.isArray(i) && i.length === 2)) {
+        return undefined;
+    }
+    const inputs = stops.map(i => i[0]);
+    const outputs = stops.map(i => i[1]);
+    if (!outputs.every(i => typeof i === "string")) return undefined;
+
+    if (fn.type === "categorical") {
+        // One name per value of the property.
+        const labels = inputs.every(i => typeof i === "string") || inputs.every(i => typeof i === "number");
+        if (typeof fn.property !== "string" || !labels || new Set(inputs).size !== inputs.length) return undefined;
+        return ["match", ["get", fn.property], ...stops.flat(), fallback];
+    }
+    if (fn.type !== undefined && fn.type !== "interval") return undefined;
+    if (!inputs.every(i => typeof i === "number") || inputs.some((v, i) => i > 0 && v <= inputs[i - 1])) {
+        return undefined;
+    }
+    // A single stop is one name, whatever the input.
+    if (stops.length === 1) return outputs[0];
+    // One name per range of the zoom, or of a numeric property; below the first stop is the first.
+    const input = fn.property === undefined ? ["zoom"]
+        : typeof fn.property === "string" ? ["to-number", ["get", fn.property], inputs[0]] : undefined;
+    if (!input) return undefined;
+    return ["step", input, outputs[0], ...stops.slice(1).flat()];
+}
+
 // Point an image name at the overlay's sprite.  The value is wrapped, not rewritten: the strings of
 // an expression are not all image names (the labels of a `match` are not), but whatever it
-// evaluates to is.  An empty name stays empty: no image.
+// evaluates to is.  An empty name stays empty: no image.  Returns undefined when the value is one
+// this cannot point at the sprite.
 function adaptImage(value, spriteId) {
     if (typeof value === "string") {
         return value ? `${spriteId}:${value}` : value;
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        const expression = imageFunctionExpression(value);
+        return expression === undefined ? undefined : adaptImage(expression, spriteId);
+    }
+    if (!Array.isArray(value)) return undefined;
+    if (value[0] === "step" && isZoom(value[1])) {
+        // The zoom may only be the input of the outermost expression, so each name it chooses
+        // between is wrapped, not the whole.
+        const adapted = value.map((part, index) =>
+            (index >= 2 && index % 2 === 0) ? adaptImage(part, spriteId) : part);
+        return adapted.includes(undefined) ? undefined : adapted;
     }
     return ["image", ["let", "wrolpi_image", ["to-string", value],
         ["case", ["==", ["var", "wrolpi_image"], ""], "",
@@ -145,11 +197,14 @@ export function adaptOverlayStyle(style, file) {
         for (const [group, properties] of Object.entries(IMAGE_PROPERTIES)) {
             for (const property of properties) {
                 if (layer[group]?.[property] === undefined) continue;
-                if (file.has_sprite) {
-                    layer[group][property] = adaptImage(layer[group][property], spriteId);
-                } else {
-                    // No sprite sheet came with the style: there are no images to draw.
+                // Without a sprite sheet there are no images to draw.  An image this cannot point at
+                // the overlay's sprite would be looked for in the basemap's; the layer is drawn
+                // without it (its text still is).
+                const image = file.has_sprite ? adaptImage(layer[group][property], spriteId) : undefined;
+                if (image === undefined) {
                     delete layer[group][property];
+                } else {
+                    layer[group][property] = image;
                 }
             }
         }

@@ -1,5 +1,4 @@
 import json
-import re
 import tempfile
 from pathlib import Path
 from typing import List, Dict
@@ -51,39 +50,6 @@ def find_sidecar_style(path: Path) -> Path | None:
     return None
 
 
-def find_sidecar_sprite(path: Path, extension: str = 'json', high_resolution: bool = False) -> Path | None:
-    """The sprite sheet (the icons of a sidecar style) beside a PMTiles file: `<stem>.sprite.json` and
-    `<stem>.sprite.png`, else the `sprite.json` and `sprite.png` shared by the files of its directory.
-
-    A sheet may also come at double resolution (`sprite@2x.json`, `sprite@2x.png`).  The sheet of the other
-    resolution is returned when the one asked for does not exist; a sprite file says its own pixel ratio."""
-    for base in (path.with_suffix('.sprite'), path.parent / 'sprite'):
-        resolutions = [i for i in ('', '@2x')
-                       if base.with_name(f'{base.name}{i}.json').is_file()
-                       and base.with_name(f'{base.name}{i}.png').is_file()]
-        if resolutions:
-            wanted = '@2x' if high_resolution else ''
-            resolution = wanted if wanted in resolutions else resolutions[0]
-            return base.with_name(f'{base.name}{resolution}.{extension}')
-    return None
-
-
-SPRITE_NAME = re.compile(r'^(?P<filename>.+\.pmtiles)(?P<high_resolution>@2x)?\.(?P<extension>json|png)$')
-
-
-def get_sidecar_sprite_file(name: str) -> Path | None:
-    """The sprite file MapLibre asks for as `<map file>[@2x].(json|png)`, if that map file has a sprite.
-
-    Raises ValueError if the name is not such a name, or leads outside of the map directory."""
-    match = SPRITE_NAME.match(name)
-    if not match:
-        raise ValueError(f'Invalid sprite name: {name}')
-    path = _resolve_pmtiles_file(match.group('filename'))
-    if not path:
-        return None
-    return find_sidecar_sprite(path, match.group('extension'), bool(match.group('high_resolution')))
-
-
 def get_pmtiles_files() -> List[dict]:
     """Find all .pmtiles files in the map directory and return their metadata."""
     maps_config = get_maps_config()
@@ -104,7 +70,6 @@ def get_pmtiles_files() -> List[dict]:
             style_path=str(style.relative_to(get_media_directory())) if style else None,
             # The standalone viewer is served the map directory, not the media directory.
             style_map_path=get_map_path(style) if style else None,
-            has_sprite=find_sidecar_sprite(path) is not None,
             **pmtiles.describe(path),
         ))
 

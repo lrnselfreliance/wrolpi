@@ -292,7 +292,7 @@ describe('the basemap layer groups', () => {
 });
 
 describe('an overlay with a style beside it', () => {
-    const STYLED = {...FEATURES, style_path: 'map/extras/style.json', has_sprite: true};
+    const STYLED = {...FEATURES, style_path: 'map/extras/style.json'};
     const STYLE = {
         version: 8,
         sources: {features: {type: 'vector', url: 'https://example.com/features.json'}},
@@ -319,22 +319,19 @@ describe('an overlay with a style beside it', () => {
         });
     };
 
-    test('is drawn with that style and its own sprite', async () => {
+    test("is drawn with that style and the map's own icons", async () => {
         serveStyle(STYLE);
         const map = await renderViewer([PLANET, STYLED]);
         expect(global.fetch).toHaveBeenCalledWith('/media/map/extras/style.json');
 
         const overlayLayers = map.style.layers.filter(l => l.source === 'overlay:extras/features.pmtiles');
         expect(overlayLayers.map(l => l.id)).toEqual([STYLED_LINES, STYLED_TOWERS]);
-        expect(map.getLayer(STYLED_TOWERS).layout['icon-image']).toBe('overlay:extras/features.pmtiles:tower');
+        expect(map.getLayer(STYLED_TOWERS).layout['icon-image']).toBe('overlay-icons:tower');
         expect(map.getLayer(STYLED_TOWERS).layout['text-font']).toEqual(['Noto Sans Medium']);
-        // The basemap keeps its sprite; the overlay's is beside it.
+        // The basemap keeps its sprite; the overlay icons are beside it.
         expect(map.style.sprite).toEqual([
             {id: 'default', url: `${window.location.origin}/map-assets/sprites/light`},
-            {
-                id: 'overlay:extras/features.pmtiles',
-                url: `${window.location.origin}/api/map/files/sprite/extras/features.pmtiles`,
-            },
+            {id: 'overlay-icons', url: `${window.location.origin}/map-assets/sprites/overlay-icons`},
         ]);
         // Nothing of the style's own sources reaches the map.
         expect(JSON.stringify(map.style)).not.toContain('example.com');
@@ -372,7 +369,7 @@ describe('an overlay with a style beside it', () => {
         const map = await renderViewer([PLANET, STYLED]);
         expect(map.style.layers.filter(l => l.source === 'overlay:extras/features.pmtiles').map(l => l.id))
             .toEqual([WATER, POWER_LINES, TOWERS]);
-        // No overlay sprite is asked for.
+        // The overlay icons are only asked for when a style names them.
         expect(map.style.sprite).toBe(`${window.location.origin}/map-assets/sprites/light`);
     });
 });

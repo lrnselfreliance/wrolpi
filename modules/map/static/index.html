@@ -315,14 +315,15 @@
     // Add the overlays to the map.  The style must have loaded; a new style has none of them.
     function applyOverlays() {
         if (!Overlays || !overlayFiles.length || !map) return;
-        overlayFiles.forEach(function(file) {
-            if (!Overlays.isStyledOverlay(file) || !file.has_sprite) return;
-            var id = OverlayStyle.overlaySpriteId(file);
+        // An overlay drawn with a style of its own names icons: the map's overlay icons, a
+        // second sprite beside the basemap's.  It is only asked for when there is such an overlay.
+        if (overlayFiles.some(Overlays.isStyledOverlay)) {
+            var id = OverlayStyle.OVERLAY_ICONS_SPRITE_ID;
             try {
                 var has = (map.getSprite() || []).some(function(sprite) { return sprite.id === id; });
-                if (!has) map.addSprite(id, OverlayStyle.overlaySpriteUrl(file));
-            } catch (e) { console.warn("Could not add the icons of " + file.map_path, e); }
-        });
+                if (!has) map.addSprite(id, window.location.origin + "/sprites/" + id);
+            } catch (e) { console.warn("Could not add the overlay icons", e); }
+        }
         overlayRefused = Overlays.addOverlaysToMap(map, overlayFiles, overlayState, OVERLAY_URLS);
     }
 
@@ -568,6 +569,10 @@
             var layers = overlayLayerIds();
             var hit = layers.length && map.queryRenderedFeatures(e.point, {layers: layers}).length;
             map.getCanvas().style.cursor = hit ? "pointer" : "";
+        });
+        // A name the overlay icons do not have is drawn as a plain dot.
+        map.on("styleimagemissing", function(e) {
+            if (OverlayStyle) OverlayStyle.addMissingOverlayIcon(map, e.id);
         });
         // A layer MapLibre refuses (an overlay's style may have one) is reported, not fatal.
         map.on("error", function(e) { console.warn("Map error:", e && e.error ? e.error.message : e); });

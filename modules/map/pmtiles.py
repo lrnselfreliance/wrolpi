@@ -5,9 +5,9 @@ data, so describing a file is two small reads.
 
 https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md
 """
-import gzip
 import json
 import struct
+import zlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -20,7 +20,8 @@ __all__ = ['read_pmtiles_info', 'classify', 'describe', 'is_searchable',
 
 MAGIC = b'PMTiles'
 HEADER_SIZE = 127
-# Metadata larger than this is not read; the file is described by its header alone.
+# Metadata larger than this (as stored, or once decompressed) is not read; the file is described by its header
+# alone.  A map file is something a person downloaded: a few bytes of it must not be able to fill the memory.
 MAX_METADATA_SIZE = 16 * 1024 * 1024
 
 COMPRESSION_NONE = 1
@@ -83,6 +84,15 @@ def _text(value) -> Optional[str]:
     return str(value) if value not in (None, '') else None
 
 
+def _gunzip(raw: bytes) -> bytes:
+    """Decompress gzip data, refusing to produce more than MAX_METADATA_SIZE."""
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    data = decompressor.decompress(raw, MAX_METADATA_SIZE)
+    if decompressor.unconsumed_tail:
+        raise ValueError(f'metadata is larger than {MAX_METADATA_SIZE} bytes')
+    return data
+
+
 def _read(path: Path) -> Optional[dict]:
     with path.open('rb') as fh:
         header = fh.read(HEADER_SIZE)
@@ -100,9 +110,9 @@ def _read(path: Path) -> Optional[dict]:
             raw = fh.read(metadata_length)
             try:
                 if internal_compression == COMPRESSION_GZIP:
-                    raw = gzip.decompress(raw)
+                    raw = _gunzip(raw)
                 metadata = json.loads(raw)
-            except (OSError, EOFError, ValueError) as e:
+            except (zlib.error, ValueError) as e:
                 logger.warning(f'Unable to read PMTiles metadata of {path}: {e}')
             if not isinstance(metadata, dict):
                 metadata = dict()

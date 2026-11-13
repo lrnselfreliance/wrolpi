@@ -119,3 +119,19 @@ def test_changed_file_is_read_again(test_directory, make_pmtiles):
     # A caller cannot change what is remembered.
     pmtiles.read_pmtiles_info(path)['vector_layers'].clear()
     assert [i['id'] for i in pmtiles.read_pmtiles_info(path)['vector_layers']] == ['towers']
+
+
+def test_metadata_which_decompresses_too_large(test_directory, make_pmtiles, monkeypatch):
+    """A little compressed metadata can decompress to a great deal; it is not decompressed past the limit, and the
+    file is described by its header."""
+    monkeypatch.setattr(pmtiles, 'MAX_METADATA_SIZE', 10_000)
+    small = make_pmtiles('map/small.pmtiles', vector_metadata('roads', name='Small'))
+    assert pmtiles.read_pmtiles_info(small)['title'] == 'Small'
+
+    # Compresses to far less than the limit, and decompresses to far more.
+    bomb = make_pmtiles('map/bomb.pmtiles', vector_metadata('roads', name='Bomb', padding='0' * 1_000_000))
+    assert bomb.stat().st_size < 10_000
+    info = pmtiles.read_pmtiles_info(bomb)
+    assert info['tile_type'] == 'mvt'
+    assert info['title'] is None
+    assert info['vector_layers'] == []

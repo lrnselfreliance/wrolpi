@@ -56,6 +56,28 @@
         .layer-group-header:hover { color: #1a73e8; }
         .layer-group-header input { cursor: pointer; width: 16px; height: 16px; }
 
+        /* Overlays: map files which are not the basemap, each with its own layers. */
+        #overlay-section { border-top: 1px solid #eee; margin-top: 4px; padding-top: 4px; }
+        #overlay-section h4 { padding: 4px 14px; font-size: 13px; }
+        .overlay-file { display: flex; align-items: center; gap: 6px; padding: 4px 14px; }
+        .overlay-file label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .overlay-file input, .overlay-layer input { cursor: pointer; width: 16px; height: 16px; }
+        .overlay-zooms { color: #888; font-size: 11px; }
+        .overlay-expand {
+            margin-left: auto; border: none; background: none; cursor: pointer;
+            font-size: 12px; color: #555; padding: 2px 4px;
+        }
+        .overlay-layers { padding: 0 14px 4px 38px; font-size: 13px; }
+        .overlay-layers .overlay-note { color: #888; font-size: 11px; padding: 2px 0; }
+        .overlay-all-none { display: flex; gap: 8px; padding: 2px 0; }
+        .overlay-all-none button {
+            border: none; background: none; cursor: pointer; padding: 0;
+            color: #888; font-size: 11px; text-decoration: underline;
+        }
+        .overlay-layer { display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer; }
+        .overlay-layer.disabled { color: #aaa; }
+        .overlay-swatch { width: 10px; height: 10px; flex: none; border: 1px solid #ccc; }
+
         /* File selector */
         #file-panel {
             position: absolute;
@@ -252,6 +274,78 @@
     var hasPlanetOverview = false;
     var hasTerrain = false;
     var contextMenuData = null;
+
+    // --- Overlays: map files which are not a basemap ---
+    // The logic is the map viewer's own (app/src/map-shared), loaded from the copies in /js/.  Until
+    // it has loaded (or if it cannot be), this viewer draws basemaps only.
+    var Overlays = null;
+    var OverlayStyle = null;
+    // The overlay files; one which came with a style has `styleLayers`.
+    var overlayFiles = [];
+    // What the user chose to see: {[map_path]: {enabled, layers: {[layerId]: bool}}}.
+    var overlayState = {};
+    // Which overlay files have their layers listed in the panel.
+    var overlayExpanded = {};
+    // How many layers of each file MapLibre refused, by map_path.
+    var overlayRefused = {};
+    // This viewer is served the map directory at /data/, not the media directory.
+    var OVERLAY_URLS = {
+        pmtiles: function(file) { return "pmtiles://" + dataPath(file.map_path); },
+        style: function(file) { return dataPath(file.style_map_path); },
+    };
+
+    function loadOverlays(files) {
+        if (!files.length) return Promise.resolve();
+        return Promise.all([import("/js/overlays.js"), import("/js/overlayStyle.js")])
+            .then(function(modules) {
+                Overlays = modules[0];
+                OverlayStyle = modules[1];
+                overlayState = Overlays.loadOverlayState();
+                // No `validateLayer`: this viewer cannot check a layer first, so each is added to
+                // the map by itself (see applyOverlays).
+                return OverlayStyle.loadOverlayStyles(files, {urls: OVERLAY_URLS});
+            })
+            .then(function(files) { overlayFiles = files; })
+            .catch(function(err) {
+                console.error("Overlays are not available:", err);
+                overlayFiles = [];
+            });
+    }
+
+    // Add the overlays to the map.  The style must have loaded; a new style has none of them.
+    function applyOverlays() {
+        if (!Overlays || !overlayFiles.length || !map) return;
+        overlayFiles.forEach(function(file) {
+            if (!Overlays.isStyledOverlay(file) || !file.has_sprite) return;
+            var id = OverlayStyle.overlaySpriteId(file);
+            try {
+                var has = (map.getSprite() || []).some(function(sprite) { return sprite.id === id; });
+                if (!has) map.addSprite(id, OverlayStyle.overlaySpriteUrl(file));
+            } catch (e) { console.warn("Could not add the icons of " + file.map_path, e); }
+        });
+        overlayRefused = Overlays.addOverlaysToMap(map, overlayFiles, overlayState, OVERLAY_URLS);
+    }
+
+    // Remember what the user chose to see of an overlay, and show or hide its layers to match.
+    function changeOverlayState(file, next) {
+        overlayState = next;
+        Overlays.saveOverlayState(next);
+        if (map && map.getStyle()) {
+            Overlays.buildOverlayLayers(file, next).forEach(function(layer) {
+                if (map.getLayer(layer.id)) {
+                    map.setLayoutProperty(layer.id, "visibility", layer.layout.visibility);
+                }
+            });
+        }
+        buildLayerControls();
+    }
+
+    function overlayLayerIds() {
+        if (!Overlays || !map || !map.getStyle()) return [];
+        return (map.getStyle().layers || [])
+            .filter(function(l) { return Overlays.isOverlayLayerId(l.id) && l.type !== "raster"; })
+            .map(function(l) { return l.id; });
+    }
 
     // Load saved state from localStorage.
     function getSavedVisibility() {
@@ -461,6 +555,22 @@
             menu.style.display = "block";
         });
         map.on("click", function() { document.getElementById("context-menu").style.display = "none"; });
+
+        // Click an overlay's feature to see its attributes.
+        map.on("click", function(e) {
+            var layers = overlayLayerIds();
+            if (!layers.length) return;
+            var html = Overlays.overlayPopupHtml(map.queryRenderedFeatures(e.point, {layers: layers}));
+            if (!html) return;
+            new maplibregl.Popup({offset: 8, maxWidth: "260px"}).setLngLat(e.lngLat).setHTML(html).addTo(map);
+        });
+        map.on("mousemove", function(e) {
+            var layers = overlayLayerIds();
+            var hit = layers.length && map.queryRenderedFeatures(e.point, {layers: layers}).length;
+            map.getCanvas().style.cursor = hit ? "pointer" : "";
+        });
+        // A layer MapLibre refuses (an overlay's style may have one) is reported, not fatal.
+        map.on("error", function(e) { console.warn("Map error:", e && e.error ? e.error.message : e); });
         map.on("movestart", function() { document.getElementById("context-menu").style.display = "none"; });
 
         // Long-press context menu (mobile).
@@ -501,6 +611,7 @@
                 longPressTimer = null;
             });
         map.on("load", function() {
+            applyOverlays();
             buildLayerControls();
         });
     }
@@ -545,6 +656,8 @@
 
     // --- Layer control ---
     function matchesGroup(layerId, prefixes) {
+        // An overlay's layers belong to no basemap group, whatever they are named.
+        if (layerId.indexOf("overlay:") === 0) return false;
         var baseId = layerId.indexOf(":") >= 0 ? layerId.split(":").slice(1).join(":") : layerId;
         return prefixes.some(function(prefix) {
             return baseId.indexOf(prefix) >= 0;
@@ -589,6 +702,8 @@
             container.appendChild(div);
         }
 
+        buildOverlayControls(container);
+
         // Scale unit toggle.
         var scaleDiv = document.createElement("div");
         scaleDiv.className = "layer-group";
@@ -620,6 +735,117 @@
         scaleLabel.appendChild(scaleText);
         scaleDiv.appendChild(scaleLabel);
         container.appendChild(scaleDiv);
+    }
+
+    function checkboxLabel(className, text, checked, onChange) {
+        var label = document.createElement("label");
+        label.className = className;
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = checked;
+        checkbox.addEventListener("change", function(e) { onChange(e.target.checked); });
+        label.appendChild(checkbox);
+        return {label: label, checkbox: checkbox, text: label.appendChild(document.createElement("span"))};
+    }
+
+    function textButton(text, onClick) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = text;
+        button.addEventListener("click", onClick);
+        return button;
+    }
+
+    // One overlay file: a checkbox for the file, and (for a vector file) one per layer behind an
+    // arrow.  An overlay is hidden until it is turned on.
+    function buildOverlayControl(file) {
+        var label = Overlays.overlayLabel(file, overlayFiles);
+        var enabled = Overlays.isOverlayEnabled(overlayState, file);
+        var layers = Overlays.overlayToggleLayers(file);
+        var styled = Overlays.isStyledOverlay(file);
+        var expanded = !!overlayExpanded[file.map_path];
+        var fragment = document.createDocumentFragment();
+
+        var row = document.createElement("div");
+        row.className = "overlay-file";
+        row.title = [file.description, file.map_path].filter(Boolean).join("\n");
+        var fileBox = checkboxLabel("", label, enabled, function(checked) {
+            changeOverlayState(file, Overlays.setOverlayEnabled(overlayState, file, checked));
+        });
+        fileBox.text.textContent = label;
+        row.appendChild(fileBox.label);
+        if (isFinite(file.min_zoom) && isFinite(file.max_zoom) && file.min_zoom !== null) {
+            var zooms = document.createElement("span");
+            zooms.className = "overlay-zooms";
+            zooms.textContent = "z" + file.min_zoom + "\u2013" + file.max_zoom;
+            row.appendChild(zooms);
+        }
+        if (layers.length) {
+            var expand = textButton(expanded ? "\u25BC" : "\u25B6", function() {
+                overlayExpanded[file.map_path] = !expanded;
+                buildLayerControls();
+            });
+            expand.className = "overlay-expand";
+            expand.setAttribute("aria-label", (expanded ? "Hide" : "Show") + " layers of " + label);
+            expand.setAttribute("aria-expanded", expanded ? "true" : "false");
+            row.appendChild(expand);
+        }
+        fragment.appendChild(row);
+        if (!expanded || !layers.length) return fragment;
+
+        var list = document.createElement("div");
+        list.className = "overlay-layers";
+        var allNone = document.createElement("div");
+        allNone.className = "overlay-all-none";
+        allNone.appendChild(textButton("All", function() {
+            changeOverlayState(file, Overlays.setAllOverlayLayersEnabled(overlayState, file, true));
+        }));
+        allNone.appendChild(textButton("None", function() {
+            changeOverlayState(file, Overlays.setAllOverlayLayersEnabled(overlayState, file, false));
+        }));
+        list.appendChild(allNone);
+
+        // Layers of its style the map could not use: found when the style was read, or refused
+        // by MapLibre when added.
+        var skipped = (file.styleSkipped || 0) + (overlayRefused[file.map_path] || 0);
+        if (skipped) {
+            var note = document.createElement("div");
+            note.className = "overlay-note";
+            note.textContent = skipped + " style " + (skipped === 1 ? "layer" : "layers") + " skipped";
+            list.appendChild(note);
+        }
+
+        layers.forEach(function(layer) {
+            var box = checkboxLabel("overlay-layer" + (enabled ? "" : " disabled"), layer.id,
+                Overlays.isOverlayLayerEnabled(overlayState, file, layer.id), function(checked) {
+                    changeOverlayState(file,
+                        Overlays.setOverlayLayerEnabled(overlayState, file, layer.id, checked));
+                });
+            box.checkbox.disabled = !enabled;
+            if (layer.description) box.label.title = layer.description;
+            // A generic layer is drawn in one color; a styled one however its style says.
+            if (!styled) {
+                var swatch = document.createElement("span");
+                swatch.className = "overlay-swatch";
+                swatch.style.background = Overlays.overlayColor(layer.id);
+                box.label.insertBefore(swatch, box.text);
+            }
+            box.text.textContent = layer.id;
+            list.appendChild(box.label);
+        });
+        fragment.appendChild(list);
+        return fragment;
+    }
+
+    function buildOverlayControls(container) {
+        if (!Overlays || !overlayFiles.length) return;
+        var section = document.createElement("div");
+        section.id = "overlay-section";
+        var title = document.createElement("h4");
+        title.textContent = "Overlays";
+        section.appendChild(title);
+        overlayFiles.forEach(function(file) { section.appendChild(buildOverlayControl(file)); });
+        container.appendChild(section);
     }
 
     // Toggle layer panel
@@ -659,6 +885,7 @@
                     setGroupVisibility(groupName, false);
                 }
             }
+            applyOverlays();
             buildLayerControls();
         });
     }
@@ -711,6 +938,7 @@
                 // Separate files into planet, terrain, and regional extracts.
                 var planetFile = null;
                 var regionFiles = [];
+                var overlayCandidates = [];
                 for (var i = 0; i < allFiles.length; i++) {
                     var f = allFiles[i];
                     // A file the user ignores is not drawn.
@@ -722,8 +950,11 @@
                     if (isTerrain) {
                         terrainFileName = f.mapPath;
                         hasTerrain = true;
+                    } else if (f.kind === "overlay") {
+                        // Not the basemap schema: offered in the layer panel, drawn as itself.
+                        overlayCandidates.push(f);
                     } else if (f.kind && f.kind !== "basemap") {
-                        // Overlays (and unreadable files) are not the basemap schema this viewer draws.
+                        // An unreadable file is not drawn.
                         continue;
                     } else if (isPlanetFile(f.name)) {
                         if (!planetFile || f.size > planetFile.size) {
@@ -739,7 +970,7 @@
                     // Planet covers everything — sole vector source, no overview needed.
                     pmtilesFiles = [planetFile.mapPath];
                     hasPlanetOverview = false;
-                    return pmtilesFiles;
+                    return loadOverlays(overlayCandidates).then(function() { return pmtilesFiles; });
                 }
 
                 // Use regional extracts.
@@ -749,6 +980,7 @@
                 return fetch(MAP_OVERVIEW_URL, {method: "HEAD"})
                     .then(function(r) { hasPlanetOverview = r.ok; })
                     .catch(function() { hasPlanetOverview = false; })
+                    .then(function() { return loadOverlays(overlayCandidates); })
                     .then(function() { return pmtilesFiles; });
             })
             .then(function(pmtilesFiles) {

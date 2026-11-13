@@ -1,3 +1,4 @@
+import {addOverlaysToMap, orderOverlayLayers} from '../map-shared/overlays.js';
 import {
     addOverlaysToStyle,
     buildOverlayLayers,
@@ -281,5 +282,123 @@ describe('overlayPopupHtml', () => {
         expect(long).toContain('key11: 11');
         expect(long).not.toContain('key12: 12');
         expect(long).toContain('8 more');
+    });
+});
+
+describe('adding overlays to a map a layer at a time', () => {
+    // A viewer which cannot check a layer first gives each to MapLibre by itself; MapLibre refuses
+    // only the layers it cannot draw.
+    const URLS = {pmtiles: f => `pmtiles:///data/${f.map_path}`, style: f => `/data/${f.style_map_path}`};
+
+    class FakeMap {
+        constructor(layers = [], refuse = () => false) {
+            this.layers = layers.map(l => ({...l}));
+            this.sources = {};
+            this.refuse = refuse;
+        }
+
+        getStyle() {
+            return {layers: this.layers};
+        }
+
+        getSource(id) {
+            return this.sources[id];
+        }
+
+        addSource(id, source) {
+            this.sources[id] = source;
+        }
+
+        getLayer(id) {
+            return this.layers.find(l => l.id === id);
+        }
+
+        addLayer(layer, before) {
+            // As MapLibre: a layer it cannot draw is reported and not added.
+            if (this.refuse(layer)) return;
+            const index = before ? this.layers.findIndex(l => l.id === before) : -1;
+            this.layers.splice(index === -1 ? this.layers.length : index, 0, layer);
+        }
+    }
+
+    const BASEMAP = [{id: 'earth', type: 'fill'}, {id: 'places', type: 'symbol'}, {id: 'pois', type: 'symbol'}];
+
+    test('sources come from where this viewer is served them', () => {
+        const map = new FakeMap(BASEMAP);
+        addOverlaysToMap(map, [FEATURES, SATELLITE], {}, URLS);
+        expect(map.sources).toEqual({
+            'overlay:extras/features.pmtiles': {type: 'vector', url: 'pmtiles:///data/extras/features.pmtiles'},
+            'overlay:satellite.pmtiles': {type: 'raster', url: 'pmtiles:///data/satellite.pmtiles', tileSize: 256},
+        });
+    });
+
+    test('layers are in the order a whole style would have them', () => {
+        const map = new FakeMap(BASEMAP);
+        const refused = addOverlaysToMap(map, [FEATURES, SATELLITE], {}, URLS);
+        expect(refused).toEqual({});
+
+        const sources = {};
+        const whole = BASEMAP.map(l => ({...l}));
+        addOverlaysToStyle(sources, whole, [FEATURES, SATELLITE], {});
+        expect(map.layers.map(l => l.id)).toEqual(whole.map(l => l.id));
+        // The raster is under the basemap's labels.
+        expect(map.layers.map(l => l.id).indexOf('overlay:satellite.pmtiles:raster')).toBe(1);
+    });
+
+    test('layers are added as the user last chose to see them', () => {
+        const map = new FakeMap(BASEMAP);
+        const state = setOverlayLayerEnabled(setOverlayEnabled({}, FEATURES, true), FEATURES, 'towers', false);
+        addOverlaysToMap(map, [FEATURES], state, URLS);
+        const visibility = id => map.getLayer(`overlay:extras/features.pmtiles:${id}`).layout.visibility;
+        expect([visibility('power_lines:line'), visibility('towers:circle')]).toEqual(['visible', 'none']);
+    });
+
+    test('a layer MapLibre refuses is counted against its file, and the rest are added', () => {
+        const map = new FakeMap(BASEMAP, layer => layer.id.includes(':towers:'));
+        const other = file('other.pmtiles', {vector_layers: [layer('towers', 'Point'), layer('roads', 'LineString')]});
+        const refused = addOverlaysToMap(map, [FEATURES, other], {}, URLS);
+        expect(refused).toEqual({'extras/features.pmtiles': 1, 'other.pmtiles': 1});
+        expect(map.layers.map(l => l.id)).toEqual([
+            'earth', 'places', 'pois',
+            'overlay:extras/features.pmtiles:flood_zones:fill',
+            'overlay:extras/features.pmtiles:power_lines:line',
+            'overlay:other.pmtiles:roads:line',
+        ]);
+    });
+
+    test('a layer which throws is refused too', () => {
+        const map = new FakeMap(BASEMAP, (layer) => {
+            if (layer.type === 'line') throw new Error('bad layer');
+            return false;
+        });
+        expect(addOverlaysToMap(map, [FEATURES], {}, URLS)).toEqual({'extras/features.pmtiles': 1});
+    });
+
+    test('adding again changes nothing: the style keeps one of each', () => {
+        const map = new FakeMap(BASEMAP);
+        addOverlaysToMap(map, [FEATURES], {}, URLS);
+        const before = map.layers.map(l => l.id);
+        expect(addOverlaysToMap(map, [FEATURES], {}, URLS)).toEqual({});
+        expect(map.layers.map(l => l.id)).toEqual(before);
+    });
+
+    test('an overlay with its own style keeps that style\'s order, under the generic ones', () => {
+        const styled = {
+            ...FEATURES,
+            map_path: 'styled.pmtiles',
+            styleLayers: [
+                {id: 'overlay:styled.pmtiles:towers:icons', type: 'symbol', source: 'overlay:styled.pmtiles', 'source-layer': 'towers'},
+                {id: 'overlay:styled.pmtiles:flood_zones:area', type: 'fill', source: 'overlay:styled.pmtiles', 'source-layer': 'flood_zones'},
+            ],
+        };
+        const {rasters, vectors} = orderOverlayLayers([FEATURES, styled, SATELLITE], {});
+        expect(rasters.map(l => l.id)).toEqual(['overlay:satellite.pmtiles:raster']);
+        expect(vectors.map(l => l.id)).toEqual([
+            'overlay:styled.pmtiles:towers:icons',
+            'overlay:styled.pmtiles:flood_zones:area',
+            'overlay:extras/features.pmtiles:flood_zones:fill',
+            'overlay:extras/features.pmtiles:power_lines:line',
+            'overlay:extras/features.pmtiles:towers:circle',
+        ]);
     });
 });

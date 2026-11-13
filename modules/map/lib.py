@@ -102,6 +102,8 @@ def get_pmtiles_files() -> List[dict]:
             has_search_index=path.with_suffix('.search.db').is_file(),
             visible=not maps_config.is_ignored(map_path),
             style_path=str(style.relative_to(get_media_directory())) if style else None,
+            # The standalone viewer is served the map directory, not the media directory.
+            style_map_path=get_map_path(style) if style else None,
             has_sprite=find_sidecar_sprite(path) is not None,
             **pmtiles.describe(path),
         ))

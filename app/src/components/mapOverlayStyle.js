@@ -44,6 +44,20 @@ function adaptFonts(value) {
     return FONT_EXPRESSIONS.has(value[0]) ? adaptFontExpression(value) : fontList(value);
 }
 
+// A `text-field` can set the font of a part of the text (the options of a `format` section); those
+// fonts are replaced too.
+function adaptTextFieldFonts(value) {
+    if (Array.isArray(value)) return value.map(adaptTextFieldFonts);
+    if (value && typeof value === "object") {
+        const options = {};
+        for (const [key, option] of Object.entries(value)) {
+            options[key] = key === "text-font" ? adaptFonts(option) : adaptTextFieldFonts(option);
+        }
+        return options;
+    }
+    return value;
+}
+
 // The id of an overlay's sprite; MapLibre knows its images as `<sprite id>:<image name>`.
 export function overlaySpriteId(file) {
     return overlaySourceId(file);
@@ -120,6 +134,13 @@ export function adaptOverlayStyle(style, file) {
 
         if (layer.layout?.["text-font"] !== undefined) {
             layer.layout["text-font"] = adaptFonts(layer.layout["text-font"]);
+        }
+        if (layer.layout?.["text-field"] !== undefined) {
+            layer.layout["text-field"] = adaptTextFieldFonts(layer.layout["text-field"]);
+            // MapLibre's own default font is not one the map has.
+            if (layer.layout["text-font"] === undefined) {
+                layer.layout["text-font"] = [FONT_REGULAR];
+            }
         }
         for (const [group, properties] of Object.entries(IMAGE_PROPERTIES)) {
             for (const property of properties) {

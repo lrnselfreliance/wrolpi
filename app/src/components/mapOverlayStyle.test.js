@@ -174,6 +174,35 @@ describe('fonts', () => {
             ['locality'], ['literal', ['Noto Sans Italic']],
             ['literal', ['Noto Sans Regular']]]);
     });
+
+    test('the font of a part of the text', () => {
+        const style = {
+            ...STYLE,
+            layers: [{
+                ...STYLE.layers[6],
+                layout: {
+                    'text-font': ['Roboto Condensed Regular'],
+                    'text-field': ['format',
+                        ['get', 'name'], {'text-font': ['literal', ['Roboto Condensed Italic']]},
+                        '\n', {},
+                        ['get', 'ele'], {'text-font': ['literal', ['Atkinson Hyperlegible Mono Bold']], 'font-scale': 0.8}],
+                },
+            }],
+        };
+        const result = adapted(style);
+        expect(result.skipped).toBe(0);
+        expect(byId(result, 'repeaters').layout['text-field']).toEqual(['format',
+            ['get', 'name'], {'text-font': ['literal', ['Noto Sans Italic']]},
+            '\n', {},
+            ['get', 'ele'], {'text-font': ['literal', ['Noto Sans Medium']], 'font-scale': 0.8}]);
+    });
+
+    test('text without a font is given one the map has', () => {
+        const style = {...STYLE, layers: [{...STYLE.layers[6], layout: {'text-field': ['get', 'callsign']}}]};
+        expect(byId(adapted(style), 'repeaters').layout['text-font']).toEqual(['Noto Sans Regular']);
+        // A layer without text is not given a font.
+        expect(byId(adapted(), 'roads').layout).toBeUndefined();
+    });
 });
 
 describe('icons', () => {

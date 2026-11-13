@@ -49,6 +49,19 @@ async def post_file_visible(_: Request, body: schema.MapFileVisibleRequest):
     return response.json({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
 
 
+@map_bp.get('/files/sprite/<name:path>')
+@openapi.description("Get the sprite sheet beside a PMTiles map file: `<map file>[@2x].json` or `.png`")
+async def get_file_sprite(_: Request, name: str):
+    try:
+        sprite = lib.get_sidecar_sprite_file(name)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    if sprite:
+        return await response.file(sprite)
+    return response.json({'error': 'Sprite not found'}, HTTPStatus.NOT_FOUND)
+
+
 @map_bp.get('/subscribe')
 @openapi.description('Get map catalog and current subscriptions')
 def get_subscriptions(request: Request):

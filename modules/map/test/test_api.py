@@ -287,3 +287,56 @@ def test_maps_config_is_shared(async_client):
     worker and overwritten by another), and is among the configs WROLPi manages."""
     assert get_maps_config()._config is api_app.shared_ctx.maps_config
     assert get_all_configs()['maps.yaml'] is get_maps_config()
+
+
+@pytest.mark.asyncio
+async def test_get_file_sprite(async_client, test_directory, make_pmtiles):
+    """MapLibre asks for the sprite of a map file as `<map file>.json` and `.png`, and as `@2x` on a dense screen;
+    it gets the single resolution sheet when that is all there is."""
+    make_pmtiles('map/extras/features.pmtiles', vector_metadata('towers'))
+    extras = test_directory / 'map/extras'
+    (extras / 'sprite.json').write_text('{"tower": {"x": 0, "y": 0, "width": 8, "height": 8, "pixelRatio": 1}}')
+    (extras / 'sprite.png').write_bytes(b'single')
+
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles.json')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['tower']['pixelRatio'] == 1
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles.png')
+    assert response.status_code == HTTPStatus.OK
+    assert response.body == b'single'
+    # There is no double resolution sheet.
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles@2x.png')
+    assert response.status_code == HTTPStatus.OK
+    assert response.body == b'single'
+
+    (extras / 'sprite@2x.json').write_text('{"tower": {"x": 0, "y": 0, "width": 16, "height": 16, "pixelRatio": 2}}')
+    (extras / 'sprite@2x.png').write_bytes(b'double')
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles@2x.png')
+    assert response.body == b'double'
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles@2x.json')
+    assert response.json['tower']['pixelRatio'] == 2
+    request, response = await async_client.get('/api/map/files/sprite/extras/features.pmtiles.png')
+    assert response.body == b'single'
+
+
+@pytest.mark.asyncio
+async def test_get_file_sprite_missing(async_client, test_directory, make_pmtiles):
+    """Only the sprite of a map file is served."""
+    make_pmtiles('map/features.pmtiles', vector_metadata('towers'))
+    (test_directory / 'secret.json').write_text('{"secret": true}')
+    (test_directory / 'map/notes.json').write_text('{"notes": true}')
+
+    # The file has no sprite.
+    request, response = await async_client.get('/api/map/files/sprite/features.pmtiles.json')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    # There is no such map file.
+    request, response = await async_client.get('/api/map/files/sprite/missing.pmtiles.json')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    # Not the name of a sprite.
+    for name in ('notes.json', 'features.pmtiles', 'features.pmtiles.txt', 'features.pmtiles@3x.png'):
+        request, response = await async_client.get(f'/api/map/files/sprite/{name}')
+        assert response.status_code == HTTPStatus.BAD_REQUEST, name
+    # Outside of the map directory.
+    request, response = await async_client.get('/api/map/files/sprite/..%2Fsecret.pmtiles.json')
+    assert response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND)
+    assert b'secret' not in response.body or response.status_code == HTTPStatus.BAD_REQUEST

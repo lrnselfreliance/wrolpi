@@ -60,6 +60,21 @@ export function isRasterOverlay(file) {
     return file.tile_type !== "mvt";
 }
 
+// Whether the overlay is drawn with a style which came beside the file (see mapOverlayStyle.js).
+export function isStyledOverlay(file) {
+    return !isRasterOverlay(file) && Array.isArray(file.styleLayers) && file.styleLayers.length > 0;
+}
+
+// The layers of a vector overlay the user can show and hide: all of them, or with its own style
+// only those the style draws.
+export function overlayToggleLayers(file) {
+    if (isRasterOverlay(file)) return [];
+    const layers = file.vector_layers || [];
+    if (!isStyledOverlay(file)) return layers;
+    const drawn = new Set(file.styleLayers.map(l => l["source-layer"]));
+    return layers.filter(l => drawn.has(l.id));
+}
+
 function fileStem(name) {
     return String(name).replace(/\.pmtiles$/, "");
 }
@@ -115,7 +130,7 @@ export function setOverlayLayerEnabled(state, file, layerId, enabled) {
 
 export function setAllOverlayLayersEnabled(state, file, enabled) {
     const layers = {};
-    for (const l of file.vector_layers || []) layers[l.id] = enabled;
+    for (const l of overlayToggleLayers(file)) layers[l.id] = enabled;
     return {...state, [file.map_path]: {...state?.[file.map_path], layers}};
 }
 
@@ -173,6 +188,19 @@ export function buildOverlayLayers(file, state) {
         }];
     }
 
+    if (isStyledOverlay(file)) {
+        // The file came with its own style: its layers, each shown when the file and its source
+        // layer are on (and the style does not itself hide it).
+        return file.styleLayers.map(layer => ({
+            ...layer,
+            layout: {
+                ...layer.layout,
+                visibility: visibility(enabled && layer.layout?.visibility !== "none"
+                    && isOverlayLayerEnabled(state, file, layer["source-layer"])),
+            },
+        }));
+    }
+
     const styleLayers = [];
     for (const layer of file.vector_layers || []) {
         const color = overlayColor(layer.id);
@@ -194,21 +222,28 @@ export function buildOverlayLayers(file, state) {
 }
 
 // Add the overlays to a style's sources and layers (the basemap's are already there).  A raster
-// overlay goes under the basemap's labels so the map stays readable; vector overlays go on top,
-// fills under lines under points.
+// overlay goes under the basemap's labels so the map stays readable; vector overlays go on top:
+// an overlay with its own style in that style's order, then the generic ones, fills under lines
+// under points.
 export function addOverlaysToStyle(styleSources, allLayers, overlays, state) {
     const rasters = [];
+    const styled = [];
     const vectors = {fill: [], line: [], circle: []};
     for (const file of overlays || []) {
         styleSources[overlaySourceId(file)] = buildOverlaySource(file);
-        for (const layer of buildOverlayLayers(file, state)) {
+        const layers = buildOverlayLayers(file, state);
+        if (isStyledOverlay(file)) {
+            styled.push(...layers);
+            continue;
+        }
+        for (const layer of layers) {
             if (layer.type === "raster") rasters.push(layer);
             else vectors[layer.type].push(layer);
         }
     }
     const firstLabel = allLayers.findIndex(l => l.type === "symbol");
     allLayers.splice(firstLabel === -1 ? allLayers.length : firstLabel, 0, ...rasters);
-    allLayers.push(...vectors.fill, ...vectors.line, ...vectors.circle);
+    allLayers.push(...styled, ...vectors.fill, ...vectors.line, ...vectors.circle);
 }
 
 // --- Popup ---

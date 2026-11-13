@@ -37,7 +37,10 @@
         files.forEach(function(f, i) {
             // A file is named by its path in the map directory; it may be in a sub-directory.
             var mapPath = f.map_path || f.name;
-            sources[mapPath] = {type: "vector", url: "pmtiles:///data/" + mapPath};
+            // Each part of the path is encoded: a `#` or `?` in a file name would otherwise end the
+            // path, and another file (or none) would be asked for.
+            var dataPath = "/data/" + String(mapPath).split("/").map(encodeURIComponent).join("/");
+            sources[mapPath] = {type: "vector", url: "pmtiles://" + dataPath};
             var layers = protomaps_themes_base.default(mapPath, flavor);
             if (i > 0) {
                 layers.forEach(function(l) { l.id = mapPath + ":" + l.id; });

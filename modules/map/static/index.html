@@ -204,6 +204,12 @@
     var MAP_OVERVIEW_URL = "/blobs/map-overview.pmtiles";
     var TERRAIN_PREFIX = "terrain-";
 
+    // The URL path of a map file.  Each part of its path is encoded: a `#` or `?` in a file name
+    // would otherwise end the path, and another file (or none) would be asked for.
+    function dataPath(mapPath) {
+        return "/data/" + String(mapPath).split("/").map(encodeURIComponent).join("/");
+    }
+
     function isPlanetFile(name) {
         if (name.indexOf("planet-") === 0) return true;
         return /^\d{8}\.pmtiles$/.test(name);
@@ -293,7 +299,7 @@
             var filename = sourceNames[fi];
             sources[filename] = {
                 type: "vector",
-                url: "pmtiles:///data/" + filename,
+                url: "pmtiles://" + dataPath(filename),
             };
             var fileLayers = protomaps_themes_base.default(filename, flavor);
             if (si === 0 && fi === 0) {
@@ -318,7 +324,7 @@
 
             sources["terrain-dem"] = {
                 type: "raster-dem",
-                url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                url: "pmtiles://" + window.location.origin + dataPath(terrainFileName),
                 encoding: "terrarium",
                 tileSize: 512,
             };
@@ -748,7 +754,7 @@
                 // Initialize contour source if terrain available.
                 if (hasTerrain && !demSource) {
                     demSource = new mlcontour.DemSource({
-                        url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                        url: "pmtiles://" + window.location.origin + dataPath(terrainFileName),
                         encoding: "terrarium",
                         maxzoom: 8,
                         worker: true,

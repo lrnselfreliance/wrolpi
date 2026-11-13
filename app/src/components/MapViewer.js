@@ -198,6 +198,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     visibility: contourVis,
                     "symbol-placement": "line",
                     "text-field": ["concat", ["get", "ele"], elevUnit],
+                    // A font the map has glyphs for; MapLibre's default is not one of them.
+                    "text-font": ["Noto Sans Regular"],
                     "text-size": 10,
                 },
                 paint: {

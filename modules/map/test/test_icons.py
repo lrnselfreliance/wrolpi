@@ -73,10 +73,10 @@ def test_excluded_icons_are_not_shipped():
 
 def test_icon_sets_have_their_licenses():
     """The icons are other people's work, given to the public domain; their licenses are shipped with them."""
-    assert 'CC0 1.0 Universal' in (ICONS / 'svg/maki/LICENSE.txt').read_text()
-    assert 'CC0 1.0 Universal' in (ICONS / 'svg/temaki/LICENSE.md').read_text()
-    notices = (SPRITES.parent / 'THIRD_PARTY_LICENSES.md').read_text()
-    assert 'Maki' in notices and 'Temaki' in notices
+    for icon_set in build_map_icons.ICON_SETS:
+        assert 'CC0 1.0 Universal' in (ICONS / 'svg' / icon_set / 'LICENSE.txt').read_text()
+    notice = (ICONS / 'NOTICE.txt').read_text()
+    assert 'Maki' in notice and 'Temaki' in notice and 'CC0' in notice
 
 
 def test_render_sdf(tmp_path):

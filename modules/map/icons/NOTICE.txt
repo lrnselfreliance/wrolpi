@@ -1,0 +1,15 @@
+The icons the map draws on overlays
+===================================
+
+svg/maki/     Maki, by Mapbox                https://github.com/mapbox/maki
+svg/temaki/   Temaki, by its contributors    https://github.com/rapideditor/temaki
+
+Both sets are dedicated to the public domain under CC0 1.0 Universal; the full
+text is the LICENSE.txt in each directory.  The SVGs are as their authors
+published them.
+
+aliases.json  Other names a map style may call an icon, and the icon it is.
+exclude.json  Icons of the sets which are not shipped.
+
+The sprite sheet modules/map/static/sprites/overlay-icons* is built from these
+by wrolpi/scripts/build_map_icons.py.

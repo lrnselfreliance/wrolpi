@@ -3,7 +3,7 @@
 
 An overlay drawn with a style of its own names its icons ("hospital", "ham_radio").  The map does not use the
 artwork such a style was made for; it draws WROLPi's own icons, which are the Maki and Temaki sets (both CC0, see
-their licenses in `modules/map/icons/svg/`).
+`modules/map/icons/NOTICE.txt`).
 
 The sheet is the translation between the two: every icon is listed in its index under its own name and under
 every other name it answers to (`modules/map/icons/aliases.json`), each in both spellings ("fire-station" and

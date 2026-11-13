@@ -8,6 +8,12 @@ class MapSubscribeRequest:
 
 
 @dataclass
+class MapFileVisibleRequest:
+    map_path: str
+    visible: bool
+
+
+@dataclass
 class MapPinRequest:
     lat: float
     lon: float

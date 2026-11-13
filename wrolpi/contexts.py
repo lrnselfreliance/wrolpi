@@ -40,6 +40,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.archive_downloader_config = manager.dict()
     app.shared_ctx.download_cache_config = manager.dict()
     app.shared_ctx.map_pins_config = manager.dict()
+    app.shared_ctx.maps_config = manager.dict()
     app.shared_ctx.flasher_config = manager.dict()
     app.shared_ctx.bookmarks_config = manager.dict()
     app.shared_ctx.sync_config = manager.dict()
@@ -346,6 +347,12 @@ def initialize_configs_contexts(app: Sanic):
         MAP_PINS_CONFIG.initialize(app.shared_ctx.map_pins_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory map pins config: {e}')
+
+    try:
+        from modules.map.config import MAPS_CONFIG
+        MAPS_CONFIG.initialize(app.shared_ctx.maps_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory maps config: {e}')
 
     try:
         from modules.flasher.config import FLASHER_CONFIG

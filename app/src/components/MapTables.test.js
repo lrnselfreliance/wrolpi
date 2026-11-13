@@ -28,6 +28,8 @@ jest.mock('../api', () => ({
     getMapFiles: jest.fn(),
     fetchMapSubscriptions: jest.fn(),
     getMapPins: jest.fn(),
+    setMapFileVisible: jest.fn(),
+    rebuildMapSearchIndex: jest.fn(),
 }));
 
 const api = require('../api');
@@ -154,5 +156,81 @@ describe('the Manage tab subscriptions table', () => {
         await act(async () => {
         });
         expect(screen.getByRole('button', {name: 'View All Regions'})).toBeEnabled();
+    });
+});
+
+describe('the Manage tab files table', () => {
+    const mapFile = (map_path, kind, extra = {}) => ({
+        name: map_path.split('/').pop(), map_path, path: `map/${map_path}`, kind,
+        size: 1024, visible: true, has_search_index: false, title: null, ...extra,
+    });
+    const FILES = [
+        mapFile('us-west.pmtiles', 'basemap', {title: 'Protomaps Basemap'}),
+        mapFile('extras/features.pmtiles', 'overlay', {title: 'Topographic Features'}),
+        mapFile('terrain-planet.pmtiles', 'terrain'),
+        mapFile('broken.pmtiles', 'unknown'),
+    ];
+    const rowOf = (text) => screen.getByText(text).closest('tr');
+    const cellsOf = (text) => [...rowOf(text).querySelectorAll('td')].map(td => td.textContent);
+
+    const renderFiles = async (files = FILES) => {
+        api.getMapFiles.mockResolvedValue({files});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+    };
+
+    test('a file is listed with its directory, its own name, and how the map draws it', async () => {
+        await renderFiles();
+        expect(cellsOf('extras/features.pmtiles').slice(0, 2))
+            .toEqual(['extras/features.pmtilesTopographic Features', 'Overlay']);
+        expect(cellsOf('us-west.pmtiles')[1]).toBe('Basemap');
+        expect(cellsOf('terrain-planet.pmtiles')[1]).toBe('Terrain');
+        expect(cellsOf('broken.pmtiles')[1]).toBe('Unreadable');
+    });
+
+    test('only a basemap offers a search index', async () => {
+        await renderFiles();
+        const builds = screen.getAllByRole('button', {name: 'Build'});
+        expect(builds).toHaveLength(1);
+        expect(rowOf('us-west.pmtiles')).toContainElement(builds[0]);
+    });
+
+    test('the search index of a file in a sub-directory is built by its path', async () => {
+        await renderFiles([mapFile('regions/oregon.pmtiles', 'basemap')]);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', {name: 'Build'}));
+        });
+        expect(api.rebuildMapSearchIndex).toHaveBeenCalledWith('regions/oregon.pmtiles');
+    });
+
+    test('a file is ignored with its toggle, and the list is fetched again', async () => {
+        await renderFiles();
+        const toggle = screen.getByRole('switch', {name: 'Show extras/features.pmtiles on the map'});
+        expect(toggle).toBeChecked();
+
+        api.getMapFiles.mockResolvedValue({
+            files: FILES.map(f => f.kind === 'overlay' ? {...f, visible: false} : f),
+        });
+        const before = api.getMapFiles.mock.calls.length;
+        await act(async () => {
+            fireEvent.click(toggle);
+        });
+
+        expect(api.setMapFileVisible).toHaveBeenCalledWith('extras/features.pmtiles', false);
+        expect(api.getMapFiles.mock.calls.length).toBe(before + 1);
+        // Only the ignored file's toggle is off.
+        expect(screen.getByRole('switch', {name: 'Show extras/features.pmtiles on the map'})).not.toBeChecked();
+        expect(screen.getByRole('switch', {name: 'Show us-west.pmtiles on the map'})).toBeChecked();
+    });
+
+    test('an ignored file is shown again with its toggle', async () => {
+        await renderFiles([mapFile('satellite.pmtiles', 'overlay', {visible: false})]);
+        const toggle = screen.getByRole('switch', {name: 'Show satellite.pmtiles on the map'});
+        expect(toggle).not.toBeChecked();
+        await act(async () => {
+            fireEvent.click(toggle);
+        });
+        expect(api.setMapFileVisible).toHaveBeenCalledWith('satellite.pmtiles', true);
     });
 });

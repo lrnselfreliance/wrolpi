@@ -705,9 +705,18 @@
                 var regionFiles = [];
                 for (var i = 0; i < allFiles.length; i++) {
                     var f = allFiles[i];
-                    if (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles')) {
-                        terrainFileName = f.name;
+                    // A file the user ignores is not drawn.
+                    if (f.visible === false) continue;
+                    // A file is named by its path in the map directory; it may be in a sub-directory.
+                    f.mapPath = f.map_path || f.name;
+                    var isTerrain = f.kind ? f.kind === "terrain"
+                        : (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles'));
+                    if (isTerrain) {
+                        terrainFileName = f.mapPath;
                         hasTerrain = true;
+                    } else if (f.kind && f.kind !== "basemap") {
+                        // Overlays (and unreadable files) are not the basemap schema this viewer draws.
+                        continue;
                     } else if (isPlanetFile(f.name)) {
                         if (!planetFile || f.size > planetFile.size) {
                             planetFile = f;
@@ -720,13 +729,13 @@
                 var pmtilesFiles;
                 if (planetFile) {
                     // Planet covers everything — sole vector source, no overview needed.
-                    pmtilesFiles = [planetFile.name];
+                    pmtilesFiles = [planetFile.mapPath];
                     hasPlanetOverview = false;
                     return pmtilesFiles;
                 }
 
                 // Use regional extracts.
-                pmtilesFiles = regionFiles.map(function(f) { return f.name; });
+                pmtilesFiles = regionFiles.map(function(f) { return f.mapPath; });
 
                 // Check for planet overview blob as low-zoom base layer.
                 return fetch(MAP_OVERVIEW_URL, {method: "HEAD"})

@@ -5,6 +5,9 @@ from unittest import mock
 
 import pytest
 
+from modules.map.conftest import vector_metadata
+from wrolpi.scripts import build_map_search
+
 
 def _create_test_search_db(path: Path, features: list):
     """Create a minimal .search.db file with given features for testing."""
@@ -128,10 +131,10 @@ async def test_search_status_no_files(async_client, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_search_status_with_index(async_client, test_directory, search_db, make_files_structure):
+async def test_search_status_with_index(async_client, test_directory, search_db, make_pmtiles):
     """Status endpoint shows which files have indexes."""
     # Create a PMTiles file that matches the search.db stem.
-    make_files_structure(['map/test.pmtiles'])
+    make_pmtiles('map/test.pmtiles')
 
     request, response = await async_client.get('/api/map/search/status')
     assert response.status_code == HTTPStatus.OK
@@ -140,9 +143,9 @@ async def test_search_status_with_index(async_client, test_directory, search_db,
 
 
 @pytest.mark.asyncio
-async def test_search_status_missing_index(async_client, test_directory, make_files_structure):
+async def test_search_status_missing_index(async_client, test_directory, make_pmtiles):
     """Status endpoint shows PMTiles files without search indexes."""
-    make_files_structure(['map/usa.pmtiles'])
+    make_pmtiles('map/usa.pmtiles')
 
     request, response = await async_client.get('/api/map/search/status')
     assert response.status_code == HTTPStatus.OK
@@ -164,3 +167,89 @@ async def test_delete_pmtiles_also_deletes_search_db(async_client, test_director
 
     # Search DB should also be deleted.
     assert not search_db.exists()
+
+
+@pytest.mark.asyncio
+async def test_search_status_sub_directory(async_client, test_directory, make_pmtiles):
+    """A map file in a sub-directory of the map directory is listed, with or without its index."""
+    make_pmtiles('map/regions/oregon.pmtiles')
+    indexed = make_pmtiles('map/regions/idaho.pmtiles')
+    _create_test_search_db(indexed.with_suffix('.search.db'), [])
+
+    request, response = await async_client.get('/api/map/search/status')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['map_path'] for i in response.json['missing']] == ['regions/oregon.pmtiles']
+    assert [i['map_path'] for i in response.json['indexed']] == ['regions/idaho.pmtiles']
+
+
+@pytest.mark.asyncio
+async def test_search_status_only_lists_searchable_files(async_client, test_directory, make_pmtiles):
+    """A search index is built from a Protomaps basemap; an overlay, a raster file, a terrain file and an unreadable
+    file never have one, so they are not reported as missing it."""
+    make_pmtiles('map/usa.pmtiles')
+    make_pmtiles('map/features.pmtiles', vector_metadata('power_lines', 'towers'))
+    make_pmtiles('map/satellite.pmtiles', tile_type=2)
+    make_pmtiles('map/terrain-planet.pmtiles', tile_type=4)
+    (test_directory / 'map/broken.pmtiles').write_bytes(b'not a pmtiles file')
+
+    request, response = await async_client.get('/api/map/search/status')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['name'] for i in response.json['missing']] == ['usa.pmtiles']
+    assert response.json['indexed'] == []
+
+
+def _place(name: str) -> tuple:
+    return name, 'locality', 45.0, -122.0, 5.0, 'test', 'city', 100, 'Oregon'
+
+
+@pytest.mark.asyncio
+async def test_search_sub_directory_index(async_client, test_directory, make_pmtiles):
+    """Places of a search index in a sub-directory are found."""
+    pmtiles_file = make_pmtiles('map/regions/oregon.pmtiles')
+    _create_test_search_db(pmtiles_file.with_suffix('.search.db'), [_place('Subdirville')])
+
+    request, response = await async_client.get('/api/map/search?q=Subdirville')
+    assert response.status_code == HTTPStatus.OK
+    assert [i['name'] for i in response.json['results']] == ['Subdirville']
+
+
+@pytest.mark.asyncio
+async def test_search_skips_ignored_file(async_client, test_directory, make_pmtiles):
+    """The places of an ignored map file are not found, and are found again once the file is visible."""
+    pmtiles_file = make_pmtiles('map/regions/hidden.pmtiles')
+    _create_test_search_db(pmtiles_file.with_suffix('.search.db'), [_place('Hiddenville')])
+    other = make_pmtiles('map/shown.pmtiles')
+    _create_test_search_db(other.with_suffix('.search.db'), [_place('Shownville')])
+
+    body = dict(map_path='regions/hidden.pmtiles', visible=False)
+    request, response = await async_client.post('/api/map/files/visible', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    request, response = await async_client.get('/api/map/search?q=Hiddenville')
+    assert response.json['results'] == []
+    # Only the ignored file is skipped.
+    request, response = await async_client.get('/api/map/search?q=Shownville')
+    assert [i['name'] for i in response.json['results']] == ['Shownville']
+
+    body = dict(map_path='regions/hidden.pmtiles', visible=True)
+    request, response = await async_client.post('/api/map/files/visible', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.get('/api/map/search?q=Hiddenville')
+    assert [i['name'] for i in response.json['results']] == ['Hiddenville']
+
+
+def test_build_all_in_directory_selects_searchable_files(test_directory, make_pmtiles, monkeypatch):
+    """Building every index looks in sub-directories, and does not decode files it cannot index: unfinished
+    downloads, overlays, raster and terrain files."""
+    make_pmtiles('map/usa.pmtiles')
+    make_pmtiles('map/regions/oregon.pmtiles')
+    make_pmtiles('map/.partial/idaho.pmtiles')
+    make_pmtiles('map/features.pmtiles', vector_metadata('power_lines'))
+    make_pmtiles('map/satellite.pmtiles', tile_type=2)
+    make_pmtiles('map/terrain-planet.pmtiles', tile_type=4)
+
+    built = []
+    monkeypatch.setattr(build_map_search, 'build_search_index',
+                        lambda path, max_zoom=None: built.append(path.relative_to(test_directory / 'map').as_posix()))
+    build_map_search.build_all_in_directory(test_directory / 'map')
+    assert built == ['regions/oregon.pmtiles', 'usa.pmtiles']

@@ -2,7 +2,7 @@
 // The Protomaps basemap keeps name, kind, kind_detail and elevation; there is no address,
 // phone or opening hours to show.
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
     return String(value)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")

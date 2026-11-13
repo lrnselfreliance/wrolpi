@@ -213,16 +213,47 @@ describe('a single region preview', () => {
 
 describe('the basemap source', () => {
     it("uses the user's planet file when they have one", async () => {
-        await renderManage({files: [{name: '20260329.pmtiles', size: 134e9}]});
+        await renderManage({
+            files: [
+                {
+                    name: '20260329.pmtiles', path: 'map/planet/20260329.pmtiles',
+                    map_path: 'planet/20260329.pmtiles', kind: 'basemap', visible: true, size: 134e9,
+                },
+            ],
+        });
         await userEvent.click(screen.getByRole('button', {name: 'View All Regions'}));
         await waitFor(() => expect(constructed).toHaveLength(1));
 
         const {sources} = constructed[0].options.style;
-        expect(sources.basemap.url).toBe('pmtiles:///media/map/20260329.pmtiles');
+        // The file is used where it is, here in a sub-directory of the map directory.
+        expect(sources.basemap.url).toBe('pmtiles:///media/map/planet/20260329.pmtiles');
     });
 
     it('falls back to the overview blob when there is no planet file', async () => {
-        await renderManage({files: [{name: 'us-west-20260329.pmtiles', size: 5e9}]});
+        await renderManage({
+            files: [
+                {
+                    name: 'us-west-20260329.pmtiles', path: 'map/us-west-20260329.pmtiles',
+                    map_path: 'us-west-20260329.pmtiles', kind: 'basemap', visible: true, size: 5e9,
+                },
+            ],
+        });
+        await userEvent.click(screen.getByRole('button', {name: 'View All Regions'}));
+        await waitFor(() => expect(constructed).toHaveLength(1));
+
+        const {sources} = constructed[0].options.style;
+        expect(sources.basemap.url).toBe('pmtiles:///blobs/map-overview.pmtiles');
+    });
+
+    it('falls back to the overview blob when the planet file is ignored', async () => {
+        await renderManage({
+            files: [
+                {
+                    name: '20260329.pmtiles', path: 'map/20260329.pmtiles',
+                    map_path: '20260329.pmtiles', kind: 'basemap', visible: false, size: 134e9,
+                },
+            ],
+        });
         await userEvent.click(screen.getByRole('button', {name: 'View All Regions'}));
         await waitFor(() => expect(constructed).toHaveLength(1));
 

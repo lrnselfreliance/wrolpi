@@ -380,6 +380,8 @@
                         visibility: contourVis,
                         "symbol-placement": "line",
                         "text-field": ["concat", ["get", "ele"], elevUnit],
+                        // A font the map has glyphs for; MapLibre's default is not one of them.
+                        "text-font": ["Noto Sans Regular"],
                         "text-size": 10,
                     },
                     paint: {"text-color": textColor, "text-halo-color": haloColor, "text-halo-width": 1},

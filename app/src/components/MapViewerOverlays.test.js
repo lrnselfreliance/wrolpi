@@ -109,7 +109,20 @@ jest.mock('protomaps-themes-base', () => ({
         {id: 'places_locality', type: 'symbol', source},
     ],
 }));
-jest.mock('@acalcutt/maplibre-contour-pmtiles', () => ({__esModule: true, default: {}}));
+// Contours are generated in the browser from the terrain file; only the URL of that source matters here.
+jest.mock('@acalcutt/maplibre-contour-pmtiles', () => ({
+    __esModule: true,
+    default: {
+        DemSource: class {
+            setupMaplibre() {
+            }
+
+            contourProtocolUrl() {
+                return 'dem-contour://{z}/{x}/{y}';
+            }
+        },
+    },
+}));
 jest.mock('../api', () => ({
     ...jest.requireActual('../api'),
     getMapFiles: jest.fn(),
@@ -361,5 +374,30 @@ describe('an overlay with a style beside it', () => {
             .toEqual([WATER, POWER_LINES, TOWERS]);
         // No overlay sprite is asked for.
         expect(map.style.sprite).toBe(`${window.location.origin}/map-assets/sprites/light`);
+    });
+});
+
+describe('the text of the map', () => {
+    // The fonts the map has glyphs for (modules/map/static/fonts).
+    const FONTS = ['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic'];
+    const TERRAIN = mapFile('terrain-planet.pmtiles', 'terrain', {tile_type: 'webp'});
+
+    test('contour labels are drawn in a font the map has', async () => {
+        const map = await renderViewer([PLANET, TERRAIN]);
+        const labels = map.getLayer('contour-labels');
+        expect(labels.layout['text-field']).toBeDefined();
+        // Without a font MapLibre asks for its default, which the map does not have.
+        expect(labels.layout['text-font']).toBeDefined();
+        expect(FONTS).toEqual(expect.arrayContaining(labels.layout['text-font']));
+    });
+
+    test('every layer with text names a font the map has', async () => {
+        const map = await renderViewer([PLANET, TERRAIN, FEATURES]);
+        const textLayers = map.style.layers.filter(l => l.layout?.['text-field'] !== undefined);
+        expect(textLayers.map(l => l.id)).toContain('contour-labels');
+        for (const textLayer of textLayers) {
+            expect([textLayer.id, textLayer.layout['text-font']]).toEqual([textLayer.id, expect.any(Array)]);
+            expect(FONTS).toEqual(expect.arrayContaining(textLayer.layout['text-font']));
+        }
     });
 });

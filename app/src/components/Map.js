@@ -372,7 +372,11 @@ function ManageMap() {
                 {file.title && file.title !== file.name.replace(/\.pmtiles$/, '') && <div style={{fontSize: '0.75rem', color: 'var(--muted)'}}
                                     title={file.description || undefined}>{file.title}</div>}
             </Table.Cell>
-            <Table.Cell>{MAP_FILE_KINDS[file.kind] || ''}</Table.Cell>
+            <Table.Cell>
+                {MAP_FILE_KINDS[file.kind] || ''}
+                {/* A style beside the file says how it is drawn. */}
+                {file.kind === 'overlay' && file.style_path ? ' (styled)' : ''}
+            </Table.Cell>
             <Table.Cell>{humanFileSize(file.size)}</Table.Cell>
             <Table.Cell>
                 {/* A search index is built from a basemap's places; other files have none. */}

@@ -261,3 +261,70 @@ def test_delete_pmtiles_file_forgets_ignored(async_client, test_directory, make_
     make_pmtiles('map/ignored-then-deleted.pmtiles')
     file, = lib.get_pmtiles_files()
     assert file['visible'] is True
+
+
+def _make_sprite(base, resolutions=('',)):
+    """Create sprite sheets (`<base>.json`, `<base>.png`); each says which it is."""
+    for resolution in resolutions:
+        base.with_name(f'{base.name}{resolution}.json').write_text(f'{{"sheet": "{base.name}{resolution}"}}')
+        base.with_name(f'{base.name}{resolution}.png').write_bytes(f'{base.name}{resolution}'.encode())
+
+
+def test_sidecar_style(test_directory, make_pmtiles):
+    """A style beside a map file says how it is drawn: its own, else the one its directory shares."""
+    own = make_pmtiles('map/extras/own.pmtiles', vector_metadata('towers'))
+    shared = make_pmtiles('map/extras/shared.pmtiles', vector_metadata('towers'))
+    elsewhere = make_pmtiles('map/elsewhere.pmtiles', vector_metadata('towers'))
+    assert lib.find_sidecar_style(own) is None
+
+    (test_directory / 'map/extras/style.json').write_text('{}')
+    (test_directory / 'map/extras/own.style.json').write_text('{}')
+    assert lib.find_sidecar_style(own) == test_directory / 'map/extras/own.style.json'
+    assert lib.find_sidecar_style(shared) == test_directory / 'map/extras/style.json'
+    # A directory's style is not the style of the files in other directories.
+    assert lib.find_sidecar_style(elsewhere) is None
+
+    files = {i['map_path']: i for i in lib.get_pmtiles_files()}
+    assert files['extras/own.pmtiles']['style_path'] == 'map/extras/own.style.json'
+    assert files['extras/shared.pmtiles']['style_path'] == 'map/extras/style.json'
+    assert files['elsewhere.pmtiles']['style_path'] is None
+    assert {i['has_sprite'] for i in files.values()} == {False}
+
+
+def test_sidecar_sprite(test_directory, make_pmtiles):
+    """A sprite sheet is a .json and a .png; a file's own is used before the one its directory shares."""
+    own = make_pmtiles('map/extras/own.pmtiles', vector_metadata('towers'))
+    shared = make_pmtiles('map/extras/shared.pmtiles', vector_metadata('towers'))
+    extras = test_directory / 'map/extras'
+
+    # Half of a sheet is not a sheet.
+    (extras / 'sprite.json').write_text('{}')
+    assert lib.find_sidecar_sprite(shared) is None
+
+    _make_sprite(extras / 'sprite')
+    _make_sprite(extras / 'own.sprite')
+    assert lib.find_sidecar_sprite(shared, 'json') == extras / 'sprite.json'
+    assert lib.find_sidecar_sprite(shared, 'png') == extras / 'sprite.png'
+    assert lib.find_sidecar_sprite(own, 'png') == extras / 'own.sprite.png'
+
+    files = {i['map_path']: i['has_sprite'] for i in lib.get_pmtiles_files()}
+    assert files == {'extras/own.pmtiles': True, 'extras/shared.pmtiles': True}
+
+
+def test_sidecar_sprite_resolution(test_directory, make_pmtiles):
+    """The sheet of the other resolution is used when the one asked for does not exist."""
+    path = make_pmtiles('map/extras/features.pmtiles', vector_metadata('towers'))
+    extras = test_directory / 'map/extras'
+
+    _make_sprite(extras / 'sprite')
+    assert lib.find_sidecar_sprite(path, 'png', high_resolution=True) == extras / 'sprite.png'
+
+    _make_sprite(extras / 'sprite', ('@2x',))
+    assert lib.find_sidecar_sprite(path, 'png', high_resolution=True) == extras / 'sprite@2x.png'
+    assert lib.find_sidecar_sprite(path, 'json', high_resolution=True) == extras / 'sprite@2x.json'
+    assert lib.find_sidecar_sprite(path, 'png') == extras / 'sprite.png'
+
+    # Only the double resolution sheet exists.
+    (extras / 'sprite.json').unlink()
+    assert lib.find_sidecar_sprite(path, 'png') == extras / 'sprite@2x.png'
+    assert lib.find_sidecar_sprite(path, 'json') == extras / 'sprite@2x.json'

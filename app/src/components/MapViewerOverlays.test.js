@@ -277,3 +277,89 @@ describe('the basemap layer groups', () => {
         expect(map.visibility(WATER)).toBe('none');
     });
 });
+
+describe('an overlay with a style beside it', () => {
+    const STYLED = {...FEATURES, style_path: 'map/extras/style.json', has_sprite: true};
+    const STYLE = {
+        version: 8,
+        sources: {features: {type: 'vector', url: 'https://example.com/features.json'}},
+        layers: [
+            {id: 'background', type: 'background'},
+            {id: 'lines', type: 'line', source: 'features', 'source-layer': 'power_lines'},
+            {
+                id: 'towers', type: 'symbol', source: 'features', 'source-layer': 'towers',
+                layout: {'icon-image': 'tower', 'text-field': ['get', 'name'], 'text-font': ['Roboto Bold']},
+            },
+        ],
+    };
+    const STYLED_LINES = 'overlay:extras/features.pmtiles:power_lines:lines';
+    const STYLED_TOWERS = 'overlay:extras/features.pmtiles:towers:towers';
+
+    // The style is fetched from the media directory; the overview blob is asked for with HEAD.
+    const serveStyle = (style) => {
+        global.fetch = jest.fn(async (url) => {
+            if (String(url).endsWith('style.json')) {
+                if (!style) return {ok: false};
+                return {ok: true, json: async () => style};
+            }
+            return {ok: true};
+        });
+    };
+
+    test('is drawn with that style and its own sprite', async () => {
+        serveStyle(STYLE);
+        const map = await renderViewer([PLANET, STYLED]);
+        expect(global.fetch).toHaveBeenCalledWith('/media/map/extras/style.json');
+
+        const overlayLayers = map.style.layers.filter(l => l.source === 'overlay:extras/features.pmtiles');
+        expect(overlayLayers.map(l => l.id)).toEqual([STYLED_LINES, STYLED_TOWERS]);
+        expect(map.getLayer(STYLED_TOWERS).layout['icon-image']).toBe('overlay:extras/features.pmtiles:tower');
+        expect(map.getLayer(STYLED_TOWERS).layout['text-font']).toEqual(['Noto Sans Medium']);
+        // The basemap keeps its sprite; the overlay's is beside it.
+        expect(map.style.sprite).toEqual([
+            {id: 'default', url: `${window.location.origin}/map-assets/sprites/light`},
+            {
+                id: 'overlay:extras/features.pmtiles',
+                url: `${window.location.origin}/api/map/files/sprite/extras/features.pmtiles`,
+            },
+        ]);
+        // Nothing of the style's own sources reaches the map.
+        expect(JSON.stringify(map.style)).not.toContain('example.com');
+    });
+
+    test('starts hidden, and offers only the layers its style draws', async () => {
+        serveStyle(STYLE);
+        const map = await renderViewer([PLANET, STYLED]);
+        expect([STYLED_LINES, STYLED_TOWERS].map(id => map.visibility(id))).toEqual(['none', 'none']);
+
+        await click(screen.getByLabelText('Topographic Features'));
+        expect([STYLED_LINES, STYLED_TOWERS].map(id => map.visibility(id))).toEqual(['visible', 'visible']);
+
+        await click(screen.getByRole('button', {name: 'Show layers of Topographic Features'}));
+        // The style has no layer for the file's `water`.
+        expect(screen.queryByLabelText('water')).not.toBeInTheDocument();
+        await click(screen.getByLabelText('towers'));
+        expect([STYLED_LINES, STYLED_TOWERS].map(id => map.visibility(id))).toEqual(['visible', 'none']);
+    });
+
+    test('says how many layers of the style could not be used', async () => {
+        serveStyle({
+            ...STYLE,
+            layers: [...STYLE.layers, {id: 'bad', type: 'line', source: 'features', 'source-layer': 'water', paint: {'line-width': 'wide'}}],
+        });
+        const map = await renderViewer([PLANET, STYLED]);
+        await click(screen.getByRole('button', {name: 'Show layers of Topographic Features'}));
+        expect(screen.getByText('1 style layer skipped')).toBeInTheDocument();
+        expect(map.style.layers.filter(l => l.source === 'overlay:extras/features.pmtiles').map(l => l.id))
+            .toEqual([STYLED_LINES, STYLED_TOWERS]);
+    });
+
+    test('is drawn generically when the style cannot be fetched', async () => {
+        serveStyle(null);
+        const map = await renderViewer([PLANET, STYLED]);
+        expect(map.style.layers.filter(l => l.source === 'overlay:extras/features.pmtiles').map(l => l.id))
+            .toEqual([WATER, POWER_LINES, TOWERS]);
+        // No overlay sprite is asked for.
+        expect(map.style.sprite).toBe(`${window.location.origin}/map-assets/sprites/light`);
+    });
+});

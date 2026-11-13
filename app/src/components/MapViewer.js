@@ -18,12 +18,13 @@ import {
     isOverlayEnabled,
     isOverlayLayerEnabled,
     isOverlayLayerId,
-    isRasterOverlay,
+    isStyledOverlay,
     loadOverlayState,
     mediaUrl,
     overlayColor,
     overlayLabel,
     overlayPopupHtml,
+    overlayToggleLayers,
     planMapFiles,
     pmtilesUrl,
     saveOverlayState,
@@ -31,6 +32,7 @@ import {
     setOverlayEnabled,
     setOverlayLayerEnabled,
 } from "./mapOverlays";
+import {loadOverlayStyles, overlaySpriteId, overlaySpriteUrl} from "./mapOverlayStyle";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -209,10 +211,16 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
 
     addOverlaysToStyle(styleSources, allLayers, overlays, overlayState);
 
+    // An overlay drawn with its own style may bring its own icons: a second sprite beside the
+    // basemap's, whose images are named `<sprite id>:<image>`.
+    const basemapSprite = `${window.location.origin}/map-assets/sprites/${sprite}`;
+    const overlaySprites = overlays.filter(f => isStyledOverlay(f) && f.has_sprite)
+        .map(f => ({id: overlaySpriteId(f), url: overlaySpriteUrl(f)}));
+
     return {
         version: 8,
         glyphs: "/map-assets/fonts/{fontstack}/{range}.pbf",
-        sprite: `${window.location.origin}/map-assets/sprites/${sprite}`,
+        sprite: overlaySprites.length ? [{id: "default", url: basemapSprite}, ...overlaySprites] : basemapSprite,
         sources: styleSources,
         layers: allLayers,
     };
@@ -259,7 +267,8 @@ function applyGroupVisibility(map, visibility) {
 function OverlayControl({file, label, state, onToggleFile, onToggleLayer, onToggleAllLayers}) {
     const [expanded, setExpanded] = useState(false);
     const enabled = isOverlayEnabled(state, file);
-    const vectorLayers = isRasterOverlay(file) ? [] : (file.vector_layers || []);
+    const vectorLayers = overlayToggleLayers(file);
+    const styled = isStyledOverlay(file);
     const zooms = Number.isFinite(file.min_zoom) && Number.isFinite(file.max_zoom)
         ? `z${file.min_zoom}–${file.max_zoom}` : null;
     const title = [file.description, file.path].filter(Boolean).join("\n");
@@ -288,15 +297,19 @@ function OverlayControl({file, label, state, onToggleFile, onToggleLayer, onTogg
                 <span role="button" style={linkStyle} onClick={() => onToggleAllLayers(file, true)}>All</span>
                 <span role="button" style={linkStyle} onClick={() => onToggleAllLayers(file, false)}>None</span>
             </div>
+            {file.styleSkipped > 0 && <div style={{fontSize: "0.6875rem", color: "var(--muted)"}}>
+                {file.styleSkipped} style {file.styleSkipped === 1 ? "layer" : "layers"} skipped
+            </div>}
             {vectorLayers.map(layer =>
                 <div key={layer.id} style={{padding: "0.0625rem 0"}} title={layer.description || undefined}>
                     <Checkbox
                         size="xs"
                         label={<span style={{display: "inline-flex", alignItems: "center", gap: "0.375rem"}}>
-                            <span style={{
+                            {/* A generic layer is drawn in one color; a styled one however its style says. */}
+                            {!styled && <span style={{
                                 width: "0.625rem", height: "0.625rem", flex: "none",
                                 background: overlayColor(layer.id), border: "1px solid var(--border)",
-                            }}/>
+                            }}/>}
                             {layer.id}
                         </span>}
                         checked={isOverlayLayerEnabled(state, file, layer.id)}
@@ -678,7 +691,8 @@ export default function MapViewer() {
                 const data = await getMapFiles();
                 if (data?.files) {
                     const {planet, regions, terrain, overlays: foundOverlays} = planMapFiles(data.files);
-                    overlayFiles = foundOverlays;
+                    // An overlay which came with a style is drawn with it.
+                    overlayFiles = await loadOverlayStyles(foundOverlays);
                     if (terrain) {
                         hasTerrain = true;
                         terrainPath = terrain.path;

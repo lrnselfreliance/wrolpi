@@ -20,7 +20,7 @@ def get_files(_: Request):
     return json_response(dict(files=files), HTTPStatus.OK)
 
 
-@map_bp.delete('/files/<filename:str>')
+@map_bp.delete('/files/<filename:path>')
 @openapi.description('Delete a PMTiles map file')
 @wrol_mode_check
 async def delete_file(_: Request, filename: str):
@@ -30,6 +30,21 @@ async def delete_file(_: Request, filename: str):
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 
     if deleted:
+        return response.empty()
+    return response.json({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.post('/files/visible')
+@openapi.description('Show a PMTiles map file on the map, or ignore it')
+@validate(schema.MapFileVisibleRequest)
+@wrol_mode_check
+async def post_file_visible(_: Request, body: schema.MapFileVisibleRequest):
+    try:
+        found = lib.set_pmtiles_file_visible(body.map_path, body.visible)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    if found:
         return response.empty()
     return response.json({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
 
@@ -148,7 +163,7 @@ async def rebuild_search_indexes(_: Request):
     return json_response({'error': 'No PMTiles files found'}, HTTPStatus.NOT_FOUND)
 
 
-@map_bp.post('/search/rebuild/<filename:str>')
+@map_bp.post('/search/rebuild/<filename:path>')
 @openapi.description('Rebuild search index for a single PMTiles file')
 @wrol_mode_check
 async def rebuild_single_search_index(_: Request, filename: str):

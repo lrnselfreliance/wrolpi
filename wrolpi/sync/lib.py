@@ -510,6 +510,7 @@ SYNCED_CONFIG_IMPORTS = (
     ('playlists.yaml', _import_playlists),
     ('zims.yaml', _import_zims),
     ('map_pins.yaml', _import_plain('map_pins.yaml')),
+    ('maps.yaml', _import_plain('maps.yaml')),
     ('bookmarks.yaml', _import_plain('bookmarks.yaml')),
     ('videos_downloader.yaml', _import_plain('videos_downloader.yaml')),
     ('archives_downloader.yaml', _import_plain('archives_downloader.yaml')),

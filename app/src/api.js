@@ -1679,10 +1679,24 @@ export async function getMapFiles() {
     }
 }
 
-export async function deleteMapFile(filename) {
-    const response = await apiDelete(`${API_URI}/map/files/${encodeURIComponent(filename)}`);
+// A map file is named by its path within the map directory; it may be in a sub-directory.
+function encodeMapPath(mapPath) {
+    return String(mapPath).split('/').map(encodeURIComponent).join('/');
+}
+
+export async function deleteMapFile(mapPath) {
+    const response = await apiDelete(`${API_URI}/map/files/${encodeMapPath(mapPath)}`);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Could not delete map file');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+// Show a map file on the map, or ignore it.
+export async function setMapFileVisible(mapPath, visible) {
+    const response = await apiPost(`${API_URI}/map/files/visible`, {map_path: mapPath, visible});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not change the map file');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     }
 }
@@ -1793,8 +1807,8 @@ export async function searchEstimateMap(search_str) {
     return {mapPlaces: data.map_places || 0};
 }
 
-export async function rebuildMapSearchIndex(filename) {
-    const response = await apiPost(`${API_URI}/map/search/rebuild/${encodeURIComponent(filename)}`);
+export async function rebuildMapSearchIndex(mapPath) {
+    const response = await apiPost(`${API_URI}/map/search/rebuild/${encodeMapPath(mapPath)}`);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Could not rebuild search index');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});

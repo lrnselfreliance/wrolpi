@@ -5,7 +5,9 @@ from typing import List, Dict
 
 from sqlalchemy.orm import Session
 
+from modules.map import pmtiles
 from modules.map.catalog import MAP_REGIONS, MAP_REGIONS_BY_NAME, MANIFEST_URL
+from modules.map.config import get_maps_config
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config, aiohttp_get, verify_gpg_signature
 from wrolpi.downloader import DownloadFrequency, Download, save_downloads_config, download_manager
 
@@ -19,47 +21,93 @@ def get_map_directory() -> Path:
     return map_directory
 
 
+def iter_map_files(suffix: str) -> List[Path]:
+    """The files in the map directory (at any depth) whose name ends with `suffix`, sorted.
+
+    Hidden directories are skipped; an unfinished download waits in one under its final name."""
+    map_directory = get_map_directory()
+    paths = []
+    for path in walk(map_directory):
+        if not path.name.endswith(suffix) or not path.is_file():
+            continue
+        if any(i.startswith('.') for i in path.relative_to(map_directory).parts):
+            continue
+        paths.append(path)
+    return sorted(paths)
+
+
+def get_map_path(path: Path) -> str:
+    """The name of a map file in the API and the maps config: its path relative to the map directory."""
+    return path.relative_to(get_map_directory()).as_posix()
+
+
 def get_pmtiles_files() -> List[dict]:
     """Find all .pmtiles files in the map directory and return their metadata."""
-    map_directory = get_map_directory()
-    paths = walk(map_directory)
+    maps_config = get_maps_config()
 
     files = []
-    for path in sorted(paths):
-        if path.is_file() and path.suffix == '.pmtiles':
-            stat = path.stat()
-            files.append(dict(
-                name=path.name,
-                path=str(path.relative_to(get_media_directory())),
-                size=stat.st_size,
-                mtime=stat.st_mtime,
-                has_search_index=path.with_suffix('.search.db').is_file(),
-            ))
+    for path in iter_map_files('.pmtiles'):
+        stat = path.stat()
+        map_path = get_map_path(path)
+        files.append(dict(
+            name=path.name,
+            path=str(path.relative_to(get_media_directory())),
+            map_path=map_path,
+            size=stat.st_size,
+            mtime=stat.st_mtime,
+            has_search_index=path.with_suffix('.search.db').is_file(),
+            visible=not maps_config.is_ignored(map_path),
+            **pmtiles.describe(path),
+        ))
 
     return files
+
+
+def _resolve_pmtiles_file(filename: str) -> Path | None:
+    """The PMTiles file in the map directory that `filename` (relative to the map directory) names, if it exists.
+
+    Raises ValueError if the name leads outside of the map directory."""
+    map_directory = get_map_directory().resolve()
+    # Prevent path traversal.
+    path = (map_directory / filename).resolve()
+    if not path.is_relative_to(map_directory):
+        raise ValueError(f'Invalid filename: {filename}')
+
+    if path.is_file() and path.suffix == '.pmtiles':
+        return path
+    return None
 
 
 def delete_pmtiles_file(filename: str) -> bool:
     """Delete a PMTiles file from the map directory.  Returns True if the file was deleted.
 
     Also deletes the companion .search.db file if it exists."""
-    map_directory = get_map_directory()
-    # Prevent path traversal.
-    path = (map_directory / filename).resolve()
-    if not path.is_relative_to(map_directory.resolve()):
-        raise ValueError(f'Invalid filename: {filename}')
+    path = _resolve_pmtiles_file(filename)
+    if not path:
+        return False
 
-    if path.is_file() and path.suffix == '.pmtiles':
-        path.unlink()
-        logger.warning(f'Deleted PMTiles file: {path}')
-        # Also delete companion search index.
-        search_db = path.with_suffix('.search.db')
-        if search_db.is_file():
-            search_db.unlink()
-            logger.warning(f'Deleted search index: {search_db}')
-        return True
+    map_path = path.relative_to(get_map_directory().resolve()).as_posix()
+    path.unlink()
+    logger.warning(f'Deleted PMTiles file: {path}')
+    # Also delete companion search index.
+    search_db = path.with_suffix('.search.db')
+    if search_db.is_file():
+        search_db.unlink()
+        logger.warning(f'Deleted search index: {search_db}')
+    # A file that is gone is not ignored; a later file of the same name starts visible.
+    get_maps_config().set_ignored(map_path, False)
+    return True
 
-    return False
+
+def set_pmtiles_file_visible(filename: str, visible: bool) -> bool:
+    """Show a PMTiles file on the map, or ignore it.  Returns False if there is no such file."""
+    path = _resolve_pmtiles_file(filename)
+    if not path:
+        return False
+
+    map_path = path.relative_to(get_map_directory().resolve()).as_posix()
+    get_maps_config().set_ignored(map_path, not visible)
+    return True
 
 
 def get_map_catalog() -> List[dict]:

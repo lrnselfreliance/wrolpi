@@ -12,9 +12,9 @@ import {
 import {Route, Routes, useNavigate} from "react-router";
 import {
     deleteMapFile, deleteMapPin, fetchMapSubscriptions, getMapFiles, getMapPins,
-    mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, updateMapPin
+    mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, setMapFileVisible, updateMapPin
 } from "../api";
-import {Button, Divider, Group, Header, Icon, Modal, Table, TextInput} from "./ui";
+import {Button, Divider, Group, Header, Icon, Modal, Table, TextInput, Toggle} from "./ui";
 import {SortableTable} from "./SortableTable";
 import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -24,29 +24,29 @@ import {solarCalculatorPath} from "./calculators/solar";
 import maplibregl from "maplibre-gl";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
+import {planMapFiles, pmtilesUrl} from "./mapOverlays";
 
 // Ensure PMTiles protocol is registered (may already be registered by MapViewer).
 try { maplibregl.addProtocol("pmtiles", new Protocol().tile); } catch (e) { /* already registered */ }
 
 const MAP_OVERVIEW_URL = "/blobs/map-overview.pmtiles";
 
-// Detect full planet files: "planet-20260329.pmtiles" or bare date like "20260329.pmtiles".
-function isPlanetFile(name) {
-    if (name.startsWith("planet-")) return true;
-    return /^\d{8}\.pmtiles$/.test(name);
-}
+// How the map draws a file (the API's `kind`).
+const MAP_FILE_KINDS = {
+    basemap: 'Basemap',
+    overlay: 'Overlay',
+    terrain: 'Terrain',
+    unknown: 'Unreadable',
+};
 
 // Resolve the best available base map source for preview maps.
 // Checks for a user's planet file first, falls back to the overview blob.
 async function getPreviewMapSource() {
     try {
         const data = await getMapFiles();
-        if (data?.files) {
-            for (const f of data.files) {
-                if (isPlanetFile(f.name)) {
-                    return {type: 'vector', url: `pmtiles:///media/map/${f.name}`};
-                }
-            }
+        const {planet} = planMapFiles(data?.files);
+        if (planet) {
+            return {type: 'vector', url: pmtilesUrl(planet.path)};
         }
     } catch (e) { /* ignore */ }
     return {type: 'vector', url: `pmtiles://${MAP_OVERVIEW_URL}`};
@@ -343,30 +343,47 @@ function ManageMap() {
 
     // --- Files table ---
     const fileHeaders = [
-        {key: 'name', text: 'File', sortBy: i => i.name.toLowerCase()},
+        {key: 'name', text: 'File', sortBy: i => i.map_path.toLowerCase()},
+        {key: 'kind', text: 'Type', sortBy: i => i.kind || ''},
         {key: 'size', text: 'Size', sortBy: i => i.size || 0},
         {key: 'search', text: 'Search', sortBy: null},
         {key: 'actions', text: '', sortBy: null},
+        {key: 'visible', text: 'Visible', sortBy: i => (i.visible === false ? 0 : 1)},
     ];
 
-    const handleBuildSearch = async (filename) => {
-        await rebuildMapSearchIndex(filename);
+    const handleBuildSearch = async (mapPath) => {
+        await rebuildMapSearchIndex(mapPath);
         await fetchFiles();
     };
 
+    const handleVisible = async (file, visible) => {
+        try {
+            await setMapFileVisible(file.map_path, visible);
+        } finally {
+            await fetchFiles();
+        }
+    };
+
     const fileRowFunc = (file) => {
-        return <Table.Row key={file.name}>
-            <Table.Cell>{file.name}</Table.Cell>
+        return <Table.Row key={file.map_path}>
+            <Table.Cell>
+                {/* A file in a sub-directory is shown with its directory. */}
+                {file.map_path}
+                {file.title && file.title !== file.name.replace(/\.pmtiles$/, '') && <div style={{fontSize: '0.75rem', color: 'var(--muted)'}}
+                                    title={file.description || undefined}>{file.title}</div>}
+            </Table.Cell>
+            <Table.Cell>{MAP_FILE_KINDS[file.kind] || ''}</Table.Cell>
             <Table.Cell>{humanFileSize(file.size)}</Table.Cell>
             <Table.Cell>
-                {file.name.startsWith('terrain')
+                {/* A search index is built from a basemap's places; other files have none. */}
+                {file.kind !== 'basemap'
                     ? null
                     : file.has_search_index
                         ? <Button size='xs' icon='check' disabled role='save'>Built</Button>
                         : <APIButton size='xs' icon='search'
                                      disabled={searchBuilding}
                                      loading={searchBuilding}
-                                     onClick={() => handleBuildSearch(file.name)}>
+                                     onClick={() => handleBuildSearch(file.map_path)}>
                             {searchBuilding ? 'Building...' : 'Build'}
                         </APIButton>
                 }
@@ -377,16 +394,24 @@ function ManageMap() {
                     size='xs'
                     confirmContent='Delete this map file?'
                     confirmButton='Delete'
-                    onClick={() => handleDelete(file.name)}
+                    onClick={() => handleDelete(file.map_path)}
                 >
                     Delete
                 </APIButton>
+            </Table.Cell>
+            <Table.Cell>
+                <Toggle
+                    aria-label={`Show ${file.map_path} on the map`}
+                    title='Show this file on the map, or ignore it.'
+                    checked={file.visible !== false}
+                    onChange={(e) => handleVisible(file, e.currentTarget.checked)}
+                />
             </Table.Cell>
         </Table.Row>;
     };
 
     const emptyRow = <Table.Row>
-        <Table.Cell colSpan={4}>No PMTiles map files were found in <b>map/</b></Table.Cell>
+        <Table.Cell colSpan={6}>No PMTiles map files were found in <b>map/</b></Table.Cell>
     </Table.Row>;
 
     // --- Catalog table ---
@@ -427,7 +452,7 @@ function ManageMap() {
             tableHeaders={fileHeaders}
             data={files}
             rowFunc={fileRowFunc}
-            rowKey='name'
+            rowKey='map_path'
             defaultSortColumn='name'
             emptyRow={emptyRow}
         />

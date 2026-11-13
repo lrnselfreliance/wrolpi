@@ -12,15 +12,25 @@ import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
 import {poiPopupHtml} from "./mapPoiPopup";
 import {solarCalculatorPath} from "./calculators/solar";
-
-// Terrain DEM file prefix for hillshade and contours.
-const TERRAIN_PREFIX = "terrain-";
-
-// Detect full planet files: "planet-20260329.pmtiles" or bare date like "20260329.pmtiles".
-function isPlanetFile(name) {
-    if (name.startsWith("planet-")) return true;
-    return /^\d{8}\.pmtiles$/.test(name);
-}
+import {
+    addOverlaysToStyle,
+    buildOverlayLayers,
+    isOverlayEnabled,
+    isOverlayLayerEnabled,
+    isOverlayLayerId,
+    isRasterOverlay,
+    loadOverlayState,
+    mediaUrl,
+    overlayColor,
+    overlayLabel,
+    overlayPopupHtml,
+    planMapFiles,
+    pmtilesUrl,
+    saveOverlayState,
+    setAllOverlayLayersEnabled,
+    setOverlayEnabled,
+    setOverlayLayerEnabled,
+} from "./mapOverlays";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -56,8 +66,8 @@ const SKIP_SECONDARY = new Set(["background", "earth"]);
 // Set up contour DEM source (must be called once before buildStyle).
 let demSource = null;
 let terrainUrl = null;
-function initContourSource(filename) {
-    terrainUrl = `/media/map/${filename}`;
+function initContourSource(path) {
+    terrainUrl = mediaUrl(path);
     if (demSource) return;
     demSource = new mlcontour.DemSource({
         url: `pmtiles://${window.location.origin}${terrainUrl}`,
@@ -73,8 +83,10 @@ function initContourSource(filename) {
 // scaleUnit: "metric" or "imperial" — affects contour intervals and labels.
 // `sprite` is deliberately separate from `flavor`: we ship two sprite sets (light, dark)
 // and the monochrome themes draw a `black` basemap, which has no sprites of its own.
+// overlays: the map files which are not a basemap; overlayState: which of them (and of their
+// layers) the user turned on.
 function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric",
-                    sprite = "light") {
+                    sprite = "light", overlays = [], overlayState = {}) {
     const styleSources = {};
     const allLayers = [];
 
@@ -195,6 +207,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
         );
     }
 
+    addOverlaysToStyle(styleSources, allLayers, overlays, overlayState);
+
     return {
         version: 8,
         glyphs: "/map-assets/fonts/{fontstack}/{range}.pbf",
@@ -219,7 +233,87 @@ function getInitialVisibility() {
     return v;
 }
 
-function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
+// Show or hide the basemap layers of a layer group.  Layer IDs are plain ("water") or prefixed
+// with their source ("oregon.pmtiles:water"); an overlay's layers belong to no group, whatever
+// they are named.
+function setGroupVisibility(map, groupName, visible) {
+    const prefixes = LAYER_GROUPS[groupName];
+    if (!prefixes) return;
+    for (const layer of map.getStyle()?.layers || []) {
+        if (isOverlayLayerId(layer.id)) continue;
+        const baseId = layer.id.includes(":") ? layer.id.split(":").slice(1).join(":") : layer.id;
+        if (prefixes.some(p => baseId.includes(p))) {
+            map.setLayoutProperty(layer.id, "visibility", visible ? "visible" : "none");
+        }
+    }
+}
+
+function applyGroupVisibility(map, visibility) {
+    for (const [groupName, visible] of Object.entries(visibility || {})) {
+        setGroupVisibility(map, groupName, visible);
+    }
+}
+
+// One overlay file in the layer control: a checkbox for the file, and (for a vector file) one per
+// layer behind a chevron.
+function OverlayControl({file, label, state, onToggleFile, onToggleLayer, onToggleAllLayers}) {
+    const [expanded, setExpanded] = useState(false);
+    const enabled = isOverlayEnabled(state, file);
+    const vectorLayers = isRasterOverlay(file) ? [] : (file.vector_layers || []);
+    const zooms = Number.isFinite(file.min_zoom) && Number.isFinite(file.max_zoom)
+        ? `z${file.min_zoom}–${file.max_zoom}` : null;
+    const title = [file.description, file.path].filter(Boolean).join("\n");
+    const linkStyle = {cursor: "pointer", textDecoration: "underline", color: "var(--muted)"};
+
+    return <div style={{padding: "0.125rem 0"}}>
+        <div style={{display: "flex", alignItems: "center", gap: "0.375rem"}} title={title}>
+            <Checkbox
+                label={label}
+                checked={enabled}
+                onChange={(e) => onToggleFile(file, e.currentTarget.checked)}
+            />
+            {zooms && <span style={{color: "var(--muted)", fontSize: "0.6875rem"}}>{zooms}</span>}
+            {vectorLayers.length > 0 && <span
+                role="button"
+                aria-label={`${expanded ? "Hide" : "Show"} layers of ${label}`}
+                aria-expanded={expanded}
+                style={{cursor: "pointer", marginLeft: "auto"}}
+                onClick={() => setExpanded(x => !x)}
+            >
+                <Icon name={expanded ? "chevron down" : "chevron right"} size="small"/>
+            </span>}
+        </div>
+        {expanded && <div style={{padding: "0.125rem 0 0.25rem 1.5rem"}}>
+            <div style={{fontSize: "0.6875rem", display: "flex", gap: "0.5rem", padding: "0.125rem 0"}}>
+                <span role="button" style={linkStyle} onClick={() => onToggleAllLayers(file, true)}>All</span>
+                <span role="button" style={linkStyle} onClick={() => onToggleAllLayers(file, false)}>None</span>
+            </div>
+            {vectorLayers.map(layer =>
+                <div key={layer.id} style={{padding: "0.0625rem 0"}} title={layer.description || undefined}>
+                    <Checkbox
+                        size="xs"
+                        label={<span style={{display: "inline-flex", alignItems: "center", gap: "0.375rem"}}>
+                            <span style={{
+                                width: "0.625rem", height: "0.625rem", flex: "none",
+                                background: overlayColor(layer.id), border: "1px solid var(--border)",
+                            }}/>
+                            {layer.id}
+                        </span>}
+                        checked={isOverlayLayerEnabled(state, file, layer.id)}
+                        disabled={!enabled}
+                        onChange={(e) => onToggleLayer(file, layer.id, e.currentTarget.checked)}
+                    />
+                </div>
+            )}
+        </div>}
+    </div>;
+}
+
+function LayerControl({
+                          map, scaleUnit, onScaleUnitChange, visibilityRef,
+                          overlays = [], overlayState = {}, onToggleOverlay, onToggleOverlayLayer,
+                          onToggleAllOverlayLayers,
+                      }) {
     const [visibility, setVisibility] = useState(() => {
         const v = getInitialVisibility();
         if (visibilityRef) visibilityRef.current = v;
@@ -244,15 +338,7 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
 
     const toggleGroup = useCallback((groupName, checked) => {
         if (!map) return;
-        const prefixes = LAYER_GROUPS[groupName];
-        const allMapLayers = map.getStyle()?.layers || [];
-        for (const layer of allMapLayers) {
-            // Match both plain IDs and prefixed IDs (e.g., "water" and "file.pmtiles:water").
-            const baseId = layer.id.includes(":") ? layer.id.split(":").slice(1).join(":") : layer.id;
-            if (prefixes.some(p => baseId.includes(p))) {
-                map.setLayoutProperty(layer.id, "visibility", checked ? "visible" : "none");
-            }
-        }
+        setGroupVisibility(map, groupName, checked);
         setVisibility(prev => {
             const next = {...prev, [groupName]: checked};
             if (visibilityRef) visibilityRef.current = next;
@@ -314,6 +400,19 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
                     />
                 </div>
             )}
+            {overlays.length > 0 &&
+                <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
+                    <div style={{fontWeight: 600, paddingBottom: "0.125rem"}}>Overlays</div>
+                    {overlays.map(file => <OverlayControl
+                        key={file.map_path}
+                        file={file}
+                        label={overlayLabel(file, overlays)}
+                        state={overlayState}
+                        onToggleFile={onToggleOverlay}
+                        onToggleLayer={onToggleOverlayLayer}
+                        onToggleAllLayers={onToggleAllOverlayLayers}
+                    />)}
+                </div>}
             <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
                 <Toggle
                     label={scaleUnit === "imperial" ? "Imperial" : "Metric"}
@@ -529,6 +628,12 @@ export default function MapViewer() {
     const activeFilesRef = useRef([]);
     const hasTerrainRef = useRef(false);
     const layerVisibilityRef = useRef(null);
+    // The overlay files, and what the user chose to see of them.  The ref is what the map's own
+    // callbacks and a style rebuild read.
+    const [overlays, setOverlays] = useState([]);
+    const overlaysRef = useRef([]);
+    const [overlayState, setOverlayState] = useState(loadOverlayState);
+    const overlayStateRef = useRef(overlayState);
     const [mapReady, setMapReady] = useState(false);
     const [error, setError] = useState(null);
     const [contextMenu, setContextMenu] = useState(null);
@@ -567,32 +672,25 @@ export default function MapViewer() {
 
             // Fetch user's PMTiles files first to determine what base layer is needed.
             let hasTerrain = false;
-            let terrainFileName = null;
-            let planetFile = null;
+            let terrainPath = null;
+            let overlayFiles = [];
             try {
                 const data = await getMapFiles();
                 if (data?.files) {
-                    const regionFiles = [];
-                    for (const f of data.files) {
-                        if (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles')) {
-                            hasTerrain = true;
-                            terrainFileName = f.name;
-                        } else if (isPlanetFile(f.name)) {
-                            if (!planetFile || f.size > planetFile.size) {
-                                planetFile = f;
-                            }
-                        } else {
-                            regionFiles.push(f);
-                        }
+                    const {planet, regions, terrain, overlays: foundOverlays} = planMapFiles(data.files);
+                    overlayFiles = foundOverlays;
+                    if (terrain) {
+                        hasTerrain = true;
+                        terrainPath = terrain.path;
                     }
 
-                    if (planetFile) {
-                        // Planet covers everything — sole vector source, no overview needed.
-                        mapSources.push({name: planetFile.name, url: `pmtiles:///media/map/${planetFile.name}`});
+                    if (planet) {
+                        // Planet covers everything — sole basemap source, no overview needed.
+                        mapSources.push({name: planet.map_path, url: pmtilesUrl(planet.path)});
                     } else {
                         // Use regional extracts.
-                        for (const f of regionFiles) {
-                            mapSources.push({name: f.name, url: `pmtiles:///media/map/${f.name}`});
+                        for (const f of regions) {
+                            mapSources.push({name: f.map_path, url: pmtilesUrl(f.path)});
                         }
                         // Add planet overview blob as low-zoom base layer (if available).
                         try {
@@ -612,16 +710,19 @@ export default function MapViewer() {
             if (destroyed) return;
             activeFilesRef.current = mapSources;
             hasTerrainRef.current = hasTerrain;
+            overlaysRef.current = overlayFiles;
+            setOverlays(overlayFiles);
 
             // Initialize contour source if terrain data is available.
             if (hasTerrain) {
-                initContourSource(terrainFileName);
+                initContourSource(terrainPath);
             }
 
             try {
                 map = new maplibregl.Map({
                     container: mapContainer.current,
-                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit, mapSprite(theme)),
+                    style: buildStyle(mapSources, mapFlavor(theme), hasTerrain, scaleUnit, mapSprite(theme),
+                        overlayFiles, overlayStateRef.current),
                     center: [initialLon, initialLat],
                     zoom: initialZoom,
                     attributionControl: true,
@@ -683,11 +784,17 @@ export default function MapViewer() {
                     .map(l => l.id)
                     .filter(id => id === "pois" || id.endsWith(":pois"))
                     .filter(id => map.getLayer(id));
+                // An overlay is drawn over the basemap, so its features are what a click lands on first.
+                const overlayLayerIds = () => (map.getStyle()?.layers || [])
+                    .filter(l => isOverlayLayerId(l.id) && l.type !== "raster")
+                    .map(l => l.id)
+                    .filter(id => map.getLayer(id));
+                const featuresAt = (point, layers) =>
+                    layers.length ? map.queryRenderedFeatures(point, {layers}) : [];
                 map.on("click", (e) => {
                     if (destroyed) return;
-                    const layers = poiLayerIds();
-                    if (!layers.length) return;
-                    const html = poiPopupHtml(map.queryRenderedFeatures(e.point, {layers}), e.lngLat);
+                    const html = overlayPopupHtml(featuresAt(e.point, overlayLayerIds()))
+                        || poiPopupHtml(featuresAt(e.point, poiLayerIds()), e.lngLat);
                     if (!html) return;
                     new maplibregl.Popup({offset: 8, maxWidth: "260px", className: "wrolpi-map-popup"})
                         .setLngLat(e.lngLat)
@@ -696,8 +803,7 @@ export default function MapViewer() {
                 });
                 map.on("mousemove", (e) => {
                     if (destroyed) return;
-                    const layers = poiLayerIds();
-                    const hit = layers.length && map.queryRenderedFeatures(e.point, {layers}).length;
+                    const hit = featuresAt(e.point, [...overlayLayerIds(), ...poiLayerIds()]).length;
                     map.getCanvas().style.cursor = hit ? "pointer" : "";
                 });
 
@@ -744,18 +850,7 @@ export default function MapViewer() {
                     if (!destroyed) {
                         mapRef.current = map;
                         // Apply saved layer visibility on initial load.
-                        const savedVis = getInitialVisibility();
-                        const allMapLayers = map.getStyle()?.layers || [];
-                        for (const [groupName, visible] of Object.entries(savedVis)) {
-                            const prefixes = LAYER_GROUPS[groupName];
-                            if (!prefixes) continue;
-                            for (const layer of allMapLayers) {
-                                const baseId = layer.id.includes(":") ? layer.id.split(":").slice(1).join(":") : layer.id;
-                                if (prefixes.some(p => baseId.includes(p))) {
-                                    map.setLayoutProperty(layer.id, "visibility", visible ? "visible" : "none");
-                                }
-                            }
-                        }
+                        applyGroupVisibility(map, getInitialVisibility());
                         setMapReady(true);
                     }
                 });
@@ -794,28 +889,42 @@ export default function MapViewer() {
 
         const center = map.getCenter();
         const zoom = map.getZoom();
+        // The overlays are part of the style, as the user last set them.
         map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current,
-            scaleUnit, mapSprite(theme)));
+            scaleUnit, mapSprite(theme), overlaysRef.current, overlayStateRef.current));
         map.once("style.load", () => {
             map.setCenter(center);
             map.setZoom(zoom);
             // Re-apply layer visibility state after style rebuild.
-            const vis = layerVisibilityRef.current;
-            if (vis) {
-                const allMapLayers = map.getStyle()?.layers || [];
-                for (const [groupName, visible] of Object.entries(vis)) {
-                    const prefixes = LAYER_GROUPS[groupName];
-                    if (!prefixes) continue;
-                    for (const layer of allMapLayers) {
-                        const baseId = layer.id.includes(":") ? layer.id.split(":").slice(1).join(":") : layer.id;
-                        if (prefixes.some(p => baseId.includes(p))) {
-                            map.setLayoutProperty(layer.id, "visibility", visible ? "visible" : "none");
-                        }
-                    }
-                }
-            }
+            applyGroupVisibility(map, layerVisibilityRef.current);
         });
     }, [theme, mapReady, scaleUnit]);
+
+    // Remember what the user chose to see of an overlay, and show or hide its layers to match.
+    const changeOverlayState = useCallback((file, next) => {
+        overlayStateRef.current = next;
+        setOverlayState(next);
+        saveOverlayState(next);
+        const map = mapRef.current;
+        if (!map) return;
+        for (const layer of buildOverlayLayers(file, next)) {
+            if (map.getLayer(layer.id)) {
+                map.setLayoutProperty(layer.id, "visibility", layer.layout.visibility);
+            }
+        }
+    }, []);
+
+    const handleToggleOverlay = useCallback((file, enabled) => {
+        changeOverlayState(file, setOverlayEnabled(overlayStateRef.current, file, enabled));
+    }, [changeOverlayState]);
+
+    const handleToggleOverlayLayer = useCallback((file, layerId, enabled) => {
+        changeOverlayState(file, setOverlayLayerEnabled(overlayStateRef.current, file, layerId, enabled));
+    }, [changeOverlayState]);
+
+    const handleToggleAllOverlayLayers = useCallback((file, enabled) => {
+        changeOverlayState(file, setAllOverlayLayersEnabled(overlayStateRef.current, file, enabled));
+    }, [changeOverlayState]);
 
     const handleScaleUnitChange = useCallback((unit) => {
         const map = mapRef.current;
@@ -964,7 +1073,17 @@ export default function MapViewer() {
 
     return <div ref={mapContainer} style={{position: "relative", width: "100%", height: "85vh"}}>
         {mapReady && <MapSearch map={mapRef.current}/>}
-        {mapReady && <LayerControl map={mapRef.current} scaleUnit={scaleUnit} onScaleUnitChange={handleScaleUnitChange} visibilityRef={layerVisibilityRef}/>}
+        {mapReady && <LayerControl
+            map={mapRef.current}
+            scaleUnit={scaleUnit}
+            onScaleUnitChange={handleScaleUnitChange}
+            visibilityRef={layerVisibilityRef}
+            overlays={overlays}
+            overlayState={overlayState}
+            onToggleOverlay={handleToggleOverlay}
+            onToggleOverlayLayer={handleToggleOverlayLayer}
+            onToggleAllOverlayLayers={handleToggleAllOverlayLayers}
+        />}
         {contextMenu && <div
             style={{
                 position: "absolute",

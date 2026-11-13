@@ -3,6 +3,8 @@ from unittest import mock
 import pytest
 
 from modules.map import lib
+from modules.map.config import get_maps_config
+from modules.map.conftest import vector_metadata
 from wrolpi.common import get_wrolpi_config
 
 
@@ -170,3 +172,92 @@ def test_get_custom_map_directory(async_client, test_directory, test_wrolpi_conf
 
     assert lib.get_map_directory() == (test_directory / 'custom/deep/map/directory')
     assert (test_directory / 'custom/deep/map/directory').is_dir()
+
+
+def test_get_pmtiles_files_sub_directories(test_directory, make_pmtiles):
+    """Files in sub-directories of the map directory are listed by their path within it.  Unfinished downloads
+    (in a hidden directory) are not listed."""
+    make_pmtiles('map/usa.pmtiles')
+    make_pmtiles('map/extras/features.pmtiles', vector_metadata('towers', name='Features', type='overlay'))
+    make_pmtiles('map/extras/deeper/satellite.pmtiles', dict(), tile_type=3)
+    make_pmtiles('map/.partial/oregon.pmtiles')
+
+    files = {i['map_path']: i for i in lib.get_pmtiles_files()}
+    assert sorted(files) == ['extras/deeper/satellite.pmtiles', 'extras/features.pmtiles', 'usa.pmtiles']
+
+    features = files['extras/features.pmtiles']
+    assert features['name'] == 'features.pmtiles'
+    assert features['path'] == 'map/extras/features.pmtiles'
+    assert features['kind'] == 'overlay'
+    assert features['title'] == 'Features'
+    assert features['tile_type'] == 'mvt'
+    assert [i['id'] for i in features['vector_layers']] == ['towers']
+    assert features['visible'] is True
+
+    assert files['usa.pmtiles']['kind'] == 'basemap'
+    assert files['extras/deeper/satellite.pmtiles']['kind'] == 'overlay'
+    assert files['extras/deeper/satellite.pmtiles']['tile_type'] == 'jpeg'
+
+
+def test_get_pmtiles_files_unreadable(test_directory, make_files_structure):
+    """A file which cannot be read is listed (so it can be deleted), as a file the map cannot draw."""
+    make_files_structure(['map/empty.pmtiles'])
+    file, = lib.get_pmtiles_files()
+    assert file['kind'] == 'unknown'
+    assert file['title'] is None
+    assert file['vector_layers'] == []
+
+
+def test_delete_pmtiles_file_sub_directory(test_directory, make_pmtiles):
+    """A file in a sub-directory is deleted by its path within the map directory, with its search index."""
+    pmtiles_file = make_pmtiles('map/extras/features.pmtiles')
+    search_db = pmtiles_file.with_suffix('.search.db')
+    search_db.touch()
+    same_name = make_pmtiles('map/features.pmtiles')
+
+    assert lib.delete_pmtiles_file('extras/features.pmtiles') is True
+    assert not pmtiles_file.exists()
+    assert not search_db.exists()
+    # The file of the same name in the map directory is another file.
+    assert same_name.is_file()
+
+
+def test_set_pmtiles_file_visible(async_client, test_directory, make_pmtiles):
+    """An ignored file is listed as not visible, in the maps config, until it is shown again."""
+    make_pmtiles('map/extras/ignore-me.pmtiles')
+    make_pmtiles('map/ignore-me.pmtiles')
+
+    assert lib.set_pmtiles_file_visible('extras/ignore-me.pmtiles', False) is True
+    assert get_maps_config().ignored_files == ['extras/ignore-me.pmtiles']
+    visible = {i['map_path']: i['visible'] for i in lib.get_pmtiles_files()}
+    assert visible == {'ignore-me.pmtiles': True, 'extras/ignore-me.pmtiles': False}
+
+    assert lib.set_pmtiles_file_visible('extras/ignore-me.pmtiles', True) is True
+    assert get_maps_config().ignored_files == []
+    assert all(i['visible'] for i in lib.get_pmtiles_files())
+
+
+def test_set_pmtiles_file_visible_unknown_file(async_client, test_directory, make_pmtiles):
+    """Only a map file can be ignored."""
+    make_pmtiles('map/usa.pmtiles')
+    (test_directory / 'map/notes.txt').write_text('notes')
+
+    assert lib.set_pmtiles_file_visible('missing.pmtiles', False) is False
+    assert lib.set_pmtiles_file_visible('notes.txt', False) is False
+    with pytest.raises(ValueError):
+        lib.set_pmtiles_file_visible('../../etc/passwd', False)
+    assert get_maps_config().ignored_files == []
+
+
+def test_delete_pmtiles_file_forgets_ignored(async_client, test_directory, make_pmtiles):
+    """A deleted file is no longer ignored, so a new file of the same name is drawn."""
+    make_pmtiles('map/ignored-then-deleted.pmtiles')
+    lib.set_pmtiles_file_visible('ignored-then-deleted.pmtiles', False)
+    assert get_maps_config().ignored_files == ['ignored-then-deleted.pmtiles']
+
+    assert lib.delete_pmtiles_file('ignored-then-deleted.pmtiles') is True
+    assert get_maps_config().ignored_files == []
+
+    make_pmtiles('map/ignored-then-deleted.pmtiles')
+    file, = lib.get_pmtiles_files()
+    assert file['visible'] is True

@@ -500,6 +500,7 @@ SYNCED_CONFIG_FILE_NAMES = frozenset({
     'download_manager.yaml',
     'inventory/catalog.yaml',
     'map_pins.yaml',
+    'maps.yaml',
     'playlists.yaml',
     'tags.yaml',
     'videos_downloader.yaml',
@@ -1511,6 +1512,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if map_pins_config := get_map_pins_config():
         all_configs[map_pins_config.file_name] = map_pins_config
 
+    from modules.map.config import get_maps_config
+    if maps_config := get_maps_config():
+        all_configs[maps_config.file_name] = maps_config
+
     from modules.flasher.config import get_flasher_config
     if flasher_config := get_flasher_config():
         all_configs[flasher_config.file_name] = flasher_config
@@ -1694,6 +1699,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import map pins config: {e}')
         results['map_pins'] = False
+
+    # Maps (YAML-only, no DB)
+    try:
+        from modules.map.config import get_maps_config
+        await asyncio.to_thread(get_maps_config().import_config)
+        results['maps'] = True
+        logger.debug('maps config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import maps config: {e}')
+        results['maps'] = False
 
     # Bookmarks (YAML-only, no DB)
     try:

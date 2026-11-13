@@ -29,15 +29,21 @@
         var sources = {};
         var allLayers = [];
 
-        // Add user's PMTiles files (skip terrain). Includes map-overview if present.
+        // Add user's basemap PMTiles files: not terrain, overlays, or files the user ignores.
         var files = (data.files || []).filter(function(f) {
-            return f.name.indexOf("terrain") !== 0;
+            if (f.visible === false) return false;
+            return f.kind ? f.kind === "basemap" : f.name.indexOf("terrain") !== 0;
         });
         files.forEach(function(f, i) {
-            sources[f.name] = {type: "vector", url: "pmtiles:///data/" + f.name};
-            var layers = protomaps_themes_base.default(f.name, flavor);
+            // A file is named by its path in the map directory; it may be in a sub-directory.
+            var mapPath = f.map_path || f.name;
+            // Each part of the path is encoded: a `#` or `?` in a file name would otherwise end the
+            // path, and another file (or none) would be asked for.
+            var dataPath = "/data/" + String(mapPath).split("/").map(encodeURIComponent).join("/");
+            sources[mapPath] = {type: "vector", url: "pmtiles://" + dataPath};
+            var layers = protomaps_themes_base.default(mapPath, flavor);
             if (i > 0) {
-                layers.forEach(function(l) { l.id = f.name + ":" + l.id; });
+                layers.forEach(function(l) { l.id = mapPath + ":" + l.id; });
             }
             allLayers = allLayers.concat(layers);
         });

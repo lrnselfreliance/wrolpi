@@ -226,13 +226,29 @@ def build_search_index(pmtiles_path, output_path=None, max_zoom=DEFAULT_MAX_ZOOM
     return output_path
 
 
+def _is_searchable(pmtiles_path):
+    """Whether the file has the layers a search index is built from; decoding a large file to find nothing is slow.
+
+    This script also runs without WROLPi installed, then every file is tried."""
+    project_root = str(Path(__file__).resolve().parent.parent.parent)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    try:
+        from modules.map.pmtiles import is_searchable
+    except ImportError:
+        return True
+    return is_searchable(pmtiles_path)
+
+
 def build_all_in_directory(directory, max_zoom=DEFAULT_MAX_ZOOM):
     """Build search indexes for all .pmtiles files in a directory.
 
-    Skips terrain files (which contain no place data).
+    Sub-directories are searched too, except hidden ones (unfinished downloads).  Skips terrain files (which
+    contain no place data) and files without the layers the index is built from.
     """
     directory = Path(directory).resolve()
-    pmtiles_files = sorted(directory.glob('*.pmtiles'))
+    pmtiles_files = sorted(p for p in directory.rglob('*.pmtiles')
+                           if p.is_file() and not any(i.startswith('.') for i in p.relative_to(directory).parts))
 
     if not pmtiles_files:
         print(f'No .pmtiles files found in {directory}')
@@ -240,7 +256,7 @@ def build_all_in_directory(directory, max_zoom=DEFAULT_MAX_ZOOM):
 
     # Skip terrain and planet files.
     pmtiles_files = [p for p in pmtiles_files
-                     if 'terrain' not in p.stem.lower() and not is_planet_file(p.name)]
+                     if 'terrain' not in p.stem.lower() and not is_planet_file(p.name) and _is_searchable(p)]
 
     print(f'Found {len(pmtiles_files)} PMTiles files in {directory}')
     results = []

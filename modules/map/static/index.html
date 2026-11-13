@@ -204,6 +204,12 @@
     var MAP_OVERVIEW_URL = "/blobs/map-overview.pmtiles";
     var TERRAIN_PREFIX = "terrain-";
 
+    // The URL path of a map file.  Each part of its path is encoded: a `#` or `?` in a file name
+    // would otherwise end the path, and another file (or none) would be asked for.
+    function dataPath(mapPath) {
+        return "/data/" + String(mapPath).split("/").map(encodeURIComponent).join("/");
+    }
+
     function isPlanetFile(name) {
         if (name.indexOf("planet-") === 0) return true;
         return /^\d{8}\.pmtiles$/.test(name);
@@ -293,7 +299,7 @@
             var filename = sourceNames[fi];
             sources[filename] = {
                 type: "vector",
-                url: "pmtiles:///data/" + filename,
+                url: "pmtiles://" + dataPath(filename),
             };
             var fileLayers = protomaps_themes_base.default(filename, flavor);
             if (si === 0 && fi === 0) {
@@ -318,7 +324,7 @@
 
             sources["terrain-dem"] = {
                 type: "raster-dem",
-                url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                url: "pmtiles://" + window.location.origin + dataPath(terrainFileName),
                 encoding: "terrarium",
                 tileSize: 512,
             };
@@ -705,9 +711,18 @@
                 var regionFiles = [];
                 for (var i = 0; i < allFiles.length; i++) {
                     var f = allFiles[i];
-                    if (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles')) {
-                        terrainFileName = f.name;
+                    // A file the user ignores is not drawn.
+                    if (f.visible === false) continue;
+                    // A file is named by its path in the map directory; it may be in a sub-directory.
+                    f.mapPath = f.map_path || f.name;
+                    var isTerrain = f.kind ? f.kind === "terrain"
+                        : (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles'));
+                    if (isTerrain) {
+                        terrainFileName = f.mapPath;
                         hasTerrain = true;
+                    } else if (f.kind && f.kind !== "basemap") {
+                        // Overlays (and unreadable files) are not the basemap schema this viewer draws.
+                        continue;
                     } else if (isPlanetFile(f.name)) {
                         if (!planetFile || f.size > planetFile.size) {
                             planetFile = f;
@@ -720,13 +735,13 @@
                 var pmtilesFiles;
                 if (planetFile) {
                     // Planet covers everything — sole vector source, no overview needed.
-                    pmtilesFiles = [planetFile.name];
+                    pmtilesFiles = [planetFile.mapPath];
                     hasPlanetOverview = false;
                     return pmtilesFiles;
                 }
 
                 // Use regional extracts.
-                pmtilesFiles = regionFiles.map(function(f) { return f.name; });
+                pmtilesFiles = regionFiles.map(function(f) { return f.mapPath; });
 
                 // Check for planet overview blob as low-zoom base layer.
                 return fetch(MAP_OVERVIEW_URL, {method: "HEAD"})
@@ -739,7 +754,7 @@
                 // Initialize contour source if terrain available.
                 if (hasTerrain && !demSource) {
                     demSource = new mlcontour.DemSource({
-                        url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                        url: "pmtiles://" + window.location.origin + dataPath(terrainFileName),
                         encoding: "terrarium",
                         maxzoom: 8,
                         worker: true,

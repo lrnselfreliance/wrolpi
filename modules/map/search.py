@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 from typing import List
 
-from modules.map.lib import get_map_directory
+from modules.map import pmtiles
+from modules.map.config import get_maps_config
+from modules.map.lib import get_map_directory, get_map_path, iter_map_files
 from wrolpi.common import logger, background_task
 from wrolpi.events import Events
 from wrolpi.flags import map_search_building
@@ -17,10 +19,19 @@ logger = logger.getChild(__name__)
 BUILD_SCRIPT = Path(__file__).parent.parent.parent / 'wrolpi' / 'scripts' / 'build_map_search.py'
 
 
+SEARCH_DB_SUFFIX = '.search.db'
+
+
+def get_searchable_pmtiles_files() -> List[Path]:
+    """The PMTiles files a place search index can be built from."""
+    return [i for i in iter_map_files('.pmtiles') if pmtiles.is_searchable(i)]
+
+
 def get_search_db_files() -> List[Path]:
-    """Find all .search.db files in the map directory."""
-    map_directory = get_map_directory()
-    return sorted(map_directory.glob('*.search.db'))
+    """Find the .search.db files in the map directory (at any depth), except those of ignored map files."""
+    maps_config = get_maps_config()
+    return [i for i in iter_map_files(SEARCH_DB_SUFFIX)
+            if not maps_config.is_ignored(get_map_path(i).removesuffix(SEARCH_DB_SUFFIX) + '.pmtiles')]
 
 
 def search_places(query: str, limit: int = 12, offset: int = 0, lat: float = None, lon: float = None) -> dict:
@@ -176,20 +187,16 @@ def search_places_count(query: str) -> int:
 
 
 def get_search_status() -> dict:
-    """Return status of search indexes: which PMTiles files have indexes and which don't."""
-    map_directory = get_map_directory()
+    """Return status of search indexes: which PMTiles files have indexes and which don't.
 
-    pmtiles_files = sorted(map_directory.glob('*.pmtiles'))
-    # Strip the double .search.db extension to get the PMTiles stem.
-    search_db_files = {p.name.removesuffix('.search.db') for p in get_search_db_files()}
-
+    Only files a search index can be built from are listed (a Protomaps basemap; not terrain or an overlay)."""
     indexed = []
     missing = []
 
-    for pmtiles_path in pmtiles_files:
-        info = {'name': pmtiles_path.name, 'stem': pmtiles_path.stem}
-        if pmtiles_path.stem in search_db_files:
-            db_path = pmtiles_path.with_suffix('.search.db')
+    for pmtiles_path in get_searchable_pmtiles_files():
+        info = {'name': pmtiles_path.name, 'stem': pmtiles_path.stem, 'map_path': get_map_path(pmtiles_path)}
+        db_path = pmtiles_path.with_suffix(SEARCH_DB_SUFFIX)
+        if db_path.is_file():
             info['search_db_size'] = db_path.stat().st_size
             indexed.append(info)
         else:
@@ -275,7 +282,7 @@ def rebuild_all_search_indexes(max_zoom: int = 10) -> bool:
     """Launch the build script for the entire map directory as a background task."""
     map_directory = get_map_directory()
 
-    if not any(map_directory.glob('*.pmtiles')):
+    if not get_searchable_pmtiles_files():
         return False
 
     if map_search_building.is_set():

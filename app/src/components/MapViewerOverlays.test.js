@@ -228,7 +228,8 @@ describe('an overlay in the layer control', () => {
         const map = await renderViewer([PLANET, FEATURES, SATELLITE]);
         await click(screen.getByLabelText('Topographic Features'));
 
-        expect([WATER, POWER_LINES, TOWERS].map(id => map.visibility(id))).toEqual(['visible', 'visible', 'visible']);
+        // The basemap draws water already, so the file's own is left off.
+        expect([WATER, POWER_LINES, TOWERS].map(id => map.visibility(id))).toEqual(['none', 'visible', 'visible']);
         // The other overlay is untouched.
         expect(map.visibility(RASTER)).toBe('none');
         expect(JSON.parse(localStorage.getItem(STORAGE_KEY_OVERLAYS)))
@@ -244,13 +245,19 @@ describe('an overlay in the layer control', () => {
         }));
         const map = await renderViewer([PLANET, FEATURES]);
         expect(screen.getByLabelText('Topographic Features')).toBeChecked();
-        expect([WATER, POWER_LINES, TOWERS].map(id => map.visibility(id))).toEqual(['visible', 'visible', 'none']);
+        expect([WATER, POWER_LINES, TOWERS].map(id => map.visibility(id))).toEqual(['none', 'visible', 'none']);
     });
 
     test('each layer of a vector file has its own checkbox', async () => {
         const map = await renderViewer([PLANET, FEATURES]);
         await click(screen.getByLabelText('Topographic Features'));
         await click(screen.getByRole('button', {name: 'Show layers of Topographic Features'}));
+
+        // A layer of something the basemap draws starts unchecked, and can be checked.
+        expect(screen.getByLabelText('water')).not.toBeChecked();
+        expect(screen.getByLabelText('power_lines')).toBeChecked();
+        await click(screen.getByLabelText('water'));
+        expect(screen.getByLabelText('water')).toBeChecked();
 
         await click(screen.getByLabelText('towers'));
         expect([WATER, POWER_LINES, TOWERS].map(id => map.visibility(id))).toEqual(['visible', 'visible', 'none']);
@@ -275,6 +282,8 @@ describe('the basemap layer groups', () => {
     test("do not show or hide an overlay's layer of the same name", async () => {
         const map = await renderViewer([PLANET, FEATURES]);
         await click(screen.getByLabelText('Topographic Features'));
+        await click(screen.getByRole('button', {name: 'Show layers of Topographic Features'}));
+        await click(screen.getByLabelText('water'));
         expect(map.visibility('water')).toBe('visible');
         expect(map.visibility(WATER)).toBe('visible');
 

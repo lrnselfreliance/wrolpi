@@ -5,7 +5,15 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
-import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefaultLocation} from "../api";
+import {
+    addMapPin,
+    deleteMapPin,
+    exportMapPdf,
+    getMapFiles,
+    getMapPins,
+    searchMap,
+    setMapDefaultLocation,
+} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
@@ -19,6 +27,7 @@ import {
     isOverlayLayerEnabled,
     isOverlayLayerId,
     isStyledOverlay,
+    overlaySourceId,
     loadOverlayState,
     mediaUrl,
     overlayColor,
@@ -33,8 +42,17 @@ import {
     setOverlayLayerEnabled,
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
-import MapQuadPicker from "./MapQuadPicker";
+import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
 import {quadAt} from "./mapQuads";
+import {
+    exportFileName,
+    exportFrame,
+    exportGroups,
+    exportTitle,
+    maxCanvasSide,
+    renderExport,
+    saveBlob,
+} from "./mapExport";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -665,6 +683,9 @@ export default function MapViewer() {
     // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
     const [pickingQuad, setPickingQuad] = useState(null);
     const pickingQuadRef = useRef(false);
+    // Exporting the chosen quadrangle: how far along it is, or why it could not be done.
+    const [exportStatus, setExportStatus] = useState(null);
+    const [exportError, setExportError] = useState(null);
     const [scaleUnit, setScaleUnit] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch (e) { return "metric"; }
     });
@@ -1017,6 +1038,40 @@ export default function MapViewer() {
         setContextMenu(null);
     }, [contextMenu]);
 
+    // Make a PDF of a quadrangle: the layers which are on, drawn as they are on the map.
+    const handleExportPdf = useCallback(async (quad) => {
+        const map = mapRef.current;
+        if (!map) return;
+        setExportError(null);
+        setExportStatus("Preparing…");
+        try {
+            const style = map.getStyle();
+            const overlayLabels = Object.fromEntries(overlaysRef.current.map(
+                file => [overlaySourceId(file), overlayLabel(file, overlaysRef.current)]));
+            const groups = exportGroups(
+                style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX)),
+                {layerGroups: LAYER_GROUPS, overlayLabels});
+            if (!groups.length) throw new Error("No layer of the map is turned on");
+            const rendered = await renderExport({
+                MapClass: maplibregl.Map,
+                style,
+                frame: exportFrame(quad, {maxSide: maxCanvasSide()}),
+                groups,
+                ignoredPrefixes: [QUAD_LAYER_PREFIX],
+                setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
+                onProgress: (name, index, count) => setExportStatus(`Drawing ${name} (${index + 1} of ${count})…`),
+            });
+            setExportStatus("Making the PDF…");
+            const pdf = await exportMapPdf({...rendered, title: exportTitle(quad)});
+            saveBlob(pdf, exportFileName(quad));
+        } catch (e) {
+            console.error("Map export failed:", e);
+            setExportError(e?.message || "The map could not be exported");
+        } finally {
+            setExportStatus(null);
+        }
+    }, []);
+
     const handleExportPng = useCallback(() => {
         const map = mapRef.current;
         if (!map) return;
@@ -1225,7 +1280,13 @@ export default function MapViewer() {
             map={mapRef.current}
             scaleUnit={scaleUnit}
             initialQuad={pickingQuad.quad}
-            onClose={() => setPickingQuad(null)}
+            onExport={handleExportPdf}
+            status={exportStatus}
+            error={exportError}
+            onClose={() => {
+                setExportError(null);
+                setPickingQuad(null);
+            }}
         />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}

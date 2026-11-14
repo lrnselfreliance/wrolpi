@@ -3,6 +3,7 @@ import {
     addOverlaysToStyle,
     buildOverlayLayers,
     buildOverlaySource,
+    isBasemapLayer,
     isOverlayEnabled,
     isOverlayLayerEnabled,
     loadOverlayState,
@@ -120,6 +121,35 @@ describe('what the user chose to see', () => {
         expect(isOverlayLayerEnabled(state, FEATURES, 'power_lines')).toBe(true);
         // Turning a layer off does not turn the file off.
         expect(isOverlayEnabled(state, FEATURES)).toBe(true);
+    });
+
+    test('a layer the basemap already draws is off until it is turned on', () => {
+        // Both schemas a basemap is commonly made in, whatever the case.
+        for (const id of ['roads', 'transportation', 'transportation_name', 'water', 'building', 'Place']) {
+            expect(isBasemapLayer(id)).toBe(true);
+        }
+        for (const id of ['towers', 'power_lines', 'housenumber', 'water_towers', '', undefined]) {
+            expect(isBasemapLayer(id)).toBe(false);
+        }
+
+        const file = {
+            ...FEATURES,
+            vector_layers: [{id: 'towers', geometry: 'Point'}, {id: 'transportation', geometry: 'LineString'}],
+        };
+        let state = setOverlayEnabled({}, file, true);
+        expect(isOverlayLayerEnabled(state, file, 'towers')).toBe(true);
+        expect(isOverlayLayerEnabled(state, file, 'transportation')).toBe(false);
+        const visibility = () => Object.fromEntries(
+            buildOverlayLayers(file, state).map(l => [l['source-layer'], l.layout.visibility]));
+        expect(visibility()).toEqual({towers: 'visible', transportation: 'none'});
+
+        // The choice is the user's.
+        state = setOverlayLayerEnabled(state, file, 'transportation', true);
+        expect(isOverlayLayerEnabled(state, file, 'transportation')).toBe(true);
+        expect(visibility()).toEqual({towers: 'visible', transportation: 'visible'});
+        state = setAllOverlayLayersEnabled(state, file, false);
+        state = setAllOverlayLayersEnabled(state, file, true);
+        expect(visibility()).toEqual({towers: 'visible', transportation: 'visible'});
     });
 
     test('all the layers of a file can be turned off and on', () => {

@@ -16,7 +16,7 @@ const FILE = {
     name: 'features.pmtiles', map_path: 'extras/features.pmtiles', path: 'map/extras/features.pmtiles',
     kind: 'overlay', tile_type: 'mvt', visible: true,
     style_path: 'map/extras/style.json',
-    vector_layers: [layer('repeaters'), layer('roads'), layer('parks')],
+    vector_layers: [layer('repeaters'), layer('trails'), layer('parks')],
 };
 const SOURCE = 'overlay:extras/features.pmtiles';
 // The map's own icons: every image a style names is one of these.
@@ -37,7 +37,7 @@ const STYLE = {
         {id: 'relief', type: 'raster', source: 'relief'},
         {id: 'parks', type: 'fill', source: 'features', 'source-layer': 'parks', paint: {'fill-color': '#9c9'}},
         {id: 'contours', type: 'line', source: 'contours', 'source-layer': 'contours'},
-        {id: 'roads', type: 'line', source: 'features', 'source-layer': 'roads', paint: {'line-color': '#c60'}},
+        {id: 'trails', type: 'line', source: 'features', 'source-layer': 'trails', paint: {'line-color': '#c60'}},
         // A layer of the file's source which this file does not have.
         {id: 'buildings', type: 'fill', source: 'features', 'source-layer': 'buildings'},
         {
@@ -58,11 +58,11 @@ describe('adaptOverlayStyle', () => {
     test("keeps the layers which draw this file, in the style's order", () => {
         const result = adapted();
         expect(result.layers.map(l => l.id)).toEqual([
-            `${SOURCE}:parks:parks`, `${SOURCE}:roads:roads`, `${SOURCE}:repeaters:repeaters`,
+            `${SOURCE}:parks:parks`, `${SOURCE}:trails:trails`, `${SOURCE}:repeaters:repeaters`,
         ]);
         expect(result.skipped).toBe(0);
         // What the style said of a layer is kept.
-        expect(byId(result, 'roads').paint).toEqual({'line-color': '#c60'});
+        expect(byId(result, 'trails').paint).toEqual({'line-color': '#c60'});
         expect(byId(result, 'repeaters').minzoom).toBe(10);
     });
 
@@ -79,12 +79,12 @@ describe('adaptOverlayStyle', () => {
             ...STYLE,
             layers: [
                 // Another source has a layer of the same name.
-                {id: 'other-roads', type: 'line', source: 'contours', 'source-layer': 'roads'},
+                {id: 'other-trails', type: 'line', source: 'contours', 'source-layer': 'trails'},
                 ...STYLE.layers,
             ],
         };
         expect(adapted(style).layers.map(l => l.id)).toEqual([
-            `${SOURCE}:parks:parks`, `${SOURCE}:roads:roads`, `${SOURCE}:repeaters:repeaters`,
+            `${SOURCE}:parks:parks`, `${SOURCE}:trails:trails`, `${SOURCE}:repeaters:repeaters`,
         ]);
     });
 
@@ -114,15 +114,15 @@ describe('adaptOverlayStyle', () => {
         const style = {
             ...STYLE,
             layers: [
-                {id: 'bad-paint', type: 'line', source: 'features', 'source-layer': 'roads', paint: {'line-width': 'wide'}},
-                {id: 'bad-type', type: 'sparkles', source: 'features', 'source-layer': 'roads'},
+                {id: 'bad-paint', type: 'line', source: 'features', 'source-layer': 'trails', paint: {'line-width': 'wide'}},
+                {id: 'bad-type', type: 'sparkles', source: 'features', 'source-layer': 'trails'},
                 ...STYLE.layers,
             ],
         };
         const result = adapted(style);
         expect(result.skipped).toBe(2);
         expect(result.layers.map(l => l.id)).toEqual([
-            `${SOURCE}:parks:parks`, `${SOURCE}:roads:roads`, `${SOURCE}:repeaters:repeaters`,
+            `${SOURCE}:parks:parks`, `${SOURCE}:trails:trails`, `${SOURCE}:repeaters:repeaters`,
         ]);
     });
 
@@ -205,7 +205,7 @@ describe('fonts', () => {
         const style = {...STYLE, layers: [{...STYLE.layers[6], layout: {'text-field': ['get', 'callsign']}}]};
         expect(byId(adapted(style), 'repeaters').layout['text-font']).toEqual(['Noto Sans Regular']);
         // A layer without text is not given a font.
-        expect(byId(adapted(), 'roads').layout).toBeUndefined();
+        expect(byId(adapted(), 'trails').layout).toBeUndefined();
     });
 });
 
@@ -326,7 +326,7 @@ describe('icons', () => {
             'icon-color': '#c00', 'icon-halo-color': '#ffffff', 'icon-halo-width': 1, 'text-color': '#00c',
         });
         // A layer without an icon is not given an icon's paint.
-        expect(byId(adapted(), 'roads').paint).toEqual({'line-color': '#c60'});
+        expect(byId(adapted(), 'trails').paint).toEqual({'line-color': '#c60'});
     });
 });
 
@@ -480,7 +480,7 @@ describe('a styled overlay on the map', () => {
     test('is drawn with its style, not the generic colors', () => {
         const layers = buildOverlayLayers(styled, setOverlayEnabled({}, styled, true));
         expect(layers.map(l => [l.id, l.type])).toEqual([
-            [`${SOURCE}:parks:parks`, 'fill'], [`${SOURCE}:roads:roads`, 'line'],
+            [`${SOURCE}:parks:parks`, 'fill'], [`${SOURCE}:trails:trails`, 'line'],
             [`${SOURCE}:repeaters:repeaters`, 'symbol'],
         ]);
         expect(layers[2].layout['icon-image']).toBe(`${ICONS}:ham_radio`);
@@ -490,7 +490,7 @@ describe('a styled overlay on the map', () => {
         expect(visibility({})).toEqual(['none', 'none', 'none']);
         let state = setOverlayEnabled({}, styled, true);
         expect(visibility(state)).toEqual(['visible', 'visible', 'visible']);
-        state = setOverlayLayerEnabled(state, styled, 'roads', false);
+        state = setOverlayLayerEnabled(state, styled, 'trails', false);
         expect(visibility(state)).toEqual(['visible', 'none', 'visible']);
     });
 
@@ -505,9 +505,9 @@ describe('a styled overlay on the map', () => {
 
     test('only the layers its style draws can be chosen', () => {
         const file = {...styled, vector_layers: [...FILE.vector_layers, layer('buildings')]};
-        expect(overlayToggleLayers(file).map(l => l.id)).toEqual(['repeaters', 'roads', 'parks']);
+        expect(overlayToggleLayers(file).map(l => l.id)).toEqual(['repeaters', 'trails', 'parks']);
         // Without a style, every layer of the file is drawn.
         expect(overlayToggleLayers({...file, styleLayers: undefined}).map(l => l.id))
-            .toEqual(['repeaters', 'roads', 'parks', 'buildings']);
+            .toEqual(['repeaters', 'trails', 'parks', 'buildings']);
     });
 });

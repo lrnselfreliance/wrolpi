@@ -126,9 +126,28 @@ export function isOverlayEnabled(state, file) {
     return state?.[file.map_path]?.enabled === true;
 }
 
-// Once a file is on, each of its layers is drawn until the user turns that layer off.
+// The layers of the schemas a basemap is commonly made in (Protomaps, which the map's own basemap
+// is, and OpenMapTiles).  A file which also has other things often carries these too, and drawing
+// them again over the basemap doubles every road and label.
+const BASEMAP_LAYERS = new Set([
+    // Protomaps
+    "earth", "water", "roads", "landuse", "landcover", "buildings", "boundaries", "places", "pois",
+    "transit", "natural", "physical_line", "physical_point",
+    // OpenMapTiles
+    "waterway", "water_name", "landuse", "landcover", "park", "boundary", "aeroway", "aerodrome_label",
+    "transportation", "transportation_name", "building", "place", "poi", "mountain_peak",
+]);
+
+// Whether a layer of an overlay is of something the basemap already draws.
+export function isBasemapLayer(layerId) {
+    return BASEMAP_LAYERS.has(String(layerId ?? "").toLowerCase());
+}
+
+// Once a file is on, each of its layers is as the user chose.  A layer the user has not chosen for
+// is drawn, unless the basemap already draws the same thing.
 export function isOverlayLayerEnabled(state, file, layerId) {
-    return state?.[file.map_path]?.layers?.[layerId] !== false;
+    const chosen = state?.[file.map_path]?.layers?.[layerId];
+    return typeof chosen === "boolean" ? chosen : !isBasemapLayer(layerId);
 }
 
 export function setOverlayEnabled(state, file, enabled) {

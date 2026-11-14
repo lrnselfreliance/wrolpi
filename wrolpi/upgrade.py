@@ -18,6 +18,9 @@ logger = logger.getChild(__name__)
 # Path to the upgrade script.
 UPGRADE_SCRIPT = PROJECT_DIR / 'upgrade.sh'
 
+# Exits non-zero unless a commit is signed by the WROLPi release key (the same check install paths use).
+VERIFY_COMMIT_SCRIPT = pathlib.Path(__file__).parent / 'scripts/verify_wrolpi_commit.sh'
+
 # The env file systemd reads for wrolpi-upgrade.service.
 UPGRADE_ENV_FILE = '/tmp/wrolpi-upgrade.env'
 
@@ -175,6 +178,23 @@ def get_commits_behind(branch: str) -> int:
     return 0
 
 
+def is_commit_signed(rev: str, repo: pathlib.Path = None, key: pathlib.Path = None) -> bool:
+    """Return True only if `rev` in `repo` (default: the WROLPi checkout) is signed by the WROLPi release key.
+
+    The key comes from the running (already verified) checkout, never from the fetched commit."""
+    cmd = ['bash', str(VERIFY_COMMIT_SCRIPT), str(repo or PROJECT_DIR), rev]
+    if key:
+        cmd.append(str(key))
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        if result.returncode != 0:
+            logger.info(f'{rev} is not signed by the WROLPi release key: {result.stderr.decode().strip()}')
+        return result.returncode == 0
+    except Exception as e:
+        logger.error(f'Failed to verify the signature of {rev}', exc_info=e)
+        return False
+
+
 @wrol_mode_check
 def check_for_update(fetch: bool = True) -> dict:
     """
@@ -230,11 +250,12 @@ def check_for_update(fetch: bool = True) -> dict:
     if not local_commit or not remote_commit:
         return result
 
-    # Check if update is available
+    # Check if update is available.  upgrade.sh refuses a remote tip that is not signed by the release key, so
+    # only a signed tip is offered.
     if local_commit != remote_commit:
         commits_behind = get_commits_behind(branch)
         result['commits_behind'] = commits_behind
-        result['update_available'] = commits_behind > 0
+        result['update_available'] = commits_behind > 0 and is_commit_signed(f'origin/{branch}')
 
     return result
 

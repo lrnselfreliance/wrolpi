@@ -15,9 +15,12 @@ from wrolpi.upgrade import (
     get_remote_commit,
     get_commits_behind,
     git_fetch,
+    is_commit_signed,
     refresh_update_status,
     start_upgrade,
 )
+from wrolpi.test.test_common import gpg_test_key  # noqa: F401 (fixture)
+from wrolpi.test.test_verify_wrolpi_commit import signed_repo  # noqa: F401 (fixture)
 
 
 class TestGitFunctions:
@@ -200,13 +203,47 @@ class TestCheckForUpdate:
                 patch('wrolpi.upgrade.git_fetch', return_value=True), \
                 patch('wrolpi.upgrade.get_local_commit', return_value='abc1234'), \
                 patch('wrolpi.upgrade.get_remote_commit', return_value='def5678'), \
-                patch('wrolpi.upgrade.get_commits_behind', return_value=3):
+                patch('wrolpi.upgrade.get_commits_behind', return_value=3), \
+                patch('wrolpi.upgrade.is_commit_signed', return_value=True) as mock_signed:
             result = check_for_update(fetch=True)
             assert result['update_available'] is True
             assert result['branch'] == 'master'
             assert result['current_commit'] == 'abc1234'
             assert result['latest_commit'] == 'def5678'
             assert result['commits_behind'] == 3
+            mock_signed.assert_called_once_with('origin/master')
+
+    def test_check_for_update_unsigned_remote(self):
+        """An update is not offered when the remote tip is not signed by the release key; upgrade.sh would refuse
+        it."""
+        mock_path = MagicMock()
+        mock_path.is_dir.return_value = True
+        with patch('wrolpi.upgrade.DOCKERIZED', False), \
+                patch('wrolpi.upgrade.PROJECT_DIR', mock_path), \
+                patch('wrolpi.upgrade.get_current_branch', return_value='master'), \
+                patch('wrolpi.upgrade.git_fetch', return_value=True), \
+                patch('wrolpi.upgrade.get_local_commit', return_value='abc1234'), \
+                patch('wrolpi.upgrade.get_remote_commit', return_value='def5678'), \
+                patch('wrolpi.upgrade.get_commits_behind', return_value=3), \
+                patch('wrolpi.upgrade.is_commit_signed', return_value=False) as mock_signed:
+            result = check_for_update(fetch=True)
+            mock_signed.assert_called_once_with('origin/master')
+            assert result['update_available'] is False
+            assert result['latest_commit'] == 'def5678'
+            assert result['commits_behind'] == 3
+
+
+def test_is_commit_signed(signed_repo, monkeypatch):
+    """is_commit_signed accepts only a commit signed by the pinned key."""
+    repo, key, fingerprint = signed_repo
+    monkeypatch.setenv('WROLPI_SIGNING_FINGERPRINT', fingerprint)
+    assert is_commit_signed('signed', repo=repo, key=key) is True
+    assert is_commit_signed('unsigned', repo=repo, key=key) is False
+    assert is_commit_signed('does-not-exist', repo=repo, key=key) is False
+
+    # The real WROLPi key did not sign the test commit.
+    monkeypatch.delenv('WROLPI_SIGNING_FINGERPRINT')
+    assert is_commit_signed('signed', repo=repo) is False
 
     def test_check_for_update_skip_fetch(self):
         """check_for_update can skip fetch."""

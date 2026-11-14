@@ -286,6 +286,10 @@ def test_sidecar_style(test_directory, make_pmtiles):
 
     files = {i['map_path']: i for i in lib.get_pmtiles_files()}
     assert files['extras/own.pmtiles']['style_path'] == 'map/extras/own.style.json'
+    # The style is also named within the map directory, for the viewer which is served only that.
+    assert files['extras/own.pmtiles']['style_map_path'] == 'extras/own.style.json'
+    assert files['extras/shared.pmtiles']['style_map_path'] == 'extras/style.json'
+    assert files['elsewhere.pmtiles']['style_map_path'] is None
     assert files['extras/shared.pmtiles']['style_path'] == 'map/extras/style.json'
     assert files['elsewhere.pmtiles']['style_path'] is None
     assert {i['has_sprite'] for i in files.values()} == {False}
@@ -328,3 +332,15 @@ def test_sidecar_sprite_resolution(test_directory, make_pmtiles):
     (extras / 'sprite.json').unlink()
     assert lib.find_sidecar_sprite(path, 'png') == extras / 'sprite@2x.png'
     assert lib.find_sidecar_sprite(path, 'json') == extras / 'sprite@2x.json'
+
+
+def test_sidecar_style_custom_map_directory(test_directory, make_pmtiles, test_wrolpi_config):
+    """The style's path within the map directory does not depend on what the map directory is called."""
+    get_wrolpi_config().map_destination = 'atlas'
+    make_pmtiles('atlas/extras/features.pmtiles', vector_metadata('towers'))
+    (test_directory / 'atlas/extras/style.json').write_text('{}')
+
+    file, = lib.get_pmtiles_files()
+    assert file['map_path'] == 'extras/features.pmtiles'
+    assert file['style_path'] == 'atlas/extras/style.json'
+    assert file['style_map_path'] == 'extras/style.json'

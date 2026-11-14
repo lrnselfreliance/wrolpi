@@ -40,6 +40,7 @@
     "test": "TZ=America/New_York react-scripts test",
     "eject": "react-scripts eject",
     "cy:run": "cypress run",
+    "sync:map-shared": "mkdir -p ../modules/map/static/js && cp src/map-shared/overlays.js src/map-shared/overlayStyle.js ../modules/map/static/js/",
     "cy:open": "cypress open"
   },
   "eslintConfig": {

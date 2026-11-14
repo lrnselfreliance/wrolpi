@@ -74,10 +74,57 @@ const fileBrowserTasks = {
   },
 };
 
+/*
+ * Real map files for the standalone map viewer's e2e test, jailed to one directory inside the
+ * media directory's map directory.
+ */
+const zlib = require("zlib");
+
+const MAP_SANDBOX_NAME = "cypress-map";
+const MAP_SANDBOX_DIR = path.join(MEDIA_DIR, "map", MAP_SANDBOX_NAME);
+
+// A PMTiles version 3 file with a header, metadata and an empty tile directory: enough for the
+// map to list and add it, with no tiles to draw.
+function pmtilesFile(metadata) {
+  const directory = zlib.gzipSync(Buffer.from([0]));
+  const meta = zlib.gzipSync(Buffer.from(JSON.stringify(metadata)));
+  const header = Buffer.alloc(127);
+  header.write("PMTiles", 0, "latin1");
+  header[7] = 3;
+  header.writeBigUInt64LE(127n, 8);
+  header.writeBigUInt64LE(BigInt(directory.length), 16);
+  header.writeBigUInt64LE(BigInt(127 + directory.length), 24);
+  header.writeBigUInt64LE(BigInt(meta.length), 32);
+  // Clustered, internal compression gzip, tile compression gzip, tile type mvt, zoom 0-8.
+  Buffer.from([1, 2, 2, 1, 0, 8]).copy(header, 96);
+  header.writeInt32LE(-1800000000, 102);
+  header.writeInt32LE(-850000000, 106);
+  header.writeInt32LE(1800000000, 110);
+  header.writeInt32LE(850000000, 114);
+  return Buffer.concat([header, directory, meta]);
+}
+
+const mapTasks = {
+  // Wipe the sandbox and create an overlay file there, with a style beside it if given.
+  "map:seed-overlay": ({ name, metadata, style }) => {
+    if (!/^[a-z-]+$/.test(name)) throw new Error(`Refusing the map file name: ${name}`);
+    fs.rmSync(MAP_SANDBOX_DIR, { recursive: true, force: true });
+    fs.mkdirSync(MAP_SANDBOX_DIR, { recursive: true });
+    fs.writeFileSync(path.join(MAP_SANDBOX_DIR, `${name}.pmtiles`), pmtilesFile(metadata));
+    if (style) fs.writeFileSync(path.join(MAP_SANDBOX_DIR, `${name}.style.json`), JSON.stringify(style));
+    return `${MAP_SANDBOX_NAME}/${name}.pmtiles`;
+  },
+  "map:cleanup": () => {
+    fs.rmSync(MAP_SANDBOX_DIR, { recursive: true, force: true });
+    return true;
+  },
+};
+
 module.exports = defineConfig({
   e2e: {
     setupNodeEvents(on) {
       on("task", fileBrowserTasks);
+      on("task", mapTasks);
     },
     // Use HTTP for CI, HTTPS for local development
     baseUrl: process.env.CI ? 'http://localhost:3000' : 'https://localhost:8443',

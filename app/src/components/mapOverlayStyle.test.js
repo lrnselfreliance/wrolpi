@@ -362,6 +362,22 @@ describe('patterns', () => {
         expect(pattern({'fill-color': '#9c9'})).toEqual({'fill-color': '#9c9'});
     });
 
+    test('a patterned extrusion is a translucent color too, and keeps its shape', () => {
+        expect(pattern({'fill-extrusion-pattern': 'brick'}, 'fill-extrusion'))
+            .toEqual({'fill-extrusion-color': '#808080', 'fill-extrusion-opacity': 0.25});
+        expect(pattern({'fill-extrusion-pattern': 'brick', 'fill-extrusion-height': ['get', 'height']}, 'fill-extrusion'))
+            .toEqual({
+                'fill-extrusion-color': '#808080', 'fill-extrusion-opacity': 0.25,
+                'fill-extrusion-height': ['get', 'height'],
+            });
+        // The style's own color and opacity are kept.
+        expect(pattern({
+            'fill-extrusion-pattern': 'brick', 'fill-extrusion-color': '#a52', 'fill-extrusion-opacity': 0.8,
+        }, 'fill-extrusion')).toEqual({'fill-extrusion-color': '#a52', 'fill-extrusion-opacity': 0.8});
+        // An extrusion without a pattern is as its style has it.
+        expect(pattern({'fill-extrusion-height': 10}, 'fill-extrusion')).toEqual({'fill-extrusion-height': 10});
+    });
+
     test('a patterned line is a plain line', () => {
         expect(pattern({'line-pattern': 'ruling', 'line-width': 2}, 'line'))
             .toEqual({'line-color': '#808080', 'line-width': 2});

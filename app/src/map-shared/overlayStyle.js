@@ -232,6 +232,12 @@ export function adaptOverlayStyle(style, file, {validateLayer} = {}) {
         if (patterns.includes("line-pattern")) {
             layer.paint = {"line-color": PATTERN_COLOR, ...layer.paint};
         }
+        if (patterns.includes("fill-extrusion-pattern")) {
+            // As a fill: an extrusion without its pattern would be opaque black too.
+            layer.paint = {
+                "fill-extrusion-color": PATTERN_COLOR, "fill-extrusion-opacity": PATTERN_OPACITY, ...layer.paint,
+            };
+        }
 
         // One bad layer must not stop the map: MapLibre refuses a whole style over it.
         let errors = [];

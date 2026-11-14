@@ -3,7 +3,9 @@ import {
     bundledFont,
     loadOverlayStyle,
     loadOverlayStyles,
-    overlaySpriteUrl,
+    addMissingOverlayIcon,
+    missingOverlayIcon,
+    OVERLAY_ICONS_SPRITE_ID,
 } from './mapOverlayStyle';
 import {buildOverlayLayers, overlayToggleLayers, setOverlayEnabled, setOverlayLayerEnabled} from './mapOverlays';
 
@@ -12,11 +14,13 @@ import {buildOverlayLayers, overlayToggleLayers, setOverlayEnabled, setOverlayLa
 const layer = (id) => ({id, geometry: null, minzoom: 0, maxzoom: 13, description: null});
 const FILE = {
     name: 'features.pmtiles', map_path: 'extras/features.pmtiles', path: 'map/extras/features.pmtiles',
-    kind: 'overlay', tile_type: 'mvt', visible: true, has_sprite: true,
+    kind: 'overlay', tile_type: 'mvt', visible: true,
     style_path: 'map/extras/style.json',
     vector_layers: [layer('repeaters'), layer('roads'), layer('parks')],
 };
 const SOURCE = 'overlay:extras/features.pmtiles';
+// The map's own icons: every image a style names is one of these.
+const ICONS = 'overlay-icons';
 
 // As a style arrives: its own source names and URLs, and layers of sources which are not this file.
 const STYLE = {
@@ -211,9 +215,10 @@ describe('icons', () => {
         return adapted(style, file);
     };
 
-    test("an image is one of the overlay's own sprite", () => {
-        expect(byId(adapted(), 'repeaters').layout['icon-image']).toBe(`${SOURCE}:ham_radio`);
-        expect(byId(withIcon('{class}_11'), 'repeaters').layout['icon-image']).toBe(`${SOURCE}:{class}_11`);
+    test("an image is one of the map's overlay icons, never of the style's own sprite", () => {
+        expect(OVERLAY_ICONS_SPRITE_ID).toBe(ICONS);
+        expect(byId(adapted(), 'repeaters').layout['icon-image']).toBe(`${ICONS}:ham_radio`);
+        expect(byId(withIcon('{class}_11'), 'repeaters').layout['icon-image']).toBe(`${ICONS}:{class}_11`);
     });
 
     test('an image chosen by an expression: what it evaluates to is renamed, not its strings', () => {
@@ -223,14 +228,14 @@ describe('icons', () => {
         const value = byId(result, 'repeaters').layout['icon-image'];
         // The expression is intact inside the wrapping: the label "hospital" still matches the class.
         expect(JSON.stringify(value)).toContain(JSON.stringify(icon));
-        expect(JSON.stringify(value)).toContain(`"${SOURCE}:"`);
+        expect(JSON.stringify(value)).toContain(`"${ICONS}:"`);
     });
 
     describe('an image named by a property function', () => {
         // The wrapping every image gets; `expression` is what gives the name.
         const wrapped = expression => ['image', ['let', 'wrolpi_image', ['to-string', expression],
             ['case', ['==', ['var', 'wrolpi_image'], ''], '',
-                ['concat', `${SOURCE}:`, ['var', 'wrolpi_image']]]]];
+                ['concat', `${ICONS}:`, ['var', 'wrolpi_image']]]]];
         const iconOf = (fn) => {
             const result = withIcon(fn);
             // The layer is kept: its text is drawn whatever becomes of its image.
@@ -257,13 +262,13 @@ describe('icons', () => {
             expect(iconOf({property: 'height', stops: [[0, 'low'], [100, 'tall']]}))
                 .toEqual(wrapped(['step', ['to-number', ['get', 'height'], 0], 'low', 100, 'tall']));
             // A single stop is one name.
-            expect(iconOf({property: 'height', type: 'interval', stops: [[10, 'only']]})).toBe(`${SOURCE}:only`);
-            expect(iconOf({stops: [[10, 'only']]})).toBe(`${SOURCE}:only`);
+            expect(iconOf({property: 'height', type: 'interval', stops: [[10, 'only']]})).toBe(`${ICONS}:only`);
+            expect(iconOf({stops: [[10, 'only']]})).toBe(`${ICONS}:only`);
         });
 
         test('a name for each range of the zoom: each name is renamed, the zoom stays outermost', () => {
             expect(iconOf({stops: [[0, 'dot'], [12, 'tower'], [15, '{class}_big']]}))
-                .toEqual(['step', ['zoom'], `${SOURCE}:dot`, 12, `${SOURCE}:tower`, 15, `${SOURCE}:{class}_big`]);
+                .toEqual(['step', ['zoom'], `${ICONS}:dot`, 12, `${ICONS}:tower`, 15, `${ICONS}:{class}_big`]);
         });
 
         test('a function which cannot be rewritten: the layer is drawn without the image', () => {
@@ -286,51 +291,138 @@ describe('icons', () => {
                 expect(byId(result, 'repeaters').layout['text-field']).toEqual(['get', 'callsign']);
             }
         });
-
-        test('a pattern named by a function', () => {
-            const style = {
-                ...STYLE,
-                layers: [{
-                    id: 'parks', type: 'fill', source: 'features', 'source-layer': 'parks',
-                    paint: {'fill-pattern': {type: 'identity', property: 'pattern'}},
-                }],
-            };
-            const result = adapted(style);
-            expect(result.skipped).toBe(0);
-            expect(byId(result, 'parks').paint['fill-pattern']).toEqual(wrapped(['coalesce', ['get', 'pattern'], '']));
-        });
     });
 
     test('an image chosen by the zoom in an expression: the zoom stays outermost', () => {
         const result = withIcon(['step', ['zoom'], 'dot', 12, ['match', ['get', 'class'], 'tower', 'tower', 'pin']]);
         expect(result.skipped).toBe(0);
         const value = byId(result, 'repeaters').layout['icon-image'];
-        expect(value.slice(0, 4)).toEqual(['step', ['zoom'], `${SOURCE}:dot`, 12]);
+        expect(value.slice(0, 4)).toEqual(['step', ['zoom'], `${ICONS}:dot`, 12]);
         expect(JSON.stringify(value[4])).toContain(JSON.stringify(['match', ['get', 'class'], 'tower', 'tower', 'pin']));
     });
 
-    test('a pattern is an image too', () => {
+    test("an icon is drawn at its own size, not at a scale of the style's artwork", () => {
         const style = {
             ...STYLE,
             layers: [{
-                id: 'parks', type: 'fill', source: 'features', 'source-layer': 'parks',
-                paint: {'fill-pattern': 'forest', 'fill-opacity': 0.5},
+                ...STYLE.layers[6],
+                layout: {'icon-image': 'ham_radio', 'icon-size': 0.59, 'icon-anchor': 'bottom'},
             }],
         };
-        expect(byId(adapted(style), 'parks').paint).toEqual({'fill-pattern': `${SOURCE}:forest`, 'fill-opacity': 0.5});
-    });
-
-    test('without a sprite sheet there are no images, and the text is still drawn', () => {
-        const result = adapted(STYLE, {...FILE, has_sprite: false});
-        expect(byId(result, 'repeaters').layout).toEqual({
-            'text-field': ['get', 'callsign'], 'text-font': ['Noto Sans Medium'],
+        expect(byId(adapted(style), 'repeaters').layout).toEqual({
+            'icon-image': `${ICONS}:ham_radio`, 'icon-anchor': 'bottom',
         });
-        expect(result.skipped).toBe(0);
     });
 
-    test("the sprite is asked of this WROLPi, by the file's path", () => {
-        expect(overlaySpriteUrl({map_path: 'extras/my features.pmtiles'}))
-            .toBe(`${window.location.origin}/api/map/files/sprite/extras/my%20features.pmtiles`);
+    test('an icon is dark with a light edge unless its style says otherwise', () => {
+        expect(byId(adapted(), 'repeaters').paint).toEqual({
+            'icon-color': '#222222', 'icon-halo-color': '#ffffff', 'icon-halo-width': 1,
+        });
+        const style = {
+            ...STYLE,
+            layers: [{...STYLE.layers[6], paint: {'icon-color': '#c00', 'text-color': '#00c'}}],
+        };
+        expect(byId(adapted(style), 'repeaters').paint).toEqual({
+            'icon-color': '#c00', 'icon-halo-color': '#ffffff', 'icon-halo-width': 1, 'text-color': '#00c',
+        });
+        // A layer without an icon is not given an icon's paint.
+        expect(byId(adapted(), 'roads').paint).toEqual({'line-color': '#c60'});
+    });
+});
+
+describe('patterns', () => {
+    // A pattern is an image of the style's own sprite, which the map does not use.
+    const pattern = (paint, type = 'fill') => {
+        const style = {
+            ...STYLE,
+            layers: [{id: 'parks', type, source: 'features', 'source-layer': 'parks', paint}],
+        };
+        const result = adapted(style);
+        expect(result.skipped).toBe(0);
+        return byId(result, 'parks').paint;
+    };
+
+    test('a patterned fill is a translucent color, never the opaque black MapLibre would fill it with', () => {
+        expect(pattern({'fill-pattern': 'marsh'})).toEqual({'fill-color': '#808080', 'fill-opacity': 0.25});
+        // By an expression, or a function, too.
+        expect(pattern({'fill-pattern': ['match', ['get', 'class'], 'wet', 'marsh', 'sand']}))
+            .toEqual({'fill-color': '#808080', 'fill-opacity': 0.25});
+        expect(pattern({'fill-pattern': {type: 'identity', property: 'pattern'}}))
+            .toEqual({'fill-color': '#808080', 'fill-opacity': 0.25});
+    });
+
+    test("the fill keeps the style's own color and opacity", () => {
+        expect(pattern({'fill-pattern': 'marsh', 'fill-color': '#9cf'}))
+            .toEqual({'fill-color': '#9cf', 'fill-opacity': 0.25});
+        expect(pattern({'fill-pattern': 'marsh', 'fill-color': '#9cf', 'fill-opacity': 0.6}))
+            .toEqual({'fill-color': '#9cf', 'fill-opacity': 0.6});
+    });
+
+    test('a fill without a pattern is as its style has it', () => {
+        expect(pattern({'fill-color': '#9c9'})).toEqual({'fill-color': '#9c9'});
+    });
+
+    test('a patterned extrusion is a translucent color too, and keeps its shape', () => {
+        expect(pattern({'fill-extrusion-pattern': 'brick'}, 'fill-extrusion'))
+            .toEqual({'fill-extrusion-color': '#808080', 'fill-extrusion-opacity': 0.25});
+        expect(pattern({'fill-extrusion-pattern': 'brick', 'fill-extrusion-height': ['get', 'height']}, 'fill-extrusion'))
+            .toEqual({
+                'fill-extrusion-color': '#808080', 'fill-extrusion-opacity': 0.25,
+                'fill-extrusion-height': ['get', 'height'],
+            });
+        // The style's own color and opacity are kept.
+        expect(pattern({
+            'fill-extrusion-pattern': 'brick', 'fill-extrusion-color': '#a52', 'fill-extrusion-opacity': 0.8,
+        }, 'fill-extrusion')).toEqual({'fill-extrusion-color': '#a52', 'fill-extrusion-opacity': 0.8});
+        // An extrusion without a pattern is as its style has it.
+        expect(pattern({'fill-extrusion-height': 10}, 'fill-extrusion')).toEqual({'fill-extrusion-height': 10});
+    });
+
+    test('a patterned line is a plain line', () => {
+        expect(pattern({'line-pattern': 'ruling', 'line-width': 2}, 'line'))
+            .toEqual({'line-color': '#808080', 'line-width': 2});
+        expect(pattern({'line-pattern': 'ruling', 'line-color': '#c00'}, 'line')).toEqual({'line-color': '#c00'});
+    });
+});
+
+describe('a name the overlay icons do not have', () => {
+    class FakeMap {
+        images = {};
+
+        hasImage(id) {
+            return id in this.images;
+        }
+
+        addImage(id, image, options) {
+            this.images[id] = {image, options};
+        }
+    }
+
+    test('is drawn as a dot: a signed distance field, as the icons are', () => {
+        const {width, height, data} = missingOverlayIcon();
+        expect(data).toHaveLength(width * height * 4);
+        const alpha = (x, y) => data[(y * width + x) * 4 + 3];
+        const middle = Math.floor(width / 2);
+        // Full in the middle, three quarters at the edge of the dot, less beyond it.
+        expect(alpha(middle, middle)).toBe(255);
+        expect(alpha(0, 0)).toBeLessThan(alpha(middle + 6, middle));
+        expect(alpha(middle + 4, middle)).toBeGreaterThan(191);
+        expect(alpha(middle + 6, middle)).toBeLessThan(191);
+    });
+
+    test('is supplied when the map asks for it', () => {
+        const map = new FakeMap();
+        expect(addMissingOverlayIcon(map, `${ICONS}:wreck`)).toBe(true);
+        expect(map.images[`${ICONS}:wreck`].options).toEqual({sdf: true});
+        // Once.
+        expect(addMissingOverlayIcon(map, `${ICONS}:wreck`)).toBe(false);
+    });
+
+    test("an image of the basemap's is not the overlay icons' to supply", () => {
+        const map = new FakeMap();
+        expect(addMissingOverlayIcon(map, 'townspot')).toBe(false);
+        expect(addMissingOverlayIcon(map, 'default:townspot')).toBe(false);
+        expect(map.images).toEqual({});
     });
 });
 
@@ -391,7 +483,7 @@ describe('a styled overlay on the map', () => {
             [`${SOURCE}:parks:parks`, 'fill'], [`${SOURCE}:roads:roads`, 'line'],
             [`${SOURCE}:repeaters:repeaters`, 'symbol'],
         ]);
-        expect(layers[2].layout['icon-image']).toBe(`${SOURCE}:ham_radio`);
+        expect(layers[2].layout['icon-image']).toBe(`${ICONS}:ham_radio`);
     });
 
     test('starts hidden, and its layers are shown and hidden by the layer of the file they draw', () => {

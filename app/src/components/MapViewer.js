@@ -32,7 +32,7 @@ import {
     setOverlayEnabled,
     setOverlayLayerEnabled,
 } from "./mapOverlays";
-import {loadOverlayStyles, overlaySpriteId, overlaySpriteUrl} from "./mapOverlayStyle";
+import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -213,16 +213,19 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
 
     addOverlaysToStyle(styleSources, allLayers, overlays, overlayState);
 
-    // An overlay drawn with its own style may bring its own icons: a second sprite beside the
-    // basemap's, whose images are named `<sprite id>:<image>`.
+    // An overlay drawn with a style of its own names icons: the map's overlay icons, a second
+    // sprite beside the basemap's.  It is only asked for when there is such an overlay.
     const basemapSprite = `${window.location.origin}/map-assets/sprites/${sprite}`;
-    const overlaySprites = overlays.filter(f => isStyledOverlay(f) && f.has_sprite)
-        .map(f => ({id: overlaySpriteId(f), url: overlaySpriteUrl(f)}));
+    const overlayIcons = {
+        id: OVERLAY_ICONS_SPRITE_ID,
+        url: `${window.location.origin}/map-assets/sprites/${OVERLAY_ICONS_SPRITE_ID}`,
+    };
+    const styled = overlays.some(isStyledOverlay);
 
     return {
         version: 8,
         glyphs: "/map-assets/fonts/{fontstack}/{range}.pbf",
-        sprite: overlaySprites.length ? [{id: "default", url: basemapSprite}, ...overlaySprites] : basemapSprite,
+        sprite: styled ? [{id: "default", url: basemapSprite}, overlayIcons] : basemapSprite,
         sources: styleSources,
         layers: allLayers,
     };
@@ -793,6 +796,8 @@ export default function MapViewer() {
                     });
                 });
                 map.on("click", () => setContextMenu(null));
+                // A name the overlay icons do not have is drawn as a plain dot.
+                map.on("styleimagemissing", (e) => addMissingOverlayIcon(map, e.id));
                 map.on("movestart", () => setContextMenu(null));
 
                 // Click a POI to see the details the pmtiles file already has (kind, detail, elevation).

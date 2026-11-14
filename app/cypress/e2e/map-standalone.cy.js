@@ -97,6 +97,7 @@ const openPanel = () => cy.get('#overlay-section', {timeout: 20000}).should('be.
 
     it('draws an overlay with the style beside it, without the layer MapLibre refuses', () => {
         cy.intercept('GET', '**/data/cypress-map/styled.style.json').as('style');
+        cy.intercept('GET', '**/sprites/overlay-icons*.json').as('icons');
         cy.task('map:seed-overlay', {name: 'styled', metadata: METADATA, style: STYLE});
         cy.visit(VIEWER);
         // The style is fetched from the map directory this viewer is served.
@@ -112,6 +113,14 @@ const openPanel = () => cy.get('#overlay-section', {timeout: 20000}).should('be.
         // The panel is rebuilt by a change, so the checkbox is found again.
         overlayBox().check();
         overlayBox().should('be.checked');
+        // A style names icons: the map's own, a sprite of this viewer's.  Its index has a name a
+        // style may use for an icon, beside the icon's own.
+        cy.wait('@icons').then(({response}) => {
+            expect(response.statusCode).to.eq(200);
+            expect(response.body).to.have.property('ham_radio');
+            expect(response.body.ham_radio).to.deep.eq(response.body.antenna);
+            expect(response.body.hospital.sdf).to.eq(true);
+        });
     });
 
     it('does not offer an ignored file', () => {

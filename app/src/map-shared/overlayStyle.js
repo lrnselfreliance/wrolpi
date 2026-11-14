@@ -8,7 +8,7 @@
 // this file keeps.  A viewer which can check a layer before giving it to MapLibre passes
 // `validateLayer(layer, sourceId, spriteId)`, which returns the layer's errors.
 
-import {encodePath, overlaySourceId} from "./overlays.js";
+import {overlaySourceId} from "./overlays.js";
 
 // The fonts the map has glyphs for (modules/map/static/fonts).  The map has one glyph URL, so a
 // style's own fonts cannot be loaded; each is replaced by the nearest of these.
@@ -16,11 +16,20 @@ const FONT_REGULAR = "Noto Sans Regular";
 const FONT_MEDIUM = "Noto Sans Medium";
 const FONT_ITALIC = "Noto Sans Italic";
 
-// Properties whose value names an image of the sprite.
-const IMAGE_PROPERTIES = {
-    layout: ["icon-image"],
-    paint: ["fill-pattern", "line-pattern", "fill-extrusion-pattern"],
-};
+// The map's own icons for overlays (see wrolpi/scripts/build_map_icons.py): a sprite beside the
+// basemap's.  MapLibre knows its images as `<sprite id>:<image name>`.  Its index lists each icon
+// under every name a style may call it, so pointing an image at this sprite is the whole
+// translation; the artwork a style was made for is never used.
+export const OVERLAY_ICONS_SPRITE_ID = "overlay-icons";
+
+// How an icon is drawn when its style does not say: dark, with a light edge, to be seen on any
+// basemap.  (The icons are signed distance fields, which take a color and a halo.)
+const ICON_PAINT_DEFAULTS = {"icon-color": "#222222", "icon-halo-color": "#ffffff", "icon-halo-width": 1};
+
+// A pattern is an image the map does not have; what it filled is drawn in a translucent color.
+const PATTERN_PROPERTIES = ["fill-pattern", "line-pattern", "fill-extrusion-pattern"];
+const PATTERN_COLOR = "#808080";
+const PATTERN_OPACITY = 0.25;
 
 // Expression operators a `text-font` value can start with; anything else is a plain list of fonts.
 const FONT_EXPRESSIONS = new Set(["literal", "match", "case", "step", "coalesce", "let", "var", "get"]);
@@ -62,14 +71,26 @@ function adaptTextFieldFonts(value) {
     return value;
 }
 
-// The id of an overlay's sprite; MapLibre knows its images as `<sprite id>:<image name>`.
-export function overlaySpriteId(file) {
-    return overlaySourceId(file);
+// The image MapLibre is given for a name the overlay icons do not have: a plain dot, so that a
+// feature is marked on the map whatever its style calls its icon.  A signed distance field, as
+// the icons are.
+export function missingOverlayIcon() {
+    const size = 25, radius = 5;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const outside = Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2) - radius;
+            data[(y * size + x) * 4 + 3] = Math.max(0, Math.min(255, Math.round(255 - 255 * (outside / 8 + 0.25))));
+        }
+    }
+    return {width: size, height: size, data};
 }
 
-// The sprite sheet of an overlay, as MapLibre asks for it (it appends `@2x` and the extension).
-export function overlaySpriteUrl(file) {
-    return `${window.location.origin}/api/map/files/sprite/${encodePath(file.map_path)}`;
+// For a map's `styleimagemissing` event: supply the dot for a name the overlay icons do not have.
+export function addMissingOverlayIcon(map, id) {
+    if (!String(id).startsWith(`${OVERLAY_ICONS_SPRITE_ID}:`) || map.hasImage(id)) return false;
+    map.addImage(id, missingOverlayIcon(), {sdf: true});
+    return true;
 }
 
 const isZoom = value => Array.isArray(value) && value.length === 1 && value[0] === "zoom";
@@ -158,7 +179,7 @@ export function adaptOverlayStyle(style, file, {validateLayer} = {}) {
     const fileLayerIds = new Set((file.vector_layers || []).map(l => l.id));
     const styleSource = chooseSource(style, fileLayerIds);
     const source = overlaySourceId(file);
-    const spriteId = overlaySpriteId(file);
+    const spriteId = OVERLAY_ICONS_SPRITE_ID;
     // A style drawn for one scale (a printed map, say) is unreadable zoomed out; it can say the zoom
     // it is meant to be seen from.
     const minZoom = Number(style.metadata?.["wrolpi:minzoom"]);
@@ -187,19 +208,35 @@ export function adaptOverlayStyle(style, file, {validateLayer} = {}) {
                 layer.layout["text-font"] = [FONT_REGULAR];
             }
         }
-        for (const [group, properties] of Object.entries(IMAGE_PROPERTIES)) {
-            for (const property of properties) {
-                if (layer[group]?.[property] === undefined) continue;
-                // Without a sprite sheet there are no images to draw.  An image this cannot point at
-                // the overlay's sprite would be looked for in the basemap's; the layer is drawn
-                // without it (its text still is).
-                const image = file.has_sprite ? adaptImage(layer[group][property], spriteId) : undefined;
-                if (image === undefined) {
-                    delete layer[group][property];
-                } else {
-                    layer[group][property] = image;
-                }
+        if (layer.layout?.["icon-image"] !== undefined) {
+            // An image this cannot point at the overlay icons would be looked for among the
+            // basemap's; the layer is drawn without it (its text still is).
+            const image = adaptImage(layer.layout["icon-image"], spriteId);
+            if (image === undefined) {
+                delete layer.layout["icon-image"];
+            } else {
+                layer.layout["icon-image"] = image;
+                // A size is a scale of the artwork the style was made for; ours has its own size.
+                delete layer.layout["icon-size"];
+                layer.paint = {...ICON_PAINT_DEFAULTS, ...layer.paint};
             }
+        }
+        const patterns = PATTERN_PROPERTIES.filter(property => layer.paint?.[property] !== undefined);
+        for (const property of patterns) {
+            delete layer.paint[property];
+        }
+        if (patterns.includes("fill-pattern")) {
+            // Without its pattern MapLibre would fill the area in opaque black.
+            layer.paint = {"fill-color": PATTERN_COLOR, "fill-opacity": PATTERN_OPACITY, ...layer.paint};
+        }
+        if (patterns.includes("line-pattern")) {
+            layer.paint = {"line-color": PATTERN_COLOR, ...layer.paint};
+        }
+        if (patterns.includes("fill-extrusion-pattern")) {
+            // As a fill: an extrusion without its pattern would be opaque black too.
+            layer.paint = {
+                "fill-extrusion-color": PATTERN_COLOR, "fill-extrusion-opacity": PATTERN_OPACITY, ...layer.paint,
+            };
         }
 
         // One bad layer must not stop the map: MapLibre refuses a whole style over it.

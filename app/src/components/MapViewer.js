@@ -33,6 +33,8 @@ import {
     setOverlayLayerEnabled,
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
+import MapQuadPicker from "./MapQuadPicker";
+import {quadAt} from "./mapQuads";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -659,6 +661,10 @@ export default function MapViewer() {
     const [addingPin, setAddingPin] = useState(null); // {lat, lon} when pin dialog is open
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
+    // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
+    // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
+    const [pickingQuad, setPickingQuad] = useState(null);
+    const pickingQuadRef = useRef(false);
     const [scaleUnit, setScaleUnit] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch (e) { return "metric"; }
     });
@@ -785,6 +791,27 @@ export default function MapViewer() {
                 };
                 map.addControl(pinControl, "top-right");
 
+                // Choose a quadrangle to export.
+                const exportButton = document.createElement("button");
+                exportButton.type = "button";
+                exportButton.title = "Export a 1:24,000 map";
+                exportButton.setAttribute("aria-label", "Export a 1:24,000 map");
+                exportButton.textContent = "🖨️";
+                exportButton.style.cssText = pinToggle.style.cssText;
+                exportButton.addEventListener("click", () => {
+                    if (destroyed) return;
+                    setPickingQuad(picking => (picking ? null : {quad: null}));
+                });
+                map.addControl({
+                    onAdd: () => {
+                        const container = document.createElement("div");
+                        container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+                        container.appendChild(exportButton);
+                        return container;
+                    },
+                    onRemove: () => {},
+                }, "top-right");
+
                 // Right-click context menu (desktop).
                 map.on("contextmenu", (e) => {
                     if (destroyed) return;
@@ -813,7 +840,7 @@ export default function MapViewer() {
                 const featuresAt = (point, layers) =>
                     layers.length ? map.queryRenderedFeatures(point, {layers}) : [];
                 map.on("click", (e) => {
-                    if (destroyed) return;
+                    if (destroyed || pickingQuadRef.current) return;
                     const html = overlayPopupHtml(featuresAt(e.point, overlayLayerIds()))
                         || poiPopupHtml(featuresAt(e.point, poiLayerIds()), e.lngLat);
                     if (!html) return;
@@ -824,6 +851,10 @@ export default function MapViewer() {
                 });
                 map.on("mousemove", (e) => {
                     if (destroyed) return;
+                    if (pickingQuadRef.current) {
+                        map.getCanvas().style.cursor = "crosshair";
+                        return;
+                    }
                     const hit = featuresAt(e.point, [...overlayLayerIds(), ...poiLayerIds()]).length;
                     map.getCanvas().style.cursor = hit ? "pointer" : "";
                 });
@@ -970,6 +1001,19 @@ export default function MapViewer() {
         navigator.clipboard.writeText(text).catch(() => {
             window.prompt("Copy coordinates:", text);
         });
+        setContextMenu(null);
+    }, [contextMenu]);
+
+    useEffect(() => {
+        pickingQuadRef.current = pickingQuad !== null;
+        const map = mapRef.current;
+        if (map) map.getCanvas().style.cursor = pickingQuad ? "crosshair" : "";
+    }, [pickingQuad]);
+
+    const handleExportQuad = useCallback(() => {
+        if (!contextMenu) return;
+        // Start with the quadrangle which was clicked.
+        setPickingQuad({quad: quadAt(contextMenu.lon, contextMenu.lat)});
         setContextMenu(null);
     }, [contextMenu]);
 
@@ -1147,6 +1191,14 @@ export default function MapViewer() {
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
+                onClick={handleExportQuad}
+            >
+                Export a 1:24,000 map
+            </div>
+            <div
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
             >
                 Add Pin Here
@@ -1168,6 +1220,13 @@ export default function MapViewer() {
                 Set as Default View
             </div>
         </div>}
+        {mapReady && pickingQuad && <MapQuadPicker
+            key={pickingQuad.quad?.id || "none"}
+            map={mapRef.current}
+            scaleUnit={scaleUnit}
+            initialQuad={pickingQuad.quad}
+            onClose={() => setPickingQuad(null)}
+        />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}
             lon={addingPin.lon}

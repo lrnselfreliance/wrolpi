@@ -24,6 +24,9 @@ SECONDS_PER_DEGREE = 3600
 TALLEST = 450
 # Edges this near (seconds of arc) are the same edge.
 SAME_EDGE = 1
+# A place this near (seconds of arc) past the outer edge of a quadrangle is on that edge: the edges the map gives
+# are a hair from where they are.
+OUTER_EDGE = 0.01
 
 
 @dataclass
@@ -70,14 +73,14 @@ def _row(south: int) -> Row:
     return wests, cells
 
 
-def quad_name(west: float, south: float, east: float, north: float) -> Optional[QuadName]:
-    """What the USGS calls the quadrangle between these edges (degrees), or None where it has none: most of the
-    world."""
+def _find(x: float, y: float, outer: float = 0) -> Optional[Tuple[int, int, int, int, str, str]]:
+    """The quadrangle (west, south, east, north, name, state) which has a place (seconds of arc), or None.
+
+    A place on an edge two quadrangles share is in the one east, or north, of it: a quadrangle has its west and
+    south edges, and not its east and north ones.  With `outer` it has those too, and that much (seconds of arc)
+    past them."""
     souths, _ = load_index()
-    x = (west + east) / 2 * SECONDS_PER_DEGREE
-    y = (south + north) / 2 * SECONDS_PER_DEGREE
-    edges = [round(i * SECONDS_PER_DEGREE) for i in (west, south, east, north)]
-    # The rows which may have the middle of the area, from the nearest to start south of it.
+    # The rows which may have the place, from the nearest to start south of it.
     last = bisect.bisect_right(souths, y)
     for row_south in reversed(souths[max(0, last - 8):last]):
         if row_south < y - TALLEST * 2:
@@ -86,8 +89,26 @@ def quad_name(west: float, south: float, east: float, north: float) -> Optional[
         index = bisect.bisect_right(wests, x) - 1
         # Quadrangles moved to fit an island lie over their neighbors a little, so the one before is looked at too.
         for cell_west, cell_east, cell_north, name, state in cells[max(0, index - 1):index + 1][::-1]:
-            if cell_west <= x < cell_east and row_south <= y < cell_north:
-                found = [cell_west, row_south, cell_east, cell_north]
-                exact = all(abs(a - b) <= SAME_EDGE for a, b in zip(edges, found))
-                return QuadName(name=name, state=state, exact=exact)
+            if outer:
+                within = x <= cell_east + outer and y <= cell_north + outer
+            else:
+                within = x < cell_east and y < cell_north
+            if within and cell_west <= x and row_south <= y:
+                return cell_west, row_south, cell_east, cell_north, name, state
     return None
+
+
+def quad_name(west: float, south: float, east: float, north: float) -> Optional[QuadName]:
+    """What the USGS calls the quadrangle between these edges (degrees), or None where it has none: most of the
+    world.
+
+    It is the quadrangle which has the middle of the area.  Where the middle is on the east or north edge of a
+    quadrangle with none beyond it (an area half of which is the last quadrangle of the land), it is that one."""
+    x = (west + east) / 2 * SECONDS_PER_DEGREE
+    y = (south + north) / 2 * SECONDS_PER_DEGREE
+    found = _find(x, y) or _find(x, y, outer=OUTER_EDGE)
+    if found is None:
+        return None
+    edges = [round(i * SECONDS_PER_DEGREE) for i in (west, south, east, north)]
+    exact = all(abs(a - b) <= SAME_EDGE for a, b in zip(edges, found[:4]))
+    return QuadName(name=found[4], state=found[5], exact=exact)

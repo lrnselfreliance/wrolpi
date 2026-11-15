@@ -38,6 +38,27 @@ def test_quad_name_in_alaska():
     assert quads.quad_name(-149.875, 61.125, -149.75, 61.25).name == 'Anchorage A-8 NE'
 
 
+@pytest.mark.parametrize('west,south,name,state', [
+    # A quadrangle 11.25 minutes wide, which ends at the middle of this area: there is none east of it.
+    (-153.25, 59.0, 'Iliamna A-1 SW', 'Alaska'),
+    (-151.375, 59.0, 'Seldovia A-4 SW', 'Alaska'),
+    # A quadrangle moved to fit an island, which ends at the middle of this area: there is none north of it.
+    (145.625, 18.75, 'Agrigan Island', 'Northern Mariana Islands'),
+])
+def test_quad_name_at_an_outer_edge(west, south, name, state):
+    """An area half of which is a quadrangle, and the other half no quadrangle, is a part of that quadrangle:
+    its middle is on the quadrangle's edge, not outside it."""
+    found = quads.quad_name(west, south, west + 0.125, south + 0.125)
+    assert found is not None
+    assert (found.name, found.state, found.exact) == (name, state, False)
+
+
+def test_quad_name_at_a_shared_edge():
+    """A place on the edge two quadrangles share is in the one east, or north, of that edge."""
+    assert quads.quad_name(-105.25, 40.25, -105, 40.375).name == 'Berthoud'
+    assert quads.quad_name(-105.125, 40.125, -105, 40.375).name == 'Berthoud'
+
+
 @pytest.mark.parametrize('west,south', [
     (0, 0),
     (151.125, -33.875),  # Sydney.

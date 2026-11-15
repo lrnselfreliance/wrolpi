@@ -1,5 +1,7 @@
 import io
 import json
+import math
+import re
 import subprocess
 import sys
 from http import HTTPStatus
@@ -218,3 +220,152 @@ def test_images_are_compressed_as_they_are_added():
     # And it is still the picture: blue, mostly opaque, over the left of the photograph.
     pixmap = page.get_pixmap(dpi=72, alpha=False)
     assert pixmap.pixel(50, 45) != pixmap.pixel(10, 45)
+
+
+# A quadrangle at Anchorage: west, south, east, north.
+ANCHORAGE = [-150.0, 61.125, -149.875, 61.25]
+
+
+def read_viewport(pdf: bytes) -> dict:
+    """What the first page of a PDF says of where it is: its /VP, as the text of each part."""
+    doc = pymupdf.open(stream=pdf, filetype='pdf')
+    page = doc[0]
+    kind, viewports = doc.xref_get_key(page.xref, 'VP')
+    assert kind == 'array', f'The page has no /VP: {kind} {viewports}'
+
+    def numbers(key):
+        return [float(i) for i in re.search(rf'/{key}\s*\[([^]]*)]', viewports).group(1).split()]
+
+    return dict(
+        text=viewports,
+        bbox=numbers('BBox'), bounds=numbers('Bounds'), gpts=numbers('GPTS'), lpts=numbers('LPTS'),
+        page=(page.rect.width, page.rect.height),
+    )
+
+
+def test_pdf_says_where_it_is():
+    """With the edges of the map, the page has a geospatial viewport: all of the page, in Web Mercator, with the
+    latitude and longitude of each of its corners."""
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72,
+                            title='1:24,000 61°07′30″N 150°00′W', bounds=ANCHORAGE)
+    viewport = read_viewport(pdf)
+
+    # All of the page.
+    assert viewport['bbox'] == [0, 0, WIDTH, HEIGHT]
+    # The corners, from the lower left of the page: upper left, lower left, lower right, upper right...
+    assert viewport['lpts'] == viewport['bounds'] == [0, 1, 0, 0, 1, 0, 1, 1]
+    # ...and where each is: latitude, then longitude.
+    assert viewport['gpts'] == [61.25, -150, 61.125, -150, 61.125, -149.875, 61.25, -149.875]
+
+    text = viewport['text']
+    assert '/Type/Viewport' in text.replace(' ', '') and '/Subtype/GEO' in text.replace(' ', '')
+    assert '/EPSG 3857' in text
+    assert 'PROJCS["WGS 84 / Pseudo-Mercator"' in text and 'AUTHORITY["EPSG","3857"]' in text
+
+    # It is still the PDF it was.
+    assert layer_names(pdf) == ['Background']
+    assert pymupdf.open(stream=pdf, filetype='pdf')[0].get_pixmap(dpi=72).pixel(5, 5) == (200, 80, 20)
+
+
+def test_corner_of_page_is_corner_of_map():
+    """A reader finds where a point of the page is from the corners: here, as a reader does it, in the
+    projection the page says it is in."""
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=ANCHORAGE)
+    viewport = read_viewport(pdf)
+
+    def mercator(latitude, longitude):
+        return (math.radians(longitude) * 6378137,
+                math.log(math.tan(math.pi / 4 + math.radians(latitude) / 2)) * 6378137)
+
+    def unmercator(x, y):
+        return math.degrees(2 * math.atan(math.exp(y / 6378137)) - math.pi / 2), math.degrees(x / 6378137)
+
+    lpts, gpts = viewport['lpts'], viewport['gpts']
+    corners = {(lpts[i], lpts[i + 1]): mercator(gpts[i], gpts[i + 1]) for i in range(0, 8, 2)}
+
+    def where(across, up):
+        """The latitude and longitude of a point of the page (0 to 1 from its lower left)."""
+        (x0, y0), (x1, y1) = corners[(0, 0)], corners[(1, 1)]
+        return unmercator(x0 + across * (x1 - x0), y0 + up * (y1 - y0))
+
+    assert where(0, 0) == pytest.approx((61.125, -150))
+    assert where(1, 1) == pytest.approx((61.25, -149.875))
+    # The middle of the page is the middle of the map in longitude, and north of its middle in latitude: the
+    # further north, the more of the page a degree is.
+    latitude, longitude = where(0.5, 0.5)
+    assert longitude == pytest.approx(-149.9375)
+    assert 61.1875 < latitude < 61.1877
+    # The other two corners are the corners of the same rectangle.
+    assert corners[(0, 1)] == pytest.approx((corners[(0, 0)][0], corners[(1, 1)][1]))
+    assert corners[(1, 0)] == pytest.approx((corners[(1, 1)][0], corners[(0, 0)][1]))
+
+
+def test_pdf_without_edges_says_nothing_of_where_it_is():
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72)
+    doc = pymupdf.open(stream=pdf, filetype='pdf')
+    assert doc.xref_get_key(doc[0].xref, 'VP')[0] == 'null'
+
+
+def test_viewport_name():
+    """The viewport is named as the map is; a name which is not ASCII is written so a PDF can hold it."""
+    viewport = export.geospatial_viewport(10, 10, ANCHORAGE, 'A quadrangle (of a map)')
+    assert '/Name (A quadrangle \\(of a map\\))' in viewport
+    assert '/Name' not in export.geospatial_viewport(10, 10, ANCHORAGE)
+
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72,
+                            title='61°07′30″N', bounds=ANCHORAGE)
+    name = re.search(r'/Name\s*<([0-9A-Fa-f]+)>', read_viewport(pdf)['text']).group(1)
+    assert bytes.fromhex(name).decode('utf-16') == '61°07′30″N'
+
+
+@pytest.mark.parametrize('bounds', [
+    [-150, 61.125, -149.875],  # Three edges.
+    'here',
+    [-150, 61.125, -149.875, 'north'],
+    [-149.875, 61.125, -150, 61.25],  # East of its east.
+    [-150, 61.25, -149.875, 61.125],  # North of its north.
+    [-150, 61.125, -150, 61.25],  # No width.
+    [-190, 61.125, -149.875, 61.25],  # Off the world.
+    [179.875, 0, 180.00001, 0.125],  # Across the antimeridian, if not by much.
+    [179.9, 0, 180.1, 0.125],
+    [-180.00001, 0, -179.875, 0.125],
+    [-150, 61.125, -149.875, 89],  # Further north than the map goes.
+    [-150, float('nan'), -149.875, 61.25],
+])
+def test_invalid_bounds(bounds):
+    with pytest.raises(InvalidExport, match='edges'):
+        build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=bounds)
+
+
+@pytest.mark.parametrize('bounds,expected', [
+    # The map's own arithmetic puts the edge of the world a hair past where it is.
+    ([179.875, 0, 180.00000000000125, 0.125], [179.875, 0, 180, 0.125]),
+    ([-180.00000000000125, 0, -179.875, 0.125], [-180, 0, -179.875, 0.125]),
+    ([-180, 0, -179.875, 0.125], [-180, 0, -179.875, 0.125]),
+])
+def test_bounds_at_the_antimeridian(bounds, expected):
+    """A map whose edge is the antimeridian is exported, with that edge at 180 degrees and not at -180."""
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=bounds)
+    west, south, east, north = expected
+    assert read_viewport(pdf)['gpts'] == [north, west, south, west, south, east, north, east]
+
+
+@pytest.mark.asyncio
+async def test_api_export_pdf_georeferenced(async_client, make_multipart_form):
+    """The edges of the map are sent with its images, and the PDF says where it is."""
+    images = [('Background', make_image())]
+    body = export_form(make_multipart_form, images, bounds=ANCHORAGE)
+    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    assert response.status_code == HTTPStatus.OK, response.text
+    assert read_viewport(response.content)['gpts'] == [61.25, -150, 61.125, -150, 61.125, -149.875, 61.25, -149.875]
+
+    # Without them it is a PDF all the same.
+    request, response = await async_client.post(
+        '/api/map/export/pdf', content=export_form(make_multipart_form, images), headers=MULTIPART)
+    assert response.status_code == HTTPStatus.OK
+
+    # Edges which are not those of a map are refused.
+    body = export_form(make_multipart_form, images, bounds=[0, 0, 0, 0])
+    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'edges' in response.json['error']

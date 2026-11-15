@@ -133,6 +133,16 @@ export function exportStyle(style, ignoredPrefixes = []) {
     return {...style, sources, layers};
 }
 
+// The map's arithmetic can put the edge of the world a hair past where it is (180.00000000000125
+// degrees).  Such an edge is the edge of the world; one further past it is of a map which crosses the
+// antimeridian, and is left as it is.
+const LONGITUDE_SLIVER = 1e-8;
+
+function edgeLongitude(longitude) {
+    if (Math.abs(longitude) > 180 && Math.abs(longitude) - 180 < LONGITUDE_SLIVER) return Math.sign(longitude) * 180;
+    return longitude;
+}
+
 function once(map, event, timeoutMs = RENDER_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("The map took too long to draw")), timeoutMs);
@@ -166,7 +176,9 @@ export function isOpaque(canvas) {
 }
 
 // Draw each group of layers of `style` on a map of its own, and return the images:
-// {width, height, dpi, layers: [{name, blob}]}.
+// {width, height, dpi, bounds, layers: [{name, blob}]}.  `bounds` is the west, south, east and north
+// edges of the images (degrees), which is what says where the PDF is on the Earth: they are read
+// from the map which was drawn, so they are of the picture and not of what was asked for.
 //
 // MapClass: maplibregl.Map.  setup(map): called with the new map before it draws anything.
 // onProgress(name, index, count): called before each group is drawn.
@@ -217,9 +229,11 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
             layers.push({name: group.name, blob});
             show("none");
         }
+        const edges = map.getBounds();
         return {
             width: canvas.width,
             height: canvas.height,
+            bounds: [edgeLongitude(edges.getWest()), edges.getSouth(), edgeLongitude(edges.getEast()), edges.getNorth()],
             dpi: canvas.width / frame.cssWidth * (frame.dpi / frame.pixelRatio),
             layers,
         };

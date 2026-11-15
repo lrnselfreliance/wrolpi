@@ -184,13 +184,15 @@ async def rebuild_single_search_index(_: Request, filename: str):
 async def post_export_pdf(request: Request):
     """The browser draws the map, one image for each layer; this puts them in a PDF, each in a layer of its own.
 
-    A multipart form: `meta` is JSON (`width` and `height` in pixels, `dpi`, `title`, and `layers`: the name of
-    each layer from the bottom up), and `layer` is the image of each layer, in the same order."""
+    A multipart form: `meta` is JSON (`width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each
+    layer from the bottom up, and `bounds`: the west, south, east and north edges of the images in degrees, with
+    which the PDF says where it is), and `layer` is the image of each layer, in the same order."""
     try:
         meta = json.loads(request.form.get('meta') or '')
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
         names = [str(i) for i in meta['layers']]
         title = str(meta.get('title') or '') or None
+        bounds = meta.get('bounds')
     except (ValueError, TypeError, KeyError):
         return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)
 
@@ -202,7 +204,7 @@ async def post_export_pdf(request: Request):
     layers = [export.ExportLayer(name=name, image=image.body) for name, image in zip(names, images)]
     try:
         # The images are decoded and compressed, which is not for the event loop.
-        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title)
+        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title, bounds)
     except export.InvalidExport as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 

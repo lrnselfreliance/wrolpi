@@ -3,11 +3,15 @@
 The map is drawn by the browser, which is the only thing that draws it as the user sees it: one image for each
 layer the user has turned on, all of the same area and size.  Here they become one page, each image in a PDF
 layer (an "optional content group") of its own, so a reader can show and hide them as the map can.
+
+The page is also told where on the Earth it is (a "geospatial PDF", ISO 32000-2 section 12.10), so a reader which
+knows how can show coordinates, measure, and put a GPS position on the map.
 """
 import io
+import math
 import zlib
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Sequence
 
 from PIL import Image
 
@@ -15,8 +19,8 @@ from wrolpi.common import logger
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ExportLayer', 'InvalidExport', 'build_layered_pdf', 'MAX_LAYERS', 'MAX_SIDE', 'MAX_PIXELS',
-           'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
+__all__ = ['ExportLayer', 'InvalidExport', 'build_layered_pdf', 'geospatial_viewport', 'MAX_LAYERS', 'MAX_SIDE',
+           'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
 
 # What the browser may ask for.  Every image is decoded, so what an export costs is its pixels, whatever the size
 # of the upload (an image of one color is a few kilobytes however large it is).
@@ -35,6 +39,33 @@ MAX_DPI = 1200
 IMAGE_FORMATS = ('PNG', 'JPEG')
 
 POINTS_PER_INCH = 72
+
+
+# The map is drawn in Web Mercator, in which the area between two meridians and two parallels is a rectangle: the
+# page.  So the page is said to be in that projection, and its four corners are all a reader needs.
+#
+# Web Mercator is Mercator on a sphere the size of the WGS 84 equator, with WGS 84 latitudes and longitudes.  The
+# EXTENSION says so to a reader which knows PROJ; one which does not takes it for Mercator on the ellipsoid, which
+# across a page of a map is the same to well within a meter (the corners are given in latitude and longitude, so
+# such a reader only stretches the page a little differently between them).
+WEB_MERCATOR_EPSG = 3857
+WEB_MERCATOR_WKT = (
+    'PROJCS["WGS 84 / Pseudo-Mercator",'
+    'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
+    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
+    'PROJECTION["Mercator_1SP"],'
+    'PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],'
+    'PARAMETER["false_easting",0],PARAMETER["false_northing",0],'
+    'UNIT["metre",1],'
+    'EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m'
+    ' +nadgrids=@null +wktext +no_defs"],'
+    'AUTHORITY["EPSG","3857"]]'
+)
+# Web Mercator has no poles: this is as far north or south as it goes.
+MAX_LATITUDE = 85.06
+# The browser's arithmetic can put the edge of the world a hair past where it is (180.00000000000125 degrees).  An
+# edge within this of 180 degrees is at 180 degrees; one further past it is of a map which crosses the antimeridian.
+LONGITUDE_SLIVER = 1e-8
 
 
 class InvalidExport(ValueError):
@@ -75,6 +106,57 @@ def _check_layer(layer: ExportLayer, width: int, height: int) -> bool:
         raise InvalidExport(f'The layer {layer.name!r} is not a readable image') from e
 
 
+def _edge_longitude(longitude: float) -> float:
+    """A longitude which is a rounding error past the edge of the world, put on it.  It is not wrapped: the east
+    edge of the last map before the antimeridian is at 180 degrees, not at -180."""
+    if 180 < abs(longitude) < 180 + LONGITUDE_SLIVER:
+        return math.copysign(180.0, longitude)
+    return longitude
+
+
+def _check_bounds(bounds: Sequence[float]) -> List[float]:
+    """The west, south, east and north edges of a map, in degrees.  Raises InvalidExport when they are not."""
+    try:
+        west, south, east, north = (float(i) for i in bounds)
+    except (TypeError, ValueError) as e:
+        raise InvalidExport('The edges of the map are not four numbers') from e
+    west, east = _edge_longitude(west), _edge_longitude(east)
+    edges = [west, south, east, north]
+    if not all(math.isfinite(i) for i in edges) or not (-180 <= west < east <= 180) \
+            or not (-MAX_LATITUDE <= south < north <= MAX_LATITUDE):
+        raise InvalidExport(f'A map with the edges {edges} can not be exported')
+    return edges
+
+
+def _pdf_string(text: str) -> str:
+    """A string as it is written in a PDF: as it is when it is ASCII, else in UTF-16."""
+    if text.isascii():
+        return '(' + text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)') + ')'
+    return '<' + (b'\xfe\xff' + text.encode('utf-16-be')).hex().upper() + '>'
+
+
+def geospatial_viewport(width: float, height: float, bounds: Sequence[float], name: str = None) -> str:
+    """The value of a page's `/VP`: a viewport which covers the page (`width` by `height` points), and says the
+    page is the map between `bounds` (west, south, east, north; degrees of WGS 84) in Web Mercator.
+
+    A point of the page is given as a part of the way across and up it (0 to 1, from the lower left), and the
+    corners are listed as GDAL and the readers which follow it expect: upper left, lower left, lower right,
+    upper right.  The coordinates of each are its latitude, then its longitude.
+    """
+    west, south, east, north = _check_bounds(bounds)
+    corners = '0 1 0 0 1 0 1 1'
+    points = ' '.join(f'{lat:.9f} {lon:.9f}' for lat, lon in ((north, west), (south, west), (south, east),
+                                                              (north, east)))
+    name = f' /Name {_pdf_string(name)}' if name else ''
+    return (
+        f'[<< /Type /Viewport{name} /BBox [0 0 {width:.3f} {height:.3f}]'
+        f' /Measure << /Type /Measure /Subtype /GEO'
+        f' /Bounds [{corners}] /GPTS [{points}] /LPTS [{corners}]'
+        f' /GCS << /Type /PROJCS /EPSG {WEB_MERCATOR_EPSG} /WKT {_pdf_string(WEB_MERCATOR_WKT)} >>'
+        f' /PDU [/M /SQM /DEG] >> >>]'
+    )
+
+
 def _compress_stream(doc, xref: int):
     """Compress the stream of an object of the PDF, when it is not already."""
     if doc.xref_get_key(xref, 'Filter')[0] != 'null':
@@ -97,13 +179,16 @@ def _insert_layer(doc, page, layer: ExportLayer):
         _compress_stream(doc, int(mask.split()[0]))
 
 
-def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None) -> bytes:
+def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None,
+                      bounds: Optional[Sequence[float]] = None) -> bytes:
     """A one page PDF of the layers, the first at the bottom, each in a PDF layer of its own.
 
     A layer in which nothing was drawn is left out.
 
     @param layers: The images of the map, all `width` by `height` pixels.
     @param dpi: How many of those pixels are an inch of the page.
+    @param bounds: The west, south, east and north edges of the images, in degrees.  With them the PDF says where
+        it is on the Earth; the images must be Web Mercator, and all of the map between those edges.
     @raise InvalidExport: When the layers are not of one map.
     """
     if not layers:
@@ -118,6 +203,8 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
                             f' turn some layers off')
     if not MIN_DPI <= dpi <= MAX_DPI:
         raise InvalidExport(f'A map can not be exported at {dpi} DPI')
+    if bounds is not None:
+        bounds = _check_bounds(bounds)
 
     drawn = [layer for layer in layers if _check_layer(layer, width, height)]
     if not drawn:
@@ -132,6 +219,8 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
         page = doc.new_page(width=width * POINTS_PER_INCH / dpi, height=height * POINTS_PER_INCH / dpi)
         for layer in drawn:
             _insert_layer(doc, page, layer)
+        if bounds is not None:
+            doc.xref_set_key(page.xref, 'VP', geospatial_viewport(page.rect.width, page.rect.height, bounds, title))
         doc.set_metadata(dict(title=title or 'Map', creator='WROLPi', producer='WROLPi'))
         return doc.tobytes(garbage=3)
     finally:

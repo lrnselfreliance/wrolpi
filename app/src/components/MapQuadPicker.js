@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Button} from "./ui";
+import {Button, Checkbox} from "./ui";
 import {
     EMPTY_FEATURES,
     QUAD_MIN_ZOOM,
@@ -51,7 +51,8 @@ function selectedFeatures(quad) {
 // The grid and the chosen quadrangle are layers of the map, which a change of its style removes; they
 // are put back whenever the style has loaded.
 //
-// onExport(quad): make the PDF.  While it is being made `status` says how far along it is, and
+// onExport(quad, {sheet}): make the PDF; `sheet` is whether the map is to be on a sheet, with a
+// margin, a grid and scale bars.  While it is being made `status` says how far along it is, and
 // nothing else can be chosen; `error` says why the last one could not be made.
 export default function MapQuadPicker({
     map, scaleUnit, initialQuad = null, onExport, onClose, status = null, error = null,
@@ -63,6 +64,7 @@ export default function MapQuadPicker({
     const selectedRef = useRef(initialQuad);
     // Whether the map is zoomed in far enough for the grid to be drawn.
     const [gridShown, setGridShown] = useState(true);
+    const [sheet, setSheet] = useState(true);
 
     useEffect(() => {
         if (!map) return;
@@ -166,6 +168,14 @@ export default function MapQuadPicker({
                     ? "Click a quadrangle on the map to choose it."
                     : "Zoom in to see the quadrangles."}
             </div>}
+        <Checkbox
+            size="xs"
+            style={{paddingTop: "0.5rem"}}
+            label="Margins, grid and scale bars"
+            checked={sheet}
+            disabled={busy}
+            onChange={e => setSheet(e.currentTarget.checked)}
+        />
         {status && <div role="status" style={{paddingTop: "0.25rem"}}>{status}</div>}
         {error && !status && <div role="alert" style={{paddingTop: "0.25rem", color: "var(--danger, #c92a2a)"}}>
             {error}
@@ -179,7 +189,7 @@ export default function MapQuadPicker({
                 size="xs"
                 disabled={!selected || !onExport || busy}
                 loading={busy}
-                onClick={() => onExport(selected)}
+                onClick={() => onExport(selected, {sheet})}
             >Export PDF</Button>
         </div>
     </div>;

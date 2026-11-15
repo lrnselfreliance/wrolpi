@@ -1780,9 +1780,11 @@ export async function setMapDefaultLocation(lat, lon, zoom) {
 // Make a PDF of a map from the images of its layers ({name, blob}, from the bottom up).  Returns the
 // PDF (a Blob); throws an Error which says what went wrong.
 // `bounds` is the west, south, east and north edges of the images, in degrees.
-export async function exportMapPdf({width, height, dpi, title, bounds, layers}) {
+export async function exportMapPdf({width, height, dpi, title, bounds, layers, sheet}) {
     const form = new FormData();
-    form.append('meta', JSON.stringify({width, height, dpi, title, bounds, layers: layers.map(i => i.name)}));
+    form.append('meta', JSON.stringify({
+        width, height, dpi, title, bounds, sheet, layers: layers.map(i => i.name),
+    }));
     layers.forEach((layer, index) => form.append('layer', layer.blob, `${index}`));
     let response;
     try {

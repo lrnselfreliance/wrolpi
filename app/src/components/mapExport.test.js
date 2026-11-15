@@ -1,8 +1,11 @@
 import {
     BACKGROUND_GROUP,
     exportFileName,
+    exportCredits,
+    exportDate,
     exportFrame,
     exportGroups,
+    exportSheet,
     exportStyle,
     exportTitle,
     renderExport,
@@ -340,6 +343,54 @@ describe('drawing the layers', () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+});
+
+describe('what is written on the sheet', () => {
+    const style = {
+        sources: {
+            basemap: {type: 'vector'},
+            satellite: {type: 'raster', attribution: '<a href="https://example.com">Imagery</a> &copy;  Somebody'},
+            'overlay:towers': {type: 'vector', attribution: 'Towers by Somebody Else'},
+            unused: {type: 'vector', attribution: 'Not on this map'},
+        },
+        layers: [
+            {id: 'background', type: 'background'},
+            {id: 'water', type: 'fill', source: 'basemap'},
+            {id: 'roads', type: 'line', source: 'basemap'},
+            {id: 'satellite', type: 'raster', source: 'satellite'},
+            {id: 'overlay:towers:points', type: 'circle', source: 'overlay:towers'},
+            {id: 'hidden', type: 'fill', source: 'unused'},
+        ],
+    };
+    // The basemap learns where it is from when its file is read.
+    const loaded = {basemap: {attribution: '© OpenStreetMap contributors'}};
+    const map = {getStyle: () => style, getSource: id => loaded[id]};
+    const groups = [
+        {name: 'Background', ids: ['background']},
+        {name: 'Water', ids: ['water']},
+        {name: 'Roads', ids: ['roads']},
+        {name: 'Satellite', ids: ['satellite']},
+        {name: 'Towers', ids: ['overlay:towers:points']},
+    ];
+
+    test('says where the data of the exported layers is from, once each, as text', () => {
+        expect(exportCredits(map, groups)).toEqual([
+            '© OpenStreetMap contributors', 'Imagery © Somebody', 'Towers by Somebody Else',
+        ]);
+        expect(exportCredits(map, groups.slice(0, 1))).toEqual([]);
+        expect(exportCredits(map, [])).toEqual([]);
+    });
+
+    test('says the day as the person exporting has it', () => {
+        expect(exportDate(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
+        expect(exportDate(new Date(2026, 10, 15))).toBe('2026-11-15');
+    });
+
+    test('is the name of the quadrangle, its credits and the day', () => {
+        expect(exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15))).toEqual({
+            name: '61°07′30″N 150°00′W', credits: ['© OpenStreetMap contributors'], date: '2026-11-15',
+        });
     });
 });
 

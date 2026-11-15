@@ -6,6 +6,9 @@ layer (an "optional content group") of its own, so a reader can show and hide th
 
 The page is also told where on the Earth it is (a "geospatial PDF", ISO 32000-2 section 12.10), so a reader which
 knows how can show coordinates, measure, and put a GPS position on the map.
+
+The map can be put on a sheet (see `modules.map.sheet`): a margin around it with what a printed map has there, and
+a grid over it.
 """
 import io
 import math
@@ -15,12 +18,13 @@ from typing import List, Optional, Sequence
 
 from PIL import Image
 
+from modules.map.sheet import Sheet, draw_sheet, plan_sheet
 from wrolpi.common import logger
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ExportLayer', 'InvalidExport', 'build_layered_pdf', 'geospatial_viewport', 'MAX_LAYERS', 'MAX_SIDE',
-           'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
+__all__ = ['ExportLayer', 'InvalidExport', 'Sheet', 'build_layered_pdf', 'geospatial_viewport', 'MAX_LAYERS',
+           'MAX_SIDE', 'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
 
 # What the browser may ask for.  Every image is decoded, so what an export costs is its pixels, whatever the size
 # of the upload (an image of one color is a few kilobytes however large it is).
@@ -135,11 +139,13 @@ def _pdf_string(text: str) -> str:
     return '<' + (b'\xfe\xff' + text.encode('utf-16-be')).hex().upper() + '>'
 
 
-def geospatial_viewport(width: float, height: float, bounds: Sequence[float], name: str = None) -> str:
-    """The value of a page's `/VP`: a viewport which covers the page (`width` by `height` points), and says the
-    page is the map between `bounds` (west, south, east, north; degrees of WGS 84) in Web Mercator.
+def geospatial_viewport(width: float, height: float, bounds: Sequence[float], name: str = None,
+                        origin: Sequence[float] = (0, 0)) -> str:
+    """The value of a page's `/VP`: a viewport which covers the map (`width` by `height` points, its lower left
+    corner at `origin`: so far right of, and up from, the page's), and says it is the map between `bounds` (west,
+    south, east, north; degrees of WGS 84) in Web Mercator.
 
-    A point of the page is given as a part of the way across and up it (0 to 1, from the lower left), and the
+    A point of the map is given as a part of the way across and up it (0 to 1, from the lower left), and the
     corners are listed as GDAL and the readers which follow it expect: upper left, lower left, lower right,
     upper right.  The coordinates of each are its latitude, then its longitude.
     """
@@ -149,7 +155,8 @@ def geospatial_viewport(width: float, height: float, bounds: Sequence[float], na
                                                               (north, east)))
     name = f' /Name {_pdf_string(name)}' if name else ''
     return (
-        f'[<< /Type /Viewport{name} /BBox [0 0 {width:.3f} {height:.3f}]'
+        f'[<< /Type /Viewport{name}'
+        f' /BBox [{origin[0]:.3f} {origin[1]:.3f} {origin[0] + width:.3f} {origin[1] + height:.3f}]'
         f' /Measure << /Type /Measure /Subtype /GEO'
         f' /Bounds [{corners}] /GPTS [{points}] /LPTS [{corners}]'
         f' /GCS << /Type /PROJCS /EPSG {WEB_MERCATOR_EPSG} /WKT {_pdf_string(WEB_MERCATOR_WKT)} >>'
@@ -165,13 +172,13 @@ def _compress_stream(doc, xref: int):
     doc.xref_set_key(xref, 'Filter', '/FlateDecode')
 
 
-def _insert_layer(doc, page, layer: ExportLayer):
-    """Put the image of a layer on the page, in a PDF layer of its own.
+def _insert_layer(doc, page, rect, layer: ExportLayer):
+    """Put the image of a layer in a rectangle of the page, in a PDF layer of its own.
 
     PyMuPDF keeps the pixels of an image uncompressed until the PDF is written: about 90 MB for each layer of a
     quadrangle, all of them at once.  They are compressed here instead, so only one layer's are ever in memory."""
     group = doc.add_ocg(layer.name, on=True)
-    xref = page.insert_image(page.rect, stream=layer.image, oc=group)
+    xref = page.insert_image(rect, stream=layer.image, oc=group)
     _compress_stream(doc, xref)
     # The transparency of a PNG is an image of its own.
     kind, mask = doc.xref_get_key(xref, 'SMask')
@@ -180,7 +187,7 @@ def _insert_layer(doc, page, layer: ExportLayer):
 
 
 def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None,
-                      bounds: Optional[Sequence[float]] = None) -> bytes:
+                      bounds: Optional[Sequence[float]] = None, sheet: Optional[Sheet] = None) -> bytes:
     """A one page PDF of the layers, the first at the bottom, each in a PDF layer of its own.
 
     A layer in which nothing was drawn is left out.
@@ -189,6 +196,7 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
     @param dpi: How many of those pixels are an inch of the page.
     @param bounds: The west, south, east and north edges of the images, in degrees.  With them the PDF says where
         it is on the Earth; the images must be Web Mercator, and all of the map between those edges.
+    @param sheet: With this the map is on a sheet, which says this of it.  The sheet needs `bounds`.
     @raise InvalidExport: When the layers are not of one map.
     """
     if not layers:
@@ -205,6 +213,8 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
         raise InvalidExport(f'A map can not be exported at {dpi} DPI')
     if bounds is not None:
         bounds = _check_bounds(bounds)
+    elif sheet is not None:
+        raise InvalidExport('The edges of the map are needed to put it on a sheet')
 
     drawn = [layer for layer in layers if _check_layer(layer, width, height)]
     if not drawn:
@@ -216,11 +226,23 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
 
     doc = pymupdf.open()
     try:
-        page = doc.new_page(width=width * POINTS_PER_INCH / dpi, height=height * POINTS_PER_INCH / dpi)
+        map_width, map_height = width * POINTS_PER_INCH / dpi, height * POINTS_PER_INCH / dpi
+        if sheet is not None:
+            plan = plan_sheet(map_width, map_height, bounds, sheet)
+            page = doc.new_page(width=plan.width, height=plan.height)
+            rect = pymupdf.Rect(plan.map_rect)
+        else:
+            plan = None
+            page = doc.new_page(width=map_width, height=map_height)
+            rect = page.rect
         for layer in drawn:
-            _insert_layer(doc, page, layer)
+            _insert_layer(doc, page, rect, layer)
+        if plan is not None:
+            draw_sheet(doc, page, plan)
         if bounds is not None:
-            doc.xref_set_key(page.xref, 'VP', geospatial_viewport(page.rect.width, page.rect.height, bounds, title))
+            # A PDF measures up from the bottom of the page.
+            origin = (rect.x0, page.rect.height - rect.y1)
+            doc.xref_set_key(page.xref, 'VP', geospatial_viewport(rect.width, rect.height, bounds, title, origin))
         doc.set_metadata(dict(title=title or 'Map', creator='WROLPi', producer='WROLPi'))
         return doc.tobytes(garbage=3)
     finally:

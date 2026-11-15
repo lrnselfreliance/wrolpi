@@ -1,6 +1,9 @@
 import io
 import json
+import subprocess
+import sys
 from http import HTTPStatus
+from unittest import mock
 
 import pymupdf
 import pytest
@@ -113,6 +116,8 @@ def test_blank_layer_is_left_out():
     ([ExportLayer('A', make_image())], 0, HEIGHT, 300, '0x90'),
     ([ExportLayer('A', make_image())], export.MAX_SIDE + 1, 10, 300, 'can not be exported'),
     ([ExportLayer('A', make_image())], 10000, 10000, 300, 'can not be exported'),
+    # Each layer is a size a map is, but all of them together are more than there is memory for.
+    ([ExportLayer('A', b'never decoded')] * 30, 6000, 8000, 300, 'too large to export'),
     ([ExportLayer('A', make_image())], WIDTH, HEIGHT, 0, 'DPI'),
     ([ExportLayer('A', make_image())], WIDTH, HEIGHT, 5000, 'DPI'),
 ])
@@ -172,3 +177,44 @@ async def test_api_export_pdf_invalid(async_client, make_multipart_form):
     request, response = await post(export_form(make_multipart_form, [('A', make_image(size=(10, 10)))]))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert '10x10' in response.json['error']
+
+
+def test_total_pixels_are_limited_before_decoding():
+    """The memory an export needs is the pixels of all its layers, which a small upload can be a great many of:
+    it is refused without any image being opened."""
+    with mock.patch('modules.map.export.Image.open') as image_open:
+        with pytest.raises(InvalidExport, match='too large to export'):
+            build_layered_pdf([ExportLayer(str(i), BLANK) for i in range(export.MAX_LAYERS)],
+                              export.MAX_SIDE // 4, export.MAX_SIDE // 4, dpi=300)
+    image_open.assert_not_called()
+
+    # A quadrangle at 300 DPI near the equator, with every layer of a full layer control on, is within it.
+    assert 24 * 5300 * 6900 <= export.MAX_TOTAL_PIXELS
+
+
+def test_pymupdf_is_not_imported_with_the_module():
+    """pymupdf is slow to import, and the API imports this module when it starts."""
+    code = 'import sys, modules.map.api; print("pymupdf" in sys.modules)'
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines()[-1] == 'False'
+
+
+def test_images_are_compressed_as_they_are_added():
+    """The pixels of a layer are compressed in the PDF when the layer is added, not kept until it is written:
+    kept, the layers of a quadrangle are more memory than a Raspberry Pi has to spare."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=WIDTH, height=HEIGHT)
+    export._insert_layer(doc, page, ExportLayer('Satellite', make_image(image_format='JPEG')))
+    export._insert_layer(doc, page, ExportLayer('Water', make_image((0, 0, 255, 200), box=(0, 0, 30, 90))))
+
+    streams = [xref for xref in range(1, doc.xref_length()) if doc.xref_is_stream(xref)]
+    images = [xref for xref in streams if doc.xref_get_key(xref, 'Subtype')[1] == '/Image']
+    # The picture and its transparency, and the photograph.
+    assert len(images) == 3
+    assert sorted(doc.xref_get_key(xref, 'Filter')[1] for xref in images) \
+        == ['/DCTDecode', '/FlateDecode', '/FlateDecode']
+
+    # And it is still the picture: blue, mostly opaque, over the left of the photograph.
+    pixmap = page.get_pixmap(dpi=72, alpha=False)
+    assert pixmap.pixel(50, 45) != pixmap.pixel(10, 45)

@@ -189,8 +189,8 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
             attributionControl: false,
             pixelRatio: frame.pixelRatio,
             maxCanvasSize: [side, side],
-            // The canvas is read after it is drawn.
-            preserveDrawingBuffer: true,
+            // The canvas is read after it is drawn, so what was drawn must still be in it.
+            canvasContextAttributes: {preserveDrawingBuffer: true},
             // A label is all there at once: nothing is caught half faded in.
             fadeDuration: 0,
         });

@@ -5,24 +5,31 @@ layer the user has turned on, all of the same area and size.  Here they become o
 layer (an "optional content group") of its own, so a reader can show and hide them as the map can.
 """
 import io
+import zlib
 from dataclasses import dataclass
 from typing import List
 
-import pymupdf
 from PIL import Image
 
 from wrolpi.common import logger
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ExportLayer', 'InvalidExport', 'build_layered_pdf', 'MAX_LAYERS', 'MAX_SIDE', 'MAX_PIXELS', 'MIN_DPI',
-           'MAX_DPI']
+__all__ = ['ExportLayer', 'InvalidExport', 'build_layered_pdf', 'MAX_LAYERS', 'MAX_SIDE', 'MAX_PIXELS',
+           'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
 
-# What the browser may ask for.  The images are decoded, so their size is what memory the export needs.
+# What the browser may ask for.  Every image is decoded, so what an export costs is its pixels, whatever the size
+# of the upload (an image of one color is a few kilobytes however large it is).
 MAX_LAYERS = 64
 MAX_SIDE = 16384
-# A 1:24,000 quadrangle at 300 DPI is about 23 megapixels, and at 400 DPI about 40.
+# The pixels of one layer, which are in memory together (a few bytes each) while it is put in the PDF.  A 1:24,000
+# quadrangle at 300 DPI is 23 to 36 megapixels, more the nearer it is to the equator.
 MAX_PIXELS = 64_000_000
+# The pixels of every layer of a map together, which is the work an export is.  A quadrangle of 36 megapixels with
+# 24 layers on is about 860 million.
+MAX_TOTAL_PIXELS = 1_000_000_000
+# How hard an image is compressed in the PDF (zlib, 1 to 9).  Less is a few seconds faster and a much larger file.
+COMPRESSION_LEVEL = 6
 MIN_DPI = 36
 MAX_DPI = 1200
 IMAGE_FORMATS = ('PNG', 'JPEG')
@@ -68,6 +75,28 @@ def _check_layer(layer: ExportLayer, width: int, height: int) -> bool:
         raise InvalidExport(f'The layer {layer.name!r} is not a readable image') from e
 
 
+def _compress_stream(doc, xref: int):
+    """Compress the stream of an object of the PDF, when it is not already."""
+    if doc.xref_get_key(xref, 'Filter')[0] != 'null':
+        return
+    doc.update_stream(xref, zlib.compress(doc.xref_stream_raw(xref), COMPRESSION_LEVEL), compress=False)
+    doc.xref_set_key(xref, 'Filter', '/FlateDecode')
+
+
+def _insert_layer(doc, page, layer: ExportLayer):
+    """Put the image of a layer on the page, in a PDF layer of its own.
+
+    PyMuPDF keeps the pixels of an image uncompressed until the PDF is written: about 90 MB for each layer of a
+    quadrangle, all of them at once.  They are compressed here instead, so only one layer's are ever in memory."""
+    group = doc.add_ocg(layer.name, on=True)
+    xref = page.insert_image(page.rect, stream=layer.image, oc=group)
+    _compress_stream(doc, xref)
+    # The transparency of a PNG is an image of its own.
+    kind, mask = doc.xref_get_key(xref, 'SMask')
+    if kind == 'xref':
+        _compress_stream(doc, int(mask.split()[0]))
+
+
 def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None) -> bytes:
     """A one page PDF of the layers, the first at the bottom, each in a PDF layer of its own.
 
@@ -83,6 +112,10 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
         raise InvalidExport(f'A map of more than {MAX_LAYERS} layers can not be exported')
     if not (0 < width <= MAX_SIDE and 0 < height <= MAX_SIDE) or width * height > MAX_PIXELS:
         raise InvalidExport(f'A map of {width}x{height} pixels can not be exported')
+    if len(layers) * width * height > MAX_TOTAL_PIXELS:
+        # Before any image is decoded.
+        raise InvalidExport(f'A map of {len(layers)} layers of {width}x{height} pixels is too large to export;'
+                            f' turn some layers off')
     if not MIN_DPI <= dpi <= MAX_DPI:
         raise InvalidExport(f'A map can not be exported at {dpi} DPI')
 
@@ -90,13 +123,16 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
     if not drawn:
         raise InvalidExport('Nothing is drawn in any layer of the map')
 
+    # Not imported at module level: pymupdf also imports onnxruntime (~2s on a Pi 4), which the API must not pay
+    # for at startup.
+    import pymupdf
+
     doc = pymupdf.open()
     try:
         page = doc.new_page(width=width * POINTS_PER_INCH / dpi, height=height * POINTS_PER_INCH / dpi)
         for layer in drawn:
-            group = doc.add_ocg(layer.name, on=True)
-            page.insert_image(page.rect, stream=layer.image, oc=group)
+            _insert_layer(doc, page, layer)
         doc.set_metadata(dict(title=title or 'Map', creator='WROLPi', producer='WROLPi'))
-        return doc.tobytes(deflate=True, garbage=3)
+        return doc.tobytes(garbage=3)
     finally:
         doc.close()

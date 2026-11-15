@@ -255,8 +255,11 @@ describe('drawing the layers', () => {
 
         expect(record.options).toMatchObject({
             center: frame.center, zoom: frame.zoom, pixelRatio: 2, interactive: false,
-            preserveDrawingBuffer: true, fadeDuration: 0, maxCanvasSize: [6864, 6864],
+            fadeDuration: 0, maxCanvasSize: [6864, 6864],
+            // Where this MapLibre reads it from; as an option of the map itself it is ignored.
+            canvasContextAttributes: {preserveDrawingBuffer: true},
         });
+        expect(record.options).not.toHaveProperty('preserveDrawingBuffer');
         expect(record.options.container.style.width).toBe('1654px');
         expect(record.options.container.style.height).toBe('3432px');
         expect(setup).toHaveBeenCalledTimes(1);

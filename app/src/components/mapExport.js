@@ -166,7 +166,9 @@ export function isOpaque(canvas) {
 }
 
 // Draw each group of layers of `style` on a map of its own, and return the images:
-// {width, height, dpi, layers: [{name, blob}]}.
+// {width, height, dpi, bounds, layers: [{name, blob}]}.  `bounds` is the west, south, east and north
+// edges of the images (degrees), which is what says where the PDF is on the Earth: they are read
+// from the map which was drawn, so they are of the picture and not of what was asked for.
 //
 // MapClass: maplibregl.Map.  setup(map): called with the new map before it draws anything.
 // onProgress(name, index, count): called before each group is drawn.
@@ -217,9 +219,11 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
             layers.push({name: group.name, blob});
             show("none");
         }
+        const edges = map.getBounds();
         return {
             width: canvas.width,
             height: canvas.height,
+            bounds: [edges.getWest(), edges.getSouth(), edges.getEast(), edges.getNorth()],
             dpi: canvas.width / frame.cssWidth * (frame.dpi / frame.pixelRatio),
             layers,
         };

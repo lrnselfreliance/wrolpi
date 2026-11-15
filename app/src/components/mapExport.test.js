@@ -190,6 +190,11 @@ function fakeMapClass(record, {transparent = true} = {}) {
             return this.canvas;
         }
 
+        // The edges of what this map draws (not quite those of the quadrangle it was asked for).
+        getBounds() {
+            return {getWest: () => -150, getSouth: () => 61.12499878, getEast: () => -149.875, getNorth: () => 61.25000121};
+        }
+
         getLayer(id) {
             return this.layerIds.has(id) ? {id} : undefined;
         }
@@ -251,6 +256,8 @@ describe('drawing the layers', () => {
         expect(result.layers.map(l => l.name)).toEqual(['Water', 'Roads - Minor', 'Labels']);
         expect(result.layers[1].blob.layers).toEqual(['roads_minor']);
         expect(result).toMatchObject({width: 3308, height: 6864, dpi: 300});
+        // Where the picture is, as the map which drew it has it.
+        expect(result.bounds).toEqual([-150, 61.12499878, -149.875, 61.25000121]);
         expect(progress).toEqual(['Water 1/3', 'Roads - Minor 2/3', 'Labels 3/3']);
 
         expect(record.options).toMatchObject({

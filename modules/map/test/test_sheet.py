@@ -6,7 +6,7 @@ from http import HTTPStatus
 import pymupdf
 import pytest
 
-from modules.map import export, sheet
+from modules.map import export, magnetic, sheet
 from modules.map.export import ExportLayer, InvalidExport, Sheet, build_layered_pdf
 from modules.map.test.test_export import MULTIPART, export_form, layer_names, make_image, read_viewport
 
@@ -269,6 +269,63 @@ def test_sheet_title_of_a_narrow_map(bounds, name):
     for title in titles:
         assert title in page.rect
         assert title.y1 <= top - sheet.LABEL_SIZE
+
+
+def test_plan_norths():
+    """A sheet says how far the grid's north and a compass's north are from true north, at the middle of it."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, SHEET)
+    # West of the middle of its zone the grid leans west; a compass in Alaska points well east.
+    assert plan.grid_north == pytest.approx(-2.571, abs=0.001)
+    assert plan.magnetic_north == pytest.approx(magnetic.declination(61.1875, -149.9375, 2026 + 318 / 365), abs=0.01)
+    assert 13 < plan.magnetic_north < 15
+    notes = ' '.join(plan.notes)
+    assert "Grid north is 2°34' west of true north" in notes
+    assert re.search(r"Magnetic north is 13°5\d' east of true north at the middle of the map on 2026-11-15,"
+                     r" and moves about 0°1\d' west each year \(WMM-2025\)\.", notes), notes
+
+
+@pytest.mark.parametrize('date', [None, 'yesterday', '', '2024-12-31', '2030-01-01', '2026-13-45'])
+def test_plan_without_a_compass(date):
+    """Where a compass points is not said when the day is not known, or is not one the model is of."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, Sheet(date=date))
+    assert plan.magnetic_north is None
+    assert 'Magnetic' not in ' '.join(plan.notes)
+    assert plan.grid_north is not None
+
+
+def test_decimal_year():
+    assert sheet._decimal_year('2026-01-01') == 2026
+    assert sheet._decimal_year('2026-07-02') == pytest.approx(2026.4986, abs=0.0001)
+    assert sheet._decimal_year('2028-12-31T10:00:00') == pytest.approx(2028 + 365 / 366)
+
+
+def test_norths_are_on_their_own_sides():
+    """In the diagram a north is drawn on the side of true north it is on, and apart from it however near it
+    is."""
+    assert sheet._north_tip(0, 0, 14, 50)[0] > 0 > sheet._north_tip(0, 0, -2.5, 50)[0]
+    # A north a tenth of a degree off, and one eighty off, are both drawn where they can be seen.
+    near, far = sheet._north_tip(0, 0, 0.1, 50), sheet._north_tip(0, 0, -80, 50)
+    assert near[0] == pytest.approx(50 * math.sin(math.radians(7)))
+    assert far == pytest.approx((-25, -50 * math.cos(math.radians(30))))
+
+
+def test_sheet_norths_diagram():
+    """The diagram of the norths is beside the scale bars, with each angle written; a sheet too narrow for it,
+    or with nothing to put in it, goes without."""
+    text = page_text(build())
+    assert 'MN 13°' in text and 'E\n' in text
+    assert 'GN 2°34\' W' in text
+
+    # No compass: the grid's north is still drawn.
+    text = page_text(build(sheet_=Sheet()))
+    assert 'GN 2°34\' W' in text and 'MN' not in text
+
+    # No grid near a pole, but a compass points somewhere; the quadrangle is too narrow for the diagram.
+    narrow = build_layered_pdf([ExportLayer('Background', make_image(size=(90, 400)))], 90, 400, DPI,
+                               bounds=[0, 84.5, 0.125, 84.625], sheet=Sheet(date='2026-11-15'))
+    text = page_text(narrow)
+    assert 'Magnetic north is' in text
+    assert 'MN ' not in text and 'GN ' not in text
 
 
 def test_sheet_text_which_the_font_can_not_write():

@@ -1,14 +1,18 @@
 """The sheet an exported map is printed on: what a topographic map has around and over the map itself.
 
 Around the map is a margin with a title, the latitude and longitude of the map's corners and of ticks along its
-edges, scale bars, and notes (the projection, the grid, where the map's data is from).  Over the map is a grid of
+edges, scale bars, a diagram of the three norths (true, grid and magnetic), and notes (the projection, the grid,
+where a compass points, where the map's data is from).  Over the map is a grid of
 1,000 meter squares (Universal Transverse Mercator), which is how a position is read from, or found on, paper.
 
 All of it is drawn as lines and text, in PDF layers of its own which a reader can turn off.
 """
+import datetime
 import math
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
+
+from modules.map import magnetic
 
 __all__ = ['Sheet', 'SheetPlan', 'plan_sheet', 'draw_sheet', 'to_utm', 'from_utm', 'utm_zone', 'map_scale',
            'format_angle', 'graticule_interval', 'SHEET_LAYER', 'GRID_LAYER']
@@ -71,7 +75,8 @@ class Sheet:
     name: Optional[str] = None
     # Where the data of the map is from.
     credits: Sequence[str] = ()
-    # When the map was made, as it is to be written.
+    # When the map was made, as it is to be written.  When it is a day (2026-11-15), the sheet says where a
+    # compass points on that day.
     date: Optional[str] = None
 
 
@@ -90,6 +95,10 @@ class SheetPlan:
     notes: List[str] = field(default_factory=list)
     # The UTM zone the map's grid is of, or None where there is no grid.
     zone: Optional[int] = None
+    # How far east of true north (degrees) the grid's north, and a compass, point at the middle of the map.
+    # None where there is no grid, and when it is not known where a compass points.
+    grid_north: Optional[float] = None
+    magnetic_north: Optional[float] = None
 
     @property
     def south_hemisphere(self) -> bool:
@@ -237,6 +246,25 @@ def _grid_convergence(latitude: float, longitude: float, zone: int, south: bool)
                                    math.radians(lat - latitude)))
 
 
+def _east_or_west(angle: float) -> str:
+    """An angle east of north as it is said: 2°34' west.  No north is known to better than a minute."""
+    return f'{format_angle(_to_the_minute(abs(angle)))} {"west" if angle < 0 else "east"}'
+
+
+def _to_the_minute(angle: float) -> float:
+    return round(angle * 60) / 60
+
+
+def _decimal_year(date: Optional[str]) -> Optional[float]:
+    """A day (2026-11-15) as a year and a part of one, or None when it is not a day."""
+    try:
+        day = datetime.date.fromisoformat(str(date).strip()[:10])
+    except ValueError:
+        return None
+    first = datetime.date(day.year, 1, 1)
+    return day.year + (day - first).days / (datetime.date(day.year + 1, 1, 1) - first).days
+
+
 def _format_scale(scale: float) -> str:
     """1:24,000.  A map's scale is not known closer than three figures."""
     digits = max(0, math.floor(math.log10(scale)) - 2)
@@ -274,11 +302,19 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     notes = [f'Scale {_format_scale(plan.scale)} at the middle of the map.  Projection: Web Mercator.'
              f'  Datum: WGS 84.  True north is up the page.']
     if plan.zone:
-        convergence = _grid_convergence(*middle, plan.zone, plan.south_hemisphere)
+        plan.grid_north = _grid_convergence(*middle, plan.zone, plan.south_hemisphere)
         notes.append(
             f'{_grid_meters(plan):,} meter grid: Universal Transverse Mercator, zone {plan.zone}'
-            f'{"S" if plan.south_hemisphere else "N"}.  Grid north is {format_angle(abs(convergence))}'
-            f' {"west" if convergence < 0 else "east"} of true north at the middle of the map.')
+            f'{"S" if plan.south_hemisphere else "N"}.  Grid north is {_east_or_west(plan.grid_north)} of true'
+            f' north at the middle of the map.')
+    year = _decimal_year(sheet.date)
+    plan.magnetic_north = magnetic.declination(*middle, year) if year else None
+    if plan.magnetic_north is not None:
+        model = magnetic.load_model()
+        yearly = model.declination(*middle, year + 1) - plan.magnetic_north
+        notes.append(
+            f'Magnetic north is {_east_or_west(plan.magnetic_north)} of true north at the middle of the map on'
+            f' {_latin(sheet.date)}, and moves about {_east_or_west(yearly)} each year ({model.name}).')
     names = [_latin(str(i)) for i in sheet.credits if str(i).strip()]
     if names:
         notes.append('Map data: ' + '; '.join(names))
@@ -342,6 +378,10 @@ class _Pen:
     def box(self, rect: Sequence[float], fill=None, width: float = 0.5):
         self.shape.draw_rect(rect)
         self.shape.finish(width=width, color=BLACK, fill=fill, oc=self.group)
+
+    def polygon(self, points: Sequence[Tuple[float, float]], fill=BLACK):
+        self.shape.draw_polyline(list(points))
+        self.shape.finish(width=0.3, color=BLACK, fill=fill, closePath=True, oc=self.group)
 
     def text(self, x: float, y: float, text: str, size: float = LABEL_SIZE, align: str = 'left', font: str = FONT,
              color=BLACK):
@@ -469,12 +509,13 @@ def _draw_grid(pen: _Pen, plan: SheetPlan):
 
 
 def _draw_scale_bar(pen: _Pen, center: float, y: float, unit: float, name: str, most: int, parts: int,
-                    available: float, number=str):
+                    available: float, number=str) -> float:
     """A bar which is `unit` points for each unit of distance, with its top at `y`.  It has one unit left of its
-    zero, divided in `parts`, and as many to the right as there is room for, up to `most`."""
+    zero, divided in `parts`, and as many to the right as there is room for, up to `most`.  Returns how long the
+    bar is: nothing, when there is no room for it."""
     count = min(most, int(available // unit) - 1)
     if count < 1:
-        return
+        return 0
     left = center - (count + 1) * unit / 2
     zero = left + unit
     for i in range(parts):
@@ -487,6 +528,45 @@ def _draw_scale_bar(pen: _Pen, center: float, y: float, unit: float, name: str, 
     for i in range(count + 1):
         pen.text(zero + i * unit, y - 2.5, number(i), align='center')
     pen.text(zero + count * unit + 12, y + BAR_HEIGHT, name)
+    return (count + 1) * unit
+
+
+# The diagram of the norths: how long the line to each is (points), and the least and the most it is drawn from
+# straight up (degrees).  The diagram shows which side each north is on, not how far: the angles are written.
+NORTH_LENGTHS = dict(true=62, magnetic=50, grid=38)
+NORTH_LEAST, NORTH_MOST = 7, 30
+# How wide the diagram is, with what is written beside its lines.
+NORTHS_WIDTH = 100
+
+
+def _north_tip(x: float, y: float, angle: float, length: float) -> Tuple[float, float]:
+    """Where the line to a north ends: drawn to its side of straight up, but never so near it, or so far from it,
+    that it can not be told apart."""
+    shown = math.radians(math.copysign(min(NORTH_MOST, max(NORTH_LEAST, abs(angle))), angle))
+    return x + length * math.sin(shown), y - length * math.cos(shown)
+
+
+def _draw_norths(pen: _Pen, plan: SheetPlan, x: float, y: float):
+    """Which way true north, the grid's north and a compass's north are from each other, from a point at
+    (`x`, `y`), with how far each is from true north written under it."""
+    top = y - NORTH_LENGTHS['true']
+    pen.line([(x, y), (x, top)], width=0.6)
+    # True north is at a star.
+    star = [(x + r * math.sin(math.radians(36 * i)), top - 5 - r * math.cos(math.radians(36 * i)))
+            for i, r in zip(range(10), (5, 2) * 5)]
+    pen.polygon(star)
+    below = y + LABEL_SIZE + 4
+    for name, angle, length in (('MN', plan.magnetic_north, NORTH_LENGTHS['magnetic']),
+                                ('GN', plan.grid_north, NORTH_LENGTHS['grid'])):
+        if angle is None:
+            continue
+        tip_x, tip_y = _north_tip(x, y, angle, length)
+        pen.line([(x, y), (tip_x, tip_y)], width=0.6)
+        east = angle >= 0
+        pen.text(tip_x + (3 if east else -3), tip_y + 2, name, align='left' if east else 'right')
+        pen.text(x, below, f'{name} {format_angle(_to_the_minute(abs(angle)))} {"E" if east else "W"}',
+                 align='center')
+        below += LABEL_SIZE + 2
 
 
 def _draw_margin(pen: _Pen, plan: SheetPlan):
@@ -510,10 +590,16 @@ def _draw_margin(pen: _Pen, plan: SheetPlan):
     # The room a bar has: the map's width, less the name of its unit on each side (so it stays centered).
     available = (x1 - x0) - 2 * (_text_width('KILOMETERS', LABEL_SIZE) + 14)
     meter = 1 / (plan.scale * METERS_PER_POINT)
-    _draw_scale_bar(pen, center, y, 1000 * meter, 'KILOMETERS', 2, 10, available)
-    _draw_scale_bar(pen, center, y + BAR_SPACING, METERS_PER_MILE * meter, 'MILES', 1, 4, available)
-    _draw_scale_bar(pen, center, y + 2 * BAR_SPACING, 1000 * METERS_PER_FOOT * meter, 'FEET', 7, 2, available,
-                    number=lambda i: str(i * 1000))
+    bars = [
+        _draw_scale_bar(pen, center, y, 1000 * meter, 'KILOMETERS', 2, 10, available),
+        _draw_scale_bar(pen, center, y + BAR_SPACING, METERS_PER_MILE * meter, 'MILES', 1, 4, available),
+        _draw_scale_bar(pen, center, y + 2 * BAR_SPACING, 1000 * METERS_PER_FOOT * meter, 'FEET', 7, 2, available,
+                        number=lambda i: str(i * 1000)),
+    ]
+    # The norths are left of the bars, where there is room for them.
+    if (plan.grid_north is not None or plan.magnetic_north is not None) \
+            and center - max(bars) / 2 - x0 >= NORTHS_WIDTH + 10:
+        _draw_norths(pen, plan, x0 + NORTHS_WIDTH / 2, y + 2 * BAR_SPACING - 12)
 
     y += 3 * BAR_SPACING
     for index, note in enumerate(plan.notes):

@@ -5,7 +5,7 @@
 // with only that layer showing; the API puts the images in a PDF, each in a layer of its own, and
 // (when it is asked to) on a sheet: with a margin, a grid, scale bars and notes around the map.
 
-import {QUAD_DEGREES, QUAD_SCALE, quadLabel, quadSize} from "./mapQuads";
+import {QUAD_DEGREES, QUAD_SCALE, quadLabel, quadSize, quadTitle} from "./mapQuads";
 import {isOverlayLayerId} from "./mapOverlays";
 
 export const EXPORT_DPI = 300;
@@ -291,23 +291,34 @@ export function exportDate(now = new Date()) {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-// What is written on the sheet a quadrangle is printed on.
-export function exportSheet(quad, map, groups, now = new Date()) {
-    return {name: quadLabel(quad), credits: exportCredits(map, groups), date: exportDate(now)};
+// What is written on the sheet a quadrangle is printed on.  `named` is what the USGS calls the
+// quadrangle ({name, state, exact}), when it calls it anything: else it goes by where it is.
+export function exportSheet(quad, map, groups, now = new Date(), named = null) {
+    return {
+        name: quadTitle(named) || quadLabel(quad),
+        credits: exportCredits(map, groups),
+        date: exportDate(now),
+    };
 }
 
-// "N40.250_W112.000": where a quadrangle's southwest corner is, in a form a file can be named.
+// "N40.250_W105.125": where a quadrangle's southwest corner is, in a form a file can be named.
 function quadFileStem(quad) {
     const part = (value, positive, negative) => `${value < 0 ? negative : positive}${Math.abs(value).toFixed(3)}`;
     return `${part(quad.south, "N", "S")}_${part(quad.west, "E", "W")}`;
 }
 
-export function exportFileName(quad) {
-    return `wrolpi-map_${QUAD_SCALE / 1000}k_${quadFileStem(quad)}.pdf`;
+// A name as a part of a file's: "Berthoud".
+function fileNamePart(name) {
+    return String(name).normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
 }
 
-export function exportTitle(quad) {
-    return `1:${QUAD_SCALE.toLocaleString("en-US")} ${quadLabel(quad)}`;
+export function exportFileName(quad, named = null) {
+    const name = named?.name ? fileNamePart(named.name) : "";
+    return `wrolpi-map_${QUAD_SCALE / 1000}k_${name ? `${name}_` : ""}${quadFileStem(quad)}.pdf`;
+}
+
+export function exportTitle(quad, named = null) {
+    return `1:${QUAD_SCALE.toLocaleString("en-US")} ${quadTitle(named) || quadLabel(quad)}`;
 }
 
 // Give the user a file to keep.

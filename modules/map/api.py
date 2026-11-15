@@ -6,7 +6,7 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import export, lib, schema, search
+from modules.map import export, lib, quads, schema, search
 from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
@@ -177,6 +177,24 @@ async def rebuild_single_search_index(_: Request, filename: str):
     if started:
         return json_response({'message': f'Search index rebuild started for {filename}'}, HTTPStatus.ACCEPTED)
     return json_response({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/quad')
+@openapi.description('The name of the USGS quadrangle of an area of the map')
+async def get_quad(request: Request):
+    """What the USGS calls the quadrangle between `west`, `south`, `east` and `north` (degrees): `quad` is its
+    `name`, its `state`, and whether it is `exact`ly that area (and not a larger quadrangle which has the middle
+    of it); or null where there is no name, which is most of the world."""
+    try:
+        west, south, east, north = (float(request.args.get(i)) for i in ('west', 'south', 'east', 'north'))
+    except (TypeError, ValueError):
+        return response.json({'error': 'The edges of the area are four numbers'}, HTTPStatus.BAD_REQUEST)
+    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+        # Not so of a number which is not one, either.
+        return response.json({'error': 'The edges are not those of an area of the map'}, HTTPStatus.BAD_REQUEST)
+    # The index is read from its file the first time, which is not for the event loop.
+    name = await asyncio.to_thread(quads.quad_name, west, south, east, north)
+    return json_response({'quad': name.__json__() if name else None})
 
 
 # How much may be written on the sheet of an exported map.

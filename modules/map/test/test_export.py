@@ -43,7 +43,7 @@ def test_layers_are_pdf_layers():
         ExportLayer('Background', make_image((240, 240, 230, 255))),
         ExportLayer('Water', make_image((60, 120, 220, 255), box=(0, 0, 30, 90))),
         ExportLayer('Satellite', make_image(image_format='JPEG')),
-    ], WIDTH, HEIGHT, dpi=300, title='40°15′N 112°00′W')
+    ], WIDTH, HEIGHT, dpi=300, title='40°15′N 105°07′30″W')
 
     doc = pymupdf.open(stream=pdf, filetype='pdf')
     assert doc.page_count == 1
@@ -52,7 +52,7 @@ def test_layers_are_pdf_layers():
     assert (round(page.rect.width, 3), round(page.rect.height, 3)) == (14.4, 21.6)
     assert layer_names(pdf) == ['Background', 'Water', 'Satellite']
     assert all(i['on'] for i in doc.get_ocgs().values())
-    assert doc.metadata['title'] == '40°15′N 112°00′W'
+    assert doc.metadata['title'] == '40°15′N 105°07′30″W'
 
     # Every image fills the page, and is the picture it was given.
     images = page.get_image_info(xrefs=True)

@@ -45,12 +45,14 @@ import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from 
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
 import {quadAt} from "./mapQuads";
 import {
+    EXPORT_DPI,
     exportFileName,
     exportFrame,
     exportGroups,
     exportSheet,
     exportTitle,
     maxCanvasSide,
+    maxExportPixels,
     renderExport,
     saveBlob,
 } from "./mapExport";
@@ -1040,7 +1042,7 @@ export default function MapViewer() {
     }, [contextMenu]);
 
     // Make a PDF of a quadrangle: the layers which are on, drawn as they are on the map.
-    const handleExportPdf = useCallback(async (quad, {sheet = true} = {}) => {
+    const handleExportPdf = useCallback(async (quad, {sheet = true, dpi = EXPORT_DPI} = {}) => {
         const map = mapRef.current;
         if (!map) return;
         setExportError(null);
@@ -1053,14 +1055,19 @@ export default function MapViewer() {
                 style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX)),
                 {layerGroups: LAYER_GROUPS, overlayLabels});
             if (!groups.length) throw new Error("No layer of the map is turned on");
+            const frame = exportFrame(
+                quad, {dpi, maxSide: maxCanvasSide(), maxPixels: maxExportPixels(groups.length)});
+            // The map is less sharp than was asked for when this browser, or this many layers, can not be.
+            const sharpness = Math.round(frame.dpi) < dpi ? ` at ${Math.round(frame.dpi)} DPI` : "";
             const rendered = await renderExport({
                 MapClass: maplibregl.Map,
                 style,
-                frame: exportFrame(quad, {maxSide: maxCanvasSide()}),
+                frame,
                 groups,
                 ignoredPrefixes: [QUAD_LAYER_PREFIX],
                 setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
-                onProgress: (name, index, count) => setExportStatus(`Drawing ${name} (${index + 1} of ${count})…`),
+                onProgress: (name, index, count) => setExportStatus(
+                    `Drawing ${name} (${index + 1} of ${count})${sharpness}…`),
             });
             setExportStatus("Making the PDF…");
             const pdf = await exportMapPdf({

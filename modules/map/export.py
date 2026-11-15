@@ -31,10 +31,11 @@ __all__ = ['ExportLayer', 'InvalidExport', 'Sheet', 'build_layered_pdf', 'geospa
 MAX_LAYERS = 64
 MAX_SIDE = 16384
 # The pixels of one layer, which are in memory together (a few bytes each) while it is put in the PDF.  A 1:24,000
-# quadrangle at 300 DPI is 23 to 36 megapixels, more the nearer it is to the equator.
+# quadrangle at 300 DPI is 23 to 47 megapixels, more the nearer it is to the equator; at 400 DPI, 40 to 83.  The
+# browser draws a map less sharp than it was asked to rather than send more than this.
 MAX_PIXELS = 64_000_000
-# The pixels of every layer of a map together, which is the work an export is.  A quadrangle of 36 megapixels with
-# 24 layers on is about 860 million.
+# The pixels of every layer of a map together, which is the work an export is.  A quadrangle of 40 megapixels with
+# 24 layers on is about 960 million.
 MAX_TOTAL_PIXELS = 1_000_000_000
 # How hard an image is compressed in the PDF (zlib, 1 to 9).  Less is a few seconds faster and a much larger file.
 COMPRESSION_LEVEL = 6

@@ -9,6 +9,13 @@ import {QUAD_DEGREES, QUAD_SCALE, quadLabel, quadSize} from "./mapQuads";
 import {isOverlayLayerId} from "./mapOverlays";
 
 export const EXPORT_DPI = 300;
+// How sharp a map may be asked for.  More is four times the work for twice the sharpness: a
+// quadrangle at 600 is more than a browser will draw, or a Raspberry Pi will make a PDF of.
+export const EXPORT_DPIS = [300, 400];
+// The most the API makes a PDF of: the pixels of one layer, and of all the layers of a map together
+// (MAX_PIXELS and MAX_TOTAL_PIXELS in modules/map/export.py).
+const MAX_LAYER_PIXELS = 64_000_000;
+const MAX_TOTAL_PIXELS = 1_000_000_000;
 // The map's style is made for a screen, where its sizes (of text, of lines) are in CSS pixels.  This
 // is how many of those are an inch of paper: fewer is larger text and less detail.  At 150 a 12 pixel
 // label prints at about 6 points, which is what a topographic map uses, and a quadrangle is drawn at
@@ -38,6 +45,11 @@ export function maxCanvasSide() {
     }
 }
 
+// The most pixels each layer of a map of `layerCount` layers may be.
+export function maxExportPixels(layerCount) {
+    return Math.min(MAX_LAYER_PIXELS, Math.floor(MAX_TOTAL_PIXELS / Math.max(1, layerCount)));
+}
+
 function mercatorY(latitude) {
     return Math.log(Math.tan(Math.PI / 4 + latitude * Math.PI / 360));
 }
@@ -51,7 +63,12 @@ function latitudeOfMercatorY(y) {
 //
 // The map is Web Mercator, in which a quadrangle is exactly a rectangle.  It is as wide as the sheet
 // is at the quadrangle's middle, and as tall as Mercator makes that.
-export function exportFrame(quad, {dpi = EXPORT_DPI, cssDpi = EXPORT_CSS_DPI, maxSide = MAX_CANVAS_SIDE} = {}) {
+//
+// The map is as sharp as was asked for (`dpi`), or as sharp as it can be: no side of it longer than
+// `maxSide` (the browser's largest canvas), and no more of it than `maxPixels` (what the API takes).
+export function exportFrame(quad, {
+    dpi = EXPORT_DPI, cssDpi = EXPORT_CSS_DPI, maxSide = MAX_CANVAS_SIDE, maxPixels = Infinity,
+} = {}) {
     const widthInches = quadSize(quad).sheetWidthMm / MILLIMETERS_PER_INCH;
     const cssWidth = Math.round(widthInches * cssDpi);
     // The width of the whole world at the zoom where the quadrangle is `cssWidth` wide.
@@ -59,8 +76,11 @@ export function exportFrame(quad, {dpi = EXPORT_DPI, cssDpi = EXPORT_CSS_DPI, ma
     const [south, north] = [mercatorY(quad.south), mercatorY(quad.north)];
     const cssHeight = Math.round((north - south) / (2 * Math.PI) * world);
 
-    // As sharp as was asked for, or as this browser's largest canvas allows.
-    const pixelRatio = Math.min(dpi / cssDpi, maxSide / Math.max(cssWidth, cssHeight));
+    // A hair under what the pixels allow: each side of the canvas is rounded to a whole pixel.
+    const pixelRatio = Math.min(
+        dpi / cssDpi,
+        maxSide / Math.max(cssWidth, cssHeight),
+        Math.sqrt(maxPixels / (cssWidth * cssHeight)) * 0.999);
     return {
         cssWidth,
         cssHeight,

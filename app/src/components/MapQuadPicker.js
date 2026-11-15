@@ -9,6 +9,7 @@ import {
     quadLabel,
     quadPolygon,
     quadSize,
+    quadTitle,
 } from "./mapQuads";
 
 // What the ids of the picker's layers and sources start with: they are of the app, not of the map.
@@ -52,11 +53,16 @@ function selectedFeatures(quad) {
 // The grid and the chosen quadrangle are layers of the map, which a change of its style removes; they
 // are put back whenever the style has loaded.
 //
-// onExport(quad, {sheet, dpi}): make the PDF; `sheet` is whether the map is to be on a sheet, with a
-// margin, a grid and scale bars, and `dpi` is how sharp it is to be.  While it is being made `status` says how far along it is, and
-// nothing else can be chosen; `error` says why the last one could not be made.
+// onExport(quad, {sheet, dpi, name}): make the PDF; `sheet` is whether the map is to be on a sheet,
+// with a margin, a grid and scale bars, `dpi` is how sharp it is to be, and `name` is what the USGS
+// calls the quadrangle ({name, state, exact}), or null.
+//
+// fetchName(quad): asks for that name; it resolves to null where there is none.
+//
+// While the PDF is being made `status` says how far along it is, and nothing else can be chosen;
+// `error` says why the last one could not be made.
 export default function MapQuadPicker({
-    map, scaleUnit, initialQuad = null, onExport, onClose, status = null, error = null,
+    map, scaleUnit, initialQuad = null, onExport, onClose, fetchName, status = null, error = null,
 }) {
     const busy = status !== null;
     const busyRef = useRef(busy);
@@ -67,6 +73,21 @@ export default function MapQuadPicker({
     const [gridShown, setGridShown] = useState(true);
     const [sheet, setSheet] = useState(true);
     const [dpi, setDpi] = useState(EXPORT_DPI);
+    // What the chosen quadrangle is called: {id, name} once it is known, for the quadrangle it is of.
+    const [named, setNamed] = useState(null);
+    const name = selected && named?.id === selected.id ? named.name : null;
+
+    useEffect(() => {
+        if (!selected || !fetchName) return;
+        let current = true;
+        Promise.resolve(fetchName(selected))
+            .then(found => current && setNamed({id: selected.id, name: found || null}))
+            .catch(() => current && setNamed({id: selected.id, name: null}));
+        // An answer for a quadrangle which is no longer the chosen one is not used.
+        return () => {
+            current = false;
+        };
+    }, [selected, fetchName]);
 
     useEffect(() => {
         if (!map) return;
@@ -157,6 +178,7 @@ export default function MapQuadPicker({
         <div style={{fontWeight: 600, paddingBottom: "0.25rem"}}>Export a 1:24,000 map</div>
         {selected
             ? <div>
+                {name && <div data-testid="quad-name" style={{fontWeight: 600}}>{quadTitle(name)}</div>}
                 <div data-testid="quad-label">{quadLabel(selected)}</div>
                 <div style={{color: "var(--muted)"}} data-testid="quad-size">
                     {formatDistance(size.widthMeters, scaleUnit)} × {formatDistance(size.heightMeters, scaleUnit)}
@@ -208,7 +230,7 @@ export default function MapQuadPicker({
                 size="xs"
                 disabled={!selected || !onExport || busy}
                 loading={busy}
-                onClick={() => onExport(selected, {sheet, dpi})}
+                onClick={() => onExport(selected, {sheet, dpi, name})}
             >Export PDF</Button>
         </div>
     </div>;

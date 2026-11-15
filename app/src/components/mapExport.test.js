@@ -14,7 +14,7 @@ import {
 import {quadAt} from './mapQuads';
 
 const ANCHORAGE = quadAt(-149.93, 61.19);
-const SPRINGS = quadAt(-111.9345, 40.2802);
+const BERTHOUD = quadAt(-105.0595, 40.31);
 
 describe('how a quadrangle is drawn', () => {
     test('is the size of a 1:24,000 sheet, at the sharpness asked for', () => {
@@ -27,7 +27,7 @@ describe('how a quadrangle is drawn', () => {
         expect(frame.zoom).toBeCloseTo(13.18, 2);
 
         // Wider nearer the equator, and no taller.
-        const south = exportFrame(SPRINGS);
+        const south = exportFrame(BERTHOUD);
         expect(south.cssWidth).toBe(2615);
         expect(Math.abs(south.cssHeight - frame.cssHeight)).toBeLessThan(15);
         expect(south.zoom).toBeCloseTo(13.84, 2);
@@ -433,5 +433,23 @@ describe('what the PDF is called', () => {
         expect(exportFileName(ANCHORAGE)).toBe('wrolpi-map_24k_N61.125_W150.000.pdf');
         expect(exportFileName(quadAt(151.21, -33.87))).toBe('wrolpi-map_24k_S33.875_E151.125.pdf');
         expect(exportTitle(ANCHORAGE)).toBe('1:24,000 61°07′30″N 150°00′W');
+    });
+
+    test('says what the USGS calls it, when it calls it anything', () => {
+        const berthoud = {name: 'Berthoud', state: 'Colorado', exact: true};
+        const anchorage = {name: 'Anchorage A-8 NW', state: 'Alaska', exact: false};
+        expect(exportFileName(BERTHOUD, berthoud)).toBe('wrolpi-map_24k_Berthoud_N40.250_W105.125.pdf');
+        expect(exportFileName(ANCHORAGE, anchorage)).toBe('wrolpi-map_24k_Anchorage_A_8_NW_N61.125_W150.000.pdf');
+        expect(exportFileName(BERTHOUD, {name: '../Ni‘ihau: “North”?'})).toBe(
+            'wrolpi-map_24k_Ni_ihau_North_N40.250_W105.125.pdf');
+        expect(exportFileName(BERTHOUD, {name: '///'})).toBe('wrolpi-map_24k_N40.250_W105.125.pdf');
+        expect(exportTitle(BERTHOUD, berthoud)).toBe('1:24,000 Berthoud, Colorado');
+        // A quadrangle of the grid which is not all of the named one is a part of it.
+        expect(exportTitle(ANCHORAGE, anchorage)).toBe('1:24,000 Part of Anchorage A-8 NW, Alaska');
+        const map = {getStyle: () => ({layers: [], sources: {}}), getSource: () => undefined};
+        expect(exportSheet(BERTHOUD, map, [], new Date(2026, 10, 15), berthoud)).toEqual({
+            name: 'Berthoud, Colorado', credits: [], date: '2026-11-15',
+        });
+        expect(exportSheet(BERTHOUD, map, [], new Date(2026, 10, 15), null).name).toBe('40°15′N 105°07′30″W');
     });
 });

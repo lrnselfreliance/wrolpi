@@ -1798,6 +1798,19 @@ export async function exportMapPdf({width, height, dpi, title, bounds, layers, s
     return await response.blob();
 }
 
+// What the USGS calls a quadrangle: {name, state, exact}, or null where it has no name (most of the
+// world), and when it can not be asked.  A map is exported without its name as well as with it.
+export async function getMapQuadName({west, south, east, north}) {
+    try {
+        const response = await apiGet(
+            `${API_URI}/map/quad?west=${west}&south=${south}&east=${east}&north=${north}`);
+        if (!response.ok) return null;
+        return (await response.json()).quad || null;
+    } catch (e) {
+        return null;
+    }
+}
+
 export async function searchMap(query, limit = 12, offset = 0, lat = null, lon = null) {
     let url = `${API_URI}/map/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`;
     if (lat !== null && lon !== null) {

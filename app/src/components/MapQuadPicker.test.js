@@ -1,12 +1,12 @@
 import React from 'react';
-import {act, fireEvent, screen} from '@testing-library/react';
+import {act, fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderUI} from '../test-utils';
 import MapQuadPicker, {formatDistance, formatSheet} from './MapQuadPicker';
 import {quadAt} from './mapQuads';
 
 // As much of a MapLibre map as the picker uses.
 class FakeMap {
-    constructor({zoom = 12, bounds = {west: -112.05, south: 40.26, east: -111.8, north: 40.4}} = {}) {
+    constructor({zoom = 12, bounds = {west: -105.175, south: 40.26, east: -104.925, north: 40.4}} = {}) {
         this.zoom = zoom;
         this.bounds = bounds;
         this.sources = {};
@@ -70,7 +70,7 @@ class FakeMap {
 const click = (map, lng, lat) => act(() => map.fire('click', {lngLat: {lng, lat}}));
 const gridLines = map => map.getSource('quad-grid').data.features[0]?.geometry.coordinates || [];
 const selectedIds = map => map.getSource('quad-selected').data.features.map(f => f.properties.id);
-const SPRINGS = quadAt(-111.9345, 40.2802);
+const BERTHOUD = quadAt(-105.0595, 40.31);
 
 function renderPicker(map, props = {}) {
     const onClose = jest.fn();
@@ -94,7 +94,7 @@ describe('choosing a quadrangle to export', () => {
     test('the grid follows the map', () => {
         const map = new FakeMap();
         renderPicker(map);
-        map.bounds = {west: -112.05, south: 40.26, east: -111.8, north: 40.6};
+        map.bounds = {west: -105.175, south: 40.26, east: -104.925, north: 40.6};
         act(() => map.fire('moveend'));
         expect(gridLines(map)).toHaveLength(8);
     });
@@ -114,37 +114,37 @@ describe('choosing a quadrangle to export', () => {
     test('a click chooses the quadrangle under it, and says what it is', () => {
         const map = new FakeMap();
         renderPicker(map);
-        click(map, -111.9345, 40.2802);
+        click(map, -105.0595, 40.31);
 
-        expect(selectedIds(map)).toEqual([SPRINGS.id]);
-        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 112°00′W');
+        expect(selectedIds(map)).toEqual([BERTHOUD.id]);
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 105°07′30″W');
         expect(screen.getByTestId('quad-size'))
             .toHaveTextContent('10.6 km × 13.9 km on the ground, 44.3 cm × 57.8 cm printed');
 
         // Another click chooses another; there is one at a time.
-        click(map, -111.8, 40.4);
-        expect(selectedIds(map)).toEqual([quadAt(-111.8, 40.4).id]);
-        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°22′30″N 111°52′30″W');
+        click(map, -104.925, 40.4);
+        expect(selectedIds(map)).toEqual([quadAt(-104.925, 40.4).id]);
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°22′30″N 105°00′W');
     });
 
     test('a click on the chosen quadrangle lets go of it', () => {
         const map = new FakeMap();
         renderPicker(map);
-        click(map, -111.9345, 40.2802);
-        click(map, -111.95, 40.3);
+        click(map, -105.0595, 40.31);
+        click(map, -105.075, 40.3);
         expect(selectedIds(map)).toEqual([]);
         expect(screen.queryByTestId('quad-label')).not.toBeInTheDocument();
     });
 
     test('can start with a quadrangle already chosen', () => {
         const map = new FakeMap();
-        renderPicker(map, {initialQuad: SPRINGS});
-        expect(selectedIds(map)).toEqual([SPRINGS.id]);
-        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 112°00′W');
+        renderPicker(map, {initialQuad: BERTHOUD});
+        expect(selectedIds(map)).toEqual([BERTHOUD.id]);
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 105°07′30″W');
     });
 
     test('the size is in the units of the map', () => {
-        renderPicker(new FakeMap(), {initialQuad: SPRINGS, scaleUnit: 'imperial'});
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, scaleUnit: 'imperial'});
         expect(screen.getByTestId('quad-size'))
             .toHaveTextContent('6.6 mi × 8.6 mi on the ground, 17.4 in × 22.8 in printed');
         expect(formatDistance(1609.344, 'imperial')).toBe('1.0 mi');
@@ -154,61 +154,108 @@ describe('choosing a quadrangle to export', () => {
     test('the grid and the choice are put back when the style of the map changes', () => {
         const map = new FakeMap();
         renderPicker(map);
-        click(map, -111.9345, 40.2802);
+        click(map, -105.0595, 40.31);
 
         act(() => map.changeStyle());
         expect(map.layers.map(l => l.id)).toEqual(['quad-grid-lines', 'quad-selected-fill', 'quad-selected-outline']);
         expect(gridLines(map)).toHaveLength(7);
-        expect(selectedIds(map)).toEqual([SPRINGS.id]);
+        expect(selectedIds(map)).toEqual([BERTHOUD.id]);
     });
 
     test('exports the chosen quadrangle', () => {
         const onExport = jest.fn();
-        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport});
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport});
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 300});
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 300, name: null});
     });
 
     test('exports the map alone when the sheet is turned off', () => {
         const onExport = jest.fn();
-        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport});
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport});
         const sheet = screen.getByRole('checkbox', {name: 'Margins, grid and scale bars'});
         expect(sheet).toBeChecked();
         fireEvent.click(sheet);
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: false, dpi: 300});
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: false, dpi: 300, name: null});
     });
 
     test('exports a sharper map when one is asked for', () => {
         const onExport = jest.fn();
-        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport});
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport});
         expect(screen.getByRole('radio', {name: '300 DPI'})).toBeChecked();
         fireEvent.click(screen.getByRole('radio', {name: '400 DPI'}));
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 400});
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 400, name: null});
+    });
+
+    test('says what the USGS calls the quadrangle, and exports it by that name', async () => {
+        const named = {name: 'Berthoud', state: 'Colorado', exact: true};
+        const fetchName = jest.fn().mockResolvedValue(named);
+        const onExport = jest.fn();
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport, fetchName});
+        expect(await screen.findByTestId('quad-name')).toHaveTextContent('Berthoud, Colorado');
+        expect(fetchName).toHaveBeenCalledWith(BERTHOUD);
+        // Where it is, is still said.
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 105°07′30″W');
+        fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 300, name: named});
+    });
+
+    test('a quadrangle the USGS has no name for goes by where it is', async () => {
+        const fetchName = jest.fn().mockResolvedValue(null);
+        const onExport = jest.fn();
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport, fetchName});
+        await waitFor(() => expect(fetchName).toHaveBeenCalled());
+        expect(screen.queryByTestId('quad-name')).toBeNull();
+        fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 300, name: null});
+    });
+
+    test('a name which can not be asked for is no name', async () => {
+        const fetchName = jest.fn().mockRejectedValue(new Error('offline'));
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, fetchName});
+        await waitFor(() => expect(fetchName).toHaveBeenCalled());
+        expect(screen.queryByTestId('quad-name')).toBeNull();
+        expect(screen.getByTestId('quad-label')).toBeInTheDocument();
+    });
+
+    test('the name of one quadrangle is not shown for another', async () => {
+        let answer;
+        const fetchName = jest.fn()
+            .mockImplementationOnce(() => new Promise(resolve => {
+                answer = resolve;
+            }))
+            .mockResolvedValue({name: 'Windsor', state: 'Colorado', exact: true});
+        const map = new FakeMap();
+        renderPicker(map, {initialQuad: BERTHOUD, fetchName});
+        // Another quadrangle is chosen before the first is named.
+        act(() => map.fire('click', {lngLat: {lng: -104.925, lat: 40.4}}));
+        expect(await screen.findByTestId('quad-name')).toHaveTextContent('Windsor, Colorado');
+        await act(async () => answer({name: 'Berthoud', state: 'Colorado', exact: true}));
+        expect(screen.getByTestId('quad-name')).toHaveTextContent('Windsor, Colorado');
     });
 
     test('while the PDF is being made it says how far along it is, and the choice stays', () => {
         const map = new FakeMap();
         const onExport = jest.fn();
-        renderPicker(map, {initialQuad: SPRINGS, onExport, status: 'Drawing Water (2 of 13)…'});
+        renderPicker(map, {initialQuad: BERTHOUD, onExport, status: 'Drawing Water (2 of 13)…'});
 
         expect(screen.getByRole('status')).toHaveTextContent('Drawing Water (2 of 13)…');
         expect(screen.getByRole('button', {name: 'Export PDF'})).toBeDisabled();
         expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled();
 
         // A click on the map does not choose another quadrangle.
-        click(map, -111.8, 40.4);
-        expect(selectedIds(map)).toEqual([SPRINGS.id]);
-        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 112°00′W');
+        click(map, -104.925, 40.4);
+        expect(selectedIds(map)).toEqual([BERTHOUD.id]);
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 105°07′30″W');
     });
 
     test('says why the PDF could not be made, and it can be tried again', () => {
         const onExport = jest.fn();
-        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport, error: 'Could not reach the server'});
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport, error: 'Could not reach the server'});
         expect(screen.getByRole('alert')).toHaveTextContent('Could not reach the server');
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 300});
+        expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 300, name: null});
         expect(screen.getByRole('button', {name: 'Close'})).toBeEnabled();
     });
 

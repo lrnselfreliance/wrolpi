@@ -100,6 +100,15 @@ export function quadLabel(quad) {
     return `${formatLatitude(quad.south)} ${formatLongitude(quad.west)}`;
 }
 
+// What the USGS calls a quadrangle, from what the API says of it ({name, state, exact}): "Berthoud,
+// Colorado".  A quadrangle of the grid which is not all of the named one (they are wider in
+// Alaska) is a part of it.
+export function quadTitle(named) {
+    if (!named?.name) return null;
+    const title = named.state ? `${named.name}, ${named.state}` : named.name;
+    return named.exact === false ? `Part of ${title}` : title;
+}
+
 // How far it is across and up a quadrangle on the ground (meters, along its middle), and on a sheet
 // printed at 1:24,000 (millimeters).
 export function quadSize(quad) {

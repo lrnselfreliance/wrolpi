@@ -9,6 +9,7 @@ import {
     addMapPin,
     deleteMapPin,
     exportMapPdf,
+    getMapQuadName,
     getMapFiles,
     getMapPins,
     searchMap,
@@ -1042,7 +1043,7 @@ export default function MapViewer() {
     }, [contextMenu]);
 
     // Make a PDF of a quadrangle: the layers which are on, drawn as they are on the map.
-    const handleExportPdf = useCallback(async (quad, {sheet = true, dpi = EXPORT_DPI} = {}) => {
+    const handleExportPdf = useCallback(async (quad, {sheet = true, dpi = EXPORT_DPI, name = null} = {}) => {
         const map = mapRef.current;
         if (!map) return;
         setExportError(null);
@@ -1072,11 +1073,11 @@ export default function MapViewer() {
             setExportStatus("Making the PDF…");
             const pdf = await exportMapPdf({
                 ...rendered,
-                title: exportTitle(quad),
+                title: exportTitle(quad, name),
                 // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
-                sheet: sheet ? exportSheet(quad, map, groups) : undefined,
+                sheet: sheet ? exportSheet(quad, map, groups, new Date(), name) : undefined,
             });
-            saveBlob(pdf, exportFileName(quad));
+            saveBlob(pdf, exportFileName(quad, name));
         } catch (e) {
             console.error("Map export failed:", e);
             setExportError(e?.message || "The map could not be exported");
@@ -1294,6 +1295,7 @@ export default function MapViewer() {
             scaleUnit={scaleUnit}
             initialQuad={pickingQuad.quad}
             onExport={handleExportPdf}
+            fetchName={getMapQuadName}
             status={exportStatus}
             error={exportError}
             onClose={() => {

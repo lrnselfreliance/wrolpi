@@ -326,12 +326,28 @@ def test_viewport_name():
     [-150, 61.25, -149.875, 61.125],  # North of its north.
     [-150, 61.125, -150, 61.25],  # No width.
     [-190, 61.125, -149.875, 61.25],  # Off the world.
+    [179.875, 0, 180.00001, 0.125],  # Across the antimeridian, if not by much.
+    [179.9, 0, 180.1, 0.125],
+    [-180.00001, 0, -179.875, 0.125],
     [-150, 61.125, -149.875, 89],  # Further north than the map goes.
     [-150, float('nan'), -149.875, 61.25],
 ])
 def test_invalid_bounds(bounds):
     with pytest.raises(InvalidExport, match='edges'):
         build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=bounds)
+
+
+@pytest.mark.parametrize('bounds,expected', [
+    # The map's own arithmetic puts the edge of the world a hair past where it is.
+    ([179.875, 0, 180.00000000000125, 0.125], [179.875, 0, 180, 0.125]),
+    ([-180.00000000000125, 0, -179.875, 0.125], [-180, 0, -179.875, 0.125]),
+    ([-180, 0, -179.875, 0.125], [-180, 0, -179.875, 0.125]),
+])
+def test_bounds_at_the_antimeridian(bounds, expected):
+    """A map whose edge is the antimeridian is exported, with that edge at 180 degrees and not at -180."""
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=bounds)
+    west, south, east, north = expected
+    assert read_viewport(pdf)['gpts'] == [north, west, south, west, south, east, north, east]
 
 
 @pytest.mark.asyncio

@@ -63,6 +63,9 @@ WEB_MERCATOR_WKT = (
 )
 # Web Mercator has no poles: this is as far north or south as it goes.
 MAX_LATITUDE = 85.06
+# The browser's arithmetic can put the edge of the world a hair past where it is (180.00000000000125 degrees).  An
+# edge within this of 180 degrees is at 180 degrees; one further past it is of a map which crosses the antimeridian.
+LONGITUDE_SLIVER = 1e-8
 
 
 class InvalidExport(ValueError):
@@ -103,12 +106,21 @@ def _check_layer(layer: ExportLayer, width: int, height: int) -> bool:
         raise InvalidExport(f'The layer {layer.name!r} is not a readable image') from e
 
 
+def _edge_longitude(longitude: float) -> float:
+    """A longitude which is a rounding error past the edge of the world, put on it.  It is not wrapped: the east
+    edge of the last map before the antimeridian is at 180 degrees, not at -180."""
+    if 180 < abs(longitude) < 180 + LONGITUDE_SLIVER:
+        return math.copysign(180.0, longitude)
+    return longitude
+
+
 def _check_bounds(bounds: Sequence[float]) -> List[float]:
     """The west, south, east and north edges of a map, in degrees.  Raises InvalidExport when they are not."""
     try:
         west, south, east, north = (float(i) for i in bounds)
     except (TypeError, ValueError) as e:
         raise InvalidExport('The edges of the map are not four numbers') from e
+    west, east = _edge_longitude(west), _edge_longitude(east)
     edges = [west, south, east, north]
     if not all(math.isfinite(i) for i in edges) or not (-180 <= west < east <= 180) \
             or not (-MAX_LATITUDE <= south < north <= MAX_LATITUDE):

@@ -133,6 +133,16 @@ export function exportStyle(style, ignoredPrefixes = []) {
     return {...style, sources, layers};
 }
 
+// The map's arithmetic can put the edge of the world a hair past where it is (180.00000000000125
+// degrees).  Such an edge is the edge of the world; one further past it is of a map which crosses the
+// antimeridian, and is left as it is.
+const LONGITUDE_SLIVER = 1e-8;
+
+function edgeLongitude(longitude) {
+    if (Math.abs(longitude) > 180 && Math.abs(longitude) - 180 < LONGITUDE_SLIVER) return Math.sign(longitude) * 180;
+    return longitude;
+}
+
 function once(map, event, timeoutMs = RENDER_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("The map took too long to draw")), timeoutMs);
@@ -223,7 +233,7 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
         return {
             width: canvas.width,
             height: canvas.height,
-            bounds: [edges.getWest(), edges.getSouth(), edges.getEast(), edges.getNorth()],
+            bounds: [edgeLongitude(edges.getWest()), edges.getSouth(), edgeLongitude(edges.getEast()), edges.getNorth()],
             dpi: canvas.width / frame.cssWidth * (frame.dpi / frame.pixelRatio),
             layers,
         };

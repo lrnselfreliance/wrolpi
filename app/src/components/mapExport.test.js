@@ -192,7 +192,8 @@ function fakeMapClass(record, {transparent = true} = {}) {
 
         // The edges of what this map draws (not quite those of the quadrangle it was asked for).
         getBounds() {
-            return {getWest: () => -150, getSouth: () => 61.12499878, getEast: () => -149.875, getNorth: () => 61.25000121};
+            const [west, south, east, north] = record.bounds || [-150, 61.12499878, -149.875, 61.25000121];
+            return {getWest: () => west, getSouth: () => south, getEast: () => east, getNorth: () => north};
         }
 
         getLayer(id) {
@@ -270,6 +271,27 @@ describe('drawing the layers', () => {
         expect(record.options.container.style.width).toBe('1654px');
         expect(record.options.container.style.height).toBe('3432px');
         expect(setup).toHaveBeenCalledTimes(1);
+    });
+
+    test('an edge a hair past the edge of the world is the edge of the world', async () => {
+        // What the map's arithmetic makes of the last quadrangle before the antimeridian.
+        const east = await renderExport({
+            MapClass: fakeMapClass({captures: [], bounds: [179.875, 0, 180.00000000000125, 0.125]}),
+            style, frame, groups,
+        });
+        expect(east.bounds).toEqual([179.875, 0, 180, 0.125]);
+
+        const west = await renderExport({
+            MapClass: fakeMapClass({captures: [], bounds: [-180.00000000000125, 0, -179.875, 0.125]}),
+            style, frame, groups,
+        });
+        expect(west.bounds).toEqual([-180, 0, -179.875, 0.125]);
+
+        // A map which is really across the antimeridian is left as it is, for the API to refuse.
+        const across = await renderExport({
+            MapClass: fakeMapClass({captures: [], bounds: [179.9, 0, 180.1, 0.125]}), style, frame, groups,
+        });
+        expect(across.bounds).toEqual([179.9, 0, 180.1, 0.125]);
     });
 
     test('nothing is left behind, whether it works or not', async () => {

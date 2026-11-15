@@ -44,6 +44,9 @@ TOP_MARGIN = 64
 FONT = 'helv'
 BOLD = 'hebo'
 TITLE_SIZE = 13
+# Between two lines of the title, and the least there is between the name and the scale on one line.
+TITLE_LEADING = 18
+TITLE_GAP = 18
 LABEL_SIZE = 6.5
 NOTE_SIZE = 7
 NOTE_LEADING = 9.5
@@ -491,9 +494,15 @@ def _draw_margin(pen: _Pen, plan: SheetPlan):
     x0, y0, x1, y1 = plan.map_rect
     scale = _format_scale(plan.scale)
     title_y = y0 - 24
-    if plan.name:
+    if not plan.name:
+        pen.text(x1, title_y, scale, size=TITLE_SIZE, font=BOLD, align='right')
+    elif _text_width(plan.name, TITLE_SIZE, BOLD) + _text_width(scale, TITLE_SIZE, BOLD) + TITLE_GAP <= x1 - x0:
         pen.text(x0, title_y, plan.name, size=TITLE_SIZE, font=BOLD)
-    pen.text(x1, title_y, scale, size=TITLE_SIZE, font=BOLD, align='right')
+        pen.text(x1, title_y, scale, size=TITLE_SIZE, font=BOLD, align='right')
+    else:
+        # A map too narrow for both (a quadrangle near a pole is two inches wide) has the scale under the name.
+        pen.text(x0, title_y - TITLE_LEADING, plan.name, size=TITLE_SIZE, font=BOLD)
+        pen.text(x0, title_y, scale, size=TITLE_SIZE, font=BOLD)
 
     center = (x0 + x1) / 2
     y = y1 + BARS_OFFSET

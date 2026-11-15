@@ -245,6 +245,32 @@ def test_sheet_of_a_narrow_map():
     assert 'MILES' not in page_text(narrow)
 
 
+@pytest.mark.parametrize('bounds,name', [
+    # The narrowest quadrangles there are, with the longest names.
+    ([-179.875, 84.875, -179.75, 85], '84°52′30″N 179°52′30″W'),
+    ([-179.875, -84.875, -179.75, -84.75], '84°52′30″S 179°52′30″W'),
+    ([10, 84.875, 10.125, 85], '84°52′30″N 10°00′E'),
+    (ANCHORAGE, '61°07′30″N 150°00′W'),
+])
+def test_sheet_title_of_a_narrow_map(bounds, name):
+    """The name of a map and its scale are not written over each other, however narrow the map is."""
+    # As wide as the paper of a 1:24,000 sheet is.
+    map_width = sheet.map_scale(1, bounds) / 24000
+    width, height = round(map_width * DPI / 72), 400
+    pdf = build_layered_pdf([ExportLayer('Background', make_image(size=(width, height)))], width, height, DPI,
+                            bounds=bounds, sheet=Sheet(name=name))
+    page = pymupdf.open(stream=pdf, filetype='pdf')[0]
+    titles = [pymupdf.Rect(span['bbox']) for block in page.get_text('dict')['blocks'] for line in block.get('lines', [])
+              for span in line['spans'] if span['size'] == pytest.approx(sheet.TITLE_SIZE)]
+    assert len(titles) == 2, titles
+    assert not titles[0].intersects(titles[1]), titles
+    # Both are on the page, above the map and what is written along its top edge.
+    top = sheet.plan_sheet(map_width, height * 72 / DPI, bounds, Sheet(name=name)).map_rect[1]
+    for title in titles:
+        assert title in page.rect
+        assert title.y1 <= top - sheet.LABEL_SIZE
+
+
 def test_sheet_text_which_the_font_can_not_write():
     pdf = build(sheet_=Sheet(name='Карта “map” – 地図', credits=['<b>© Somebody</b>\n\nelse']))
     text = page_text(pdf)

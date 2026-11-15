@@ -169,6 +169,30 @@ describe('choosing a quadrangle to export', () => {
         expect(onExport).toHaveBeenCalledWith(SPRINGS);
     });
 
+    test('while the PDF is being made it says how far along it is, and the choice stays', () => {
+        const map = new FakeMap();
+        const onExport = jest.fn();
+        renderPicker(map, {initialQuad: SPRINGS, onExport, status: 'Drawing Water (2 of 13)…'});
+
+        expect(screen.getByRole('status')).toHaveTextContent('Drawing Water (2 of 13)…');
+        expect(screen.getByRole('button', {name: 'Export PDF'})).toBeDisabled();
+        expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled();
+
+        // A click on the map does not choose another quadrangle.
+        click(map, -111.8, 40.4);
+        expect(selectedIds(map)).toEqual([SPRINGS.id]);
+        expect(screen.getByTestId('quad-label')).toHaveTextContent('40°15′N 112°00′W');
+    });
+
+    test('says why the PDF could not be made, and it can be tried again', () => {
+        const onExport = jest.fn();
+        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport, error: 'Could not reach the server'});
+        expect(screen.getByRole('alert')).toHaveTextContent('Could not reach the server');
+        fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
+        expect(onExport).toHaveBeenCalledWith(SPRINGS);
+        expect(screen.getByRole('button', {name: 'Close'})).toBeEnabled();
+    });
+
     test('leaves nothing on the map when it is closed', () => {
         const map = new FakeMap();
         map.layers.push({id: 'roads'});

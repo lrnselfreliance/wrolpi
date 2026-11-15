@@ -1,10 +1,12 @@
+import asyncio
+import json
 from http import HTTPStatus
 
 from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import lib, schema, search
+from modules.map import export, lib, schema, search
 from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
@@ -175,3 +177,33 @@ async def rebuild_single_search_index(_: Request, filename: str):
     if started:
         return json_response({'message': f'Search index rebuild started for {filename}'}, HTTPStatus.ACCEPTED)
     return json_response({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.post('/export/pdf')
+@openapi.description('Make a PDF of a map from images of its layers')
+async def post_export_pdf(request: Request):
+    """The browser draws the map, one image for each layer; this puts them in a PDF, each in a layer of its own.
+
+    A multipart form: `meta` is JSON (`width` and `height` in pixels, `dpi`, `title`, and `layers`: the name of
+    each layer from the bottom up), and `layer` is the image of each layer, in the same order."""
+    try:
+        meta = json.loads(request.form.get('meta') or '')
+        width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
+        names = [str(i) for i in meta['layers']]
+        title = str(meta.get('title') or '') or None
+    except (ValueError, TypeError, KeyError):
+        return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)
+
+    images = request.files.getlist('layer') if request.files else []
+    if len(images) != len(names):
+        return response.json({'error': f'There are {len(names)} layers, but {len(images)} images'},
+                             HTTPStatus.BAD_REQUEST)
+
+    layers = [export.ExportLayer(name=name, image=image.body) for name, image in zip(names, images)]
+    try:
+        # The images are decoded and compressed, which is not for the event loop.
+        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title)
+    except export.InvalidExport as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    return response.raw(pdf, content_type='application/pdf')

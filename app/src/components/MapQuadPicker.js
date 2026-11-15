@@ -10,6 +10,8 @@ import {
     quadSize,
 } from "./mapQuads";
 
+// What the ids of the picker's layers and sources start with: they are of the app, not of the map.
+export const QUAD_LAYER_PREFIX = "quad-";
 const GRID_SOURCE = "quad-grid";
 const SELECTED_SOURCE = "quad-selected";
 // The picker's own layers, in the order they are drawn (all above the map's).
@@ -48,7 +50,15 @@ function selectedFeatures(quad) {
 //
 // The grid and the chosen quadrangle are layers of the map, which a change of its style removes; they
 // are put back whenever the style has loaded.
-export default function MapQuadPicker({map, scaleUnit, initialQuad = null, onExport, onClose}) {
+//
+// onExport(quad): make the PDF.  While it is being made `status` says how far along it is, and
+// nothing else can be chosen; `error` says why the last one could not be made.
+export default function MapQuadPicker({
+    map, scaleUnit, initialQuad = null, onExport, onClose, status = null, error = null,
+}) {
+    const busy = status !== null;
+    const busyRef = useRef(busy);
+    busyRef.current = busy;
     const [selected, setSelected] = useState(initialQuad);
     const selectedRef = useRef(initialQuad);
     // Whether the map is zoomed in far enough for the grid to be drawn.
@@ -89,6 +99,8 @@ export default function MapQuadPicker({map, scaleUnit, initialQuad = null, onExp
         };
 
         const choose = (e) => {
+            // The quadrangle being exported stays the chosen one.
+            if (busyRef.current) return;
             const quad = quadAt(e.lngLat.lng, e.lngLat.lat);
             // Choosing the chosen quadrangle again lets go of it.
             const next = quad && selectedRef.current?.id === quad.id ? null : quad;
@@ -154,12 +166,19 @@ export default function MapQuadPicker({map, scaleUnit, initialQuad = null, onExp
                     ? "Click a quadrangle on the map to choose it."
                     : "Zoom in to see the quadrangles."}
             </div>}
+        {status && <div role="status" style={{paddingTop: "0.25rem"}}>{status}</div>}
+        {error && !status && <div role="alert" style={{paddingTop: "0.25rem", color: "var(--danger, #c92a2a)"}}>
+            {error}
+        </div>}
         <div style={{display: "flex", gap: "0.5rem", justifyContent: "flex-end", paddingTop: "0.5rem"}}>
-            <Button role="cancel" size="xs" onClick={onClose}>Cancel</Button>
+            <Button role="cancel" size="xs" disabled={busy} onClick={onClose}>
+                {error ? "Close" : "Cancel"}
+            </Button>
             <Button
                 role="primary"
                 size="xs"
-                disabled={!selected || !onExport}
+                disabled={!selected || !onExport || busy}
+                loading={busy}
                 onClick={() => onExport(selected)}
             >Export PDF</Button>
         </div>

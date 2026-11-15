@@ -1777,6 +1777,24 @@ export async function setMapDefaultLocation(lat, lon, zoom) {
     }
 }
 
+// Make a PDF of a map from the images of its layers ({name, blob}, from the bottom up).  Returns the
+// PDF (a Blob); throws an Error which says what went wrong.
+export async function exportMapPdf({width, height, dpi, title, layers}) {
+    const form = new FormData();
+    form.append('meta', JSON.stringify({width, height, dpi, title, layers: layers.map(i => i.name)}));
+    layers.forEach((layer, index) => form.append('layer', layer.blob, `${index}`));
+    let response;
+    try {
+        response = await fetch(`${API_URI}/map/export/pdf`, {method: 'POST', body: form});
+    } catch (e) {
+        throw new Error('Could not reach the server');
+    }
+    if (!response.ok) {
+        throw new Error(await getErrorMessage(response, 'Could not make the PDF'));
+    }
+    return await response.blob();
+}
+
 export async function searchMap(query, limit = 12, offset = 0, lat = null, lon = null) {
     let url = `${API_URI}/map/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`;
     if (lat !== null && lon !== null) {

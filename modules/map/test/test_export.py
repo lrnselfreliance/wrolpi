@@ -207,8 +207,8 @@ def test_images_are_compressed_as_they_are_added():
     kept, the layers of a quadrangle are more memory than a Raspberry Pi has to spare."""
     doc = pymupdf.open()
     page = doc.new_page(width=WIDTH, height=HEIGHT)
-    export._insert_layer(doc, page, ExportLayer('Satellite', make_image(image_format='JPEG')))
-    export._insert_layer(doc, page, ExportLayer('Water', make_image((0, 0, 255, 200), box=(0, 0, 30, 90))))
+    export._insert_layer(doc, page, page.rect, ExportLayer('Satellite', make_image(image_format='JPEG')))
+    export._insert_layer(doc, page, page.rect, ExportLayer('Water', make_image((0, 0, 255, 200), box=(0, 0, 30, 90))))
 
     streams = [xref for xref in range(1, doc.xref_length()) if doc.xref_is_stream(xref)]
     images = [xref for xref in streams if doc.xref_get_key(xref, 'Subtype')[1] == '/Image']

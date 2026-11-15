@@ -48,6 +48,7 @@ import {
     exportFileName,
     exportFrame,
     exportGroups,
+    exportSheet,
     exportTitle,
     maxCanvasSide,
     renderExport,
@@ -1039,7 +1040,7 @@ export default function MapViewer() {
     }, [contextMenu]);
 
     // Make a PDF of a quadrangle: the layers which are on, drawn as they are on the map.
-    const handleExportPdf = useCallback(async (quad) => {
+    const handleExportPdf = useCallback(async (quad, {sheet = true} = {}) => {
         const map = mapRef.current;
         if (!map) return;
         setExportError(null);
@@ -1062,7 +1063,12 @@ export default function MapViewer() {
                 onProgress: (name, index, count) => setExportStatus(`Drawing ${name} (${index + 1} of ${count})…`),
             });
             setExportStatus("Making the PDF…");
-            const pdf = await exportMapPdf({...rendered, title: exportTitle(quad)});
+            const pdf = await exportMapPdf({
+                ...rendered,
+                title: exportTitle(quad),
+                // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
+                sheet: sheet ? exportSheet(quad, map, groups) : undefined,
+            });
             saveBlob(pdf, exportFileName(quad));
         } catch (e) {
             console.error("Map export failed:", e);

@@ -2,7 +2,8 @@
 //
 // The browser draws the map, because nothing else draws it as the user sees it.  A second map, off
 // the screen and the size of the printed sheet, is drawn once for each layer the user has turned on,
-// with only that layer showing; the API puts the images in a PDF, each in a layer of its own.
+// with only that layer showing; the API puts the images in a PDF, each in a layer of its own, and
+// (when it is asked to) on a sheet: with a margin, a grid, scale bars and notes around the map.
 
 import {QUAD_DEGREES, QUAD_SCALE, quadLabel, quadSize} from "./mapQuads";
 import {isOverlayLayerId} from "./mapOverlays";
@@ -241,6 +242,38 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
         if (map) map.remove();
         container.remove();
     }
+}
+
+// Where the data of the exported layers is from: what each of their sources says of itself, once
+// each, as text.
+//
+// map: the map on the screen, whose sources have been loaded (a source may only learn its
+// attribution from its file).
+export function exportCredits(map, groups) {
+    const style = map.getStyle();
+    const exported = new Set(groups.flatMap(group => group.ids));
+    const credits = [];
+    for (const layer of style.layers || []) {
+        if (!layer.source || !exported.has(layer.id)) continue;
+        const attribution = map.getSource(layer.source)?.attribution || style.sources?.[layer.source]?.attribution;
+        if (!attribution) continue;
+        // An attribution is HTML: links, mostly.
+        const html = new DOMParser().parseFromString(String(attribution), "text/html");
+        const text = (html.body.textContent || "").replace(/\s+/g, " ").trim();
+        if (text && !credits.includes(text)) credits.push(text);
+    }
+    return credits;
+}
+
+// The day, as the person exporting the map has it: 2026-11-15.
+export function exportDate(now = new Date()) {
+    const pad = value => String(value).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+// What is written on the sheet a quadrangle is printed on.
+export function exportSheet(quad, map, groups, now = new Date()) {
+    return {name: quadLabel(quad), credits: exportCredits(map, groups), date: exportDate(now)};
 }
 
 // "N40.250_W112.000": where a quadrangle's southwest corner is, in a form a file can be named.

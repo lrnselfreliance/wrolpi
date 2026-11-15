@@ -179,21 +179,34 @@ async def rebuild_single_search_index(_: Request, filename: str):
     return json_response({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
 
 
+# How much may be written on the sheet of an exported map.
+SHEET_TEXT_LENGTH = 200
+SHEET_CREDITS = 20
+
+
 @map_bp.post('/export/pdf')
 @openapi.description('Make a PDF of a map from images of its layers')
 async def post_export_pdf(request: Request):
     """The browser draws the map, one image for each layer; this puts them in a PDF, each in a layer of its own.
 
     A multipart form: `meta` is JSON (`width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each
-    layer from the bottom up, and `bounds`: the west, south, east and north edges of the images in degrees, with
-    which the PDF says where it is), and `layer` is the image of each layer, in the same order."""
+    layer from the bottom up, `bounds`: the west, south, east and north edges of the images in degrees, with
+    which the PDF says where it is, and `sheet`: with which the map is put on a sheet with a margin and a grid;
+    `name`, `credits` and `date` are written on it), and `layer` is the image of each layer, in the same order."""
     try:
         meta = json.loads(request.form.get('meta') or '')
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
         names = [str(i) for i in meta['layers']]
         title = str(meta.get('title') or '') or None
         bounds = meta.get('bounds')
-    except (ValueError, TypeError, KeyError):
+        sheet = meta.get('sheet')
+        if sheet is not None:
+            sheet = export.Sheet(
+                name=str(sheet.get('name') or '')[:SHEET_TEXT_LENGTH] or None,
+                credits=[str(i)[:SHEET_TEXT_LENGTH] for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
+                date=str(sheet.get('date') or '')[:SHEET_TEXT_LENGTH] or None,
+            )
+    except (ValueError, TypeError, KeyError, AttributeError):
         return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)
 
     images = request.files.getlist('layer') if request.files else []
@@ -204,7 +217,8 @@ async def post_export_pdf(request: Request):
     layers = [export.ExportLayer(name=name, image=image.body) for name, image in zip(names, images)]
     try:
         # The images are decoded and compressed, which is not for the event loop.
-        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title, bounds)
+        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title, bounds,
+                                      sheet)
     except export.InvalidExport as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 

@@ -316,7 +316,8 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     plan.magnetic_north = magnetic.declination(*middle, year) if year else None
     if plan.magnetic_north is not None:
         model = magnetic.load_model()
-        yearly = model.declination(*middle, year + 1) - plan.magnetic_north
+        # The shorter way around: a compass which passes due south goes from 180 west to 180 east.
+        yearly = (model.declination(*middle, year + 1) - plan.magnetic_north + 180) % 360 - 180
         notes.append(
             f'Magnetic north is {_east_or_west(plan.magnetic_north)} of true north at the middle of the map on'
             f' {_latin(sheet.date)}, and moves about {_east_or_west(yearly)} each year ({model.name}).')

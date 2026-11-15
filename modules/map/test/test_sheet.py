@@ -301,6 +301,17 @@ def test_plan_norths():
                      r" and moves about 0°1\d' west each year \(WMM-2025\)\.", notes), notes
 
 
+def test_plan_compass_which_passes_south():
+    """Near the south magnetic pole a compass points almost due south, and within a year passes from a little
+    west of south to a little east of it.  It has moved a little, not most of the way around."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, [140.5, -74, 140.625, -73.875], Sheet(date='2026-11-15'))
+    assert plan.magnetic_north == pytest.approx(-179.94, abs=0.01)
+    assert magnetic.load_model().declination(-73.9375, 140.5625, sheet._decimal_year('2027-11-15')) > 179
+    notes = ' '.join(plan.notes)
+    assert "Magnetic north is 179°56' west of true north" in notes
+    assert "moves about 0°21' west each year" in notes
+
+
 @pytest.mark.parametrize('date', [None, 'yesterday', '', '2024-12-31', '2030-01-01', '2026-13-45'])
 def test_plan_without_a_compass(date):
     """Where a compass points is not said when the day is not known, or is not one the model is of."""

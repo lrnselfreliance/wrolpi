@@ -106,6 +106,9 @@ class FakePen:
     def text(self, x, y, text, **kwargs):
         self.texts.append((x, y, text, kwargs.get('align', 'left')))
 
+    def box(self, rect, **kwargs):
+        pass
+
 
 def place_at(plan, x, y):
     """The latitude and longitude of a point of the page."""
@@ -168,6 +171,20 @@ def test_grid_labels_keep_clear_of_coordinates():
             assert all(not low < x < high for low, high in across), text
         else:
             assert all(not low < y - sheet.LABEL_SIZE * 0.35 < high for low, high in up), text
+
+
+def test_no_tick_at_a_corner():
+    """The edges of the picture the browser draws are a hair outside the quadrangle's.  The corner is still the
+    corner: it is not also a tick, written over the corner's own coordinate."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, [-149.87500012, 61.12499878, -149.74999988, 61.25000121],
+                            Sheet())
+    pen = FakePen()
+    sheet._draw_graticule(pen, plan)
+    labels = sorted(text for _, _, text, _ in pen.texts)
+    assert labels == sorted(2 * ["10'", '12\'30"', "50'", '47\'30"', "149°52'30\"W", "149°45'W", "61°15'N",
+                                 '61°07\'30"N'])
+    # Two ticks on each edge, and a cross (two lines) where each tick of latitude meets one of longitude.
+    assert len(pen.lines) == 4 * 2 + 4 * 2
 
 
 def test_clip():

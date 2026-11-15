@@ -197,15 +197,20 @@ def graticule_interval(span: float) -> float:
     return GRATICULE_INTERVALS[-1] / 3600
 
 
+# A tick nearer an edge of the map than this part of the way to the next tick is that edge: the edges of the
+# picture the browser draws are a hair outside the map it was asked for (a millionth of a degree).
+TICK_CLEARANCE = 0.01
+
+
 def _multiples(interval: float, low: float, high: float) -> List[float]:
-    """The multiples of `interval` between `low` and `high`, and not at either."""
-    first = math.floor(low / interval) + 1
+    """The multiples of `interval` between `low` and `high`, and not at (or a hair from) either."""
+    first = math.floor(low / interval)
     values = []
     for i in range(first, first + 100_000):
         value = i * interval
-        if value >= high - interval * 1e-6:
+        if value >= high - interval * TICK_CLEARANCE:
             break
-        if value > low + interval * 1e-6:
+        if value > low + interval * TICK_CLEARANCE:
             values.append(value)
     return values
 

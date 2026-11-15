@@ -166,7 +166,7 @@ describe('choosing a quadrangle to export', () => {
         const onExport = jest.fn();
         renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport});
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true});
+        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 300});
     });
 
     test('exports the map alone when the sheet is turned off', () => {
@@ -176,7 +176,16 @@ describe('choosing a quadrangle to export', () => {
         expect(sheet).toBeChecked();
         fireEvent.click(sheet);
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: false});
+        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: false, dpi: 300});
+    });
+
+    test('exports a sharper map when one is asked for', () => {
+        const onExport = jest.fn();
+        renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport});
+        expect(screen.getByRole('radio', {name: '300 DPI'})).toBeChecked();
+        fireEvent.click(screen.getByRole('radio', {name: '400 DPI'}));
+        fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
+        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 400});
     });
 
     test('while the PDF is being made it says how far along it is, and the choice stays', () => {
@@ -199,7 +208,7 @@ describe('choosing a quadrangle to export', () => {
         renderPicker(new FakeMap(), {initialQuad: SPRINGS, onExport, error: 'Could not reach the server'});
         expect(screen.getByRole('alert')).toHaveTextContent('Could not reach the server');
         fireEvent.click(screen.getByRole('button', {name: 'Export PDF'}));
-        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true});
+        expect(onExport).toHaveBeenCalledWith(SPRINGS, {sheet: true, dpi: 300});
         expect(screen.getByRole('button', {name: 'Close'})).toBeEnabled();
     });
 

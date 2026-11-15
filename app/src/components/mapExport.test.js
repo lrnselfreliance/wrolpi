@@ -8,6 +8,7 @@ import {
     exportSheet,
     exportStyle,
     exportTitle,
+    maxExportPixels,
     renderExport,
 } from './mapExport';
 import {quadAt} from './mapQuads';
@@ -43,6 +44,39 @@ describe('how a quadrangle is drawn', () => {
         expect(y(ANCHORAGE.south) - y(center[1])).toBeCloseTo(y(center[1]) - y(ANCHORAGE.north), 6);
         // The height is whole pixels, so it is within half of one of the quadrangle's.
         expect(Math.abs((y(ANCHORAGE.south) - y(ANCHORAGE.north)) - cssHeight)).toBeLessThanOrEqual(0.5);
+    });
+
+    test('is sharper when that is asked for, and no larger on paper', () => {
+        const frame = exportFrame(ANCHORAGE, {dpi: 400});
+        expect(frame.dpi).toBe(400);
+        expect(frame.pixelRatio).toBeCloseTo(400 / 150, 10);
+        // The same sheet, the same text and detail: only more pixels.
+        expect(frame).toMatchObject({cssWidth: 1654, cssHeight: 3432});
+        expect(frame.zoom).toBe(exportFrame(ANCHORAGE).zoom);
+    });
+
+    test('is less sharp when it would be more pixels than the API makes a PDF of', () => {
+        // A quadrangle at the equator is square, and at 400 DPI is 83 megapixels.
+        const equator = quadAt(0.05, 0.05);
+        const asked = exportFrame(equator, {dpi: 400});
+        expect(asked.cssWidth * asked.cssHeight * asked.pixelRatio ** 2).toBeGreaterThan(80e6);
+
+        const frame = exportFrame(equator, {dpi: 400, maxPixels: maxExportPixels(1)});
+        const pixels = Math.round(frame.cssWidth * frame.pixelRatio) * Math.round(frame.cssHeight * frame.pixelRatio);
+        expect(pixels).toBeLessThanOrEqual(64e6);
+        expect(pixels).toBeGreaterThan(63.5e6);
+        expect(frame.dpi).toBeGreaterThan(345);
+        expect(frame.dpi).toBeLessThan(355);
+
+        // With many layers on, each may be less.
+        expect(maxExportPixels(1)).toBe(64e6);
+        expect(maxExportPixels(15)).toBe(64e6);
+        expect(maxExportPixels(25)).toBe(40e6);
+        const many = exportFrame(equator, {maxPixels: maxExportPixels(25)});
+        expect(many.dpi).toBeLessThan(300);
+        expect(25 * many.cssWidth * many.cssHeight * many.pixelRatio ** 2).toBeLessThanOrEqual(1e9);
+        // A map which is within what the API takes is as sharp as was asked for.
+        expect(exportFrame(ANCHORAGE, {dpi: 400, maxPixels: maxExportPixels(13)}).dpi).toBe(400);
     });
 
     test('is less sharp where the browser can not make a canvas that large', () => {

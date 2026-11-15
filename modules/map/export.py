@@ -12,9 +12,10 @@ a grid over it.
 """
 import io
 import math
+import pathlib
 import zlib
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence
 
 from PIL import Image
 
@@ -23,8 +24,8 @@ from wrolpi.common import logger
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ExportLayer', 'InvalidExport', 'Sheet', 'build_layered_pdf', 'geospatial_viewport', 'MAX_LAYERS',
-           'MAX_SIDE', 'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
+__all__ = ['ExportLayer', 'InvalidExport', 'Sheet', 'build_layered_pdf', 'check_export', 'geospatial_viewport',
+           'MAX_LAYERS', 'MAX_SIDE', 'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
 
 # What the browser may ask for.  Every image is decoded, so what an export costs is its pixels, whatever the size
 # of the upload (an image of one color is a few kilobytes however large it is).
@@ -81,8 +82,13 @@ class InvalidExport(ValueError):
 class ExportLayer:
     # What the layer is called in the reader's list of layers.
     name: str
-    # A PNG or JPEG image.
-    image: bytes
+    # A PNG or JPEG image, or the file it is in.  The images of a map are a hundred megabytes together, so those
+    # in files are read one at a time, when each is needed.
+    image: Optional[bytes] = None
+    path: Optional[pathlib.Path] = None
+
+    def read(self) -> bytes:
+        return self.image if self.image is not None else pathlib.Path(self.path).read_bytes()
 
 
 def _is_blank(image: Image.Image) -> bool:
@@ -97,7 +103,7 @@ def _is_blank(image: Image.Image) -> bool:
 def _check_layer(layer: ExportLayer, width: int, height: int) -> bool:
     """Raises InvalidExport when the layer is not an image of the map.  Returns whether there is anything in it."""
     try:
-        image = Image.open(io.BytesIO(layer.image))
+        image = Image.open(io.BytesIO(layer.read()))
         if image.format not in IMAGE_FORMATS:
             raise InvalidExport(f'The layer {layer.name!r} is not a PNG or JPEG image')
         if image.size != (width, height):
@@ -179,7 +185,7 @@ def _insert_layer(doc, page, rect, layer: ExportLayer):
     PyMuPDF keeps the pixels of an image uncompressed until the PDF is written: about 90 MB for each layer of a
     quadrangle, all of them at once.  They are compressed here instead, so only one layer's are ever in memory."""
     group = doc.add_ocg(layer.name, on=True)
-    xref = page.insert_image(rect, stream=layer.image, oc=group)
+    xref = page.insert_image(rect, stream=layer.read(), oc=group)
     _compress_stream(doc, xref)
     # The transparency of a PNG is an image of its own.
     kind, mask = doc.xref_get_key(xref, 'SMask')
@@ -187,8 +193,32 @@ def _insert_layer(doc, page, rect, layer: ExportLayer):
         _compress_stream(doc, int(mask.split()[0]))
 
 
+def check_export(layer_count: int, width: int, height: int, dpi: float, bounds: Optional[Sequence[float]] = None,
+                 sheet: Optional[Sheet] = None) -> Optional[List[float]]:
+    """Raises InvalidExport when a map of `layer_count` images of `width` by `height` pixels can not be made into a
+    PDF.  No image is read: this is what can be said of a map before its images are sent.  Returns the `bounds`
+    as they are used."""
+    if layer_count < 1:
+        raise InvalidExport('There are no layers to export')
+    if layer_count > MAX_LAYERS:
+        raise InvalidExport(f'A map of more than {MAX_LAYERS} layers can not be exported')
+    if not (0 < width <= MAX_SIDE and 0 < height <= MAX_SIDE) or width * height > MAX_PIXELS:
+        raise InvalidExport(f'A map of {width}x{height} pixels can not be exported')
+    if layer_count * width * height > MAX_TOTAL_PIXELS:
+        raise InvalidExport(f'A map of {layer_count} layers of {width}x{height} pixels is too large to export;'
+                            f' turn some layers off')
+    if not MIN_DPI <= dpi <= MAX_DPI:
+        raise InvalidExport(f'A map can not be exported at {dpi} DPI')
+    if bounds is not None:
+        return _check_bounds(bounds)
+    if sheet is not None:
+        raise InvalidExport('The edges of the map are needed to put it on a sheet')
+    return None
+
+
 def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None,
-                      bounds: Optional[Sequence[float]] = None, sheet: Optional[Sheet] = None) -> bytes:
+                      bounds: Optional[Sequence[float]] = None, sheet: Optional[Sheet] = None,
+                      progress: Optional[Callable[[int, int], None]] = None) -> bytes:
     """A one page PDF of the layers, the first at the bottom, each in a PDF layer of its own.
 
     A layer in which nothing was drawn is left out.
@@ -198,26 +228,26 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
     @param bounds: The west, south, east and north edges of the images, in degrees.  With them the PDF says where
         it is on the Earth; the images must be Web Mercator, and all of the map between those edges.
     @param sheet: With this the map is on a sheet, which says this of it.  The sheet needs `bounds`.
+    @param progress: Called with how many steps are done, and how many there are, before each step.  A PDF takes
+        a minute or two on a Raspberry Pi, which is long to wait with nothing said; and it may raise to stop the
+        work.
     @raise InvalidExport: When the layers are not of one map.
     """
-    if not layers:
-        raise InvalidExport('There are no layers to export')
-    if len(layers) > MAX_LAYERS:
-        raise InvalidExport(f'A map of more than {MAX_LAYERS} layers can not be exported')
-    if not (0 < width <= MAX_SIDE and 0 < height <= MAX_SIDE) or width * height > MAX_PIXELS:
-        raise InvalidExport(f'A map of {width}x{height} pixels can not be exported')
-    if len(layers) * width * height > MAX_TOTAL_PIXELS:
-        # Before any image is decoded.
-        raise InvalidExport(f'A map of {len(layers)} layers of {width}x{height} pixels is too large to export;'
-                            f' turn some layers off')
-    if not MIN_DPI <= dpi <= MAX_DPI:
-        raise InvalidExport(f'A map can not be exported at {dpi} DPI')
-    if bounds is not None:
-        bounds = _check_bounds(bounds)
-    elif sheet is not None:
-        raise InvalidExport('The edges of the map are needed to put it on a sheet')
+    # Before any image is decoded.
+    bounds = check_export(len(layers), width, height, dpi, bounds, sheet)
 
-    drawn = [layer for layer in layers if _check_layer(layer, width, height)]
+    # Each layer is looked at, and then each which has anything in it is put in the PDF: two steps a layer.
+    steps = 2 * len(layers)
+
+    def step(done: int):
+        if progress:
+            progress(done, steps)
+
+    drawn = []
+    for index, layer in enumerate(layers):
+        step(index)
+        if _check_layer(layer, width, height):
+            drawn.append(layer)
     if not drawn:
         raise InvalidExport('Nothing is drawn in any layer of the map')
 
@@ -236,8 +266,11 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
             plan = None
             page = doc.new_page(width=map_width, height=map_height)
             rect = page.rect
-        for layer in drawn:
+        for index, layer in enumerate(drawn):
+            # A layer which was left out is a step done.
+            step(len(layers) + (len(layers) - len(drawn)) + index)
             _insert_layer(doc, page, rect, layer)
+        step(steps)
         if plan is not None:
             draw_sheet(doc, page, plan)
         if bounds is not None:

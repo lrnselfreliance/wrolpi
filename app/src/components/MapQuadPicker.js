@@ -60,9 +60,10 @@ function selectedFeatures(quad) {
 // fetchName(quad): asks for that name; it resolves to null where there is none.
 //
 // While the PDF is being made `status` says how far along it is, and nothing else can be chosen;
-// `error` says why the last one could not be made.
+// Cancel then stops it (onCancel()) and does not close the picker.  `error` says why the last one
+// could not be made.
 export default function MapQuadPicker({
-    map, scaleUnit, initialQuad = null, onExport, onClose, fetchName, status = null, error = null,
+    map, scaleUnit, initialQuad = null, onExport, onCancel, onClose, fetchName, status = null, error = null,
 }) {
     const busy = status !== null;
     const busyRef = useRef(busy);
@@ -222,8 +223,8 @@ export default function MapQuadPicker({
             {error}
         </div>}
         <div style={{display: "flex", gap: "0.5rem", justifyContent: "flex-end", paddingTop: "0.5rem"}}>
-            <Button role="cancel" size="xs" disabled={busy} onClick={onClose}>
-                {error ? "Close" : "Cancel"}
+            <Button role="cancel" size="xs" disabled={busy && !onCancel} onClick={busy ? onCancel : onClose}>
+                {error && !busy ? "Close" : "Cancel"}
             </Button>
             <Button
                 role="primary"

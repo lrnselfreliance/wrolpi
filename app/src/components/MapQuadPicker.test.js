@@ -169,6 +169,26 @@ describe('choosing a quadrangle to export', () => {
         expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 300, name: null});
     });
 
+    test('while the PDF is being made, Cancel stops it and the picker stays', () => {
+        const onCancel = jest.fn();
+        const {onClose} = renderPicker(new FakeMap(), {
+            initialQuad: BERTHOUD, onExport: jest.fn(), onCancel, status: 'Making the PDF (40%)…',
+        });
+        const cancel = screen.getByRole('button', {name: 'Cancel'});
+        expect(cancel).toBeEnabled();
+        fireEvent.click(cancel);
+        expect(onCancel).toHaveBeenCalledTimes(1);
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('when nothing is being made, Cancel closes the picker', () => {
+        const onCancel = jest.fn();
+        const {onClose} = renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport: jest.fn(), onCancel});
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(onCancel).not.toHaveBeenCalled();
+    });
+
     test('exports the map alone when the sheet is turned off', () => {
         const onExport = jest.fn();
         renderPicker(new FakeMap(), {initialQuad: BERTHOUD, onExport});
@@ -242,6 +262,7 @@ describe('choosing a quadrangle to export', () => {
 
         expect(screen.getByRole('status')).toHaveTextContent('Drawing Water (2 of 13)…');
         expect(screen.getByRole('button', {name: 'Export PDF'})).toBeDisabled();
+        // An export which can not be stopped has no way to stop it.
         expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled();
 
         // A click on the map does not choose another quadrangle.

@@ -416,6 +416,22 @@ describe('what is written on the sheet', () => {
         expect(exportCredits(map, [])).toEqual([]);
     });
 
+    test('an attribution which names many sources is each of them', () => {
+        const many = {
+            getStyle: () => ({
+                sources: {a: {type: 'vector'}, b: {type: 'vector'}},
+                layers: [{id: 'a', type: 'line', source: 'a'}, {id: 'b', type: 'line', source: 'b'}],
+            }),
+            getSource: id => ({
+                a: {attribution: '© OpenStreetMap contributors | © OpenMapTiles |  Somebody'},
+                b: {attribution: 'Somebody | <a href="#">Somebody Else</a> | '},
+            })[id],
+        };
+        expect(exportCredits(many, [{name: 'A', ids: ['a', 'b']}])).toEqual([
+            '© OpenStreetMap contributors', '© OpenMapTiles', 'Somebody', 'Somebody Else',
+        ]);
+    });
+
     test('says the day as the person exporting has it', () => {
         expect(exportDate(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
         expect(exportDate(new Date(2026, 10, 15))).toBe('2026-11-15');

@@ -689,6 +689,8 @@ export default function MapViewer() {
     const pickingQuadRef = useRef(false);
     // Exporting the chosen quadrangle: how far along it is, or why it could not be done.
     const [exportStatus, setExportStatus] = useState(null);
+    // Whether the person exporting has asked for the export which is being made to stop.
+    const exportCancelledRef = useRef(false);
     const [exportError, setExportError] = useState(null);
     const [scaleUnit, setScaleUnit] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch (e) { return "metric"; }
@@ -1046,6 +1048,7 @@ export default function MapViewer() {
     const handleExportPdf = useCallback(async (quad, {sheet = true, dpi = EXPORT_DPI, name = null} = {}) => {
         const map = mapRef.current;
         if (!map) return;
+        exportCancelledRef.current = false;
         setExportError(null);
         setExportStatus("Preparing…");
         try {
@@ -1070,20 +1073,32 @@ export default function MapViewer() {
                 onProgress: (name, index, count) => setExportStatus(
                     `Drawing ${name} (${index + 1} of ${count})${sharpness}…`),
             });
-            setExportStatus("Making the PDF…");
             const pdf = await exportMapPdf({
                 ...rendered,
                 title: exportTitle(quad, name),
                 // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
                 sheet: sheet ? exportSheet(quad, map, groups, new Date(), name) : undefined,
+            }, {
+                // Once it is being stopped, that is what is said.
+                onStatus: text => !exportCancelledRef.current && setExportStatus(text),
+                isCancelled: () => exportCancelledRef.current,
             });
             saveBlob(pdf, exportFileName(quad, name));
         } catch (e) {
-            console.error("Map export failed:", e);
-            setExportError(e?.message || "The map could not be exported");
+            // Stopped by the person exporting: nothing went wrong.
+            if (!e?.cancelled) {
+                console.error("Map export failed:", e);
+                setExportError(e?.message || "The map could not be exported");
+            }
         } finally {
             setExportStatus(null);
         }
+    }, []);
+
+    // Stop the export which is being made.  It stops between two steps, and the server stops making the PDF.
+    const handleCancelExport = useCallback(() => {
+        exportCancelledRef.current = true;
+        setExportStatus("Stopping…");
     }, []);
 
     const handleExportPng = useCallback(() => {
@@ -1295,6 +1310,7 @@ export default function MapViewer() {
             scaleUnit={scaleUnit}
             initialQuad={pickingQuad.quad}
             onExport={handleExportPdf}
+            onCancel={handleCancelExport}
             fetchName={getMapQuadName}
             status={exportStatus}
             error={exportError}

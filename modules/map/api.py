@@ -1,12 +1,11 @@
 import asyncio
-import json
 from http import HTTPStatus
 
 from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import export, lib, quads, schema, search
+from modules.map import export, export_job, lib, quads, schema, search
 from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
@@ -198,24 +197,42 @@ async def get_quad(request: Request):
 
 
 # How much may be written on the sheet of an exported map.
-SHEET_TEXT_LENGTH = 200
-SHEET_CREDITS = 20
+SHEET_TEXT_LENGTH = 300
+SHEET_CREDITS = 40
 
 
-@map_bp.post('/export/pdf')
-@openapi.description('Make a PDF of a map from images of its layers')
-async def post_export_pdf(request: Request):
-    """The browser draws the map, one image for each layer; this puts them in a PDF, each in a layer of its own.
+def _export_error(e: Exception):
+    """The response for an export which could not go on."""
+    if isinstance(e, export_job.ExportNotFound):
+        return response.json({'error': str(e)}, HTTPStatus.NOT_FOUND)
+    if isinstance(e, export_job.ExportNotReady):
+        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
+    return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 
-    A multipart form: `meta` is JSON (`width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each
-    layer from the bottom up, `bounds`: the west, south, east and north edges of the images in degrees, with
-    which the PDF says where it is, and `sheet`: with which the map is put on a sheet with a margin and a grid;
-    `name`, `credits` and `date` are written on it), and `layer` is the image of each layer, in the same order."""
+
+EXPORT_ERRORS = (export.InvalidExport, export_job.ExportNotFound, export_job.ExportNotReady)
+
+
+@map_bp.post('/export')
+@openapi.description('Begin the export of a map as a PDF')
+async def post_export(request: Request):
+    """The browser draws the map, one image for each layer; the API puts them in a PDF, each in a layer of its own.
+    That takes a minute or two on a Raspberry Pi, so it is a Job:
+
+    1. This request describes the map, and is answered with an `export_id`.
+    2. `POST /api/map/export/<export_id>/layer/<index>` sends the image of each layer.
+    3. `POST /api/map/export/<export_id>/start` is answered with a `job_id`, to watch at `/api/jobs/<job_id>`.
+    4. `GET /api/map/export/<export_id>/pdf` is the PDF, once the Job is complete.
+
+    The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each layer from the bottom
+    up, `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
+    is, and `sheet`: with which the map is put on a sheet with a margin and a grid; `name`, `credits` and `date`
+    are written on it."""
     try:
-        meta = json.loads(request.form.get('meta') or '')
+        meta = request.json
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
         names = [str(i) for i in meta['layers']]
-        title = str(meta.get('title') or '') or None
+        title = str(meta.get('title') or '')[:SHEET_TEXT_LENGTH] or None
         bounds = meta.get('bounds')
         sheet = meta.get('sheet')
         if sheet is not None:
@@ -224,20 +241,42 @@ async def post_export_pdf(request: Request):
                 credits=[str(i)[:SHEET_TEXT_LENGTH] for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
                 date=str(sheet.get('date') or '')[:SHEET_TEXT_LENGTH] or None,
             )
-    except (ValueError, TypeError, KeyError, AttributeError):
+    except Exception:  # noqa Whatever is made of a body which is not the description of a map.
         return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)
 
-    images = request.files.getlist('layer') if request.files else []
-    if len(images) != len(names):
-        return response.json({'error': f'There are {len(names)} layers, but {len(images)} images'},
-                             HTTPStatus.BAD_REQUEST)
-
-    layers = [export.ExportLayer(name=name, image=image.body) for name, image in zip(names, images)]
     try:
-        # The images are decoded and compressed, which is not for the event loop.
-        pdf = await asyncio.to_thread(export.build_layered_pdf, layers, width, height, dpi, title, bounds,
-                                      sheet)
-    except export.InvalidExport as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+        # Old exports are removed from the disk here, which is not for the event loop.
+        export_id = await asyncio.to_thread(export_job.create_export, names, width, height, dpi, title, bounds, sheet)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return json_response({'export_id': export_id}, HTTPStatus.CREATED)
 
-    return response.raw(pdf, content_type='application/pdf')
+
+@map_bp.post('/export/<export_id:str>/layer/<index:int>')
+@openapi.description('Send the image (PNG or JPEG) of one layer of a map which is being exported')
+async def post_export_layer(request: Request, export_id: str, index: int):
+    try:
+        await asyncio.to_thread(export_job.save_layer, export_id, index, request.body)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return response.empty()
+
+
+@map_bp.post('/export/<export_id:str>/start')
+@openapi.description('Queue the Job which makes the PDF of a map, all of whose layers have been sent')
+async def post_export_start(_: Request, export_id: str):
+    try:
+        job_id = await asyncio.to_thread(export_job.start_export, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return json_response({'job_id': job_id}, HTTPStatus.ACCEPTED)
+
+
+@map_bp.get('/export/<export_id:str>/pdf')
+@openapi.description('The PDF of an exported map, once the Job which makes it is complete')
+async def get_export_pdf(_: Request, export_id: str):
+    try:
+        pdf = await asyncio.to_thread(export_job.get_export_pdf, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')

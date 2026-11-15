@@ -13,6 +13,7 @@ from PIL import Image
 
 from modules.map import export
 from modules.map.export import ExportLayer, InvalidExport, build_layered_pdf
+from wrolpi.jobs import wait_for_job
 
 WIDTH, HEIGHT = 60, 90
 
@@ -128,26 +129,38 @@ def test_invalid_export(layers, width, height, dpi, error):
         build_layered_pdf(layers, width, height, dpi)
 
 
-MULTIPART = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-
-
-def export_form(make_multipart_form, images, **meta):
+async def api_export(async_client, images, **meta):
+    """Export a map through the API, as the browser does: describe it, send the image of each layer, have the PDF
+    made, and fetch it.  Returns the response which ended it (the PDF's, or the first to refuse) and the Job's
+    record (None when it did not get as far as a Job)."""
     meta = dict(dict(width=WIDTH, height=HEIGHT, dpi=300, layers=[name for name, _ in images]), **meta)
-    return make_multipart_form([
-        dict(name='meta', value=json.dumps(meta)),
-        *[dict(name='layer', value=image, filename=f'{index}.png') for index, (_, image) in enumerate(images)],
-    ])
+    request, response = await async_client.post('/api/map/export', json=meta)
+    if response.status_code != HTTPStatus.CREATED:
+        return response, None
+    export_id = response.json['export_id']
+    for index, (_, image) in enumerate(images):
+        request, response = await async_client.post(f'/api/map/export/{export_id}/layer/{index}', content=image)
+        if response.status_code != HTTPStatus.NO_CONTENT:
+            return response, None
+    request, response = await async_client.post(f'/api/map/export/{export_id}/start')
+    if response.status_code != HTTPStatus.ACCEPTED:
+        return response, None
+    job = await wait_for_job(response.json['job_id'], timeout=60)
+    request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
+    return response, job
 
 
 @pytest.mark.asyncio
-async def test_api_export_pdf(async_client, make_multipart_form):
-    """The images of a map's layers are sent, and the PDF of them comes back."""
-    body = export_form(make_multipart_form, [
+async def test_api_export_pdf(async_client):
+    """The images of a map's layers are sent, a Job makes the PDF of them, and the PDF is fetched."""
+    response, job = await api_export(async_client, [
         ('Background', make_image((240, 240, 230, 255))),
         ('Roads - Tunnels', BLANK),
         ('Water', make_image((60, 120, 220, 255), box=(0, 0, 30, 90))),
     ], title='A quadrangle')
-    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    assert job['status'] == 'complete', job
+    assert job['progress'] == 100
+    assert job['description'] == 'Map PDF: A quadrangle'
     assert response.status_code == HTTPStatus.OK, response.text
     assert response.headers['content-type'] == 'application/pdf'
     assert response.content.startswith(b'%PDF-')
@@ -156,29 +169,96 @@ async def test_api_export_pdf(async_client, make_multipart_form):
 
 
 @pytest.mark.asyncio
-async def test_api_export_pdf_invalid(async_client, make_multipart_form):
-    """What is not a map is refused, and why is said."""
-    def post(body):
-        return async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
-
+async def test_api_export_pdf_invalid(async_client):
+    """What is not a map is refused before any image is sent, and why is said."""
     # No description of the map.
-    request, response = await post(make_multipart_form([dict(name='layer', value=make_image(), filename='0.png')]))
+    request, response = await async_client.post('/api/map/export', content=b'not json')
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'description of the map' in response.json['error']
+    request, response = await async_client.post('/api/map/export', json=['a', 'list'])
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
     # A description which is not of a map.
-    request, response = await post(export_form(make_multipart_form, [('A', make_image())], width='wide'))
+    response, _ = await api_export(async_client, [('A', make_image())], width='wide')
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
-    # More names than images.
-    request, response = await post(export_form(make_multipart_form, [('A', make_image())], layers=['A', 'B']))
+    # More than a PDF is made of: said at once, with nothing sent.
+    response, _ = await api_export(async_client, [('A', make_image())], width=10000, height=10000)
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert '2 layers, but 1 images' in response.json['error']
+    assert '10000x10000' in response.json['error']
+    response, _ = await api_export(async_client, [], layers=[])
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'no layers' in response.json['error']
 
-    # An image which is not of the map.
-    request, response = await post(export_form(make_multipart_form, [('A', make_image(size=(10, 10)))]))
+
+@pytest.mark.asyncio
+async def test_api_export_layers(async_client):
+    """Only the images of the map's own layers are taken, and the PDF is not made until all of them are sent."""
+    meta = dict(width=WIDTH, height=HEIGHT, dpi=300, layers=['A', 'B'])
+    request, response = await async_client.post('/api/map/export', json=meta)
+    export_id = response.json['export_id']
+    layer, start = f'/api/map/export/{export_id}/layer', f'/api/map/export/{export_id}/start'
+
+    for index, content, error in (
+            (2, make_image(), 'no layer 2'),
+            (0, b'', 'empty'),
+            (0, b'not an image', 'not a PNG or JPEG'),
+            (0, make_image(image_format='GIF'), 'not a PNG or JPEG'),
+    ):
+        request, response = await async_client.post(f'{layer}/{index}', content=content)
+        assert response.status_code == HTTPStatus.BAD_REQUEST, error
+        assert error in response.json['error']
+
+    # One of two layers.
+    request, response = await async_client.post(f'{layer}/0', content=make_image())
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.post(start)
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert '1 layers have not been sent: B' in response.json['error']
+    request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert 'not started' in response.json['error']
+
+    request, response = await async_client.post(f'{layer}/1', content=make_image(image_format='JPEG'))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.post(start)
+    assert response.status_code == HTTPStatus.ACCEPTED
+    job_id = response.json['job_id']
+    # Asked again, it is the same Job; and no more images are taken.
+    request, response = await async_client.post(start)
+    assert response.json['job_id'] == job_id
+    request, response = await async_client.post(f'{layer}/0', content=make_image())
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert '10x10' in response.json['error']
+    assert 'already being made' in response.json['error']
+
+    # Until the Job is done there is no PDF.
+    request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert (await wait_for_job(job_id, timeout=60))['status'] == 'complete'
+    request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
+    assert response.status_code == HTTPStatus.OK
+    assert layer_names(response.content) == ['A', 'B']
+
+
+@pytest.mark.asyncio
+async def test_api_export_unknown(async_client):
+    """An export which there is not, and an id which is not one."""
+    for export_id in ('0' * 32, 'nothing', '..%2F..%2Fetc'):
+        for method, url in (('post', f'/api/map/export/{export_id}/layer/0'),
+                            ('post', f'/api/map/export/{export_id}/start'),
+                            ('get', f'/api/map/export/{export_id}/pdf')):
+            request, response = await getattr(async_client, method)(url)
+            assert response.status_code == HTTPStatus.NOT_FOUND, url
+
+
+@pytest.mark.asyncio
+async def test_api_export_job_fails(async_client):
+    """An image which is not of the map fails the Job, which says why; there is no PDF."""
+    response, job = await api_export(async_client, [('A', make_image()), ('B', make_image(size=(10, 10)))])
+    assert job['status'] == 'failed'
+    assert '10x10' in job['error']
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert 'failed' in response.json['error']
 
 
 def test_total_pixels_are_limited_before_decoding():
@@ -351,21 +431,18 @@ def test_bounds_at_the_antimeridian(bounds, expected):
 
 
 @pytest.mark.asyncio
-async def test_api_export_pdf_georeferenced(async_client, make_multipart_form):
-    """The edges of the map are sent with its images, and the PDF says where it is."""
+async def test_api_export_pdf_georeferenced(async_client):
+    """The edges of the map are sent with its description, and the PDF says where it is."""
     images = [('Background', make_image())]
-    body = export_form(make_multipart_form, images, bounds=ANCHORAGE)
-    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    response, job = await api_export(async_client, images, bounds=ANCHORAGE)
     assert response.status_code == HTTPStatus.OK, response.text
     assert read_viewport(response.content)['gpts'] == [61.25, -150, 61.125, -150, 61.125, -149.875, 61.25, -149.875]
 
     # Without them it is a PDF all the same.
-    request, response = await async_client.post(
-        '/api/map/export/pdf', content=export_form(make_multipart_form, images), headers=MULTIPART)
+    response, job = await api_export(async_client, images)
     assert response.status_code == HTTPStatus.OK
 
     # Edges which are not those of a map are refused.
-    body = export_form(make_multipart_form, images, bounds=[0, 0, 0, 0])
-    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    response, job = await api_export(async_client, images, bounds=[0, 0, 0, 0])
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'edges' in response.json['error']

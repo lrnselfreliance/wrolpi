@@ -277,10 +277,12 @@ export function exportCredits(map, groups) {
         if (!layer.source || !exported.has(layer.id)) continue;
         const attribution = map.getSource(layer.source)?.attribution || style.sources?.[layer.source]?.attribution;
         if (!attribution) continue;
-        // An attribution is HTML: links, mostly.
+        // An attribution is HTML: links, mostly.  One may name many sources, with a bar between them.
         const html = new DOMParser().parseFromString(String(attribution), "text/html");
-        const text = (html.body.textContent || "").replace(/\s+/g, " ").trim();
-        if (text && !credits.includes(text)) credits.push(text);
+        for (const part of (html.body.textContent || "").split("|")) {
+            const text = part.replace(/\s+/g, " ").trim();
+            if (text && !credits.includes(text)) credits.push(text);
+        }
     }
     return credits;
 }

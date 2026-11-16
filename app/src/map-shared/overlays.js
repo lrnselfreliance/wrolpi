@@ -285,20 +285,42 @@ export function orderOverlayLayers(overlays, state) {
     };
 }
 
-// Where the basemap's labels begin: the index of the first of the labels which are over all of the
-// basemap's ground (or how many layers there are, when it ends with none).
+// The layers of a basemap with every label over all of its ground: the ground in the order it was
+// in, then the labels in the order they were in.
 //
-// Not its first label: a map of several basemap files has the labels of the first file under the
-// ground of the next, and an overlay put there would be under the land and the water of every file
-// after the first.
+// A map of several basemap files is their layers one file after another, so the labels of each file
+// but the last are under the land, the water and the roads of the files after it, and under
+// anything which is put under "the labels".  Labels are always on top.
+export function labelsOverGround(layers) {
+    layers = layers || [];
+    return [...layers.filter(l => l.type !== "symbol"), ...layers.filter(l => l.type === "symbol")];
+}
+
+// The source of the contour lines both viewers draw from the terrain.  They are added to a style
+// after the basemap's labels, lines and labels both, and are not of the basemap.
+const CONTOUR_SOURCE = "contours";
+
+// Where the basemap's labels begin: the index of the first of the labels which are over all of the
+// basemap's ground.  Where no label is over its ground, the index after the last of its ground.
+//
+// Not the map's first label: a map of several basemap files has the labels of the first file under
+// the ground of the next, and an overlay put there would be under the land and the water of every
+// file after the first.  Nor before the last layer which is not a label: the contour lines are
+// drawn after the basemap's labels, and an overlay put under them would be over every label.
 export function basemapLabelsStart(layers) {
-    let start = (layers || []).length;
-    for (let i = start - 1; i >= 0; i--) {
-        if (isOverlayLayerId(layers[i].id)) continue;
-        if (layers[i].type !== "symbol") break;
-        start = i;
+    layers = layers || [];
+    const ofBasemap = layer => !isOverlayLayerId(layer.id) && layer.source !== CONTOUR_SOURCE;
+    let lastGround = -1;
+    for (let i = layers.length - 1; i >= 0; i--) {
+        if (ofBasemap(layers[i]) && layers[i].type !== "symbol") {
+            lastGround = i;
+            break;
+        }
     }
-    return start;
+    for (let i = lastGround + 1; i < layers.length; i++) {
+        if (ofBasemap(layers[i]) && layers[i].type === "symbol") return i;
+    }
+    return lastGround + 1;
 }
 
 // Add the overlays to a style's sources and layers (the basemap's are already there).

@@ -409,6 +409,11 @@
             }
         }
 
+        // The labels of every basemap file are over the ground of every file (as labelsOverGround in
+        // js/overlays.js, which may not have been loaded yet).
+        allLayers = allLayers.filter(function(l) { return l.type !== "symbol"; })
+            .concat(allLayers.filter(function(l) { return l.type === "symbol"; }));
+
         // Terrain (hillshade + contours).
         if (hasTerrain && demSource) {
             var savedVis = getSavedVisibility();

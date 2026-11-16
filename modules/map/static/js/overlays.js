@@ -285,14 +285,29 @@ export function orderOverlayLayers(overlays, state) {
     };
 }
 
+// Where the basemap's labels begin: the index of the first of the labels which are over all of the
+// basemap's ground (or how many layers there are, when it ends with none).
+//
+// Not its first label: a map of several basemap files has the labels of the first file under the
+// ground of the next, and an overlay put there would be under the land and the water of every file
+// after the first.
+export function basemapLabelsStart(layers) {
+    let start = (layers || []).length;
+    for (let i = start - 1; i >= 0; i--) {
+        if (isOverlayLayerId(layers[i].id)) continue;
+        if (layers[i].type !== "symbol") break;
+        start = i;
+    }
+    return start;
+}
+
 // Add the overlays to a style's sources and layers (the basemap's are already there).
 export function addOverlaysToStyle(styleSources, allLayers, overlays, state, urls) {
     for (const file of overlays || []) {
         styleSources[overlaySourceId(file)] = buildOverlaySource(file, urls);
     }
     const {under, over} = orderOverlayLayers(overlays, state);
-    const firstLabel = allLayers.findIndex(l => l.type === "symbol");
-    allLayers.splice(firstLabel === -1 ? allLayers.length : firstLabel, 0, ...under);
+    allLayers.splice(basemapLabelsStart(allLayers), 0, ...under);
     allLayers.push(...over);
 }
 
@@ -306,7 +321,8 @@ export function addOverlaysToMap(map, overlays, state, urls) {
         const id = overlaySourceId(file);
         if (!map.getSource(id)) map.addSource(id, buildOverlaySource(file, urls));
     }
-    const firstLabel = (map.getStyle()?.layers || []).find(l => l.type === "symbol");
+    const mapLayers = map.getStyle()?.layers || [];
+    const firstLabel = mapLayers[basemapLabelsStart(mapLayers)];
     const {under, over} = orderOverlayLayers(overlays, state);
     const add = (layer, before) => {
         if (map.getLayer(layer.id)) return;

@@ -107,11 +107,13 @@ const STYLE_LAYERS = [
     {id: 'oregon.pmtiles:water', type: 'fill'},
     {id: 'oregon.pmtiles:roads_minor', type: 'line'},
     {id: 'overlay:satellite.pmtiles:raster', type: 'raster', source: 'overlay:satellite.pmtiles'},
+    // The ground of an overlay is under the basemap's labels, and its own labels are over them.
+    {id: 'overlay:extras/features.pmtiles:water:fill', type: 'fill', source: 'overlay:extras/features.pmtiles', ...hidden},
+    {id: 'overlay:extras/features.pmtiles:lines:line', type: 'line', source: 'overlay:extras/features.pmtiles'},
     {id: 'water_label_ocean', type: 'symbol'},
     {id: 'places_locality', type: 'symbol'},
     {id: 'overlay:extras/features.pmtiles:towers:circle', type: 'circle', source: 'overlay:extras/features.pmtiles'},
-    {id: 'overlay:extras/features.pmtiles:water:fill', type: 'fill', source: 'overlay:extras/features.pmtiles', ...hidden},
-    {id: 'overlay:extras/features.pmtiles:lines:line', type: 'line', source: 'overlay:extras/features.pmtiles'},
+    {id: 'overlay:extras/features.pmtiles:towers:names', type: 'symbol', source: 'overlay:extras/features.pmtiles'},
     {id: 'overlay:off.pmtiles:raster', type: 'raster', source: 'overlay:off.pmtiles', ...hidden},
 ];
 const OVERLAY_LABELS = {
@@ -124,7 +126,8 @@ describe('the layers of the PDF', () => {
 
     test('are the layers which are on, as the layer control names them, from the bottom up', () => {
         expect(groups.map(g => g.name)).toEqual([
-            BACKGROUND_GROUP, 'Buildings', 'Water', 'Roads - Minor', 'Satellite imagery', 'Labels', 'Infrastructure',
+            BACKGROUND_GROUP, 'Buildings', 'Water', 'Roads - Minor', 'Satellite imagery', 'Infrastructure', 'Labels',
+            'Infrastructure (labels)',
         ]);
     });
 
@@ -138,8 +141,10 @@ describe('the layers of the PDF', () => {
         // A water label is a label.
         expect(ids['Labels']).toEqual(['water_label_ocean', 'places_locality']);
         // An overlay's layers are of the overlay, whatever they are named, and only those which are on.
-        expect(ids['Infrastructure']).toEqual([
-            'overlay:extras/features.pmtiles:towers:circle', 'overlay:extras/features.pmtiles:lines:line',
+        expect(ids['Infrastructure']).toEqual(['overlay:extras/features.pmtiles:lines:line']);
+        // Its labels are a layer of their own, because the basemap's labels are between the two.
+        expect(ids['Infrastructure (labels)']).toEqual([
+            'overlay:extras/features.pmtiles:towers:circle', 'overlay:extras/features.pmtiles:towers:names',
         ]);
     });
 
@@ -163,6 +168,22 @@ describe('the layers of the PDF', () => {
             overlayLabels: {'overlay:a.pmtiles': 'Water', 'overlay:b.pmtiles': 'Water'},
         }).map(g => g.name);
         expect(names).toEqual(['Water', 'Water (2)', 'Water (3)', 'overlay:c.pmtiles']);
+    });
+
+    test('an overlay which is only ground, or only labels, is one layer by its own name', () => {
+        const names = layers => exportGroups(layers, {
+            layerGroups: LAYER_GROUPS, overlayLabels: {'overlay:a.pmtiles': 'Towers'},
+        }).map(g => g.name);
+        expect(names([
+            {id: 'places_locality', type: 'symbol'},
+            {id: 'overlay:a.pmtiles:x:icons', type: 'symbol', source: 'overlay:a.pmtiles'},
+        ])).toEqual(['Labels', 'Towers']);
+        expect(names([
+            {id: 'overlay:a.pmtiles:x:line', type: 'line', source: 'overlay:a.pmtiles'},
+            {id: 'places_locality', type: 'symbol'},
+            // Its labels are turned off.
+            {id: 'overlay:a.pmtiles:x:icons', type: 'symbol', source: 'overlay:a.pmtiles', ...hidden},
+        ])).toEqual(['Towers', 'Labels']);
     });
 
     test('there are none when nothing is on', () => {

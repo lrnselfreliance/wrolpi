@@ -6,7 +6,7 @@
 // (when it is asked to) on a sheet: with a margin, a grid, scale bars and notes around the map.
 
 import {QUAD_DEGREES, QUAD_SCALE, quadLabel, quadSize, quadTitle} from "./mapQuads";
-import {isOverlayLayerId} from "./mapOverlays";
+import {isOverlayLabelLayer, isOverlayLayerId} from "./mapOverlays";
 
 export const EXPORT_DPI = 300;
 // How sharp a map may be asked for.  More is four times the work for twice the sharpness: a
@@ -97,7 +97,8 @@ function basemapLayerName(layerId) {
 }
 
 // The layers of the PDF: the visible layers of the map's style, gathered as the layer control
-// gathers them, from the bottom up.  Each is {name, ids, raster}.
+// gathers them, from the bottom up.  Each is {name, ids, raster}.  An overlay is one layer, or two
+// when it has both ground and labels (see orderOverlayLayers).
 //
 // styleLayers: the layers of the map's style, as the map has them now.
 // layerGroups: {name: [part of a layer id, ...]}, the basemap groups of the layer control.
@@ -116,7 +117,12 @@ export function exportGroups(styleLayers, {layerGroups = {}, overlayLabels = {}}
     styleLayers.forEach((layer, index) => {
         if (layer.layout?.visibility === "none") return;
         if (isOverlayLayerId(layer.id)) {
-            add(`overlay ${layer.source}`, overlayLabels[layer.source] || layer.source, index, layer);
+            // An overlay is drawn in two places: its ground under the basemap's labels, and its own
+            // labels over them.  A layer of the PDF is in one place, so each is a layer of the PDF.
+            const part = isOverlayLabelLayer(layer) ? "labels" : "ground";
+            const key = `overlay ${part} ${layer.source}`;
+            add(key, overlayLabels[layer.source] || layer.source, index, layer);
+            groups.get(key).overlay = {source: layer.source, part};
             return;
         }
         const name = basemapLayerName(layer.id);
@@ -133,8 +139,11 @@ export function exportGroups(styleLayers, {layerGroups = {}, overlayLabels = {}}
     // A layer of the PDF is one image, so the layers of a group are drawn together: where the
     // topmost of them is.
     const ordered = [...groups.values()].sort((a, b) => a.top - b.top);
+    // The labels of an overlay are named as its labels when its ground is a layer too.
+    const grounds = new Set(ordered.filter(g => g.overlay?.part === "ground").map(g => g.overlay.source));
     const used = new Set();
-    return ordered.map(({name, ids, raster}) => {
+    return ordered.map(({name, ids, raster, overlay}) => {
+        if (overlay?.part === "labels" && grounds.has(overlay.source)) name = `${name} (labels)`;
         let unique = name;
         for (let n = 2; used.has(unique); n++) unique = `${name} (${n})`;
         used.add(unique);

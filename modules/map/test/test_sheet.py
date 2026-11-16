@@ -8,7 +8,7 @@ import pytest
 
 from modules.map import export, magnetic, sheet
 from modules.map.export import ExportLayer, InvalidExport, Sheet, build_layered_pdf
-from modules.map.test.test_export import MULTIPART, export_form, layer_names, make_image, read_viewport
+from modules.map.test.test_export import api_export, layer_names, make_image, read_viewport
 
 # A quadrangle of Anchorage, and the size of its image: 11 by 22.9 inches of paper at 36 DPI.
 ANCHORAGE = [-150, 61.125, -149.875, 61.25]
@@ -369,28 +369,26 @@ def test_sheet_needs_bounds():
 
 
 @pytest.mark.asyncio
-async def test_api_export_pdf_sheet(async_client, make_multipart_form):
+async def test_api_export_pdf_sheet(async_client):
     images = [('Background', make_image(size=(WIDTH, HEIGHT)))]
-    body = export_form(make_multipart_form, images, width=WIDTH, height=HEIGHT, dpi=DPI, bounds=ANCHORAGE,
-                       sheet=dict(name='A quadrangle', credits=['Somebody', 'x' * 500] + ['More'] * 50,
-                                  date='2026-11-15'))
-    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    size = dict(width=WIDTH, height=HEIGHT, dpi=DPI)
+    response, job = await api_export(
+        async_client, images, bounds=ANCHORAGE, **size,
+        sheet=dict(name='A quadrangle', credits=['Somebody', 'x' * 500] + ['More'] * 50, date='2026-11-15'))
     assert response.status_code == HTTPStatus.OK, response.text
     assert layer_names(response.content) == ['Background', 'UTM grid', 'Sheet']
     text = page_text(response.content)
     assert 'A quadrangle' in text and 'Somebody' in text
     # What is written on a sheet is limited.
-    assert len(re.findall('More', text)) == 18
-    assert 'x' * 201 not in text.replace('\n', '')
+    assert len(re.findall('More', text)) == 38
+    assert 'x' * 301 not in text.replace('\n', '')
 
     # An empty sheet is a sheet.
-    body = export_form(make_multipart_form, images, width=WIDTH, height=HEIGHT, dpi=DPI, bounds=ANCHORAGE, sheet={})
-    request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+    response, job = await api_export(async_client, images, bounds=ANCHORAGE, sheet={}, **size)
     assert response.status_code == HTTPStatus.OK, response.text
     assert 'Sheet' in layer_names(response.content)
 
     # A sheet which is not one, and a sheet of a map which is nowhere.
     for meta in (dict(bounds=ANCHORAGE, sheet='yes'), dict(sheet={})):
-        body = export_form(make_multipart_form, images, width=WIDTH, height=HEIGHT, dpi=DPI, **meta)
-        request, response = await async_client.post('/api/map/export/pdf', content=body, headers=MULTIPART)
+        response, job = await api_export(async_client, images, **size, **meta)
         assert response.status_code == HTTPStatus.BAD_REQUEST, json.dumps(meta)

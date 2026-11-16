@@ -363,6 +363,22 @@ describe('drawing the layers', () => {
         expect(drawn.captures[0].type).toBe('image/png');
     });
 
+    test('stops between two groups when it is cancelled, and leaves nothing behind', async () => {
+        const record = {captures: []};
+        const progress = [];
+        const rendering = renderExport({
+            MapClass: fakeMapClass(record), style, frame, groups,
+            onProgress: name => progress.push(name),
+            // Cancelled while the first group is drawn.
+            isCancelled: () => record.captures.length >= 1,
+        });
+        await expect(rendering).rejects.toMatchObject({cancelled: true});
+        // The second group was not drawn, nor said to be.
+        expect(record.captures).toHaveLength(1);
+        expect(progress).toEqual(['Water']);
+        expect(record.removed).toBe(true);
+    });
+
     test('a map which never finishes drawing is given up on', async () => {
         jest.useFakeTimers();
         try {
@@ -414,6 +430,22 @@ describe('what is written on the sheet', () => {
         ]);
         expect(exportCredits(map, groups.slice(0, 1))).toEqual([]);
         expect(exportCredits(map, [])).toEqual([]);
+    });
+
+    test('an attribution which names many sources is each of them', () => {
+        const many = {
+            getStyle: () => ({
+                sources: {a: {type: 'vector'}, b: {type: 'vector'}},
+                layers: [{id: 'a', type: 'line', source: 'a'}, {id: 'b', type: 'line', source: 'b'}],
+            }),
+            getSource: id => ({
+                a: {attribution: '© OpenStreetMap contributors | © OpenMapTiles |  Somebody'},
+                b: {attribution: 'Somebody | <a href="#">Somebody Else</a> | '},
+            })[id],
+        };
+        expect(exportCredits(many, [{name: 'A', ids: ['a', 'b']}])).toEqual([
+            '© OpenStreetMap contributors', '© OpenMapTiles', 'Somebody', 'Somebody Else',
+        ]);
     });
 
     test('says the day as the person exporting has it', () => {

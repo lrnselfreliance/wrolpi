@@ -49,3 +49,12 @@ def make_pmtiles(test_directory) -> Callable[..., Path]:
         return path
 
     return _
+
+
+@pytest.fixture(autouse=True)
+def map_export_root(tmp_path, monkeypatch) -> Path:
+    """Exports of the map are kept in a directory of the test, not of the machine."""
+    from modules.map import export_job
+    root = tmp_path / 'map-export'
+    monkeypatch.setattr(export_job, 'EXPORT_ROOT', root)
+    return root

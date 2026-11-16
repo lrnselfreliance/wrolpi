@@ -23,6 +23,7 @@ import {poiPopupHtml} from "./mapPoiPopup";
 import {solarCalculatorPath} from "./calculators/solar";
 import {
     addOverlaysToStyle,
+    labelsOverGround,
     buildOverlayLayers,
     isOverlayEnabled,
     isOverlayLayerEnabled,
@@ -131,6 +132,9 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
             }
         }
     }
+
+    // The labels of every basemap file are over the ground of every file.
+    allLayers.splice(0, allLayers.length, ...labelsOverGround(allLayers));
 
     // Add terrain sources and layers if available.
     if (hasTerrain && demSource) {

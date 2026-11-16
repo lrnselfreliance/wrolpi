@@ -1,6 +1,8 @@
 import {addOverlaysToMap, isOverlayLabelLayer, orderOverlayLayers} from '../map-shared/overlays.js';
 import {
     addOverlaysToStyle,
+    basemapLabelsStart,
+    labelsOverGround,
     buildOverlayLayers,
     buildOverlaySource,
     isBasemapLayer,
@@ -257,6 +259,95 @@ describe('the style of an overlay', () => {
             'places', 'pois',
             'overlay:extras/features.pmtiles:towers:circle',
         ]);
+    });
+
+    test('the ground of an overlay is over the ground of every basemap file', () => {
+        // A map of two basemap files: the labels of the first are under the ground of the second.
+        const layers = [
+            {id: 'earth', type: 'fill'}, {id: 'roads', type: 'line'}, {id: 'places', type: 'symbol'},
+            {id: 'second.pmtiles:water', type: 'fill'}, {id: 'second.pmtiles:roads', type: 'line'},
+            {id: 'second.pmtiles:places', type: 'symbol'}, {id: 'second.pmtiles:pois', type: 'symbol'},
+        ];
+        expect(basemapLabelsStart(layers)).toBe(5);
+        addOverlaysToStyle({}, layers, [FEATURES, SATELLITE], {});
+        expect(layers.map(l => l.id)).toEqual([
+            'earth', 'roads', 'places',
+            'second.pmtiles:water', 'second.pmtiles:roads',
+            // Over the land, water and roads of both files; under the labels which are over them.
+            'overlay:satellite.pmtiles:raster',
+            'overlay:extras/features.pmtiles:flood_zones:fill',
+            'overlay:extras/features.pmtiles:power_lines:line',
+            'second.pmtiles:places', 'second.pmtiles:pois',
+            'overlay:extras/features.pmtiles:towers:circle',
+        ]);
+    });
+
+    test('the ground of an overlay is under the basemap labels when the map has contours', () => {
+        const layers = [
+            {id: 'earth', type: 'fill'}, {id: 'places', type: 'symbol'},
+            {id: 'second.pmtiles:water', type: 'fill'}, {id: 'second.pmtiles:places', type: 'symbol'},
+            {id: 'contour-lines', type: 'line', source: 'contours'},
+            {id: 'contour-labels', type: 'symbol', source: 'contours'},
+        ];
+        addOverlaysToStyle({}, layers, [FEATURES], {});
+        expect(layers.map(l => l.id)).toEqual([
+            'earth', 'places', 'second.pmtiles:water',
+            'overlay:extras/features.pmtiles:flood_zones:fill',
+            'overlay:extras/features.pmtiles:power_lines:line',
+            'second.pmtiles:places',
+            'contour-lines', 'contour-labels',
+            'overlay:extras/features.pmtiles:towers:circle',
+        ]);
+    });
+
+    test('the labels of every basemap file go over the ground of every file', () => {
+        const layers = [
+            {id: 'earth', type: 'fill'}, {id: 'roads', type: 'line'}, {id: 'places', type: 'symbol'},
+            {id: 'second.pmtiles:water', type: 'fill'}, {id: 'second.pmtiles:places', type: 'symbol'},
+            {id: 'third.pmtiles:roads', type: 'line'}, {id: 'third.pmtiles:pois', type: 'symbol'},
+        ];
+        const ordered = labelsOverGround(layers);
+        expect(ordered.map(l => l.id)).toEqual([
+            'earth', 'roads', 'second.pmtiles:water', 'third.pmtiles:roads',
+            'places', 'second.pmtiles:places', 'third.pmtiles:pois',
+        ]);
+        // The same layers, and what was given is not changed.
+        expect(ordered).toHaveLength(layers.length);
+        expect(layers[2].id).toBe('places');
+        expect(labelsOverGround(undefined)).toEqual([]);
+
+        // An overlay then goes under the labels of all three files, and over the ground of all three.
+        addOverlaysToStyle({}, ordered, [FEATURES], {});
+        expect(ordered.map(l => l.id)).toEqual([
+            'earth', 'roads', 'second.pmtiles:water', 'third.pmtiles:roads',
+            'overlay:extras/features.pmtiles:flood_zones:fill',
+            'overlay:extras/features.pmtiles:power_lines:line',
+            'places', 'second.pmtiles:places', 'third.pmtiles:pois',
+            'overlay:extras/features.pmtiles:towers:circle',
+        ]);
+    });
+
+    test('where the labels of a basemap begin', () => {
+        const symbol = id => ({id, type: 'symbol'});
+        const line = id => ({id, type: 'line'});
+        expect(basemapLabelsStart([])).toBe(0);
+        expect(basemapLabelsStart(undefined)).toBe(0);
+        expect(basemapLabelsStart([line('roads')])).toBe(1);
+        expect(basemapLabelsStart([symbol('places')])).toBe(0);
+        // The contour lines are drawn after the basemap's labels, and are not of the basemap: what goes
+        // under the labels does not go under the contours instead, which would be over every label.
+        const contours = [
+            {id: 'contour-lines', type: 'line', source: 'contours'},
+            {id: 'contour-labels', type: 'symbol', source: 'contours'},
+        ];
+        expect(basemapLabelsStart([line('roads'), symbol('places'), symbol('pois'), ...contours])).toBe(1);
+        // With no label over the basemap's ground, it is over that ground and under the contours.
+        expect(basemapLabelsStart([line('roads'), ...contours])).toBe(1);
+        // An overlay which is already on the map is not of the basemap.
+        expect(basemapLabelsStart([
+            line('roads'), {id: 'overlay:a.pmtiles:x:line', type: 'line'}, symbol('places'),
+            {id: 'overlay:a.pmtiles:x:circle', type: 'circle'},
+        ])).toBe(2);
     });
 
     test('an overlay is drawn last when the basemap has no labels', () => {

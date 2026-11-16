@@ -45,6 +45,7 @@ import {
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
+import {contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
 import {quadAt} from "./mapQuads";
 import {
     EXPORT_DPI,
@@ -93,13 +94,16 @@ const SKIP_SECONDARY = new Set(["background", "earth"]);
 // Set up contour DEM source (must be called once before buildStyle).
 let demSource = null;
 let terrainUrl = null;
-function initContourSource(path) {
-    terrainUrl = mediaUrl(path);
+// How deep the terrain file goes: contours are drawn from as deep as it does.
+let terrainZoom = DEFAULT_TERRAIN_MAX_ZOOM;
+function initContourSource(file) {
+    terrainUrl = mediaUrl(file.path);
     if (demSource) return;
+    terrainZoom = terrainMaxZoom(file);
     demSource = new mlcontour.DemSource({
         url: `pmtiles://${window.location.origin}${terrainUrl}`,
         encoding: "terrarium",
-        maxzoom: 8,
+        maxzoom: terrainZoom,
         worker: true,
     });
     demSource.setupMaplibre(maplibregl);
@@ -174,27 +178,14 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
             elevationKey: "ele",
             levelKey: "level",
             multiplier: isImperial ? 3.28084 : 1, // meters to feet conversion
-            thresholds: isImperial ? {
-                // [minor, major] contour intervals in feet per zoom level.
-                4: [1000, 5000],
-                5: [500, 2500],
-                6: [200, 1000],
-                7: [200, 1000],
-                8: [100, 500],
-            } : {
-                // [minor, major] contour intervals in meters per zoom level.
-                4: [500, 2500],
-                5: [200, 1000],
-                6: [100, 500],
-                7: [100, 500],
-                8: [50, 200],
-            },
+            // [minor, major] contour intervals per zoom level, as fine as the terrain file can bear.
+            thresholds: contourThresholds(isImperial, terrainZoom),
         });
         const elevUnit = isImperial ? "ft" : "m";
         styleSources["contours"] = {
             type: "vector",
             tiles: [contourUrl],
-            maxzoom: 8,
+            maxzoom: terrainZoom,
         };
 
         allLayers.push(
@@ -727,7 +718,7 @@ export default function MapViewer() {
 
             // Fetch user's PMTiles files first to determine what base layer is needed.
             let hasTerrain = false;
-            let terrainPath = null;
+            let terrainFile = null;
             let overlayFiles = [];
             try {
                 const data = await getMapFiles();
@@ -737,7 +728,7 @@ export default function MapViewer() {
                     overlayFiles = await loadOverlayStyles(foundOverlays);
                     if (terrain) {
                         hasTerrain = true;
-                        terrainPath = terrain.path;
+                        terrainFile = terrain;
                     }
 
                     if (planet) {
@@ -771,7 +762,7 @@ export default function MapViewer() {
 
             // Initialize contour source if terrain data is available.
             if (hasTerrain) {
-                initContourSource(terrainPath);
+                initContourSource(terrainFile);
             }
 
             try {

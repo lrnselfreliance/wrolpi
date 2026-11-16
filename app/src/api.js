@@ -1789,8 +1789,8 @@ export class ExportCancelled extends Error {
     }
 }
 
-// How many times in a row the Job of an export may not be heard from before the export is given up
-// on: the API is busy while it makes a PDF, and a Raspberry Pi more so.
+// How many times in a row the server may not answer, while the PDF of an export is made or fetched,
+// before the export is given up on: the API is busy while it makes a PDF, and a Raspberry Pi more so.
 const EXPORT_POLL_FAILURES = 10;
 
 // Make the PDF of a map from the images of its layers (see modules/map/export_job.py).  The PDF is a
@@ -1798,7 +1798,8 @@ const EXPORT_POLL_FAILURES = 10;
 // layer is sent, the Job is started and watched, and the PDF is fetched when the Job is done.
 //
 // onStatus(text): told how far along it is.  isCancelled(): asked, between steps, whether to stop;
-// the Job is cancelled when it has been started.  Rejects with ExportCancelled when it was stopped.
+// the server is then told to stop the export and remove what was sent.  Rejects with
+// ExportCancelled when it was stopped.
 export async function exportMapPdf(
     {width, height, dpi, title, bounds, layers, sheet},
     {onStatus = () => undefined, isCancelled = () => false, pollMs = 1000} = {},
@@ -1813,41 +1814,43 @@ export async function exportMapPdf(
         if (!response.ok) throw new Error(await getErrorMessage(response, fallback));
         return response;
     };
-    const stopIfCancelled = () => {
-        if (isCancelled()) throw new ExportCancelled();
-    };
+    const pause = () => new Promise(resolve => setTimeout(resolve, pollMs));
     const exports = `${API_URI}/map/export`;
+    let exportId = null;
+    // Stopped by the person exporting: the server cancels the Job and removes the images.  Best
+    // effort: the export is stopped for the person either way, and the server removes old exports.
+    const stopIfCancelled = async () => {
+        if (!isCancelled()) return;
+        if (exportId) await fetch(`${exports}/${exportId}`, {method: 'DELETE'}).catch(() => undefined);
+        throw new ExportCancelled();
+    };
 
-    stopIfCancelled();
+    await stopIfCancelled();
     onStatus('Sending the map…');
     const created = await send(exports, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({width, height, dpi, title, bounds, sheet, layers: layers.map(i => i.name)}),
     }, 'Could not export the map');
-    const {export_id: exportId} = await created.json();
+    exportId = (await created.json()).export_id;
 
     // One layer a request: together they are more than a request may be, and more than a slow
     // connection sends in the time a request is given.
     for (const [index, layer] of layers.entries()) {
-        stopIfCancelled();
+        await stopIfCancelled();
         onStatus(`Sending ${layer.name} (${index + 1} of ${layers.length})…`);
         await send(`${exports}/${exportId}/layer/${index}`, {method: 'POST', body: layer.blob},
             `Could not send ${layer.name}`);
     }
 
-    stopIfCancelled();
+    await stopIfCancelled();
     const started = await send(`${exports}/${exportId}/start`, {method: 'POST'}, 'Could not make the PDF');
     const {job_id: jobId} = await started.json();
 
     let failures = 0;
     let waited = 0;
     while (true) {
-        if (isCancelled()) {
-            // Best effort: the export is stopped for the person either way.
-            await fetch(`${API_URI}/jobs/${jobId}`, {method: 'DELETE'}).catch(() => undefined);
-            throw new ExportCancelled();
-        }
+        await stopIfCancelled();
         let job;
         try {
             const response = await fetch(`${API_URI}/jobs/${jobId}`);
@@ -1869,12 +1872,28 @@ export async function exportMapPdf(
         } else if (job) {
             onStatus(`Making the PDF (${Math.round(job.progress || 0)}%)…`);
         }
-        await new Promise(resolve => setTimeout(resolve, pollMs));
+        await pause();
     }
 
+    // The PDF is made, and kept for an hour.  A request which is lost now is asked again: not to be
+    // the reason all of it is done again.
     onStatus('Fetching the PDF…');
-    const pdf = await send(`${exports}/${exportId}/pdf`, {method: 'GET'}, 'Could not fetch the PDF');
-    return await pdf.blob();
+    for (failures = 0; ; ) {
+        await stopIfCancelled();
+        let response;
+        try {
+            response = await fetch(`${exports}/${exportId}/pdf`);
+        } catch (e) {
+            response = null;
+        }
+        if (response?.ok) return await response.blob();
+        // What the server refuses, it will refuse again.
+        if (response && response.status < 500) {
+            throw new Error(await getErrorMessage(response, 'Could not fetch the PDF'));
+        }
+        if (++failures >= EXPORT_POLL_FAILURES) throw new Error('Could not fetch the PDF');
+        await pause();
+    }
 }
 
 // What the USGS calls a quadrangle: {name, state, exact}, or null where it has no name (most of the

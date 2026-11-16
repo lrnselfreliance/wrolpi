@@ -28,7 +28,7 @@ function fakeServer(jobs, {pdf = new Blob(['%PDF-']), replies = {}} = {}) {
         if (path === '/map/export') return reply(201, {export_id: 'abc'});
         if (path.startsWith('/map/export/abc/layer/')) return reply(204, null);
         if (path === '/map/export/abc/start') return reply(202, {job_id: 'job-1'});
-        if (path === '/jobs/job-1' && method === 'DELETE') return reply(200, {job: {status: 'cancelled'}});
+        if (path === '/map/export/abc' && method === 'DELETE') return reply(204, null);
         if (path === '/jobs/job-1') return reply(200, {job: jobs[Math.min(asked++, jobs.length - 1)]});
         if (path === '/map/export/abc/pdf') return reply(200, pdf);
         return reply(404, {error: 'Not found'});
@@ -106,7 +106,15 @@ describe('exportMapPdf', () => {
         expect(calls).toEqual([]);
     });
 
-    test('cancels the Job when it is stopped while the PDF is made', async () => {
+    test('has the server remove what was sent when it is stopped while layers are sent', async () => {
+        const calls = fakeServer([{status: 'complete'}]);
+        // Stopped once the first layer has been sent.
+        const rejected = exportMapPdf(MAP, {pollMs: 0, isCancelled: () => calls.includes('POST /map/export/abc/layer/0')});
+        await expect(rejected).rejects.toBeInstanceOf(ExportCancelled);
+        expect(calls).toEqual(['POST /map/export', 'POST /map/export/abc/layer/0', 'DELETE /map/export/abc']);
+    });
+
+    test('has the server stop the export when it is stopped while the PDF is made', async () => {
         const calls = fakeServer([{status: 'running', progress: 10}]);
         let polls = 0;
         const rejected = exportMapPdf(MAP, {
@@ -115,8 +123,17 @@ describe('exportMapPdf', () => {
             isCancelled: () => calls.includes('GET /jobs/job-1') && ++polls > 2,
         });
         await expect(rejected).rejects.toMatchObject({cancelled: true});
-        expect(calls).toContain('DELETE /jobs/job-1');
+        // The server cancels the Job of an export which is removed.
+        expect(calls.at(-1)).toBe('DELETE /map/export/abc');
         expect(calls).not.toContain('GET /map/export/abc/pdf');
+    });
+
+    test('is stopped all the same when the server can not be told', async () => {
+        const calls = fakeServer([{status: 'running', progress: 10}], {
+            replies: {'DELETE /map/export/abc': () => Promise.reject(new Error('network'))},
+        });
+        const rejected = exportMapPdf(MAP, {pollMs: 0, isCancelled: () => calls.includes('GET /jobs/job-1')});
+        await expect(rejected).rejects.toBeInstanceOf(ExportCancelled);
     });
 
     test('a Job which someone else cancelled is a cancelled export', async () => {
@@ -136,6 +153,36 @@ describe('exportMapPdf', () => {
         });
         await exportMapPdf(MAP, {pollMs: 0});
         expect(calls.filter(i => i === 'GET /jobs/job-1')).toHaveLength(4);
+    });
+
+    test('asks for the PDF again when the request is lost, and not when it is refused', async () => {
+        const pdf = new Blob(['%PDF-']);
+        let lost = 3;
+        let calls = fakeServer([{status: 'complete'}], {
+            replies: {
+                'GET /map/export/abc/pdf': () => {
+                    if (lost === 3) { lost--; return Promise.reject(new Error('network')); }
+                    if (lost-- > 0) return reply(502, {error: 'Bad gateway'});
+                    return reply(200, pdf);
+                },
+            },
+        });
+        expect(await exportMapPdf(MAP, {pollMs: 0})).toBe(pdf);
+        expect(calls.filter(i => i === 'GET /map/export/abc/pdf')).toHaveLength(4);
+        // The map was drawn, sent and made into a PDF once.
+        expect(calls.filter(i => i === 'POST /map/export/abc/start')).toHaveLength(1);
+
+        calls = fakeServer([{status: 'complete'}], {
+            replies: {'GET /map/export/abc/pdf': () => reply(409, {error: 'The PDF is gone'})},
+        });
+        await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toThrow('The PDF is gone');
+        expect(calls.filter(i => i === 'GET /map/export/abc/pdf')).toHaveLength(1);
+
+        calls = fakeServer([{status: 'complete'}], {
+            replies: {'GET /map/export/abc/pdf': () => Promise.reject(new Error('network'))},
+        });
+        await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toThrow('Could not fetch the PDF');
+        expect(calls.filter(i => i === 'GET /map/export/abc/pdf')).toHaveLength(10);
     });
 
     test('gives up when the server stops answering, or has forgotten the Job', async () => {

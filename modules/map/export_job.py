@@ -6,27 +6,33 @@ are a hundred megabytes, more than one request may be); then it asks for the PDF
 a Job (see `wrolpi.jobs`).  It watches the Job, and when the Job is done it fetches the PDF.
 
 An export is a directory, which holds what was said of the map, the images until the PDF is made of them, and then
-the PDF.  It is on a disk, not in memory, and is removed when it is old.
+the PDF.  It is on a disk, not in memory.  It is removed when the person exporting stops it, when its Job is
+cancelled, or when it is old; never while its Job is waiting or running.
 """
 import asyncio
 import json
+import os
 import pathlib
 import re
 import shutil
+import stat
 import time
 import uuid
 from typing import List, Optional
 
 from modules.map import export
 from wrolpi.common import logger
-from wrolpi.jobs import COMPLETE, get_current_job, get_job, register_job
+from wrolpi.errors import UnknownJob
+from wrolpi.jobs import (CANCELLED, COMPLETE, PENDING, RUNNING, cancel_job, get_current_job, get_job,
+                         register_job)
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ExportNotFound', 'ExportNotReady', 'create_export', 'save_layer', 'start_export', 'get_export_pdf',
-           'remove_old_exports', 'map_export_pdf_job', 'EXPORT_ROOT', 'EXPORT_KEEP_SECONDS', 'MAX_LAYER_BYTES']
+__all__ = ['ExportNotFound', 'ExportNotReady', 'ExportStorageError', 'create_export', 'save_layer', 'start_export',
+           'get_export_pdf', 'remove_export', 'remove_old_exports', 'map_export_pdf_job', 'EXPORT_ROOT', 'EXPORT_KEEP_SECONDS', 'MAX_LAYER_BYTES']
 
-# Where exports are kept.  Not /tmp, which is memory on a Raspberry Pi.
+# Where exports are kept.  Not /tmp, which is memory on a Raspberry Pi.  /var/tmp is a directory anyone on the
+# machine may make things in, so this one is only used when it is a real directory of this user's (see `_root`).
 EXPORT_ROOT = pathlib.Path('/var/tmp/wrolpi-map-export')
 # An export which is this old is removed: its PDF was fetched long ago, or never will be.
 EXPORT_KEEP_SECONDS = 60 * 60
@@ -47,16 +53,54 @@ class ExportNotReady(Exception):
     """The export is not as far along as it was asked to be."""
 
 
+class ExportStorageError(Exception):
+    """Where exports are kept can not be used."""
+
+
 class ExportCancelled(Exception):
     """The Job which was making the PDF was cancelled."""
+
+
+def _is_own_directory(path: pathlib.Path) -> bool:
+    """Whether a path is a directory itself (not a link to one) which this user owns."""
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISDIR(status.st_mode) and status.st_uid == os.getuid()
+
+
+def _root(create: bool = False) -> Optional[pathlib.Path]:
+    """Where exports are kept, or None when there is no such directory (and it is not to be made).
+
+    It is made for this user alone: the images of a map are whatever the user has on their map.
+
+    @raise ExportStorageError: When what is there is not a directory of this user's: a link there, which another
+        user of the machine may have made, would have exports written (and old ones removed) wherever it leads."""
+    if create:
+        try:
+            os.mkdir(EXPORT_ROOT, 0o700)
+        except FileExistsError:
+            pass
+        except OSError as e:
+            raise ExportStorageError(f'The directory of map exports can not be made: {EXPORT_ROOT}') from e
+    if not os.path.lexists(EXPORT_ROOT):
+        return None
+    if not _is_own_directory(EXPORT_ROOT):
+        raise ExportStorageError(f'The directory of map exports is not a directory of this user: {EXPORT_ROOT}')
+    if create and stat.S_IMODE(os.lstat(EXPORT_ROOT).st_mode) != 0o700:
+        # One which was made before it was made for this user alone.
+        os.chmod(EXPORT_ROOT, 0o700)
+    return EXPORT_ROOT
 
 
 def _directory(export_id: str) -> pathlib.Path:
     """Where an export is.  The id is what `create_export` gave, and nothing else: it becomes part of a path."""
     if not EXPORT_ID.match(str(export_id)):
         raise ExportNotFound(f'There is no export {export_id!r}')
-    directory = EXPORT_ROOT / export_id
-    if not (directory / META_FILE).is_file():
+    root = _root()
+    directory = root / export_id if root else None
+    if directory is None or not _is_own_directory(directory) or not (directory / META_FILE).is_file():
         raise ExportNotFound(f'There is no export {export_id!r}')
     return directory
 
@@ -73,17 +117,57 @@ def _layer_file(directory: pathlib.Path, index: int) -> pathlib.Path:
     return directory / f'layer-{index:03d}'
 
 
+def _job_status(meta: dict) -> Optional[str]:
+    """The status of the Job of an export, or None when it has none: it was not started, or the API has
+    restarted since and has forgotten the Job."""
+    if not meta.get('job_id'):
+        return None
+    try:
+        return get_job(meta['job_id'])['status']
+    except UnknownJob:
+        return None
+
+
 def remove_old_exports(now: float = None):
-    """Remove the exports which are old.  An export is a hundred megabytes until its PDF is made, and tens after."""
+    """Remove the exports which are done with.  An export is a hundred megabytes until its PDF is made, and tens
+    after.
+
+    An export whose Job is waiting or running is kept however old it is: its images are what the Job is to work
+    from, and it may wait behind another Job for longer than an export is kept.  One whose Job was cancelled is
+    removed at once.  Any other is removed when it is old.  Only what is an export is touched."""
     now = time.time() if now is None else now
-    if not EXPORT_ROOT.is_dir():
+    root = _root()
+    if root is None:
         return
-    for directory in EXPORT_ROOT.iterdir():
+    for directory in root.iterdir():
         try:
-            if directory.is_dir() and now - directory.stat().st_mtime > EXPORT_KEEP_SECONDS:
+            if not EXPORT_ID.match(directory.name) or not _is_own_directory(directory):
+                continue
+            try:
+                status = _job_status(_read_meta(directory))
+            except (OSError, ValueError):
+                # No description which can be read: not an export any Job can use.
+                status = None
+            if status in (PENDING, RUNNING):
+                continue
+            if status == CANCELLED or now - directory.stat().st_mtime > EXPORT_KEEP_SECONDS:
                 shutil.rmtree(directory, ignore_errors=True)
         except OSError as e:
             logger.warning(f'Could not remove the old map export {directory}', exc_info=e)
+
+
+def remove_export(export_id: str):
+    """Stop an export, and remove it: the person exporting does not want it.
+
+    Its Job is cancelled when it is waiting or running.  A running Job stops between two layers and removes the
+    images itself; until then they are in use, so what is left of the export is removed later, with the old ones."""
+    directory = _directory(export_id)
+    meta = _read_meta(directory)
+    status = _job_status(meta)
+    if status in (PENDING, RUNNING):
+        cancel_job(meta['job_id'])
+    if status != RUNNING:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def create_export(layers: List[str], width: int, height: int, dpi: float, title: Optional[str] = None,
@@ -92,10 +176,11 @@ def create_export(layers: List[str], width: int, height: int, dpi: float, title:
 
     @raise InvalidExport: When such a map can not be exported; no image has been sent yet."""
     bounds = export.check_export(len(layers), width, height, dpi, bounds, sheet)
+    root = _root(create=True)
     remove_old_exports()
     export_id = uuid.uuid4().hex
-    directory = EXPORT_ROOT / export_id
-    directory.mkdir(parents=True)
+    directory = root / export_id
+    os.mkdir(directory, 0o700)
     _write_meta(directory, dict(
         layers=[str(i) for i in layers], width=width, height=height, dpi=dpi, title=title, bounds=bounds,
         sheet=dict(name=sheet.name, credits=list(sheet.credits), date=sheet.date) if sheet else None,
@@ -170,6 +255,9 @@ def _make_pdf(directory: pathlib.Path, job) -> dict:
         # Under another name until all of it is written: a PDF which is there is a whole one.
         partial = directory / f'{PDF_FILE}.part'
         partial.write_bytes(pdf)
+        if job.cancel_requested():
+            partial.unlink(missing_ok=True)
+            raise ExportCancelled()
         partial.rename(directory / PDF_FILE)
         return dict(export_id=directory.name, size=len(pdf))
     finally:
@@ -179,12 +267,23 @@ def _make_pdf(directory: pathlib.Path, job) -> dict:
 
 @register_job(JOB_NAME)
 async def map_export_pdf_job(export_id: str):
-    """Make the PDF of an export.  The work is in a thread: this process has other things to keep doing."""
+    """Make the PDF of an export.  The work is in a thread: this process has other things to keep doing.
+
+    A Job which is cancelled is not over until that thread has stopped: Jobs are run one at a time so that two of
+    them do not work a Raspberry Pi at once, and the next is not to start beside the work of this one."""
     directory = _directory(export_id)
     job = get_current_job()
     job.log(f'Making the PDF of the map export {export_id}')
+    work = asyncio.ensure_future(asyncio.to_thread(_make_pdf, directory, job))
     try:
-        result = await asyncio.to_thread(_make_pdf, directory, job)
+        # Shielded: cancelling this Job must not let go of the thread, which can not be stopped from here.
+        result = await asyncio.shield(work)
+    except asyncio.CancelledError:
+        # The thread sees that the Job is cancelled between two layers, and stops.  Wait for it to.
+        await asyncio.wait({work})
+        if not work.cancelled():
+            work.exception()
+        raise
     except ExportCancelled:
         # The work saw that the Job was cancelled before the Job's runner did.  The runner is who ends a cancelled
         # Job (it looks every second), so wait for it to.

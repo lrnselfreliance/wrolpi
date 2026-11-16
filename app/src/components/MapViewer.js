@@ -1070,6 +1070,8 @@ export default function MapViewer() {
                 groups,
                 ignoredPrefixes: [QUAD_LAYER_PREFIX],
                 setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
+                // Stopped between two layers, as soon as the person exporting asks.
+                isCancelled: () => exportCancelledRef.current,
                 onProgress: (name, index, count) => setExportStatus(
                     `Drawing ${name} (${index + 1} of ${count})${sharpness}…`),
             });

@@ -202,8 +202,12 @@ export function isOpaque(canvas) {
 // from the map which was drawn, so they are of the picture and not of what was asked for.
 //
 // MapClass: maplibregl.Map.  setup(map): called with the new map before it draws anything.
-// onProgress(name, index, count): called before each group is drawn.
-export async function renderExport({MapClass, style, frame, groups, setup, onProgress, ignoredPrefixes = []}) {
+// onProgress(name, index, count): called before each group is drawn.  isCancelled(): asked before
+// each group whether to stop; when it is so nothing more is drawn, and this rejects with an error
+// whose `cancelled` is true.
+export async function renderExport({
+    MapClass, style, frame, groups, setup, onProgress, isCancelled, ignoredPrefixes = [],
+}) {
     const container = document.createElement("div");
     // Off the screen, but laid out and drawn as any element is.
     container.style.cssText = `position:fixed;left:-100000px;top:0;width:${frame.cssWidth}px;`
@@ -233,6 +237,9 @@ export async function renderExport({MapClass, style, frame, groups, setup, onPro
         const canvas = map.getCanvas();
         const layers = [];
         for (const [index, group] of groups.entries()) {
+            if (isCancelled && isCancelled()) {
+                throw Object.assign(new Error("The export was cancelled"), {cancelled: true});
+            }
             if (onProgress) onProgress(group.name, index, groups.length);
             const show = visibility => {
                 for (const id of group.ids) {

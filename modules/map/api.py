@@ -207,10 +207,13 @@ def _export_error(e: Exception):
         return response.json({'error': str(e)}, HTTPStatus.NOT_FOUND)
     if isinstance(e, export_job.ExportNotReady):
         return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
+    if isinstance(e, export_job.ExportStorageError):
+        return response.json({'error': str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
     return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
 
 
-EXPORT_ERRORS = (export.InvalidExport, export_job.ExportNotFound, export_job.ExportNotReady)
+EXPORT_ERRORS = (export.InvalidExport, export_job.ExportNotFound, export_job.ExportNotReady,
+                 export_job.ExportStorageError)
 
 
 @map_bp.post('/export')
@@ -223,6 +226,8 @@ async def post_export(request: Request):
     2. `POST /api/map/export/<export_id>/layer/<index>` sends the image of each layer.
     3. `POST /api/map/export/<export_id>/start` is answered with a `job_id`, to watch at `/api/jobs/<job_id>`.
     4. `GET /api/map/export/<export_id>/pdf` is the PDF, once the Job is complete.
+
+    `DELETE /api/map/export/<export_id>` stops an export at any of those steps, and removes what was sent.
 
     The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each layer from the bottom
     up, `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
@@ -270,6 +275,16 @@ async def post_export_start(_: Request, export_id: str):
     except EXPORT_ERRORS as e:
         return _export_error(e)
     return json_response({'job_id': job_id}, HTTPStatus.ACCEPTED)
+
+
+@map_bp.delete('/export/<export_id:str>')
+@openapi.description('Stop the export of a map: cancel its Job, if it has one, and remove what was sent')
+async def delete_export(_: Request, export_id: str):
+    try:
+        await asyncio.to_thread(export_job.remove_export, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return response.empty()
 
 
 @map_bp.get('/export/<export_id:str>/pdf')

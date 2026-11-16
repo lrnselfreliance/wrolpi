@@ -273,11 +273,16 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
         step(steps)
         if plan is not None:
             draw_sheet(doc, page, plan)
+            # Every step is done; what is told may still stop the work, here and before the PDF is written.
+            step(steps)
         if bounds is not None:
             # A PDF measures up from the bottom of the page.
             origin = (rect.x0, page.rect.height - rect.y1)
             doc.xref_set_key(page.xref, 'VP', geospatial_viewport(rect.width, rect.height, bounds, title, origin))
         doc.set_metadata(dict(title=title or 'Map', creator='WROLPi', producer='WROLPi'))
-        return doc.tobytes(garbage=3)
+        step(steps)
+        pdf = doc.tobytes(garbage=3)
+        step(steps)
+        return pdf
     finally:
         doc.close()

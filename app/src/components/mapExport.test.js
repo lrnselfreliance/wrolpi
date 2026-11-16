@@ -363,6 +363,22 @@ describe('drawing the layers', () => {
         expect(drawn.captures[0].type).toBe('image/png');
     });
 
+    test('stops between two groups when it is cancelled, and leaves nothing behind', async () => {
+        const record = {captures: []};
+        const progress = [];
+        const rendering = renderExport({
+            MapClass: fakeMapClass(record), style, frame, groups,
+            onProgress: name => progress.push(name),
+            // Cancelled while the first group is drawn.
+            isCancelled: () => record.captures.length >= 1,
+        });
+        await expect(rendering).rejects.toMatchObject({cancelled: true});
+        // The second group was not drawn, nor said to be.
+        expect(record.captures).toHaveLength(1);
+        expect(progress).toEqual(['Water']);
+        expect(record.removed).toBe(true);
+    });
+
     test('a map which never finishes drawing is given up on', async () => {
         jest.useFakeTimers();
         try {

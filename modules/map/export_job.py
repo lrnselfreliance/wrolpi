@@ -184,7 +184,8 @@ def create_export(layers: List[str], width: int, height: int, dpi: float, title:
     _write_meta(directory, dict(
         layers=[str(i) for i in layers], width=width, height=height, dpi=dpi, title=title, bounds=bounds,
         sheet=dict(name=sheet.name, credits=list(sheet.credits), date=sheet.date,
-                   contour_interval=sheet.contour_interval, contour_unit=sheet.contour_unit) if sheet else None,
+                   contour_interval=sheet.contour_interval, contour_unit=sheet.contour_unit,
+                   legend=sheet.legend) if sheet else None,
         job_id=None,
     ))
     return export_id

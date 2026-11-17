@@ -7,6 +7,7 @@ where a compass points, where the map's data is from).  Over the map is a grid o
 
 All of it is drawn as lines and text, in PDF layers of its own which a reader can turn off.
 """
+import dataclasses
 import datetime
 import math
 from dataclasses import dataclass, field
@@ -15,7 +16,8 @@ from typing import List, Optional, Sequence, Tuple
 from modules.map import magnetic, quads
 
 __all__ = ['Sheet', 'SheetPlan', 'plan_sheet', 'draw_sheet', 'to_utm', 'from_utm', 'utm_zone', 'map_scale',
-           'format_angle', 'graticule_interval', 'SHEET_LAYER', 'GRID_LAYER']
+           'format_angle', 'graticule_interval', 'SHEET_LAYER', 'GRID_LAYER', 'LegendLine', 'legend_lines',
+           'legend_as_sent', 'adjoining_quads', 'mils']
 
 # The names of the sheet's PDF layers.
 SHEET_LAYER = 'Sheet'
@@ -71,8 +73,19 @@ ADJOINING_COLUMN = 150
 # How many maps over to look for the next quadrangle: the widest of the USGS is under four maps wide.
 ADJOINING_STEPS = 4
 ADJOINING_GRAY = (0.75, 0.75, 0.75)
+GRAY = (0.6, 0.6, 0.6)
 # Where the eight are from the map, in the order they are numbered: (columns east, rows north).
 ADJOINING = ((-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1))
+# The legend: the most lines it has, how long what each is called may be, how wide and tall the room of one is,
+# how long its piece of line is, and the least and the most a line is drawn wide (points).
+LEGEND_LINES = 12
+LEGEND_LABEL = 40
+LEGEND_ITEM_WIDTH = 118
+LEGEND_ITEM_HEIGHT = 13
+LEGEND_SAMPLE = 30
+LEGEND_WIDTHS = (0.15, 5)
+LEGEND_DASHES = 6
+WHITE = (1, 1, 1)
 # A compass is marked in degrees, or in mils: 6,400 of them around.
 MILS_PER_DEGREE = 6400 / 360
 # From the bottom of the map to the first scale bar, and from the last note to the bottom of the page.
@@ -88,6 +101,22 @@ GRATICULE_INTERVALS = (36000, 18000, 3600, 1800, 900, 450, 300, 150, 60, 30, 15,
 
 
 @dataclass
+class LegendLine:
+    """A kind of line of the map (a road, a boundary), as it is drawn there: for the legend."""
+    label: str
+    # Red, green and blue, each from 0 to 1.
+    color: Tuple[float, float, float]
+    # How wide it is, in points.
+    width: float
+    opacity: float = 1
+    # The lengths of its dashes and of the gaps between them, in points; nothing when it is unbroken.
+    dash: Tuple[float, ...] = ()
+    # The line under it which is its edges: its color, and how wide it is, edges and all.
+    casing_color: Optional[Tuple[float, float, float]] = None
+    casing_width: float = 0
+
+
+@dataclass
 class Sheet:
     """What the browser says of a map, to be written around it."""
     # What the map is called.
@@ -100,6 +129,10 @@ class Sheet:
     # How far apart the map's contour lines are, and in what (one of CONTOUR_UNITS); None when it has none.
     contour_interval: Optional[float] = None
     contour_unit: Optional[str] = None
+    # The lines of the map as the browser drew them, for the legend: `{"ground": [r, g, b], "lines": [{"label",
+    # "color", "width", "opacity", "dash", "casing_color", "casing_width"}, ...]}` (see `LegendLine`; `ground`
+    # is the color of the land they are drawn on).  It is whatever was sent: `legend_lines` makes lines of it.
+    legend: Optional[dict] = None
 
 
 @dataclass
@@ -126,6 +159,9 @@ class SheetPlan:
     # What the USGS calls the eight quadrangles around the map, in the order of ADJOINING (None for one it has
     # no name for); None when it has a name for none of them, and when the sheet has no room to say.
     adjoining: Optional[List[Optional[str]]] = None
+    # The lines of the legend, and the color of the land they are drawn on.
+    legend: List[LegendLine] = field(default_factory=list)
+    legend_ground: Tuple[float, float, float] = WHITE
 
     @property
     def south_hemisphere(self) -> bool:
@@ -317,6 +353,68 @@ def adjoining_quads(bounds: Sequence[float]) -> Optional[List[Optional[str]]]:
     return names if any(names) else None
 
 
+def _number(value, least: float, most: float) -> Optional[float]:
+    """A number which was sent, kept between two others; None when it is not a number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return min(most, max(least, float(value)))
+
+
+def _color(value) -> Optional[Tuple[float, float, float]]:
+    """A color which was sent (red, green and blue, each from 0 to 1); None when it is not one."""
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    parts = tuple(_number(i, 0, 1) for i in value)
+    return None if None in parts else parts
+
+
+def legend_lines(legend) -> Tuple[Tuple[float, float, float], List[LegendLine]]:
+    """The color of the land, and the lines, of the legend which a browser sent (see `Sheet.legend`).  What is
+    not a line (it has no name, no color or no width) is left out, and a line is drawn no wider than a legend
+    has room for."""
+    if not isinstance(legend, dict):
+        return WHITE, []
+    lines = []
+    raw = legend.get('lines')
+    for line in (raw if isinstance(raw, list) else [])[:LEGEND_LINES]:
+        if not isinstance(line, dict):
+            continue
+        label = _latin(str(line.get('label') or '')).strip()[:LEGEND_LABEL]
+        color, width = _color(line.get('color')), _number(line.get('width'), *LEGEND_WIDTHS)
+        if not label or color is None or width is None:
+            continue
+        dash = line.get('dash')
+        dash = [_number(i, 0.1, LEGEND_SAMPLE) for i in (dash if isinstance(dash, (list, tuple)) else [])[:LEGEND_DASHES]]
+        opacity = _number(line.get('opacity'), 0.05, 1)
+        casing_color, casing_width = _color(line.get('casing_color')), _number(line.get('casing_width'), 0, 8)
+        lines.append(LegendLine(
+            label=label, color=color, width=width, opacity=1 if opacity is None else opacity,
+            dash=() if None in dash else tuple(dash),
+            casing_color=casing_color if casing_width else None,
+            casing_width=casing_width if casing_color and casing_width else 0))
+    return _color(legend.get('ground')) or WHITE, lines
+
+
+def legend_as_sent(legend) -> Optional[dict]:
+    """The legend which a browser sent with only what `legend_lines` makes of it, as it is sent; None when it
+    has no lines."""
+    ground, lines = legend_lines(legend)
+    return dict(ground=list(ground), lines=[dataclasses.asdict(line) for line in lines]) if lines else None
+
+
+def _legend_columns(plan: 'SheetPlan') -> int:
+    """How many lines of the legend go side by side under a map as wide as this one."""
+    return max(1, int((plan.map_rect[2] - plan.map_rect[0]) // LEGEND_ITEM_WIDTH))
+
+
+def _legend_height(plan: 'SheetPlan') -> float:
+    """The room the legend takes under the map: nothing, when it has no lines."""
+    if not plan.legend:
+        return 0
+    rows = math.ceil(len(plan.legend) / _legend_columns(plan))
+    return LABEL_SIZE + 8 + rows * LEGEND_ITEM_HEIGHT + 8
+
+
 def _contours(sheet: 'Sheet') -> Optional[str]:
     """How far apart the contour lines are, as it is written: CONTOUR INTERVAL 40 FEET."""
     interval, unit = sheet.contour_interval, CONTOUR_UNITS.get(sheet.contour_unit)
@@ -400,11 +498,13 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     if map_width >= ADJOINING_MIN_WIDTH:
         plan.adjoining = adjoining_quads(bounds)
 
+    plan.legend_ground, plan.legend = legend_lines(sheet.legend)
+
     plan.width = map_width + 2 * MARGIN
+    plan.map_rect = (MARGIN, TOP_MARGIN, MARGIN + map_width, TOP_MARGIN + map_height)
     plan.height = TOP_MARGIN + map_height + BARS_OFFSET + BAR_COUNT * BAR_SPACING \
         + (CONTOUR_LEADING if plan.contours else 0) + (ADJOINING_HEIGHT if plan.adjoining else 0) \
-        + len(plan.notes) * NOTE_LEADING + BOTTOM_PADDING
-    plan.map_rect = (MARGIN, TOP_MARGIN, MARGIN + map_width, TOP_MARGIN + map_height)
+        + _legend_height(plan) + len(plan.notes) * NOTE_LEADING + BOTTOM_PADDING
     return plan
 
 
@@ -450,13 +550,16 @@ class _Pen:
         self.shape = page.new_shape()
         self.group = group
 
-    def line(self, points: Sequence[Tuple[float, float]], width: float = 0.5, color=BLACK, opacity: float = 1):
+    def line(self, points: Sequence[Tuple[float, float]], width: float = 0.5, color=BLACK, opacity: float = 1,
+             dash: Sequence[float] = ()):
         self.shape.draw_polyline(list(points))
-        self.shape.finish(width=width, color=color, closePath=False, stroke_opacity=opacity, oc=self.group)
+        dashes = f'[{" ".join(f"{i:.2f}" for i in dash)}] 0' if dash else None
+        self.shape.finish(width=width, color=color, closePath=False, stroke_opacity=opacity, dashes=dashes,
+                          lineCap=0, oc=self.group)
 
-    def box(self, rect: Sequence[float], fill=None, width: float = 0.5):
+    def box(self, rect: Sequence[float], fill=None, width: float = 0.5, color=BLACK):
         self.shape.draw_rect(rect)
-        self.shape.finish(width=width, color=BLACK, fill=fill, oc=self.group)
+        self.shape.finish(width=width, color=color, fill=fill, oc=self.group)
 
     def polygon(self, points: Sequence[Tuple[float, float]], fill=BLACK):
         self.shape.draw_polyline(list(points))
@@ -673,6 +776,25 @@ def _draw_adjoining(pen: _Pen, plan: SheetPlan, x: float, y: float):
         listed += 1
 
 
+def _draw_legend(pen: _Pen, plan: SheetPlan, x: float, y: float):
+    """What the lines of the map are: a piece of each as the map draws it, on the color of the map's land, with
+    what it is called beside it.  Its top left is at (`x`, `y`)."""
+    pen.text(x, y + LABEL_SIZE, 'LEGEND')
+    top = y + LABEL_SIZE + 8
+    columns = _legend_columns(plan)
+    for index, line in enumerate(plan.legend):
+        left = x + (index % columns) * LEGEND_ITEM_WIDTH
+        row = top + (index // columns) * LEGEND_ITEM_HEIGHT
+        box = (left, row, left + LEGEND_SAMPLE, row + LEGEND_ITEM_HEIGHT - 3)
+        pen.box(box, fill=plan.legend_ground, width=0.3, color=GRAY)
+        middle = (box[1] + box[3]) / 2
+        ends = [(left + 1, middle), (left + LEGEND_SAMPLE - 1, middle)]
+        if line.casing_color and line.casing_width > line.width:
+            pen.line(ends, width=line.casing_width, color=line.casing_color)
+        pen.line(ends, width=line.width, color=line.color, opacity=line.opacity, dash=line.dash)
+        pen.text(left + LEGEND_SAMPLE + 5, middle + LABEL_SIZE / 3, line.label)
+
+
 def _draw_margin(pen: _Pen, plan: SheetPlan):
     """The title above the map, and the scale and the notes below it."""
     x0, y0, x1, y1 = plan.map_rect
@@ -714,6 +836,9 @@ def _draw_margin(pen: _Pen, plan: SheetPlan):
     if plan.adjoining:
         _draw_adjoining(pen, plan, x0, y - NOTE_LEADING)
         y += ADJOINING_HEIGHT
+    if plan.legend:
+        _draw_legend(pen, plan, x0, y - NOTE_LEADING)
+        y += _legend_height(plan)
     for index, note in enumerate(plan.notes):
         pen.text(x0, y + index * NOTE_LEADING, note, size=NOTE_SIZE)
 

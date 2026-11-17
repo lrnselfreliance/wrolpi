@@ -779,6 +779,13 @@ describe('what is written on the sheet', () => {
         expect(exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15), null, null))
             .not.toHaveProperty('contours');
     });
+
+    test('has the legend of the map, when the map has one', () => {
+        const legend = {ground: [1, 1, 1], lines: [{label: 'Highway', color: [0, 0, 0], width: 1}]};
+        const sheet = exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15), null, null, legend);
+        expect(sheet.legend).toEqual(legend);
+        expect(exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15))).not.toHaveProperty('legend');
+    });
 });
 
 describe('how far apart the contour lines of an exported map are', () => {

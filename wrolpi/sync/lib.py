@@ -453,6 +453,45 @@ async def download_file(client: PrimaryClient, file: ManifestFile, destination: 
     return received
 
 
+def linked_inode(destination: pathlib.Path) -> Optional[tuple]:
+    """The (device, inode) of `destination` if it has other hard links (in the Tags Directory or in a playlist), else
+    None.  Replacing such a file leaves its links holding the old version."""
+    try:
+        stat = destination.lstat()
+    except FileNotFoundError:
+        return None
+    return (stat.st_dev, stat.st_ino) if stat.st_nlink > 1 else None
+
+
+def relink_replaced_files(replaced: dict):
+    """`replaced` maps the (device, inode) a file had before the sync replaced it to the file.  Every link to such an
+    old version in the Tags Directory and the playlists directory becomes a link to the new version.
+
+    Both directories refuse to delete a file that has no other link, because it may be a last copy.  A link to a
+    replaced version is exactly that, so one that is no longer wanted (the primary changed the file's tags, or
+    reordered the playlist, in the same sync) would stay forever.  Files that are no link of a replaced file are
+    never touched."""
+    from wrolpi.collections.sync import get_playlists_directory
+    from wrolpi.tags import get_tags_directory
+
+    for directory in (get_tags_directory(), get_playlists_directory()):
+        for root, _, names in os.walk(directory):
+            for name in names:
+                link = pathlib.Path(root, name)
+                try:
+                    stat = link.lstat()
+                    file = replaced.get((stat.st_dev, stat.st_ino))
+                    if file is None:
+                        continue
+                    # Linked beside it, then renamed over it: the link is never missing.
+                    temporary = link.with_name(f'.{link.name}.sync')
+                    temporary.unlink(missing_ok=True)
+                    os.link(file, temporary)
+                    os.replace(temporary, link)
+                except OSError as e:
+                    logger.error(f'Failed to relink {repr(str(link))}: {e}')
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Secondary: configs.
 
@@ -790,6 +829,7 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
         page_downloaded = list()
         if wanted and not disk_full:
             semaphore = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
+            replaced = dict()
 
             async def download(file_: ManifestFile, destination_: pathlib.Path):
                 nonlocal disk_full
@@ -797,7 +837,10 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
                     if disk_full:
                         return None
                     try:
+                        old_inode = linked_inode(destination_)
                         await download_file(client, file_, destination_, count_bytes)
+                        if old_inode:
+                            replaced[old_inode] = destination_
                         downloaded.append(destination_)
                         return destination_
                     except SyncDiskFull as e:
@@ -809,6 +852,8 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
 
             results = await asyncio.gather(*(download(f, d) for f, d in wanted))
             page_downloaded = [i for i in results if i]
+            if replaced:
+                await asyncio.to_thread(relink_replaced_files, replaced)
             files_failed += sum(1 for i in results if i is False)
 
         update_sync_status(max_id=page.get('max_id') or 0)

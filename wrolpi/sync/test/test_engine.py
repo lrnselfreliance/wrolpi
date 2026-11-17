@@ -5,6 +5,7 @@ from collections import namedtuple
 import pytest
 import yaml
 
+from wrolpi.collections.sync import get_playlists_directory, _safe_unlink_managed
 from wrolpi.common import get_wrolpi_config, set_test_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig
@@ -13,7 +14,7 @@ from wrolpi.sync import lib
 from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.conftest import manifest_page
 from wrolpi.sync.status import get_sync_status, update_sync_status
-from wrolpi.tags import get_tags_config, Tag, TagFile
+from wrolpi.tags import get_tags_config, Tag, TagFile, _delete_extra_tags_directory_paths
 
 
 @pytest.mark.parametrize('path, allowed', [
@@ -271,6 +272,54 @@ async def test_run_sync(async_client, test_session, primary, secondary_directory
     assert status['files_to_download'] == 0
     assert status['configs_imported'] == []
     assert not [i for i in primary.state['requests'] if not i[0].startswith('/media/config/')]
+
+
+@pytest.mark.asyncio
+async def test_run_sync_replaced_file_keeps_its_links(async_client, primary, secondary_directory, make_secondary,
+                                                      fake_primary_api):
+    """The Tags Directory and playlists links of a file the sync replaces are links to the new version.  A link to
+    the old version would be the old version's last copy, which neither directory ever deletes."""
+    changed = write_primary_file(primary, 'docs/notes.txt', b'the new notes', mtime=1_700_000_500.0)
+    same = write_primary_file(primary, 'docs/same.txt', b'unchanged')
+    fake_primary_api([manifest_page((changed.path, changed.size, changed.mtime), (same.path, same.size, same.mtime))],
+                     primary.directory)
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+
+    # The secondary has an older version of one file, linked into a tag and a playlist.
+    notes = secondary_directory / 'docs/notes.txt'
+    unchanged = secondary_directory / 'docs/same.txt'
+    notes.parent.mkdir(parents=True)
+    notes.write_bytes(b'old notes')
+    unchanged.write_bytes(b'unchanged')
+    os.utime(unchanged, (same.mtime, same.mtime))
+    tag_link = secondary_directory / 'tags/one/notes.txt'
+    playlist_link = get_playlists_directory() / 'Reading/0001_notes.txt'
+    unchanged_link = secondary_directory / 'tags/one/same.txt'
+    # The only copy of a file that someone put in the Tags Directory themselves.
+    stranger = secondary_directory / 'tags/one/stranger.txt'
+    for source, link in ((notes, tag_link), (notes, playlist_link), (unchanged, unchanged_link)):
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.hardlink_to(source)
+    stranger.write_bytes(b'old notes')
+
+    status = await lib.run_sync()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert status['files_downloaded'] == 1
+    assert notes.read_bytes() == b'the new notes'
+    for link in (tag_link, playlist_link):
+        assert link.samefile(notes), f'{link} is still the old version'
+    assert notes.stat().st_nlink == 3
+    assert unchanged_link.samefile(unchanged)
+    assert stranger.read_bytes() == b'old notes' and stranger.stat().st_nlink == 1
+    assert not [i for i in secondary_directory.rglob('.*') if i.is_file()], 'no temporary file is left behind'
+
+    # The links are no longer wanted (the tag was removed, the playlist reordered): both directories can delete them.
+    _delete_extra_tags_directory_paths(secondary_directory / 'tags', [unchanged_link, stranger])
+    assert not tag_link.exists()
+    assert _safe_unlink_managed(playlist_link)
+    assert notes.read_bytes() == b'the new notes' and notes.stat().st_nlink == 1
 
 
 @pytest.mark.asyncio

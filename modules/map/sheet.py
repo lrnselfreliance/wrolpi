@@ -77,13 +77,14 @@ GRAY = (0.6, 0.6, 0.6)
 # Where the eight are from the map, in the order they are numbered: (columns east, rows north).
 ADJOINING = ((-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1))
 # The legend: the most lines it has, how long what each is called may be, how wide and tall the room of one is,
-# how long its piece of line is, and the least and the most a line is drawn wide (points).
+# how long its piece of line is, and the least and the most a line is drawn wide (points): a line thinner than
+# the least is not one which is seen on the map, and is left out.
 LEGEND_LINES = 12
 LEGEND_LABEL = 40
 LEGEND_ITEM_WIDTH = 118
 LEGEND_ITEM_HEIGHT = 13
 LEGEND_SAMPLE = 30
-LEGEND_WIDTHS = (0.15, 5)
+LEGEND_WIDTHS = (0.1, 5)
 LEGEND_DASHES = 6
 WHITE = (1, 1, 1)
 # A compass is marked in degrees, or in mils: 6,400 of them around.
@@ -380,8 +381,8 @@ def legend_lines(legend) -> Tuple[Tuple[float, float, float], List[LegendLine]]:
         if not isinstance(line, dict):
             continue
         label = _latin(str(line.get('label') or '')).strip()[:LEGEND_LABEL]
-        color, width = _color(line.get('color')), _number(line.get('width'), *LEGEND_WIDTHS)
-        if not label or color is None or width is None:
+        color, width = _color(line.get('color')), _number(line.get('width'), 0, LEGEND_WIDTHS[1])
+        if not label or color is None or width is None or width < LEGEND_WIDTHS[0]:
             continue
         dash = line.get('dash')
         dash = [_number(i, 0.1, LEGEND_SAMPLE) for i in (dash if isinstance(dash, (list, tuple)) else [])[:LEGEND_DASHES]]
@@ -792,7 +793,11 @@ def _draw_legend(pen: _Pen, plan: SheetPlan, x: float, y: float):
         if line.casing_color and line.casing_width > line.width:
             pen.line(ends, width=line.casing_width, color=line.casing_color)
         pen.line(ends, width=line.width, color=line.color, opacity=line.opacity, dash=line.dash)
-        pen.text(left + LEGEND_SAMPLE + 5, middle + LABEL_SIZE / 3, line.label)
+        # A name longer than the room beside its line is cut to it.
+        label = line.label
+        while _text_width(label, LABEL_SIZE) > LEGEND_ITEM_WIDTH - LEGEND_SAMPLE - 10 and len(label) > 1:
+            label = label[:-1]
+        pen.text(left + LEGEND_SAMPLE + 5, middle + LABEL_SIZE / 3, label)
 
 
 def _draw_margin(pen: _Pen, plan: SheetPlan):

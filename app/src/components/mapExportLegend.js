@@ -8,6 +8,9 @@ import {EXPORT_CSS_DPI} from "./mapExport";
 
 const POINTS_PER_INCH = 72;
 const WHITE = [1, 1, 1];
+// The thinnest line (points) a legend has.  A style brings a line in from nothing as the map is
+// zoomed in, and a line of a few hundredths of a point is not one anybody sees on a sheet.
+export const LEGEND_LEAST_WIDTH = 0.1;
 
 // The lines a legend may have, from the top: what each is called, the layer of the basemap (or of
 // the contours) which draws it, and the layers which may draw its edges under it.
@@ -61,8 +64,9 @@ const round = n => Math.round(n * 100) / 100;
 // style: the map's style.  groups: the layers which are exported (of exportGroups).  zoom: the zoom
 // the map is exported at.  cssDpi: how many CSS pixels of the style are an inch of the sheet.
 //
-// A line is in the legend when its layer is exported and draws something at that zoom: a path which
-// the style only draws from zoom 14 is not on a sheet drawn at 13, nor in its legend.
+// A line is in the legend when its layer is exported and draws a line which can be seen at that
+// zoom: a path which the style only draws from zoom 14 is not on a sheet drawn at 13, nor in its
+// legend, and at 14.2 it is too thin to be on either.
 export function exportLegend(style, groups, zoom, cssDpi = EXPORT_CSS_DPI) {
     const exported = new Set(groups.flatMap(group => group.ids));
     const layers = (style.layers || []).filter(layer => exported.has(layer.id) && drawnAt(layer, zoom));
@@ -75,7 +79,7 @@ export function exportLegend(style, groups, zoom, cssDpi = EXPORT_CSS_DPI) {
         if (!layer) continue;
         const width = valueAt(layer, "paint", "line-width", zoom);
         const parts = colorParts(valueAt(layer, "paint", "line-color", zoom));
-        if (!parts || !(width > 0)) continue;
+        if (!parts || !(width * points >= LEGEND_LEAST_WIDTH)) continue;
         const entry = {
             label,
             color: parts.color,

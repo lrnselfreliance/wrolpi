@@ -588,6 +588,9 @@ def test_legend_lines():
     dict(lines=[dict(label='Not a width', color=[1, 0, 0], width='wide')]),
     dict(lines=[dict(label='Not a width', color=[1, 0, 0], width=math.nan)]),
     dict(lines=[dict(label='Not a width', color=[1, 0, 0], width=True)]),
+    # Too thin to be seen on the map.
+    dict(lines=[dict(label='Path or track', color=[1, 0, 0], width=0.02, dash=[0.06, 0.02])]),
+    dict(lines=[dict(label='Nothing', color=[1, 0, 0], width=0)]),
 ])
 def test_legend_lines_which_are_not(legend):
     """What is not a legend has no lines, and is on white."""
@@ -667,3 +670,17 @@ async def test_api_export_pdf_sheet_legend(async_client):
         response, job = await api_export(async_client, images, **size, sheet=dict(legend=legend))
         assert response.status_code == HTTPStatus.OK, json.dumps(legend)
         assert 'LEGEND' not in page_text(response.content), json.dumps(legend)
+
+
+def test_sheet_legend_name_too_long_for_its_column():
+    """What a line is called is cut to the room beside the line, so it is not under the next line."""
+    lines = [dict(label='A name which is far too long for it ' + str(i), color=[0, 0, 0], width=1) for i in range(3)]
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, Sheet(legend=dict(lines=lines)))
+    pen = FakePen()
+    sheet._draw_legend(pen, plan, 54, 100)
+    written = [(x, text) for x, _, text, _ in pen.texts if text.startswith('A name')]
+    assert len(written) == 3
+    for x, text in written:
+        assert len(text) < len(lines[0]['label'])
+        left = x - sheet.LEGEND_SAMPLE - 5
+        assert x + pymupdf.get_text_length(text, fontsize=sheet.LABEL_SIZE) <= left + sheet.LEGEND_ITEM_WIDTH

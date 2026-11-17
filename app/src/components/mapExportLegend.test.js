@@ -1,4 +1,4 @@
-import {exportLegend, LEGEND_LINES} from './mapExportLegend';
+import {exportLegend, LEGEND_LEAST_WIDTH, LEGEND_LINES} from './mapExportLegend';
 
 // A basemap as the map's style has it: roads with edges under them, at widths which change with
 // the zoom; and the contours of the terrain.
@@ -64,7 +64,7 @@ describe('the legend of an exported map', () => {
         expect(at(13.2).width).toBeGreaterThan(at(12.6).width);
         expect(at(13.2).width).toBeLessThan(at(15).width);
         expect(at(15).width).toBe(0.96);
-        expect(at(11.5).color[0]).toBeLessThan(at(15.9).color[0]);
+        expect(at(12.6).color[0]).toBeLessThan(at(15.9).color[0]);
         // The edges of a road are those of the layer which draws them at that zoom.
         const highway = zoom => exportLegend(STYLE, ALL, zoom).lines[0];
         expect(highway(13).casing_color).toEqual([0.878, 0.878, 0.878]);
@@ -106,6 +106,20 @@ describe('the legend of an exported map', () => {
         const style = {layers: STYLE.layers.map(layer => ({...layer, id: `b.pmtiles:${layer.id}`}))};
         const groups = [{name: 'Everything', ids: style.layers.map(layer => layer.id)}];
         expect(labels(exportLegend(style, groups, 13.2))).toEqual(labels(exportLegend(STYLE, ALL, 13.2)));
+    });
+
+    test('a line too thin to be seen is not in the legend', () => {
+        // As the basemap draws a path: from nothing at zoom 14, where a quadrangle near the equator is drawn.
+        const path = {id: 'roads_other', type: 'line', paint: {'line-color': '#ebebeb', 'line-width': grows(14, 0, 20, 7)}};
+        const style = {layers: [path, {id: 'roads_highway', type: 'line', paint: {'line-width': 2}}]};
+        const groups = only('roads_other', 'roads_highway');
+        expect(labels(exportLegend(style, groups, 14.2))).toEqual(['Highway']);
+        // Once it is a tenth of a point wide it is.
+        expect(labels(exportLegend(style, groups, 15.5))).toEqual(['Highway', 'Path or track']);
+        const least = {layers: [{id: 'roads_highway', type: 'line', paint: {'line-width': LEGEND_LEAST_WIDTH * 150 / 72}}]};
+        expect(exportLegend(least, only('roads_highway'), 13).lines[0].width).toBe(LEGEND_LEAST_WIDTH);
+        const less = {layers: [{id: 'roads_highway', type: 'line', paint: {'line-width': 0.2}}]};
+        expect(exportLegend(less, only('roads_highway'), 13)).toBeNull();
     });
 
     test('a layer which says nothing of its line is drawn as a style draws one', () => {

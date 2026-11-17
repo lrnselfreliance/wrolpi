@@ -68,6 +68,8 @@ ADJOINING_SQUARE = 12
 ADJOINING_HEIGHT = 58
 ADJOINING_MIN_WIDTH = 280
 ADJOINING_COLUMN = 150
+# How many maps over to look for the next quadrangle: the widest of the USGS is under four maps wide.
+ADJOINING_STEPS = 4
 ADJOINING_GRAY = (0.75, 0.75, 0.75)
 # Where the eight are from the map, in the order they are numbered: (columns east, rows north).
 ADJOINING = ((-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1))
@@ -292,14 +294,25 @@ def _north_of_true(angle: float) -> str:
 
 
 def adjoining_quads(bounds: Sequence[float]) -> Optional[List[Optional[str]]]:
-    """What the USGS calls each of the eight areas the size of the map around it, in the order of ADJOINING.
-    None when it has a name for none of them: most of the world."""
+    """What the USGS calls the quadrangle on each of the eight sides of a map, in the order of ADJOINING.  None
+    when it has a name for none of them: most of the world.
+
+    A quadrangle of the USGS may be larger than the map (in Alaska they are wider), so the area the size of the
+    map beside it may be more of the quadrangle the map is in.  The quadrangle on that side is the next one
+    which is not: a sheet is never beside itself."""
     west, south, east, north = bounds
     width, height = east - west, north - south
+    own = quads.quad_name(west, south, east, north)
     names = []
     for columns, rows in ADJOINING:
-        name = quads.quad_name(west + columns * width, south + rows * height,
-                               east + columns * width, north + rows * height)
+        name = None
+        for step in range(1, ADJOINING_STEPS + 1):
+            name = quads.quad_name(west + step * columns * width, south + step * rows * height,
+                                   east + step * columns * width, north + step * rows * height)
+            if name is None or own is None or (name.name, name.state) != (own.name, own.state):
+                break
+        else:
+            name = None
         names.append(_latin(name.name) if name else None)
     return names if any(names) else None
 

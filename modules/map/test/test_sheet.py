@@ -6,7 +6,7 @@ from http import HTTPStatus
 import pymupdf
 import pytest
 
-from modules.map import export, magnetic, sheet
+from modules.map import export, magnetic, quads, sheet
 from modules.map.export import ExportLayer, InvalidExport, Sheet, build_layered_pdf
 from modules.map.test.test_export import api_export, layer_names, make_image, read_viewport
 
@@ -532,3 +532,27 @@ def test_sheet_adjoining_quads_some_unnamed():
     # A name too long for its column is cut to fit it.
     long = next(text for text in written if text.startswith('8  A name'))
     assert pymupdf.get_text_length(long, fontsize=sheet.LABEL_SIZE) <= sheet.ADJOINING_COLUMN
+
+
+@pytest.mark.parametrize('bounds', [
+    [-149.875, 61.125, -149.75, 61.25],
+    [-147.75, 64.75, -147.625, 64.875],
+    [-156.875, 71.25, -156.75, 71.375],
+    ANCHORAGE,
+])
+def test_adjoining_quads_are_never_the_map_itself(bounds):
+    """Where a quadrangle is wider than the map (Alaska), the map beside this one may be more of the same
+    quadrangle.  The quadrangle on that side is the next one."""
+    own = quads.quad_name(*bounds)
+    around = sheet.adjoining_quads(bounds)
+    assert own.name not in around
+
+
+def test_adjoining_quads_step_past_the_map():
+    """The east of a map in the west of a wide quadrangle is the quadrangle after it, not the rest of it."""
+    bounds = [-149.875, 61.125, -149.75, 61.25]
+    assert quads.quad_name(*bounds).name == 'Anchorage A-8 NE'
+    # One map east is still Anchorage A-8 NE.
+    assert quads.quad_name(-149.75, 61.125, -149.625, 61.25).name == 'Anchorage A-8 NE'
+    around = sheet.adjoining_quads(bounds)
+    assert around[3:5] == ['Anchorage A-8 NW', 'Anchorage A-7 NW']

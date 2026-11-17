@@ -5,6 +5,7 @@ from collections import namedtuple
 import pytest
 import yaml
 
+from wrolpi.collections.models import Collection
 from wrolpi.collections.sync import get_playlists_directory, _safe_unlink_managed
 from wrolpi.common import get_wrolpi_config, set_test_media_directory
 from wrolpi.db import get_db_session
@@ -320,6 +321,123 @@ async def test_run_sync_replaced_file_keeps_its_links(async_client, primary, sec
     assert not tag_link.exists()
     assert _safe_unlink_managed(playlist_link)
     assert notes.read_bytes() == b'the new notes' and notes.stat().st_nlink == 1
+
+
+@pytest.mark.asyncio
+async def test_run_sync_replaced_file_in_a_playlist_with_its_own_directory(
+        async_client, test_session, primary, secondary_directory, make_secondary, fake_primary_api):
+    """A playlist may keep its links in any folder of the library; a replaced file's link there is moved too, and
+    the folder's other files are left alone."""
+    changed = write_primary_file(primary, 'docs/notes.txt', b'the new notes', mtime=1_700_000_500.0)
+    fake_primary_api([manifest_page((changed.path, changed.size, changed.mtime))], primary.directory)
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+
+    notes = secondary_directory / 'docs/notes.txt'
+    notes.parent.mkdir(parents=True)
+    notes.write_bytes(b'old notes')
+    directory = secondary_directory / 'my lists/Reading'
+    (directory / 'deeper').mkdir(parents=True)
+    link = directory / '0001_notes.txt'
+    link.hardlink_to(notes)
+    # A hard link of the file that the playlist did not make: not its name, or not directly in its folder.
+    renamed = directory / 'my copy of the notes.txt'
+    deeper = directory / 'deeper/0001_notes.txt'
+    renamed.hardlink_to(notes)
+    deeper.hardlink_to(notes)
+    test_session.add(Collection(name='Reading', kind='playlist', directory=directory))
+    test_session.commit()
+
+    status = await lib.run_sync()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert link.samefile(notes) and link.read_bytes() == b'the new notes'
+    assert renamed.read_bytes() == b'old notes' and deeper.read_bytes() == b'old notes'
+    assert _safe_unlink_managed(link)
+
+
+@pytest.mark.asyncio
+async def test_run_sync_replaced_file_with_a_hard_linked_twin(async_client, primary, secondary_directory,
+                                                              make_secondary, fake_primary_api):
+    """Two library files may be hard links of each other.  When one of them changes, only links named for it move;
+    its twin's link is still its twin."""
+    changed = write_primary_file(primary, 'docs/a.txt', b'the new a', mtime=1_700_000_500.0)
+    fake_primary_api([manifest_page((changed.path, changed.size, changed.mtime))], primary.directory)
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+
+    a, b = secondary_directory / 'docs/a.txt', secondary_directory / 'docs/b.txt'
+    a.parent.mkdir(parents=True)
+    a.write_bytes(b'shared')
+    b.hardlink_to(a)
+    a_link, b_link = secondary_directory / 'tags/one/a.txt', secondary_directory / 'tags/one/b.txt'
+    a_link.parent.mkdir(parents=True)
+    a_link.hardlink_to(a)
+    b_link.hardlink_to(b)
+
+    status = await lib.run_sync()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert a.read_bytes() == b'the new a' and a_link.samefile(a)
+    assert b.read_bytes() == b'shared' and b_link.samefile(b)
+
+
+@pytest.mark.asyncio
+async def test_run_sync_interrupted_before_a_file_is_replaced(async_client, primary, secondary_directory,
+                                                              make_secondary, fake_primary_api, monkeypatch):
+    """A sync that stops between downloading a new version and putting it in place has left no link on the old
+    version once a later sync finishes the job, although that sync downloads nothing."""
+    changed = write_primary_file(primary, 'docs/notes.txt', b'the new notes', mtime=1_700_000_500.0)
+    fake_primary_api([manifest_page((changed.path, changed.size, changed.mtime))], primary.directory)
+    set_test_media_directory(secondary_directory)
+    make_secondary(primary.url)
+
+    notes = secondary_directory / 'docs/notes.txt'
+    notes.parent.mkdir(parents=True)
+    notes.write_bytes(b'old notes')
+    link = secondary_directory / 'tags/one/notes.txt'
+    link.parent.mkdir(parents=True)
+    link.hardlink_to(notes)
+
+    replace = os.replace
+
+    def power_cut(source, destination):
+        if pathlib.Path(destination) == notes:
+            raise OSError('the power went out')
+        return replace(source, destination)
+
+    monkeypatch.setattr(lib.os, 'replace', power_cut)
+    status = await lib.run_sync()
+    assert status['files_failed'] == 1
+    assert notes.read_bytes() == b'old notes', 'the file was not replaced'
+    monkeypatch.setattr(lib.os, 'replace', replace)
+
+    primary.state['requests'].clear()
+    status = await lib.run_sync()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert status['files_downloaded'] == 1 and status['bytes_downloaded'] == 0
+    assert notes.read_bytes() == b'the new notes'
+    assert link.samefile(notes) and notes.stat().st_nlink == 2
+    assert not [i for i in secondary_directory.rglob('.*') if i.is_file()]
+
+
+def test_move_links_of_a_long_name(test_session, test_directory):
+    """A link whose name is as long as a file name may be is still moved."""
+    name = 'n' * 240 + '.txt'
+    old, new = test_directory / 'docs' / name, test_directory / 'docs/new version'
+    old.parent.mkdir()
+    old.write_bytes(b'old')
+    new.write_bytes(b'new')
+    link = get_playlists_directory() / 'Reading' / f'0001_{name}'
+    link.parent.mkdir(parents=True)
+    link.hardlink_to(old)
+
+    assert lib.find_links([old]) == {old: [link]}
+    lib.move_links([link], old, new)
+
+    assert link.samefile(new)
+    assert [i.name for i in link.parent.iterdir()] == [link.name]
 
 
 @pytest.mark.asyncio

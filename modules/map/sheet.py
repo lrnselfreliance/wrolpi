@@ -56,6 +56,14 @@ NOTE_SIZE = 7
 NOTE_LEADING = 9.5
 BAR_HEIGHT = 4
 BAR_SPACING = 27
+# The bars: kilometers, meters, miles and feet.
+BAR_COUNT = 4
+# The room under the bars for how far apart the contour lines are.
+CONTOUR_LEADING = 16
+# The units contour lines are apart in, as they are written.
+CONTOUR_UNITS = dict(feet='FEET', meters='METERS')
+# A compass is marked in degrees, or in mils: 6,400 of them around.
+MILS_PER_DEGREE = 6400 / 360
 # From the bottom of the map to the first scale bar, and from the last note to the bottom of the page.
 BARS_OFFSET = 52
 BOTTOM_PADDING = 36
@@ -78,6 +86,9 @@ class Sheet:
     # When the map was made, as it is to be written.  When it is a day (2026-11-15), the sheet says where a
     # compass points on that day.
     date: Optional[str] = None
+    # How far apart the map's contour lines are, and in what (one of CONTOUR_UNITS); None when it has none.
+    contour_interval: Optional[float] = None
+    contour_unit: Optional[str] = None
 
 
 @dataclass
@@ -99,6 +110,8 @@ class SheetPlan:
     # None where there is no grid, and when it is not known where a compass points.
     grid_north: Optional[float] = None
     magnetic_north: Optional[float] = None
+    # How far apart the contour lines are, as it is written under the scale bars; None when there are none.
+    contours: Optional[str] = None
 
     @property
     def south_hemisphere(self) -> bool:
@@ -256,6 +269,24 @@ def _east_or_west(angle: float) -> str:
     return f'{format_angle(_to_the_minute(abs(angle)))} {"west" if angle < 0 else "east"}'
 
 
+def mils(angle: float) -> int:
+    """An angle (degrees) in the mils a compass may be marked in."""
+    return round(abs(angle) * MILS_PER_DEGREE)
+
+
+def _north_of_true(angle: float) -> str:
+    """How far a north is from true north, as it is said: 2°34' west (46 mils)."""
+    return f'{_east_or_west(angle)} ({mils(angle)} mils)'
+
+
+def _contours(sheet: 'Sheet') -> Optional[str]:
+    """How far apart the contour lines are, as it is written: CONTOUR INTERVAL 40 FEET."""
+    interval, unit = sheet.contour_interval, CONTOUR_UNITS.get(sheet.contour_unit)
+    if not unit or not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval <= 0:
+        return None
+    return f'CONTOUR INTERVAL {interval:,.10g} {unit}'
+
+
 def _to_the_minute(angle: float) -> float:
     return round(angle * 60) / 60
 
@@ -310,7 +341,7 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
         plan.grid_north = _grid_convergence(*middle, plan.zone, plan.south_hemisphere)
         notes.append(
             f'{_grid_meters(plan):,} meter grid: Universal Transverse Mercator, zone {plan.zone}'
-            f'{"S" if plan.south_hemisphere else "N"}.  Grid north is {_east_or_west(plan.grid_north)} of true'
+            f'{"S" if plan.south_hemisphere else "N"}.  Grid north is {_north_of_true(plan.grid_north)} of true'
             f' north at the middle of the map.')
     year = _decimal_year(sheet.date)
     plan.magnetic_north = magnetic.declination(*middle, year) if year else None
@@ -319,7 +350,7 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
         # The shorter way around: a compass which passes due south goes from 180 west to 180 east.
         yearly = (model.declination(*middle, year + 1) - plan.magnetic_north + 180) % 360 - 180
         notes.append(
-            f'Magnetic north is {_east_or_west(plan.magnetic_north)} of true north at the middle of the map on'
+            f'Magnetic north is {_north_of_true(plan.magnetic_north)} of true north at the middle of the map on'
             f' {_latin(sheet.date)}, and moves about {_east_or_west(yearly)} each year ({model.name}).')
     names = [_latin(str(i)) for i in sheet.credits if str(i).strip()]
     if names:
@@ -327,10 +358,11 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     notes.append(f'Made with WROLPi, {_latin(sheet.date)}.' if sheet.date else 'Made with WROLPi.')
     for note in notes:
         plan.notes.extend(_wrap(note, map_width, NOTE_SIZE))
+    plan.contours = _contours(sheet)
 
     plan.width = map_width + 2 * MARGIN
-    plan.height = TOP_MARGIN + map_height + BARS_OFFSET + 3 * BAR_SPACING + len(plan.notes) * NOTE_LEADING \
-        + BOTTOM_PADDING
+    plan.height = TOP_MARGIN + map_height + BARS_OFFSET + BAR_COUNT * BAR_SPACING \
+        + (CONTOUR_LEADING if plan.contours else 0) + len(plan.notes) * NOTE_LEADING + BOTTOM_PADDING
     plan.map_rect = (MARGIN, TOP_MARGIN, MARGIN + map_width, TOP_MARGIN + map_height)
     return plan
 
@@ -570,8 +602,8 @@ def _draw_norths(pen: _Pen, plan: SheetPlan, x: float, y: float):
         pen.line([(x, y), (tip_x, tip_y)], width=0.6)
         east = angle >= 0
         pen.text(tip_x + (3 if east else -3), tip_y + 2, name, align='left' if east else 'right')
-        pen.text(x, below, f'{name} {format_angle(_to_the_minute(abs(angle)))} {"E" if east else "W"}',
-                 align='center')
+        pen.text(x, below, f'{name} {format_angle(_to_the_minute(abs(angle)))} {"E" if east else "W"}'
+                           f'  {mils(angle)} MILS', align='center')
         below += LABEL_SIZE + 2
 
 
@@ -598,16 +630,21 @@ def _draw_margin(pen: _Pen, plan: SheetPlan):
     meter = 1 / (plan.scale * METERS_PER_POINT)
     bars = [
         _draw_scale_bar(pen, center, y, 1000 * meter, 'KILOMETERS', 2, 10, available),
-        _draw_scale_bar(pen, center, y + BAR_SPACING, METERS_PER_MILE * meter, 'MILES', 1, 4, available),
-        _draw_scale_bar(pen, center, y + 2 * BAR_SPACING, 1000 * METERS_PER_FOOT * meter, 'FEET', 7, 2, available,
+        _draw_scale_bar(pen, center, y + BAR_SPACING, 1000 * meter, 'METERS', 2, 2, available,
+                        number=lambda i: str(i * 1000)),
+        _draw_scale_bar(pen, center, y + 2 * BAR_SPACING, METERS_PER_MILE * meter, 'MILES', 1, 4, available),
+        _draw_scale_bar(pen, center, y + 3 * BAR_SPACING, 1000 * METERS_PER_FOOT * meter, 'FEET', 7, 2, available,
                         number=lambda i: str(i * 1000)),
     ]
     # The norths are left of the bars, where there is room for them.
     if (plan.grid_north is not None or plan.magnetic_north is not None) \
             and center - max(bars) / 2 - x0 >= NORTHS_WIDTH + 10:
-        _draw_norths(pen, plan, x0 + NORTHS_WIDTH / 2, y + 2 * BAR_SPACING - 12)
+        _draw_norths(pen, plan, x0 + NORTHS_WIDTH / 2, y + (BAR_COUNT - 1) * BAR_SPACING - 12)
 
-    y += 3 * BAR_SPACING
+    y += BAR_COUNT * BAR_SPACING
+    if plan.contours:
+        pen.text(center, y - 4, plan.contours, size=NOTE_SIZE + 1, align='center')
+        y += CONTOUR_LEADING
     for index, note in enumerate(plan.notes):
         pen.text(x0, y + index * NOTE_LEADING, note, size=NOTE_SIZE)
 

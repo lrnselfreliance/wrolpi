@@ -1,4 +1,4 @@
-import {contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from './terrain.js';
+import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from './terrain.js';
 
 describe('how deep a terrain file is read', () => {
     test('as deep as the file goes', () => {
@@ -59,5 +59,38 @@ describe('how far apart the contour lines are', () => {
                 expect(major).toBeGreaterThan(minor);
             }
         }
+    });
+});
+
+describe('how far apart the contour lines of a map at one zoom are', () => {
+    test('is the interval of the tiles the lines are made for', () => {
+        // A sheet is drawn at about zoom 13, from a file which goes to 12: tiles of zoom 12.
+        expect(contourInterval(true, 12, 13.2)).toEqual([40, 200]);
+        expect(contourInterval(false, 12, 13.2)).toEqual([20, 100]);
+        // The file which WROLPi offers goes to zoom 8, whatever the map is zoomed to.
+        expect(contourInterval(true, 8, 13.2)).toEqual([100, 500]);
+        expect(contourInterval(false, DEFAULT_TERRAIN_MAX_ZOOM, 14.9)).toEqual([50, 200]);
+        // A file deeper than the finest interval has the finest.
+        expect(contourInterval(true, 15, 14.2)).toEqual([40, 200]);
+        // A map zoomed out has the interval of its zoom.
+        expect(contourInterval(true, 12, 6.9)).toEqual([200, 1000]);
+        expect(contourInterval(true, 12, 10.99)).toEqual([100, 500]);
+        expect(contourInterval(true, 12, 11)).toEqual([40, 200]);
+    });
+
+    test('is the same as the lines which are drawn: the interval of the nearest zoom below', () => {
+        for (const [maxZoom, zoom] of [[8, 13.2], [12, 13.2], [12, 9.5], [3, 13], [undefined, 13]]) {
+            const thresholds = contourThresholds(true, maxZoom);
+            const tile = Math.min(Math.floor(zoom), maxZoom ?? DEFAULT_TERRAIN_MAX_ZOOM);
+            const below = Math.max(...Object.keys(thresholds).map(Number).filter(i => i <= tile));
+            expect(contourInterval(true, maxZoom, zoom)).toEqual(thresholds[below] ?? null);
+        }
+    });
+
+    test('is nothing where no line is drawn', () => {
+        expect(contourInterval(true, 12, 3.9)).toBeNull();
+        expect(contourInterval(false, 8, 0)).toBeNull();
+        // A file shallower than every interval has lines only from the zoom of the coarsest.
+        expect(contourInterval(true, 3, 13)).toBeNull();
     });
 });

@@ -44,3 +44,16 @@ export function contourThresholds(imperial, maxZoom) {
     }
     return thresholds;
 }
+
+// How far apart the contour lines are on a map drawn at `zoom` from a terrain file which goes as
+// deep as `maxZoom`: [minor, major], or null when no line is drawn at that zoom.
+//
+// The lines of a map are made a tile at a time: for tiles of the map's zoom, or of the file's
+// deepest when the map is zoomed in past it, with the interval of the nearest zoom below.
+export function contourInterval(imperial, maxZoom, zoom) {
+    const thresholds = contourThresholds(imperial, maxZoom);
+    const deepest = Number.isFinite(maxZoom) ? maxZoom : DEFAULT_TERRAIN_MAX_ZOOM;
+    const tileZoom = Math.min(Math.floor(zoom), deepest);
+    const zooms = Object.keys(thresholds).map(Number).filter(i => i <= tileZoom);
+    return zooms.length ? thresholds[Math.max(...zooms)] : null;
+}

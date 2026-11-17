@@ -9,6 +9,7 @@
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
+    "@mapbox/vector-tile": "^2.0.4",
     "@maplibre/maplibre-gl-style-spec": "^24.8.5",
     "@tabler/icons-react": "^3.50.0",
     "@testing-library/react": "^13.4.0",
@@ -20,6 +21,7 @@
     "maplibre-gl": "^5.24.0",
     "markdown-it": "^15.0.3",
     "mathjs": "^15.2.0",
+    "pbf": "^4.0.1",
     "pmtiles": "^4.5.0",
     "protomaps-themes-base": "^4.5.0",
     "query-string": "^10.0.0",
@@ -75,7 +77,7 @@
       "^.+\\.(js|jsx|mjs|cjs|ts|tsx)$": "<rootDir>/jest/babelTransform.js"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(react-hotkeys-hook|three)/)"
+      "node_modules/(?!(react-hotkeys-hook|three|@mapbox/vector-tile|@mapbox/point-geometry|pbf)/)"
     ]
   },
   "overrides": {

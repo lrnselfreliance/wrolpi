@@ -16,6 +16,7 @@ import {
     setMapDefaultLocation,
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
+import {readVectorTile} from "./mapTiles";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
@@ -1064,6 +1065,7 @@ export default function MapViewer() {
                 frame,
                 groups,
                 ignoredPrefixes: [QUAD_LAYER_PREFIX],
+                readTile: readVectorTile,
                 setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
                 // Stopped between two layers, as soon as the person exporting asks.
                 isCancelled: () => exportCancelledRef.current,

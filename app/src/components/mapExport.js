@@ -87,6 +87,7 @@ export function exportFrame(quad, {
         pixelRatio,
         dpi: pixelRatio * cssDpi,
         zoom: Math.log2(world / TILE_SIZE),
+        bounds: [quad.west, quad.south, quad.east, quad.north],
         center: [(quad.west + quad.east) / 2, latitudeOfMercatorY((south + north) / 2)],
     };
 }
@@ -151,15 +152,201 @@ export function exportGroups(styleLayers, {layerGroups = {}, overlayLabels = {}}
     });
 }
 
+// A basemap's tiles name its small roads from this zoom on.  A quadrangle is drawn at about zoom 13,
+// from tiles in which the streets of a town are lines with no names.
+export const EXPORT_DETAIL_ZOOM = 14;
+// The layers of a basemap which name roads.
+const ROAD_LABELS = "roads_labels";
+const ROAD_NAMES_SOURCE = "export-road-names:";
+const SHORT_ROAD_NAMES_SOURCE = "export-short-road-names:";
+// The layer which names the roads too short for their names, after the id of the layer it is made of.
+export const SHORT_ROAD_SUFFIX = ":short";
+// Which way the name of a short road is turned (degrees, clockwise), in what is said of the road.
+const NAME_ANGLE = "export:angle";
+const ROAD_TEXT_SIZE = 12;
+// About how wide a letter is, in its own height; and how much longer than its name a road is to be
+// for the name to be written along it.
+const LETTER_WIDTH = 0.55;
+const NAME_ROOM = 1.2;
+// Two short pieces of one road nearer than this (CSS pixels) are named once.
+const SAME_NAME_APART = 150;
+// More tiles of names than any quadrangle has: something is wrong with what was asked for.
+const MAX_DETAIL_TILES = 256;
+
+// The layers of `style` which name roads, but not on a map drawn at `zoom`: their style keeps the
+// names for a zoom at which a street is inches long on a screen.  On a sheet a road is found by its
+// name.
+export function unnamedRoadLayers(style, zoom) {
+    return (style.layers || []).filter(layer => layer.type === "symbol" && layer["source-layer"]
+        && String(layer.id).includes(ROAD_LABELS) && layer.minzoom > zoom);
+}
+
+// The tiles of `zoom` which have part of `bounds` (west, south, east, north) in them: [{z, x, y}].
+export function tilesOfBounds([west, south, east, north], zoom) {
+    const count = 2 ** zoom;
+    const column = longitude => (longitude + 180) / 360 * count;
+    const row = latitude => (1 - mercatorY(latitude) / Math.PI) / 2 * count;
+    const clamp = n => Math.min(count - 1, Math.max(0, n));
+    // A tile whose edge is the edge of the bounds has nothing of them in it.
+    const [left, right] = [clamp(Math.floor(column(west))), clamp(Math.ceil(column(east)) - 1)];
+    const [top, bottom] = [clamp(Math.floor(row(north))), clamp(Math.ceil(row(south)) - 1)];
+    const tiles = [];
+    for (let x = left; x <= right; x++) {
+        for (let y = top; y <= bottom; y++) tiles.push({z: zoom, x, y});
+    }
+    return tiles;
+}
+
+// The roads of one layer of a tile which have a name, as GeoJSON features with all that the tile says
+// of them: what a layer of the style draws a name from is whatever its style asks for.
+//
+// tile: a tile as @mapbox/vector-tile reads it.
+export function namedRoads(tile, sourceLayer, {z, x, y}) {
+    const layer = tile?.layers?.[sourceLayer];
+    const features = [];
+    for (let i = 0; layer && i < layer.length; i++) {
+        const feature = layer.feature(i);
+        if (!Object.keys(feature.properties).some(key => key === "name" || key.startsWith("name:"))) continue;
+        const {geometry, properties} = feature.toGeoJSON(x, y, z);
+        features.push({type: "Feature", geometry, properties});
+    }
+    return features;
+}
+
+function nameOf(properties) {
+    return String(properties.name ?? Object.entries(properties).find(([key]) => key.startsWith("name:"))?.[1] ?? "");
+}
+
+// Named roads (of namedRoads), as they are to be named on a map drawn at `zoom` with text of
+// `textSize` CSS pixels: {lines, points}, each a GeoJSON FeatureCollection.
+//
+// A map writes a name along a road only where the road is longer than the name, and at the scale of
+// a sheet most streets of a town are not.  Such a road is in `points`: its middle, and which way it
+// goes there (NAME_ANGLE), where its name is written over its ends as a map maker would.
+export function placeRoadNames(features, zoom, textSize = ROAD_TEXT_SIZE) {
+    const world = TILE_SIZE * 2 ** zoom;
+    const pixel = ([longitude, latitude]) => [
+        (longitude + 180) / 360 * world, (1 - mercatorY(latitude) / Math.PI) / 2 * world];
+    const lines = [];
+    const short = [];
+    for (const {geometry, properties} of features) {
+        const parts = geometry.type === "MultiLineString" ? geometry.coordinates
+            : geometry.type === "LineString" ? [geometry.coordinates] : [];
+        for (const coordinates of parts) {
+            if (coordinates.length < 2) continue;
+            const pixels = coordinates.map(pixel);
+            const lengths = pixels.slice(1).map((point, i) => Math.hypot(point[0] - pixels[i][0], point[1] - pixels[i][1]));
+            const length = lengths.reduce((sum, n) => sum + n, 0);
+            if (!length) continue;
+            if (length >= nameOf(properties).length * textSize * LETTER_WIDTH * NAME_ROOM) {
+                lines.push({type: "Feature", geometry: {type: "LineString", coordinates}, properties});
+                continue;
+            }
+            // The middle of the road, and the piece of it the middle is on.
+            let [along, i] = [length / 2, 0];
+            while (i < lengths.length - 1 && along > lengths[i]) along -= lengths[i++];
+            const part = lengths[i] ? along / lengths[i] : 0;
+            const [from, to] = [coordinates[i], coordinates[i + 1]];
+            const middle = [from[0] + (to[0] - from[0]) * part, from[1] + (to[1] - from[1]) * part];
+            // From one end to the other, and never upside down.
+            const [first, last] = [pixels[0], pixels[pixels.length - 1]];
+            let angle = Math.atan2(last[1] - first[1], last[0] - first[0]) * 180 / Math.PI;
+            if (angle > 90) angle -= 180;
+            if (angle <= -90) angle += 180;
+            short.push({length, at: pixel(middle), middle, angle, properties});
+        }
+    }
+    // A road is in pieces where two tiles meet, and where what is said of it changes.  The longest of
+    // the pieces near each other is the one which is named.
+    const points = [];
+    const kept = [];
+    for (const road of short.sort((a, b) => b.length - a.length)) {
+        const name = nameOf(road.properties);
+        if (kept.some(other => other.name === name
+            && Math.hypot(other.at[0] - road.at[0], other.at[1] - road.at[1]) < SAME_NAME_APART)) continue;
+        kept.push({name, at: road.at});
+        points.push({
+            type: "Feature",
+            geometry: {type: "Point", coordinates: road.middle},
+            properties: {...road.properties, [NAME_ANGLE]: Math.round(road.angle * 10) / 10},
+        });
+    }
+    return {
+        lines: {type: "FeatureCollection", features: lines},
+        points: {type: "FeatureCollection", features: points},
+    };
+}
+
+// The names of the roads of the map which a map drawn for `frame` would not have: {source id:
+// {lines, points}} (see placeRoadNames), for exportStyle.  They are read from tiles of EXPORT_DETAIL_ZOOM.
+//
+// readTile(url, {z, x, y}): resolves to a tile of the source with that URL (as @mapbox/vector-tile
+// reads it), or to nothing when the source has no such tile.
+//
+// A source whose names can not be read is left out, and the map is exported without them.
+export async function loadRoadNames(style, frame, readTile) {
+    const names = {};
+    if (!readTile || frame.zoom >= EXPORT_DETAIL_ZOOM) return names;
+    const tiles = tilesOfBounds(frame.bounds, EXPORT_DETAIL_ZOOM);
+    if (tiles.length > MAX_DETAIL_TILES) return names;
+    // Each source once: the layers which name its roads are of one layer of its tiles.
+    const unnamed = new Map(unnamedRoadLayers(style, frame.zoom).map(layer => [layer.source, layer]));
+    for (const [sourceId, layer] of unnamed) {
+        const sourceLayer = layer["source-layer"];
+        const textSize = Number.isFinite(layer.layout?.["text-size"]) ? layer.layout["text-size"] : ROAD_TEXT_SIZE;
+        const url = style.sources?.[sourceId]?.url;
+        if (!url) continue;
+        try {
+            const read = await Promise.all(tiles.map(async tile => namedRoads(await readTile(url, tile), sourceLayer, tile)));
+            const features = read.flat();
+            if (features.length) names[sourceId] = placeRoadNames(features, frame.zoom, textSize);
+        } catch (e) {
+            console.warn(`The road names of ${sourceId} could not be read`, e);
+        }
+    }
+    return names;
+}
+
 // A copy of the map's style in which nothing is drawn, for the map which is exported from; the
 // layers are shown a group at a time.  Layers which are of the app and not of the map (those whose
 // id starts with one of `ignoredPrefixes`) are not in it.
-export function exportStyle(style, ignoredPrefixes = []) {
+//
+// roadNames: what loadRoadNames gave for a map drawn at `zoom`.  A layer which would not name roads
+// at that zoom names those instead, as its style says to; and after it is a layer like it (its id
+// and SHORT_ROAD_SUFFIX) which names the roads too short for their names.
+export function exportStyle(style, ignoredPrefixes = [], {zoom = null, roadNames = {}} = {}) {
     const ignored = id => ignoredPrefixes.some(prefix => String(id).startsWith(prefix));
     const sources = Object.fromEntries(Object.entries(style.sources || {}).filter(([id]) => !ignored(id)));
+    for (const [id, {lines, points}] of Object.entries(roadNames)) {
+        if (!sources[id]) continue;
+        sources[ROAD_NAMES_SOURCE + id] = {type: "geojson", data: lines};
+        sources[SHORT_ROAD_NAMES_SOURCE + id] = {type: "geojson", data: points};
+    }
+    const unnamed = new Set(zoom === null ? [] : unnamedRoadLayers(style, zoom).map(layer => layer.id));
     const layers = (style.layers || [])
         .filter(layer => !ignored(layer.id))
-        .map(layer => ({...layer, layout: {...layer.layout, visibility: "none"}}));
+        .flatMap(layer => {
+            if (!unnamed.has(layer.id) || !sources[ROAD_NAMES_SOURCE + layer.source]) {
+                return [{...layer, layout: {...layer.layout, visibility: "none"}}];
+            }
+            const {minzoom, "source-layer": sourceLayer, ...named} = layer;
+            return [{
+                ...named,
+                source: ROAD_NAMES_SOURCE + layer.source,
+                layout: {...layer.layout, visibility: "none"},
+            }, {
+                ...named,
+                id: layer.id + SHORT_ROAD_SUFFIX,
+                source: SHORT_ROAD_NAMES_SOURCE + layer.source,
+                layout: {
+                    ...layer.layout,
+                    "symbol-placement": "point",
+                    "text-rotate": ["get", NAME_ANGLE],
+                    "text-rotation-alignment": "map",
+                    visibility: "none",
+                },
+            }];
+        });
     return {...style, sources, layers};
 }
 
@@ -211,12 +398,14 @@ export function isOpaque(canvas) {
 // from the map which was drawn, so they are of the picture and not of what was asked for.
 //
 // MapClass: maplibregl.Map.  setup(map): called with the new map before it draws anything.
+// readTile: how to read a tile of a source (see loadRoadNames); without it small roads have no names.
 // onProgress(name, index, count): called before each group is drawn.  isCancelled(): asked before
 // each group whether to stop; when it is so nothing more is drawn, and this rejects with an error
 // whose `cancelled` is true.
 export async function renderExport({
-    MapClass, style, frame, groups, setup, onProgress, isCancelled, ignoredPrefixes = [],
+    MapClass, style, frame, groups, setup, onProgress, isCancelled, readTile, ignoredPrefixes = [],
 }) {
+    const roadNames = await loadRoadNames(style, frame, readTile);
     const container = document.createElement("div");
     // Off the screen, but laid out and drawn as any element is.
     container.style.cssText = `position:fixed;left:-100000px;top:0;width:${frame.cssWidth}px;`
@@ -228,7 +417,7 @@ export async function renderExport({
         const side = Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * frame.pixelRatio);
         map = new MapClass({
             container,
-            style: exportStyle(style, ignoredPrefixes),
+            style: exportStyle(style, ignoredPrefixes, {zoom: frame.zoom, roadNames}),
             center: frame.center,
             zoom: frame.zoom,
             interactive: false,
@@ -251,7 +440,8 @@ export async function renderExport({
             }
             if (onProgress) onProgress(group.name, index, groups.length);
             const show = visibility => {
-                for (const id of group.ids) {
+                // A layer, and the layer of short roads which was made of it (see exportStyle).
+                for (const id of group.ids.flatMap(i => [i, i + SHORT_ROAD_SUFFIX])) {
                     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
                 }
             };

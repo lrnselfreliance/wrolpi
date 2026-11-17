@@ -8,6 +8,12 @@ import {
     exportSheet,
     exportStyle,
     exportTitle,
+    loadRoadNames,
+    namedRoads,
+    placeRoadNames,
+    SHORT_ROAD_SUFFIX,
+    tilesOfBounds,
+    unnamedRoadLayers,
     maxExportPixels,
     renderExport,
 } from './mapExport';
@@ -213,6 +219,223 @@ describe('the style which is exported from', () => {
         // The map's own style is as it was.
         expect(style.layers[0].layout).toBeUndefined();
     });
+
+    test('a layer which would not name roads names the roads which were read for it', () => {
+        const roadNames = {'a.pmtiles': {lines: {type: 'FeatureCollection', features: []}, points: POINTS}};
+        const exported = exportStyle(TOWN, [], {zoom: 13.2, roadNames});
+        expect(exported.sources['export-road-names:a.pmtiles']).toEqual({type: 'geojson', data: roadNames['a.pmtiles'].lines});
+        expect(exported.sources['export-short-road-names:a.pmtiles']).toEqual({type: 'geojson', data: POINTS});
+        expect(exported.sources['a.pmtiles']).toBe(TOWN.sources['a.pmtiles']);
+
+        expect(exported.layers.map(l => l.id)).toEqual([
+            'roads_minor', 'roads_labels_minor', 'roads_labels_minor:short', 'roads_labels_major', 'address_label',
+        ]);
+        const [, along, short, major, address] = exported.layers;
+        // As its style says to, of the names which were read, at whatever zoom.
+        expect(along).toEqual({
+            id: 'roads_labels_minor', type: 'symbol', source: 'export-road-names:a.pmtiles',
+            filter: ['in', 'kind', 'minor_road'],
+            layout: {'symbol-placement': 'line', 'text-size': 12, visibility: 'none'},
+        });
+        // A road too short for its name has it over its middle, turned as the road is.
+        expect(short).toMatchObject({
+            id: `roads_labels_minor${SHORT_ROAD_SUFFIX}`, source: 'export-short-road-names:a.pmtiles',
+            filter: ['in', 'kind', 'minor_road'],
+            layout: {
+                'symbol-placement': 'point', 'text-rotate': ['get', 'export:angle'],
+                'text-rotation-alignment': 'map', 'text-size': 12, visibility: 'none',
+            },
+        });
+        expect(short).not.toHaveProperty('minzoom');
+        expect(short).not.toHaveProperty('source-layer');
+        // A layer which names roads at this zoom, and one which is not of roads, are as they were.
+        expect(major).toMatchObject({source: 'a.pmtiles', 'source-layer': 'roads', minzoom: 11});
+        expect(address).toMatchObject({source: 'a.pmtiles', minzoom: 18});
+        // The map's own style is as it was.
+        expect(TOWN.layers[1]).toMatchObject({source: 'a.pmtiles', minzoom: 15});
+    });
+
+    test('a layer whose names could not be read is drawn as the map draws it', () => {
+        const exported = exportStyle(TOWN, [], {zoom: 13.2, roadNames: {}});
+        expect(exported.layers.map(l => l.id)).toEqual(TOWN.layers.map(l => l.id));
+        expect(exported.layers[1]).toMatchObject({source: 'a.pmtiles', minzoom: 15});
+    });
+});
+
+// A town: its small roads are named from zoom 15, its large ones from 11.
+const TOWN = {
+    version: 8,
+    sources: {'a.pmtiles': {type: 'vector', url: 'pmtiles://a'}},
+    layers: [
+        {id: 'roads_minor', type: 'line', source: 'a.pmtiles', 'source-layer': 'roads'},
+        {
+            id: 'roads_labels_minor', type: 'symbol', source: 'a.pmtiles', 'source-layer': 'roads', minzoom: 15,
+            filter: ['in', 'kind', 'minor_road'], layout: {'symbol-placement': 'line', 'text-size': 12},
+        },
+        {id: 'roads_labels_major', type: 'symbol', source: 'a.pmtiles', 'source-layer': 'roads', minzoom: 11},
+        {id: 'address_label', type: 'symbol', source: 'a.pmtiles', 'source-layer': 'pois', minzoom: 18},
+    ],
+};
+const POINTS = {type: 'FeatureCollection', features: []};
+
+// A tile as @mapbox/vector-tile reads it, of roads which go east from the given longitude.
+function fakeTile(roads) {
+    return {
+        layers: {
+            roads: {
+                length: roads.length,
+                feature: i => ({
+                    properties: roads[i].properties,
+                    toGeoJSON: (x, y, z) => ({
+                        type: 'Feature', id: 7, properties: roads[i].properties,
+                        geometry: {type: 'LineString', coordinates: roads[i].coordinates, tile: [z, x, y]},
+                    }),
+                }),
+            },
+        },
+    };
+}
+
+describe('the names of small roads', () => {
+    test('are of the layers which name roads, but not at the zoom of the sheet', () => {
+        expect(unnamedRoadLayers(TOWN, 13.2).map(l => l.id)).toEqual(['roads_labels_minor']);
+        expect(unnamedRoadLayers(TOWN, 10).map(l => l.id)).toEqual(['roads_labels_minor', 'roads_labels_major']);
+        expect(unnamedRoadLayers(TOWN, 15)).toEqual([]);
+        expect(unnamedRoadLayers({}, 13)).toEqual([]);
+    });
+
+    test('are read from the tiles which the quadrangle is in', () => {
+        // One tile of zoom 1 is a quarter of the world.
+        expect(tilesOfBounds([-90, 10, -80, 20], 1)).toEqual([{z: 1, x: 0, y: 0}]);
+        expect(tilesOfBounds([-10, -10, 10, 10], 1)).toEqual([
+            {z: 1, x: 0, y: 0}, {z: 1, x: 0, y: 1}, {z: 1, x: 1, y: 0}, {z: 1, x: 1, y: 1}]);
+        // A tile which only touches the edge has nothing of the quadrangle in it.
+        expect(tilesOfBounds([-180, 0, 0, 85.0511287798], 1)).toEqual([{z: 1, x: 0, y: 0}]);
+        // A quadrangle is a few tiles of zoom 14 wide, each of them once.
+        const tiles = tilesOfBounds([ANCHORAGE.west, ANCHORAGE.south, ANCHORAGE.east, ANCHORAGE.north], 14);
+        expect(new Set(tiles.map(t => t.x)).size).toBeLessThanOrEqual(7);
+        expect(tiles.every(t => t.z === 14)).toBe(true);
+        expect(tiles.length).toBe(new Set(tiles.map(t => `${t.x}/${t.y}`)).size);
+    });
+
+    test('are the roads of a tile which have a name, with all that is said of them', () => {
+        const tile = fakeTile([
+            {properties: {kind: 'minor_road', name: 'Elm Street', ref: '7'}, coordinates: [[0, 0], [1, 0]]},
+            {properties: {kind: 'minor_road'}, coordinates: [[0, 1], [1, 1]]},
+            {properties: {kind: 'path', 'name:en': 'Ridge Trail'}, coordinates: [[0, 2], [1, 2]]},
+        ]);
+        const roads = namedRoads(tile, 'roads', {z: 14, x: 3, y: 5});
+        expect(roads.map(r => r.properties)).toEqual([
+            {kind: 'minor_road', name: 'Elm Street', ref: '7'}, {kind: 'path', 'name:en': 'Ridge Trail'}]);
+        // Where the tile says they are, as the tile reader makes that of the tile's place.
+        expect(roads[0].geometry).toMatchObject({type: 'LineString', coordinates: [[0, 0], [1, 0]], tile: [14, 3, 5]});
+        expect(roads[0]).not.toHaveProperty('id');
+        // No such tile, or no such layer in it.
+        expect(namedRoads(null, 'roads', {z: 14, x: 3, y: 5})).toEqual([]);
+        expect(namedRoads(tile, 'streets', {z: 14, x: 3, y: 5})).toEqual([]);
+    });
+
+    // At zoom 13 the world is 4,194,304 pixels around: a degree of longitude is 11,651 of them.
+    const road = (name, degrees, extra = {}) => ({
+        type: 'Feature', properties: {kind: 'minor_road', name, ...extra},
+        geometry: {type: 'LineString', coordinates: [[0, 0], [degrees / 2, 0], [degrees, 0]]},
+    });
+
+    test('a road longer than its name is named along it, and a shorter one over its middle', () => {
+        // "Elm Street" is 10 letters: about 66 pixels of 12 pixel text, 79 with room to spare.
+        const {lines, points} = placeRoadNames([road('Elm Street', 0.01), road('Oak Street', 0.004)], 13);
+        expect(lines.features).toEqual([road('Elm Street', 0.01)]);
+        expect(points.features).toEqual([{
+            type: 'Feature', geometry: {type: 'Point', coordinates: [expect.closeTo(0.002, 9), 0]},
+            properties: {kind: 'minor_road', name: 'Oak Street', 'export:angle': 0},
+        }]);
+        // At a larger scale both are long enough.
+        expect(placeRoadNames([road('Oak Street', 0.004)], 15).points.features).toEqual([]);
+        // Smaller text needs less road.
+        expect(placeRoadNames([road('Oak Street', 0.004)], 13, 6).points.features).toEqual([]);
+    });
+
+    test('the name of a short road is turned as the road goes, and never upside down', () => {
+        const going = (to, from = [0, 0]) => ({
+            type: 'Feature', properties: {name: `${from} to ${to}`},
+            geometry: {type: 'LineString', coordinates: [from, to]},
+        });
+        const angles = roads => placeRoadNames(roads, 13).points.features.map(f => f.properties['export:angle']);
+        // East and west are level; north and south are on their side; a map's y is down.
+        expect(angles([going([0.003, 0])])).toEqual([0]);
+        expect(angles([going([0, 0], [0.003, 0])])).toEqual([0]);
+        expect(angles([going([0, 0.003])])).toEqual([90]);
+        expect(angles([going([0, -0.003])])).toEqual([90]);
+        expect(angles([going([0.002, 0.002])])).toEqual([-45]);
+        expect(angles([going([-0.002, -0.002])])).toEqual([-45]);
+        expect(angles([going([0.002, -0.002])])).toEqual([45]);
+    });
+
+    test('a short road in pieces is named once, by its longest piece', () => {
+        const piece = (name, from, to) => ({
+            type: 'Feature', properties: {name},
+            geometry: {type: 'LineString', coordinates: [[from, 0], [to, 0]]},
+        });
+        const {points} = placeRoadNames([
+            piece('Oak Street', 0, 0.002), piece('Oak Street', 0.002, 0.005), piece('Ash Street', 0.002, 0.0045),
+            // The same name a long way off is another road.
+            piece('Oak Street', 0.1, 0.102),
+        ], 13);
+        expect(points.features.map(f => [f.properties.name, f.geometry.coordinates[0]])).toEqual([
+            ['Oak Street', expect.closeTo(0.0035, 9)], ['Ash Street', expect.closeTo(0.00325, 9)],
+            ['Oak Street', expect.closeTo(0.101, 9)]]);
+    });
+
+    test('the lines of a road of many lines are each a road; what is not a line is not one', () => {
+        const {lines, points} = placeRoadNames([
+            {
+                type: 'Feature', properties: {name: 'Elm Street'},
+                geometry: {type: 'MultiLineString', coordinates: [[[0, 0], [0.01, 0]], [[0, 1], [0.003, 1]], [[5, 5]]]},
+            },
+            {type: 'Feature', properties: {name: 'Elm Square'}, geometry: {type: 'Point', coordinates: [0, 0]}},
+        ], 13);
+        expect(lines.features.map(f => f.geometry.coordinates)).toEqual([[[0, 0], [0.01, 0]]]);
+        expect(points.features.map(f => f.geometry.coordinates)).toEqual([[expect.closeTo(0.0015, 9), 1]]);
+    });
+
+    const FRAME = {zoom: 13.2, bounds: [-10, -10, 10, 10]};
+
+    test('are read from each source whose roads would have no names, a tile at a time', async () => {
+        const readTile = jest.fn(async (url, {x, y}) => (x === 8191 && y === 8191
+            ? fakeTile([{properties: {kind: 'minor_road', name: 'Elm Street'}, coordinates: [[0, 0], [0.01, 0]]}])
+            : null));
+        const frame = {zoom: 13.2, bounds: [-0.01, 0.001, -0.001, 0.01]};
+        const names = await loadRoadNames(TOWN, frame, readTile);
+        expect(readTile).toHaveBeenCalledTimes(1);
+        expect(readTile).toHaveBeenCalledWith('pmtiles://a', {z: 14, x: 8191, y: 8191});
+        expect(Object.keys(names)).toEqual(['a.pmtiles']);
+        expect(names['a.pmtiles'].lines.features.map(f => f.properties.name)).toEqual(['Elm Street']);
+    });
+
+    test('are not read when there is no need, or no way', async () => {
+        const readTile = jest.fn(async () => null);
+        // Nothing reads tiles.
+        expect(await loadRoadNames(TOWN, FRAME, undefined)).toEqual({});
+        // The map is drawn from tiles which have the names.
+        expect(await loadRoadNames(TOWN, {...FRAME, zoom: 14.3}, readTile)).toEqual({});
+        // No layer of the map names roads.
+        expect(await loadRoadNames({...TOWN, layers: [TOWN.layers[0]]}, FRAME, readTile)).toEqual({});
+        // More tiles than a quadrangle is.
+        expect(await loadRoadNames(TOWN, {zoom: 13.2, bounds: [-10, -10, 10, 10]}, readTile)).toEqual({});
+        expect(readTile).not.toHaveBeenCalled();
+        // No tile of the place has a named road.
+        expect(await loadRoadNames(TOWN, {zoom: 13.2, bounds: [-0.01, 0.001, -0.001, 0.01]}, readTile)).toEqual({});
+    });
+
+    test('a source which can not be read is exported without them', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const readTile = jest.fn(async () => {
+            throw new Error('no such file');
+        });
+        expect(await loadRoadNames(TOWN, {zoom: 13.2, bounds: [-0.01, 0.001, -0.001, 0.01]}, readTile)).toEqual({});
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
+    });
 });
 
 // As much of a MapLibre map as an export uses.  It records which layers were visible each time
@@ -329,6 +552,23 @@ describe('drawing the layers', () => {
         expect(record.options.container.style.width).toBe('1654px');
         expect(record.options.container.style.height).toBe('3432px');
         expect(setup).toHaveBeenCalledTimes(1);
+    });
+
+    test('the names of small roads are read, and drawn with the layer they are of', async () => {
+        const record = {captures: []};
+        const readTile = jest.fn(async () => fakeTile([
+            {properties: {kind: 'minor_road', name: 'Elm Street'}, coordinates: [[-149.9, 61.2], [-149.9001, 61.2]]},
+        ]));
+        const town = {...TOWN, layers: TOWN.layers.map(l => ({...l, layout: {...l.layout, visibility: 'visible'}}))};
+        await renderExport({
+            MapClass: fakeMapClass(record), style: town, frame, readTile,
+            groups: [{name: 'Labels', ids: ['roads_labels_minor', 'roads_labels_major']}],
+        });
+        expect(readTile).toHaveBeenCalledWith('pmtiles://a', expect.objectContaining({z: 14}));
+        expect(record.options.style.sources).toHaveProperty(['export-short-road-names:a.pmtiles']);
+        expect(record.captures).toEqual([{
+            type: 'image/png', visible: ['roads_labels_minor', 'roads_labels_minor:short', 'roads_labels_major'],
+        }]);
     });
 
     test('an edge a hair past the edge of the world is the edge of the world', async () => {

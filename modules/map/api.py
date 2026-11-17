@@ -201,6 +201,18 @@ SHEET_TEXT_LENGTH = 300
 SHEET_CREDITS = 40
 
 
+def _sheet_contours(contours) -> dict:
+    """How far apart the contour lines of a map are, as the browser says it, for `export.Sheet`.  A map with no
+    contour lines says nothing; what is said is written on the sheet only when it is an interval (see
+    `modules.map.sheet`)."""
+    if not isinstance(contours, dict):
+        return {}
+    interval = contours.get('interval')
+    if isinstance(interval, bool) or not isinstance(interval, (int, float)):
+        return {}
+    return dict(contour_interval=float(interval), contour_unit=str(contours.get('unit') or '')[:SHEET_TEXT_LENGTH])
+
+
 def _export_error(e: Exception):
     """The response for an export which could not go on."""
     if isinstance(e, export_job.ExportNotFound):
@@ -232,7 +244,8 @@ async def post_export(request: Request):
     The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each layer from the bottom
     up, `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
     is, and `sheet`: with which the map is put on a sheet with a margin and a grid; `name`, `credits` and `date`
-    are written on it."""
+    are written on it, and `contours` (`{"interval": 40, "unit": "feet"}`, or "meters") when the map has contour
+    lines."""
     try:
         meta = request.json
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
@@ -245,6 +258,7 @@ async def post_export(request: Request):
                 name=str(sheet.get('name') or '')[:SHEET_TEXT_LENGTH] or None,
                 credits=[str(i)[:SHEET_TEXT_LENGTH] for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
                 date=str(sheet.get('date') or '')[:SHEET_TEXT_LENGTH] or None,
+                **_sheet_contours(sheet.get('contours')),
             )
     except Exception:  # noqa Whatever is made of a body which is not the description of a map.
         return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)

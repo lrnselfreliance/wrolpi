@@ -511,12 +511,27 @@ export function exportDate(now = new Date()) {
 
 // What is written on the sheet a quadrangle is printed on.  `named` is what the USGS calls the
 // quadrangle ({name, state, exact}), when it calls it anything: else it goes by where it is.
-export function exportSheet(quad, map, groups, now = new Date(), named = null) {
+//
+// contours: {interval, unit} ("feet" or "meters"): how far apart the contour lines of the exported
+// map are, when it has them.
+export function exportSheet(quad, map, groups, now = new Date(), named = null, contours = null) {
     return {
         name: quadTitle(named) || quadLabel(quad),
         credits: exportCredits(map, groups),
         date: exportDate(now),
+        ...(contours ? {contours} : {}),
     };
+}
+
+// How far apart the contour lines of an exported map are, for exportSheet; null when no layer of
+// `contourLayers` (parts of ids, as the layer control has them) is among the `groups` which are
+// exported, or no line is drawn at the zoom.
+//
+// interval: [minor, major] at the zoom the map is exported at (see contourInterval).
+export function exportContours(groups, contourLayers, interval, imperial) {
+    const exported = groups.some(group => group.ids.some(id => contourLayers.some(part => id.includes(part))));
+    if (!exported || !interval) return null;
+    return {interval: interval[0], unit: imperial ? "feet" : "meters"};
 }
 
 // "N40.250_W105.125": where a quadrangle's southwest corner is, in a form a file can be named.

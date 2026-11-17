@@ -46,13 +46,14 @@ import {
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
-import {contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
+import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
 import {quadAt} from "./mapQuads";
 import {
     EXPORT_DPI,
     exportFileName,
     exportFrame,
     exportGroups,
+    exportContours,
     exportSheet,
     exportTitle,
     maxCanvasSide,
@@ -1045,6 +1046,8 @@ export default function MapViewer() {
         const map = mapRef.current;
         if (!map) return;
         exportCancelledRef.current = false;
+        // The unit the map measures in is the unit its contour lines are apart in.
+        const imperial = scaleUnit === "imperial";
         setExportError(null);
         setExportStatus("Preparing…");
         try {
@@ -1076,7 +1079,9 @@ export default function MapViewer() {
                 ...rendered,
                 title: exportTitle(quad, name),
                 // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
-                sheet: sheet ? exportSheet(quad, map, groups, new Date(), name) : undefined,
+                sheet: sheet ? exportSheet(quad, map, groups, new Date(), name, exportContours(
+                    groups, LAYER_GROUPS["Contours"], contourInterval(imperial, terrainZoom, frame.zoom), imperial,
+                )) : undefined,
             }, {
                 // Once it is being stopped, that is what is said.
                 onStatus: text => !exportCancelledRef.current && setExportStatus(text),
@@ -1092,7 +1097,7 @@ export default function MapViewer() {
         } finally {
             setExportStatus(null);
         }
-    }, []);
+    }, [scaleUnit]);
 
     // Stop the export which is being made.  It stops between two steps, and the server stops making the PDF.
     const handleCancelExport = useCallback(() => {

@@ -82,7 +82,7 @@ def test_plan():
     assert plan.point(61.125, -149.875) == pytest.approx((x1, y1))
     notes = ' '.join(plan.notes)
     assert 'Scale 1:24,000' in notes
-    assert 'zone 6N' in notes and 'west of true north' in notes
+    assert 'zone 6N' in notes and 'west (46 mils) of true north' in notes
     assert 'Map data: © OpenStreetMap contributors; Protomaps' in notes
     assert 'Made with WROLPi, 2026-11-15.' in notes
 
@@ -217,7 +217,7 @@ def test_sheet_pdf():
     # The name and the scale, the corners, the ticks between them, the grid, the bars and the notes.
     for expected in ('61°07\'30"N 150°00\'W', '1:24,000', "150°00'W", '149°52\'30"W', "61°15'N", '61°07\'30"N',
                      "55'", '57\'30"', "10'", '12\'30"', '6790', '342', 'mE', 'mN', 'SCALE 1:24,000', 'KILOMETERS',
-                     'MILES', 'FEET', '7000', 'zone 6N', '© OpenStreetMap contributors; Protomaps',
+                     'METERS', '2000', 'MILES', 'FEET', '7000', 'zone 6N', '© OpenStreetMap contributors; Protomaps',
                      'Made with WROLPi, 2026-11-15.'):
         assert expected in text, expected
 
@@ -296,8 +296,8 @@ def test_plan_norths():
     assert plan.magnetic_north == pytest.approx(magnetic.declination(61.1875, -149.9375, 2026 + 318 / 365), abs=0.01)
     assert 13 < plan.magnetic_north < 15
     notes = ' '.join(plan.notes)
-    assert "Grid north is 2°34' west of true north" in notes
-    assert re.search(r"Magnetic north is 13°5\d' east of true north at the middle of the map on 2026-11-15,"
+    assert "Grid north is 2°34' west (46 mils) of true north" in notes
+    assert re.search(r"Magnetic north is 13°5\d' east \(24\d mils\) of true north at the middle of the map on 2026-11-15,"
                      r" and moves about 0°1\d' west each year \(WMM-2025\)\.", notes), notes
 
 
@@ -308,7 +308,7 @@ def test_plan_compass_which_passes_south():
     assert plan.magnetic_north == pytest.approx(-179.94, abs=0.01)
     assert magnetic.load_model().declination(-73.9375, 140.5625, sheet._decimal_year('2027-11-15')) > 179
     notes = ' '.join(plan.notes)
-    assert "Magnetic north is 179°56' west of true north" in notes
+    assert "Magnetic north is 179°56' west (3199 mils) of true north" in notes
     assert "moves about 0°21' west each year" in notes
 
 
@@ -342,7 +342,8 @@ def test_sheet_norths_diagram():
     or with nothing to put in it, goes without."""
     text = page_text(build())
     assert 'MN 13°' in text and 'E\n' in text
-    assert 'GN 2°34\' W' in text
+    assert 'GN 2°34\' W  46 MILS' in text
+    assert re.search(r"MN 13°5\d' E  24\d MILS", text), text
 
     # No compass: the grid's north is still drawn.
     text = page_text(build(sheet_=Sheet()))
@@ -392,3 +393,76 @@ async def test_api_export_pdf_sheet(async_client):
     for meta in (dict(bounds=ANCHORAGE, sheet='yes'), dict(sheet={})):
         response, job = await api_export(async_client, images, **size, **meta)
         assert response.status_code == HTTPStatus.BAD_REQUEST, json.dumps(meta)
+
+
+def test_mils():
+    """A compass marked in mils has 6,400 of them around."""
+    assert sheet.mils(360) == 6400
+    assert sheet.mils(90) == 1600
+    assert sheet.mils(-2.57) == 46
+    assert sheet.mils(0) == 0
+
+
+def test_sheet_scale_bars():
+    """The bars are of kilometers, meters, miles and feet, from the top down."""
+    doc = pymupdf.open(stream=build(), filetype='pdf')
+    tops = {word[4]: word[1] for word in doc[0].get_text('words')
+            if word[4] in ('KILOMETERS', 'METERS', 'MILES', 'FEET')}
+    assert sorted(tops, key=tops.get) == ['KILOMETERS', 'METERS', 'MILES', 'FEET']
+    gaps = [tops[b] - tops[a] for a, b in (('KILOMETERS', 'METERS'), ('METERS', 'MILES'), ('MILES', 'FEET'))]
+    assert gaps == pytest.approx([sheet.BAR_SPACING] * 3, abs=0.01)
+
+
+@pytest.mark.parametrize('interval,unit,expected', [
+    (40, 'feet', 'CONTOUR INTERVAL 40 FEET'),
+    (20.0, 'meters', 'CONTOUR INTERVAL 20 METERS'),
+    (1000, 'feet', 'CONTOUR INTERVAL 1,000 FEET'),
+    (2.5, 'meters', 'CONTOUR INTERVAL 2.5 METERS'),
+])
+def test_sheet_contour_interval(interval, unit, expected):
+    """A map with contour lines says how far apart they are, under its scale bars and over its notes."""
+    plain = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, SHEET)
+    with_contours = Sheet(name=SHEET.name, credits=SHEET.credits, date=SHEET.date,
+                          contour_interval=interval, contour_unit=unit)
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, with_contours)
+    assert plan.contours == expected
+    assert plain.contours is None
+    # The page is longer by the room it takes.
+    assert plan.height == pytest.approx(plain.height + sheet.CONTOUR_LEADING)
+
+    doc = pymupdf.open(stream=build(sheet_=with_contours), filetype='pdf')
+    lines = {line.strip(): y for _, y, _, _, text, *_ in doc[0].get_text('blocks') for line in text.splitlines()}
+    assert expected in lines
+    feet = min(y for line, y in lines.items() if line == 'FEET')
+    notes = min(y for line, y in lines.items() if line.startswith('Scale 1:24,000'))
+    assert feet < lines[expected] < notes
+    assert 'CONTOUR INTERVAL' not in page_text(build())
+
+
+@pytest.mark.parametrize('interval,unit', [
+    (None, 'feet'), (40, None), (40, 'furlongs'), (0, 'feet'), (-40, 'feet'), (math.nan, 'feet'), (math.inf, 'meters'),
+    ('40', 'feet'),
+])
+def test_sheet_contour_interval_which_is_not_one(interval, unit):
+    """What is not an interval of contour lines is not written."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, Sheet(contour_interval=interval, contour_unit=unit))
+    assert plan.contours is None
+
+
+@pytest.mark.asyncio
+async def test_api_export_pdf_sheet_contours(async_client):
+    """The browser says how far apart the contour lines of a map are, and the sheet says it."""
+    images = [('Background', make_image(size=(WIDTH, HEIGHT)))]
+    size = dict(width=WIDTH, height=HEIGHT, dpi=DPI, bounds=ANCHORAGE)
+    response, job = await api_export(async_client, images, **size,
+                                     sheet=dict(contours=dict(interval=40, unit='feet')))
+    assert response.status_code == HTTPStatus.OK, response.text
+    assert 'CONTOUR INTERVAL 40 FEET' in page_text(response.content)
+
+    # What is not an interval is not written, and the map is exported.
+    for contours in (None, 'yes', {}, dict(interval='40', unit='feet'), dict(interval=True, unit='feet'),
+                     dict(interval=40), dict(interval=40, unit='furlongs'), dict(interval=-1, unit='meters'),
+                     dict(interval=40, unit=['feet'])):
+        response, job = await api_export(async_client, images, **size, sheet=dict(contours=contours))
+        assert response.status_code == HTTPStatus.OK, json.dumps(contours)
+        assert 'CONTOUR INTERVAL' not in page_text(response.content), json.dumps(contours)

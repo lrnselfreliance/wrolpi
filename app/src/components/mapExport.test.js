@@ -3,6 +3,7 @@ import {
     exportFileName,
     exportCredits,
     exportDate,
+    exportContours,
     exportFrame,
     exportGroups,
     exportSheet,
@@ -769,6 +770,36 @@ describe('what is written on the sheet', () => {
         expect(exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15))).toEqual({
             name: '61°07′30″N 150°00′W', credits: ['© OpenStreetMap contributors'], date: '2026-11-15',
         });
+    });
+
+    test('says how far apart the contour lines are, when the map has them', () => {
+        const contours = {interval: 40, unit: 'feet'};
+        const sheet = exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15), null, contours);
+        expect(sheet.contours).toEqual(contours);
+        expect(exportSheet(ANCHORAGE, map, groups.slice(1, 2), new Date(2026, 10, 15), null, null))
+            .not.toHaveProperty('contours');
+    });
+});
+
+describe('how far apart the contour lines of an exported map are', () => {
+    const exported = [
+        {name: 'Water', ids: ['water']},
+        {name: 'Contours', ids: ['contour-lines', 'contour-lines-major', 'contour-labels']},
+    ];
+    const parts = ['contour-lines', 'contour-labels'];
+
+    test('is the least of the two intervals, in the unit the map measures in', () => {
+        expect(exportContours(exported, parts, [40, 200], true)).toEqual({interval: 40, unit: 'feet'});
+        expect(exportContours(exported, parts, [20, 100], false)).toEqual({interval: 20, unit: 'meters'});
+        // The darker lines alone are still contour lines.
+        expect(exportContours([{name: 'Contours', ids: ['contour-lines-major']}], parts, [40, 200], true))
+            .toEqual({interval: 40, unit: 'feet'});
+    });
+
+    test('is nothing when the contours are not exported, or are not drawn', () => {
+        expect(exportContours(exported.slice(0, 1), parts, [40, 200], true)).toBeNull();
+        expect(exportContours([], parts, [40, 200], true)).toBeNull();
+        expect(exportContours(exported, parts, null, true)).toBeNull();
     });
 });
 

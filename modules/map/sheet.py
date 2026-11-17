@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
-from modules.map import magnetic
+from modules.map import magnetic, quads
 
 __all__ = ['Sheet', 'SheetPlan', 'plan_sheet', 'draw_sheet', 'to_utm', 'from_utm', 'utm_zone', 'map_scale',
            'format_angle', 'graticule_interval', 'SHEET_LAYER', 'GRID_LAYER']
@@ -62,6 +62,17 @@ BAR_COUNT = 4
 CONTOUR_LEADING = 16
 # The units contour lines are apart in, as they are written.
 CONTOUR_UNITS = dict(feet='FEET', meters='METERS')
+# The diagram of the quadrangles around the map: how large each of its nine squares is, how much room the
+# diagram and the names beside it take under the bars, and the narrowest map which has room for it.
+ADJOINING_SQUARE = 12
+ADJOINING_HEIGHT = 58
+ADJOINING_MIN_WIDTH = 280
+ADJOINING_COLUMN = 150
+# How many maps over to look for the next quadrangle: the widest of the USGS is under four maps wide.
+ADJOINING_STEPS = 4
+ADJOINING_GRAY = (0.75, 0.75, 0.75)
+# Where the eight are from the map, in the order they are numbered: (columns east, rows north).
+ADJOINING = ((-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1))
 # A compass is marked in degrees, or in mils: 6,400 of them around.
 MILS_PER_DEGREE = 6400 / 360
 # From the bottom of the map to the first scale bar, and from the last note to the bottom of the page.
@@ -112,6 +123,9 @@ class SheetPlan:
     magnetic_north: Optional[float] = None
     # How far apart the contour lines are, as it is written under the scale bars; None when there are none.
     contours: Optional[str] = None
+    # What the USGS calls the eight quadrangles around the map, in the order of ADJOINING (None for one it has
+    # no name for); None when it has a name for none of them, and when the sheet has no room to say.
+    adjoining: Optional[List[Optional[str]]] = None
 
     @property
     def south_hemisphere(self) -> bool:
@@ -279,6 +293,30 @@ def _north_of_true(angle: float) -> str:
     return f'{_east_or_west(angle)} ({mils(angle)} mils)'
 
 
+def adjoining_quads(bounds: Sequence[float]) -> Optional[List[Optional[str]]]:
+    """What the USGS calls the quadrangle on each of the eight sides of a map, in the order of ADJOINING.  None
+    when it has a name for none of them: most of the world.
+
+    A quadrangle of the USGS may be larger than the map (in Alaska they are wider), so the area the size of the
+    map beside it may be more of the quadrangle the map is in.  The quadrangle on that side is the next one
+    which is not: a sheet is never beside itself."""
+    west, south, east, north = bounds
+    width, height = east - west, north - south
+    own = quads.quad_name(west, south, east, north)
+    names = []
+    for columns, rows in ADJOINING:
+        name = None
+        for step in range(1, ADJOINING_STEPS + 1):
+            name = quads.quad_name(west + step * columns * width, south + step * rows * height,
+                                   east + step * columns * width, north + step * rows * height)
+            if name is None or own is None or (name.name, name.state) != (own.name, own.state):
+                break
+        else:
+            name = None
+        names.append(_latin(name.name) if name else None)
+    return names if any(names) else None
+
+
 def _contours(sheet: 'Sheet') -> Optional[str]:
     """How far apart the contour lines are, as it is written: CONTOUR INTERVAL 40 FEET."""
     interval, unit = sheet.contour_interval, CONTOUR_UNITS.get(sheet.contour_unit)
@@ -359,10 +397,13 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     for note in notes:
         plan.notes.extend(_wrap(note, map_width, NOTE_SIZE))
     plan.contours = _contours(sheet)
+    if map_width >= ADJOINING_MIN_WIDTH:
+        plan.adjoining = adjoining_quads(bounds)
 
     plan.width = map_width + 2 * MARGIN
     plan.height = TOP_MARGIN + map_height + BARS_OFFSET + BAR_COUNT * BAR_SPACING \
-        + (CONTOUR_LEADING if plan.contours else 0) + len(plan.notes) * NOTE_LEADING + BOTTOM_PADDING
+        + (CONTOUR_LEADING if plan.contours else 0) + (ADJOINING_HEIGHT if plan.adjoining else 0) \
+        + len(plan.notes) * NOTE_LEADING + BOTTOM_PADDING
     plan.map_rect = (MARGIN, TOP_MARGIN, MARGIN + map_width, TOP_MARGIN + map_height)
     return plan
 
@@ -607,6 +648,31 @@ def _draw_norths(pen: _Pen, plan: SheetPlan, x: float, y: float):
         below += LABEL_SIZE + 2
 
 
+def _draw_adjoining(pen: _Pen, plan: SheetPlan, x: float, y: float):
+    """The quadrangles around the map: nine squares with the map the middle one, each of the others with a
+    number, and beside them what each number is called.  Its top left is at (`x`, `y`)."""
+    pen.text(x, y + LABEL_SIZE, 'ADJOINING QUADRANGLES')
+    top = y + LABEL_SIZE + 5
+    side = ADJOINING_SQUARE
+    pen.box((x + side, top + side, x + 2 * side, top + 2 * side), fill=ADJOINING_GRAY, width=0.4)
+    for i in range(4):
+        pen.line([(x + i * side, top), (x + i * side, top + 3 * side)], width=0.4)
+        pen.line([(x, top + i * side), (x + 3 * side, top + i * side)], width=0.4)
+    # The names are in two columns: as wide as a long name, or as the room beside the squares allows.
+    left = x + 3 * side + 12
+    column = min(ADJOINING_COLUMN, (plan.map_rect[2] - left) / 2)
+    listed = 0
+    for number, ((columns, rows), name) in enumerate(zip(ADJOINING, plan.adjoining), start=1):
+        if not name:
+            continue
+        pen.text(x + (columns + 1.5) * side, top + (1.5 - rows) * side + LABEL_SIZE / 3, str(number), align='center')
+        while _text_width(f'{number}  {name}', LABEL_SIZE) > column - 6 and len(name) > 1:
+            name = name[:-1]
+        pen.text(left + (listed // 4) * column, top + LABEL_SIZE + (listed % 4) * (LABEL_SIZE + 2.5),
+                 f'{number}  {name}')
+        listed += 1
+
+
 def _draw_margin(pen: _Pen, plan: SheetPlan):
     """The title above the map, and the scale and the notes below it."""
     x0, y0, x1, y1 = plan.map_rect
@@ -645,6 +711,9 @@ def _draw_margin(pen: _Pen, plan: SheetPlan):
     if plan.contours:
         pen.text(center, y - 4, plan.contours, size=NOTE_SIZE + 1, align='center')
         y += CONTOUR_LEADING
+    if plan.adjoining:
+        _draw_adjoining(pen, plan, x0, y - NOTE_LEADING)
+        y += ADJOINING_HEIGHT
     for index, note in enumerate(plan.notes):
         pen.text(x0, y + index * NOTE_LEADING, note, size=NOTE_SIZE)
 

@@ -6,7 +6,7 @@ from http import HTTPStatus
 import pymupdf
 import pytest
 
-from modules.map import export, magnetic, sheet
+from modules.map import export, magnetic, quads, sheet
 from modules.map.export import ExportLayer, InvalidExport, Sheet, build_layered_pdf
 from modules.map.test.test_export import api_export, layer_names, make_image, read_viewport
 
@@ -466,3 +466,93 @@ async def test_api_export_pdf_sheet_contours(async_client):
         response, job = await api_export(async_client, images, **size, sheet=dict(contours=contours))
         assert response.status_code == HTTPStatus.OK, json.dumps(contours)
         assert 'CONTOUR INTERVAL' not in page_text(response.content), json.dumps(contours)
+
+
+BERTHOUD = [-105.125, 40.25, -105.0, 40.375]
+BERTHOUD_NEIGHBORS = ['Masonville', 'Loveland', 'Windsor', 'Carter Lake Reservoir', 'Johnstown', 'Hygiene',
+                      'Longmont', 'Gowanda']
+
+
+def test_adjoining_quads():
+    """The eight quadrangles around a map, from the northwest across and down."""
+    assert sheet.adjoining_quads(BERTHOUD) == BERTHOUD_NEIGHBORS
+    # The edges of what the browser drew are a hair outside the quadrangle.
+    assert sheet.adjoining_quads([-105.1250004, 40.2499998, -104.9999996, 40.3750002]) == BERTHOUD_NEIGHBORS
+    # Where the USGS has no quadrangles there is nothing to say.
+    assert sheet.adjoining_quads([2.25, 48.75, 2.375, 48.875]) is None
+    # At the edge of the land only some of the eight have a name: those out to sea have none.
+    coast = sheet.adjoining_quads([-124.25, 40.75, -124.125, 40.875])
+    assert coast is not None and None in coast and any(coast)
+
+
+def test_sheet_adjoining_quads():
+    """A sheet says what the quadrangles around it are called, in a diagram under its bars."""
+    size = (630, 820)
+    pdf = build_layered_pdf([ExportLayer('Background', make_image(size=size))], *size, DPI, bounds=BERTHOUD,
+                            sheet=SHEET)
+    plan = sheet.plan_sheet(size[0] * 72 / DPI, size[1] * 72 / DPI, BERTHOUD, SHEET)
+    assert plan.adjoining == BERTHOUD_NEIGHBORS
+    doc = pymupdf.open(stream=pdf, filetype='pdf')
+    assert doc[0].rect.height == pytest.approx(plan.height, abs=0.01)
+    lines = {line.strip(): y for _, y, _, _, text, *_ in doc[0].get_text('blocks') for line in text.splitlines()}
+    assert 'ADJOINING QUADRANGLES' in lines
+    for number, name in enumerate(BERTHOUD_NEIGHBORS, start=1):
+        assert f'{number}  {name}' in lines, name
+    # Under the bars, and over the notes.
+    notes = min(y for line, y in lines.items() if line.startswith('Scale 1:'))
+    assert lines['FEET'] < lines['ADJOINING QUADRANGLES'] < lines['8  Gowanda'] < notes
+
+    # The page is longer by the room the diagram takes.
+    nowhere = [2.25, 48.75, 2.375, 48.875]
+    without = sheet.plan_sheet(size[0] * 72 / DPI, size[1] * 72 / DPI, nowhere, Sheet())
+    with_ = sheet.plan_sheet(size[0] * 72 / DPI, size[1] * 72 / DPI, BERTHOUD, Sheet())
+    assert without.adjoining is None
+    assert with_.height - with_.map_rect[3] == pytest.approx(
+        without.height - without.map_rect[3] + sheet.ADJOINING_HEIGHT, abs=0.01)
+
+
+def test_sheet_adjoining_quads_where_there_are_none():
+    """A map of where the USGS names nothing, and a map too narrow for the diagram, go without it."""
+    assert 'ADJOINING' not in page_text(build(bounds=[2.25, 48.75, 2.375, 48.875]))
+    narrow = build_layered_pdf([ExportLayer('Background', make_image(size=(90, 400)))], 90, 400, DPI,
+                               bounds=BERTHOUD, sheet=Sheet())
+    assert 'ADJOINING' not in page_text(narrow)
+
+
+def test_sheet_adjoining_quads_some_unnamed():
+    """A quadrangle with no name has no number in the diagram, and the others keep theirs."""
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, BERTHOUD, Sheet())
+    plan.adjoining = ['Northwest', None, None, None, 'East', None, None, 'A name ' + 'far too long ' * 20]
+    pen = FakePen()
+    sheet._draw_adjoining(pen, plan, 54, 100)
+    written = [text for _, _, text, _ in pen.texts]
+    assert '1  Northwest' in written and '5  East' in written
+    assert '1' in written and '5' in written and '8' in written
+    assert not {'2', '3', '4', '6', '7'} & set(written)
+    # A name too long for its column is cut to fit it.
+    long = next(text for text in written if text.startswith('8  A name'))
+    assert pymupdf.get_text_length(long, fontsize=sheet.LABEL_SIZE) <= sheet.ADJOINING_COLUMN
+
+
+@pytest.mark.parametrize('bounds', [
+    [-149.875, 61.125, -149.75, 61.25],
+    [-147.75, 64.75, -147.625, 64.875],
+    [-156.875, 71.25, -156.75, 71.375],
+    ANCHORAGE,
+])
+def test_adjoining_quads_are_never_the_map_itself(bounds):
+    """Where a quadrangle is wider than the map (Alaska), the map beside this one may be more of the same
+    quadrangle.  The quadrangle on that side is the next one."""
+    own = quads.quad_name(*bounds)
+    around = sheet.adjoining_quads(bounds)
+    assert own.name not in around
+
+
+def test_adjoining_quads_step_past_the_map():
+    """The east of a map in the west of a wide quadrangle is the quadrangle after it, not the rest of it."""
+    bounds = [-149.875, 61.125, -149.75, 61.25]
+    assert quads.quad_name(*bounds).name == 'Anchorage A-8 NE'
+    # One map east is still Anchorage A-8 NE.
+    assert quads.quad_name(-149.75, 61.125, -149.625, 61.25).name == 'Anchorage A-8 NE'
+    around = sheet.adjoining_quads(bounds)
+    assert around[3:5] == ['Anchorage A-8 NW', 'Anchorage A-7 NW']

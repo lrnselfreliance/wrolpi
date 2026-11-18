@@ -689,6 +689,8 @@ export default function MapViewer() {
     const [exportStatus, setExportStatus] = useState(null);
     // Whether the person exporting has asked for the export which is being made to stop.
     const exportCancelledRef = useRef(false);
+    // Whether a map is being exported, for what is asked outside of React (the map's own buttons).
+    const exportingRef = useRef(false);
     const [exportError, setExportError] = useState(null);
     const [scaleUnit, setScaleUnit] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch (e) { return "metric"; }
@@ -824,7 +826,8 @@ export default function MapViewer() {
                 exportButton.textContent = "🖨️";
                 exportButton.style.cssText = pinToggle.style.cssText;
                 exportButton.addEventListener("click", () => {
-                    if (destroyed) return;
+                    // Not while a map is being exported: what is said of it, and its Cancel, are there.
+                    if (destroyed || exportingRef.current) return;
                     setPickingQuad(picking => (picking ? null : {quad: null}));
                 });
                 map.addControl({
@@ -941,6 +944,8 @@ export default function MapViewer() {
 
         return () => {
             destroyed = true;
+            // An export of this map stops with it: nobody is here to be given the PDF.
+            exportCancelledRef.current = true;
             if (map) {
                 map.remove();
             }
@@ -1037,8 +1042,8 @@ export default function MapViewer() {
 
     const handleExportQuad = useCallback(() => {
         if (!contextMenu) return;
-        // Start with the quadrangle which was clicked.
-        setPickingQuad({quad: quadAt(contextMenu.lon, contextMenu.lat)});
+        // Start with the quadrangle which was clicked; not while another is being exported.
+        if (!exportingRef.current) setPickingQuad({quad: quadAt(contextMenu.lon, contextMenu.lat)});
         setContextMenu(null);
     }, [contextMenu]);
 
@@ -1047,6 +1052,7 @@ export default function MapViewer() {
         const map = mapRef.current;
         if (!map) return;
         exportCancelledRef.current = false;
+        exportingRef.current = true;
         // The unit the map measures in is the unit its contour lines are apart in.
         const imperial = scaleUnit === "imperial";
         setExportError(null);
@@ -1088,7 +1094,8 @@ export default function MapViewer() {
                 onStatus: text => !exportCancelledRef.current && setExportStatus(text),
                 isCancelled: () => exportCancelledRef.current,
             });
-            saveBlob(pdf, exportFileName(quad, name));
+            // Stopped while the PDF was on its way: it is not wanted.
+            if (!exportCancelledRef.current) saveBlob(pdf, exportFileName(quad, name));
         } catch (e) {
             // Stopped by the person exporting: nothing went wrong.
             if (!e?.cancelled) {
@@ -1096,6 +1103,7 @@ export default function MapViewer() {
                 setExportError(e?.message || "The map could not be exported");
             }
         } finally {
+            exportingRef.current = false;
             setExportStatus(null);
         }
     }, [scaleUnit]);

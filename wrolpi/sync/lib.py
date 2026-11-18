@@ -26,10 +26,11 @@ import re
 import shutil
 import ssl
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Callable, Dict, List, Optional
 from urllib.parse import quote
 
 import aiohttp
@@ -38,13 +39,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
+from wrolpi.collections.models import Collection
+from wrolpi.collections.sync import get_playlists_directory, MANAGED_NAME
 from wrolpi.common import logger, get_media_directory, get_wrolpi_config, is_secondary, wrol_mode_enabled, \
     get_config_by_file_name, SYNCED_CONFIG_FILE_NAMES
 from wrolpi.dates import now, is_within_daily_window
+from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig
 from wrolpi.events import Events
 from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_sync_status, update_sync_status
+from wrolpi.tags import get_tags_directory
 from wrolpi.vars import DEFAULT_HTTP_HEADERS, PYTEST
 from wrolpi.version import __version__
 
@@ -402,10 +407,11 @@ class PrimaryClient:
 
 
 async def download_file(client: PrimaryClient, file: ManifestFile, destination: pathlib.Path,
-                        on_bytes=None) -> int:
+                        on_bytes=None, before_replace: Callable[[pathlib.Path], None] = None) -> int:
     """Download one file to `destination` with the primary's modification time.  Returns the bytes received.
 
-    A partial file left by an earlier attempt is resumed."""
+    A partial file left by an earlier attempt is resumed.  `before_replace` is called with the complete new version
+    just before it takes the place of `destination`."""
     partial = partial_path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -449,8 +455,93 @@ async def download_file(client: PrimaryClient, file: ManifestFile, destination: 
     if (size := partial.stat().st_size) != file.size:
         raise SyncError(f'{file.path} is {size} bytes, the primary said {file.size}')
     os.utime(partial, (file.mtime, file.mtime))
+    if before_replace:
+        before_replace(partial)
     os.replace(partial, destination)
     return received
+
+
+def link_directories() -> List[tuple]:
+    """Where hard links of library files are kept, each as (directory, recursive): the Tags Directory, the
+    playlists directory, and the directory of every playlist that has its own."""
+    directories = [(get_tags_directory(), True), (get_playlists_directory(), True)]
+    with get_db_session() as session:
+        custom = session.execute(
+            select(Collection.directory).where(Collection.kind == 'playlist', Collection.directory.isnot(None))
+        ).scalars().all()
+    # A playlist's own directory may be any folder of the library; only the links directly in it are its own.
+    directories.extend((pathlib.Path(i), False) for i in custom)
+    return directories
+
+
+def _is_link_name(link_name: str, file_name: str) -> bool:
+    """True if `link_name` is what the Tags Directory (the file's name) or a playlist (the name after its position)
+    calls a link to a file named `file_name`."""
+    return link_name == file_name or bool(MANAGED_NAME.match(link_name)) and link_name[5:] == file_name
+
+
+def find_links(files: List[pathlib.Path]) -> Dict[pathlib.Path, List[pathlib.Path]]:
+    """The Tags Directory and playlist links of each of `files`: the files in `link_directories` that are the same
+    inode as the file and are named for it.  A file without other hard links has none and is left out."""
+    inodes = dict()
+    for file in files:
+        try:
+            stat = file.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.st_nlink > 1:
+            # Library files may be hard links of each other, so several files can share an inode.
+            inodes.setdefault((stat.st_dev, stat.st_ino), []).append(file)
+    links = dict()
+    if not inodes:
+        return links
+
+    seen = set()
+    for directory, recursive in link_directories():
+        roots = (i[0] for i in os.walk(directory)) if recursive else (str(directory),)
+        for root in roots:
+            if root in seen:
+                continue
+            seen.add(root)
+            try:
+                names = os.listdir(root)
+            except OSError:
+                continue
+            for name in names:
+                path = pathlib.Path(root, name)
+                try:
+                    stat = path.lstat()
+                except OSError:
+                    continue
+                for file in inodes.get((stat.st_dev, stat.st_ino), ()):
+                    if _is_link_name(name, file.name):
+                        links.setdefault(file, []).append(path)
+    return links
+
+
+def move_links(links: List[pathlib.Path], old_version: pathlib.Path, new_version: pathlib.Path):
+    """Make each of `links` that is still a link to `old_version` a link to `new_version`.
+
+    The Tags Directory and a playlist refuse to delete a file that has no other link, because it may be a last
+    copy.  A link left on a replaced version is exactly that: once it is no longer wanted (the primary changed the
+    file's tags, or reordered the playlist) it would stay forever."""
+    try:
+        old = old_version.lstat()
+    except FileNotFoundError:
+        return
+    for link in links:
+        # Short, so it fits wherever the link's own name does.
+        temporary = link.with_name(f'.{uuid.uuid4().hex}.sync')
+        try:
+            stat = link.lstat()
+            if (stat.st_dev, stat.st_ino) != (old.st_dev, old.st_ino):
+                continue
+            # Linked beside it, then renamed over it: the link is never missing.
+            os.link(new_version, temporary)
+            os.replace(temporary, link)
+        except OSError as e:
+            logger.error(f'Failed to move the link {repr(str(link))}: {e}')
+            temporary.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -790,6 +881,9 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
         page_downloaded = list()
         if wanted and not disk_full:
             semaphore = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
+            # A file's links move to its new version before the new version takes its place, so a sync that is
+            # interrupted in between downloads nothing again and still leaves no link on the old version.
+            links = await asyncio.to_thread(find_links, [i for _, i in wanted])
 
             async def download(file_: ManifestFile, destination_: pathlib.Path):
                 nonlocal disk_full
@@ -797,7 +891,11 @@ async def _sync_files(client: PrimaryClient) -> List[pathlib.Path]:
                     if disk_full:
                         return None
                     try:
-                        await download_file(client, file_, destination_, count_bytes)
+                        before_replace = None
+                        if destination_ in links:
+                            def before_replace(new_version: pathlib.Path):
+                                move_links(links[destination_], destination_, new_version)
+                        await download_file(client, file_, destination_, count_bytes, before_replace)
                         downloaded.append(destination_)
                         return destination_
                     except SyncDiskFull as e:

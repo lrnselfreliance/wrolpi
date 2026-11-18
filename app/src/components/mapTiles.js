@@ -19,3 +19,11 @@ export async function readVectorTile(url, {z, x, y}) {
     const tile = await archive(url).getZxy(z, x, y);
     return tile?.data ? new VectorTile(new Pbf(new Uint8Array(tile.data))) : null;
 }
+
+// The west, south, east and north edges (degrees) of what a map file is of, as the file says; null
+// when it does not say.
+export async function readTileBounds(url) {
+    const {minLon, minLat, maxLon, maxLat} = await archive(url).getHeader();
+    const edges = [minLon, minLat, maxLon, maxLat];
+    return edges.every(Number.isFinite) && minLon < maxLon && minLat < maxLat ? edges : null;
+}

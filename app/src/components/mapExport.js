@@ -99,59 +99,109 @@ function basemapLayerName(layerId) {
     return layerId.includes(":") ? layerId.split(":").slice(1).join(":") : layerId;
 }
 
+// The kinds of layer which are drawn over what is under them without hiding it: a line, a name.
+const THIN_LAYER_TYPES = new Set(["line", "symbol", "circle"]);
+
 // The layers of the PDF: the visible layers of the map's style, gathered as the layer control
 // gathers them, from the bottom up.  Each is {name, ids, raster}.  An overlay is one layer, or two
 // when it has both ground and labels (see orderOverlayLayers).
+//
+// A layer of the PDF is drawn as images, and an image is in one place among the others.  The layers
+// of a group are not always together in the style: the parks of Land Cover are under the water and
+// its piers are over it, and a second basemap file has all of its layers over the first's.  So a
+// group is as many images as it must be, each with the name of the group (they are one layer of the
+// PDF): a part of it which fills an area stays where it is, because moved over what was above it,
+// it would hide that; a part which is only lines or names is drawn with the group's next part.
 //
 // styleLayers: the layers of the map's style, as the map has them now.
 // layerGroups: {name: [part of a layer id, ...]}, the basemap groups of the layer control.
 // overlayLabels: {source id: label} of the overlay files.
 export function exportGroups(styleLayers, {layerGroups = {}, overlayLabels = {}} = {}) {
     const groupNames = Object.keys(layerGroups);
-    const groups = new Map();
-    const add = (key, name, index, layer) => {
-        if (!groups.has(key)) groups.set(key, {name, ids: [], top: index, raster: true});
-        const group = groups.get(key);
-        group.ids.push(layer.id);
-        group.top = index;
-        group.raster = group.raster && layer.type === "raster";
-    };
-
-    styleLayers.forEach((layer, index) => {
-        if (layer.layout?.visibility === "none") return;
+    // What each visible layer is of: {key, name, overlay}.
+    const groupOf = layer => {
         if (isOverlayLayerId(layer.id)) {
             // An overlay is drawn in two places: its ground under the basemap's labels, and its own
-            // labels over them.  A layer of the PDF is in one place, so each is a layer of the PDF.
+            // labels over them.  Each is a layer of the PDF.
             const part = isOverlayLabelLayer(layer) ? "labels" : "ground";
-            const key = `overlay ${part} ${layer.source}`;
-            add(key, overlayLabels[layer.source] || layer.source, index, layer);
-            groups.get(key).overlay = {source: layer.source, part};
-            return;
+            return {
+                key: `overlay ${part} ${layer.source}`, name: overlayLabels[layer.source] || layer.source,
+                overlay: {source: layer.source, part},
+            };
         }
         const name = basemapLayerName(layer.id);
         // A layer in more than one group (a water label) is of the last, which is the labels.
         const group = [...groupNames].reverse().find(g => layerGroups[g].some(part => name.includes(part)));
-        if (group) {
-            add(`group ${group}`, group, index, layer);
-        } else {
-            // The ground everything else is drawn on.
-            add("background", BACKGROUND_GROUP, -1, layer);
-        }
-    });
+        // What is in no group is the ground everything else is drawn on.
+        return group ? {key: `group ${group}`, name: group} : {key: "background", name: BACKGROUND_GROUP};
+    };
 
-    // A layer of the PDF is one image, so the layers of a group are drawn together: where the
-    // topmost of them is.
-    const ordered = [...groups.values()].sort((a, b) => a.top - b.top);
+    // The style from the bottom up, as runs of layers which are of one group and are together.
+    const runs = [];
+    for (const layer of styleLayers) {
+        if (layer.layout?.visibility === "none") continue;
+        const group = groupOf(layer);
+        let run = runs[runs.length - 1];
+        if (run?.key !== group.key) {
+            run = {...group, ids: [], raster: true, thin: true};
+            runs.push(run);
+        }
+        run.ids.push(layer.id);
+        run.raster = run.raster && layer.type === "raster";
+        run.thin = run.thin && THIN_LAYER_TYPES.has(layer.type);
+    }
+    // A run of lines is drawn with the next run of its group, when there is one.
+    const waiting = new Map();
+    const placed = [];
+    for (const [index, run] of runs.entries()) {
+        const ids = [...(waiting.get(run.key) || []), ...run.ids];
+        waiting.delete(run.key);
+        if (run.thin && runs.slice(index + 1).some(later => later.key === run.key)) {
+            waiting.set(run.key, ids);
+        } else {
+            placed.push({...run, ids});
+        }
+    }
+
     // The labels of an overlay are named as its labels when its ground is a layer too.
-    const grounds = new Set(ordered.filter(g => g.overlay?.part === "ground").map(g => g.overlay.source));
+    const grounds = new Set(placed.filter(g => g.overlay?.part === "ground").map(g => g.overlay.source));
+    // Two groups of one name are told apart; the images of one group have one name.
     const used = new Set();
-    return ordered.map(({name, ids, raster, overlay}) => {
-        if (overlay?.part === "labels" && grounds.has(overlay.source)) name = `${name} (labels)`;
-        let unique = name;
-        for (let n = 2; used.has(unique); n++) unique = `${name} (${n})`;
-        used.add(unique);
-        return {name: unique, ids, raster};
+    const names = new Map();
+    return placed.map(({key, name, ids, raster, overlay}) => {
+        if (!names.has(key)) {
+            if (overlay?.part === "labels" && grounds.has(overlay.source)) name = `${name} (labels)`;
+            let unique = name;
+            for (let n = 2; used.has(unique); n++) unique = `${name} (${n})`;
+            used.add(unique);
+            names.set(key, unique);
+        }
+        return {name: names.get(key), ids, raster};
     });
+}
+
+// The sources of a style whose map file has nothing of an area: a map of another state.  Their
+// layers are not drawn, each of which would be an image of nothing, counted against how sharp the
+// map may be.  A source is only left out when its file says where it is of, and that is elsewhere.
+//
+// bounds: the west, south, east and north edges of the area.
+// readBounds(url): the edges of the map file a source has as its `url`, or null (see mapTiles.js).
+export async function sourcesOutside(style, bounds, readBounds) {
+    const [west, south, east, north] = bounds;
+    const outside = new Set();
+    await Promise.all(Object.entries(style.sources || {}).map(async ([id, source]) => {
+        if (typeof source.url !== "string" || !source.url.startsWith("pmtiles://")) return;
+        try {
+            const edges = await readBounds(source.url);
+            if (!edges) return;
+            const [fileWest, fileSouth, fileEast, fileNorth] = edges;
+            if (fileEast <= west || fileWest >= east || fileNorth <= south || fileSouth >= north) outside.add(id);
+        } catch (e) {
+            // A file which can not be asked is drawn, as it was going to be.
+            console.warn("Could not read where a map file is of:", source.url, e);
+        }
+    }));
+    return outside;
 }
 
 // A basemap's tiles name its small roads from this zoom on.  A quadrangle is drawn at about zoom 13,

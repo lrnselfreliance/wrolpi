@@ -179,13 +179,16 @@ def _compress_stream(doc, xref: int):
     doc.xref_set_key(xref, 'Filter', '/FlateDecode')
 
 
-def _insert_layer(doc, page, rect, layer: ExportLayer):
-    """Put the image of a layer in a rectangle of the page, in a PDF layer of its own.
+def _insert_layer(doc, page, rect, layer: ExportLayer, groups: dict):
+    """Put the image of a layer in a rectangle of the page, in the PDF layer of its name: its own, unless an
+    image before it had the name.  (`groups` is the PDF layer of each name so far.)  A layer of the map may be
+    several images, with other layers drawn between them.
 
     PyMuPDF keeps the pixels of an image uncompressed until the PDF is written: about 90 MB for each layer of a
     quadrangle, all of them at once.  They are compressed here instead, so only one layer's are ever in memory."""
-    group = doc.add_ocg(layer.name, on=True)
-    xref = page.insert_image(rect, stream=layer.read(), oc=group)
+    if layer.name not in groups:
+        groups[layer.name] = doc.add_ocg(layer.name, on=True)
+    xref = page.insert_image(rect, stream=layer.read(), oc=groups[layer.name])
     _compress_stream(doc, xref)
     # The transparency of a PNG is an image of its own.
     kind, mask = doc.xref_get_key(xref, 'SMask')
@@ -266,10 +269,11 @@ def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: f
             plan = None
             page = doc.new_page(width=map_width, height=map_height)
             rect = page.rect
+        groups = {}
         for index, layer in enumerate(drawn):
             # A layer which was left out is a step done.
             step(len(layers) + (len(layers) - len(drawn)) + index)
-            _insert_layer(doc, page, rect, layer)
+            _insert_layer(doc, page, rect, layer, groups)
         step(steps)
         if plan is not None:
             draw_sheet(doc, page, plan)

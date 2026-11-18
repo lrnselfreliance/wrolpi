@@ -180,6 +180,30 @@ export function exportGroups(styleLayers, {layerGroups = {}, overlayLabels = {}}
     });
 }
 
+// The sources of a style whose map file has nothing of an area: a map of another state.  Their
+// layers are not drawn, each of which would be an image of nothing, counted against how sharp the
+// map may be.  A source is only left out when its file says where it is of, and that is elsewhere.
+//
+// bounds: the west, south, east and north edges of the area.
+// readBounds(url): the edges of the map file a source has as its `url`, or null (see mapTiles.js).
+export async function sourcesOutside(style, bounds, readBounds) {
+    const [west, south, east, north] = bounds;
+    const outside = new Set();
+    await Promise.all(Object.entries(style.sources || {}).map(async ([id, source]) => {
+        if (typeof source.url !== "string" || !source.url.startsWith("pmtiles://")) return;
+        try {
+            const edges = await readBounds(source.url);
+            if (!edges) return;
+            const [fileWest, fileSouth, fileEast, fileNorth] = edges;
+            if (fileEast <= west || fileWest >= east || fileNorth <= south || fileSouth >= north) outside.add(id);
+        } catch (e) {
+            // A file which can not be asked is drawn, as it was going to be.
+            console.warn("Could not read where a map file is of:", source.url, e);
+        }
+    }));
+    return outside;
+}
+
 // A basemap's tiles name its small roads from this zoom on.  A quadrangle is drawn at about zoom 13,
 // from tiles in which the streets of a town are lines with no names.
 export const EXPORT_DETAIL_ZOOM = 14;

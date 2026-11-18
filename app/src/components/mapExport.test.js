@@ -16,11 +16,13 @@ import {
     unnamedRoadLayers,
     maxExportPixels,
     renderExport,
+    sourcesOutside,
 } from './mapExport';
 import {quadAt} from './mapQuads';
 
 const ANCHORAGE = quadAt(-149.93, 61.19);
 const BERTHOUD = quadAt(-105.0595, 40.31);
+const BERTHOUD_BOUNDS = [BERTHOUD.west, BERTHOUD.south, BERTHOUD.east, BERTHOUD.north];
 
 describe('how a quadrangle is drawn', () => {
     test('is the size of a 1:24,000 sheet, at the sharpness asked for', () => {
@@ -899,5 +901,48 @@ describe('what the PDF is called', () => {
             name: 'Berthoud, Colorado', credits: [], date: '2026-11-15',
         });
         expect(exportSheet(BERTHOUD, map, [], new Date(2026, 10, 15), null).name).toBe('40°15′N 105°07′30″W');
+    });
+});
+
+describe('the map files which are of somewhere else', () => {
+    const style = {
+        sources: {
+            'alaska.pmtiles': {type: 'vector', url: 'pmtiles:///media/alaska.pmtiles'},
+            'colorado.pmtiles': {type: 'vector', url: 'pmtiles:///media/colorado.pmtiles'},
+            'beside.pmtiles': {type: 'vector', url: 'pmtiles:///media/beside.pmtiles'},
+            'unsaid.pmtiles': {type: 'vector', url: 'pmtiles:///media/unsaid.pmtiles'},
+            'broken.pmtiles': {type: 'vector', url: 'pmtiles:///media/broken.pmtiles'},
+            'terrain': {type: 'raster-dem', url: 'contours://terrain'},
+            'pins': {type: 'geojson', data: {}},
+        },
+    };
+    const edges = {
+        'pmtiles:///media/alaska.pmtiles': [-180, 51, -129, 72],
+        'pmtiles:///media/colorado.pmtiles': [-109.1, 36.9, -102, 41.1],
+        // It ends where the quadrangle begins.
+        'pmtiles:///media/beside.pmtiles': [-106, 40, -105.125, 41],
+        'pmtiles:///media/unsaid.pmtiles': null,
+    };
+    const asked = [];
+    const readBounds = async url => {
+        asked.push(url);
+        if (url.includes('broken')) throw new Error('No such file');
+        return edges[url];
+    };
+
+    test('are those whose file says it is of elsewhere, and no other', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const outside = await sourcesOutside(style, BERTHOUD_BOUNDS, readBounds);
+            expect([...outside].sort()).toEqual(['alaska.pmtiles', 'beside.pmtiles']);
+            // Only a map file is asked.
+            expect(asked).toHaveLength(5);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    test('are none of a style with no sources', async () => {
+        expect((await sourcesOutside({}, BERTHOUD_BOUNDS, readBounds)).size).toBe(0);
     });
 });

@@ -16,7 +16,7 @@ import {
     setMapDefaultLocation,
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
-import {readVectorTile} from "./mapTiles";
+import {readTileBounds, readVectorTile} from "./mapTiles";
 import {exportLegend} from "./mapExportLegend";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
@@ -60,6 +60,7 @@ import {
     maxCanvasSide,
     maxExportPixels,
     renderExport,
+    sourcesOutside,
     saveBlob,
 } from "./mapExport";
 
@@ -1061,8 +1062,11 @@ export default function MapViewer() {
             const style = map.getStyle();
             const overlayLabels = Object.fromEntries(overlaysRef.current.map(
                 file => [overlaySourceId(file), overlayLabel(file, overlaysRef.current)]));
+            // A map file which is of somewhere else is not drawn.
+            const outside = await sourcesOutside(
+                style, [quad.west, quad.south, quad.east, quad.north], readTileBounds);
             const groups = exportGroups(
-                style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX)),
+                style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX) && !outside.has(layer.source)),
                 {layerGroups: LAYER_GROUPS, overlayLabels});
             if (!groups.length) throw new Error("No layer of the map is turned on");
             const frame = exportFrame(

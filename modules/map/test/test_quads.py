@@ -59,6 +59,16 @@ def test_quad_name_at_a_shared_edge():
     assert quads.quad_name(-105.125, 40.125, -105, 40.375).name == 'Berthoud'
 
 
+def test_quad_name_at_a_shared_edge_the_map_gives():
+    """The edges the map gives are a hair from where they are.  An area whose middle is that near the edge two
+    quadrangles share is in the one east, or north, of that edge, whichever side of it the hair is."""
+    assert quads.quad_name(-149.875, 61.125, -149.75, 61.25).name == 'Anchorage A-8 NE'
+    # What the map gave for those edges.
+    given = (-149.87500000000014, 61.12499878064878, -149.75000000000023, 61.25000121452442)
+    assert quads.quad_name(*given).name == 'Anchorage A-8 NE'
+    assert quads.quad_name(-105.25 - 1e-9, 40.25 - 1e-9, -105, 40.375).name == 'Berthoud'
+
+
 @pytest.mark.parametrize('west,south', [
     (0, 0),
     (151.125, -33.875),  # Sydney.

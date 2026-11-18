@@ -394,7 +394,15 @@ export function exportStyle(style, ignoredPrefixes = [], {zoom = null, roadNames
         .filter(layer => !ignored(layer.id))
         .map(layer => {
             if (!unnamed.has(layer.id) || !sources[ROAD_NAMES_SOURCE + layer.source]) {
-                return {...layer, layout: {...layer.layout, visibility: "none"}};
+                const hidden = {...layer, layout: {...layer.layout, visibility: "none"}};
+                // What a basemap draws from a zoom a little deeper than the map is drawn at (a
+                // stream, a service road) is on a map of this scale, and is in the tiles it is
+                // drawn from: it is drawn.  Not names, of which there would be too many.
+                if (zoom !== null && layer.type !== "symbol" && layer.minzoom > zoom
+                    && layer.minzoom <= EXPORT_DETAIL_ZOOM) {
+                    hidden.minzoom = Math.floor(zoom);
+                }
+                return hidden;
             }
             const {minzoom, "source-layer": sourceLayer, ...named} = layer;
             return {

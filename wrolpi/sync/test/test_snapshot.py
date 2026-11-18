@@ -9,7 +9,7 @@ import pytest
 from wrolpi.common import enable_wrol_mode
 from wrolpi.db import get_db_file
 from wrolpi.sync import backup, snapshot
-from wrolpi.sync.status import get_snapshot_status
+from wrolpi.sync.status import get_snapshot_status, update_snapshot_status
 
 
 @pytest.mark.asyncio
@@ -105,6 +105,23 @@ async def test_snapshot_refused_in_wrol_mode(async_client, test_session, test_di
     await snapshot.snapshot_tick()
     assert get_snapshot_status()['state'] == 'error' and 'WROL Mode' in get_snapshot_status()['last_error']
     assert not (test_directory / snapshot.SNAPSHOT_PATH).exists()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_interrupted(async_client, test_session, test_directory, test_wrolpi_config):
+    """A snapshot cut off by its process being killed stays marked as running.  It must not hold back the next
+    request, nor be reported as running forever."""
+    update_snapshot_status(state='running', started_at='2026-01-01T00:00:00+00:00')
+
+    await snapshot.snapshot_tick()
+    assert get_snapshot_status()['state'] == 'error'
+    assert get_snapshot_status()['last_error'] == 'The snapshot was interrupted'
+
+    update_snapshot_status(state='running')
+    snapshot.request_snapshot()
+    await snapshot.snapshot_tick()
+    assert get_snapshot_status()['state'] == 'idle' and get_snapshot_status()['written'] is True
+    assert (test_directory / snapshot.SNAPSHOT_PATH).is_file()
 
 
 def test_backup_drive_does_not_copy_the_snapshot(test_directory, tmp_path):

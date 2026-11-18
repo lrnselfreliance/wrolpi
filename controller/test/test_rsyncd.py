@@ -2,6 +2,7 @@
 Unit tests for controller.lib.rsyncd: the rsync daemon that serves the library to secondary WROLPis.
 """
 
+import asyncio
 import shutil
 import socket
 import subprocess
@@ -38,6 +39,21 @@ def make_client(helper=None):
     return client
 
 
+@pytest.fixture(autouse=True)
+def forget_images():
+    rsyncd._images_without_rsync.clear()
+    rsyncd._last_error = None
+
+
+class FakeContainerError(Exception):
+    exit_status = 127
+
+
+def helper_runs(client) -> list:
+    """The calls that made a helper (the others only look for rsync in the image)."""
+    return [i for i in client.containers.run.call_args_list if i.kwargs.get("detach")]
+
+
 def ensure(client):
     with mock.patch.object(rsyncd, "can_manage_containers", return_value=True), \
             mock.patch.object(rsyncd, "_get_client", return_value=client), \
@@ -48,7 +64,7 @@ def ensure(client):
 def current_source(client) -> str:
     """The label a helper made by this code from this api container carries."""
     ensure(client)
-    return client.containers.run.call_args.kwargs["labels"][rsyncd.SOURCE_LABEL]
+    return helper_runs(client)[0].kwargs["labels"][rsyncd.SOURCE_LABEL]
 
 
 class TestConfig:
@@ -80,7 +96,8 @@ def test_daemon_serves_the_library_read_only(tmp_path):
     database in use or the TLS keys, serves the snapshot, and refuses a write."""
     media = tmp_path / "media"
     for path in ("videos/a.mp4", "config/tags.yaml", "config/wrolpi.db", "config/wrolpi.db-wal",
-                 "config/ssl/ca.key", "config/cookies.txt.enc", "config/.sync/config/wrolpi.db"):
+                 "config/ssl/ca.key", "config/cookies.txt.enc", "config/.sync/config/wrolpi.db",
+                 "config/.sync/config/.wrolpi.db.backup"):
         (media / path).parent.mkdir(parents=True, exist_ok=True)
         (media / path).write_text(path)
     # Links that anyone able to write to the library could make, to what the daemon leaves out.  Relative: rsync
@@ -139,7 +156,8 @@ class TestEnsureRsyncDaemon:
     def test_creates_the_helper_from_the_api_container(self):
         client = make_client()
         assert ensure(client) == {"success": True, "action": "created"}
-        args, kwargs = client.containers.run.call_args
+        (call,) = helper_runs(client)
+        args, kwargs = call.args, call.kwargs
         assert args[0] == "sha256:image", "the api container's own image"
         assert kwargs["entrypoint"] == "sh" and "rsync --daemon" in args[1][1], "not the image's API entrypoint"
         assert kwargs["volumes_from"] == ["wrolpi-api-1:ro"], "the api container's volumes, read-only"
@@ -154,7 +172,7 @@ class TestEnsureRsyncDaemon:
         helper.labels = {rsyncd.SOURCE_LABEL: current_source(make_client())}
         client = make_client(helper)
         assert ensure(client) == {"success": True, "action": "kept"}
-        client.containers.run.assert_not_called()
+        client.containers.run.assert_not_called(), "not even to look for rsync"
         helper.start.assert_not_called()
         helper.remove.assert_not_called()
 
@@ -171,13 +189,48 @@ class TestEnsureRsyncDaemon:
         client = make_client(helper)
         assert ensure(client)["action"] == "created"
         helper.remove.assert_called_once_with(force=True)
-        client.containers.run.assert_called_once()
+        assert len(helper_runs(client)) == 1
+
+    def test_no_helper_from_an_image_without_rsync(self):
+        """An api image built before rsync was added: a helper made from it would exit and be restarted forever.
+        None is made, an older helper is left serving, and the image is not tried again at every check."""
+        helper = mock.Mock(status="running")
+        helper.labels = {rsyncd.SOURCE_LABEL: "made from an older api container"}
+        client = make_client(helper)
+        client.containers.run.side_effect = FakeContainerError("sh: 1: rsync: not found")
+
+        for _ in range(3):
+            result = ensure(client)
+            assert result["success"] is False and "no rsync" in result["error"]
+        assert not helper_runs(client)
+        helper.remove.assert_not_called()
+        assert client.containers.run.call_count == 1, "the image is looked at once"
+
+    def test_docker_failing_says_nothing_about_the_image(self):
+        client = make_client()
+        client.containers.run.side_effect = RuntimeError("docker is restarting")
+        assert ensure(client)["success"] is False
+        assert not rsyncd._images_without_rsync
+
+        client.containers.run.side_effect = None
+        assert ensure(client)["action"] == "created"
 
     def test_never_raises(self):
         client = make_client()
         client.containers.run.side_effect = RuntimeError("no such image")
         result = ensure(client)
         assert result["success"] is False and "no such image" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_checked_for_as_long_as_the_controller_runs(self, monkeypatch):
+        """The api container can be recreated while the Controller runs; the helper is checked again and again."""
+        calls = []
+        monkeypatch.setattr(rsyncd, "ensure_rsync_daemon", lambda: calls.append(1))
+        monkeypatch.setattr(rsyncd, "CHECK_INTERVAL_SECONDS", 0.01)
+        task = asyncio.create_task(rsyncd.rsync_daemon_loop())
+        await asyncio.sleep(0.2)
+        task.cancel()
+        assert len(calls) >= 3
 
     def test_not_given_a_view_button(self):
         assert "rsyncd" in NON_VIEWABLE_CONTAINERS

@@ -76,7 +76,12 @@ async def run_snapshot() -> dict:
 async def snapshot_tick():
     """Make a snapshot when one was requested."""
     status = get_snapshot_status()
-    if not status['requested'] or status['state'] == 'running':
+    if status['state'] == 'running':
+        # Only this loop makes snapshots, one at a time: one still marked running when a tick starts was cut off
+        # (its process was killed), and would otherwise hold back every later request.
+        status = update_snapshot_status(state='error', finished_at=now().isoformat(),
+                                        last_error='The snapshot was interrupted')
+    if not status['requested']:
         return
     update_snapshot_status(requested=False)
     await run_snapshot()

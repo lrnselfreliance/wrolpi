@@ -333,3 +333,69 @@ def test_progress_may_stop_the_work():
     with pytest.raises(RuntimeError, match='enough'):
         export.build_layered_pdf(layers, WIDTH, HEIGHT, 300, progress=progress)
     assert calls == [(0, 6), (1, 6), (2, 6), (3, 6)]
+
+
+class NeverCancelled:
+    """A Job which was not cancelled, as one is which ends because the API is stopping."""
+
+    @staticmethod
+    def cancel_requested() -> bool:
+        return False
+
+    @staticmethod
+    def set_progress(_: float):
+        pass
+
+
+def test_work_stops_when_it_is_told_to(map_export_root):
+    """The work of a Job which ended without being cancelled (the API is stopping) stops between two layers when
+    it is told to: the API waits for it, and is not to wait for all of a PDF."""
+    export_id = new_export('A', 'B')
+    for index in range(2):
+        export_job.save_layer(export_id, index, make_image())
+    directory = map_export_root / export_id
+    stop = threading.Event()
+    stop.set()
+    with pytest.raises(export_job.ExportCancelled):
+        export_job._make_pdf(directory, NeverCancelled, stop)
+    assert sorted(i.name for i in directory.iterdir()) == ['meta.json']
+    # Not told to, it makes the PDF.
+    export_id = new_export('A')
+    export_job.save_layer(export_id, 0, make_image())
+    export_job._make_pdf(map_export_root / export_id, NeverCancelled, threading.Event())
+    assert sorted(i.name for i in (map_export_root / export_id).iterdir()) == ['map.pdf', 'meta.json']
+
+
+def test_files_of_an_export_are_written_whole(map_export_root, monkeypatch):
+    """What is said of an export, and each image, is all there or is what was there before: another request
+    may read it while it is written.  A write which fails leaves nothing behind."""
+    export_id = new_export('A')
+    directory = map_export_root / export_id
+    before = (directory / 'meta.json').read_text()
+
+    def replace(*_):
+        raise OSError('The disk is full')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(export_job.os, 'replace', replace)
+        with pytest.raises(OSError):
+            export_job.save_layer(export_id, 0, make_image())
+        with pytest.raises(OSError):
+            export_job._write_meta(directory, {'layers': []})
+    assert sorted(i.name for i in directory.iterdir()) == ['meta.json']
+    assert (directory / 'meta.json').read_text() == before
+    export_job.save_layer(export_id, 0, make_image())
+    assert sorted(i.name for i in directory.iterdir()) == ['layer-000', 'meta.json']
+
+
+@pytest.mark.asyncio
+async def test_job_removes_old_exports(async_client, map_export_root):
+    """Old exports are removed when a PDF is made, as well as when an export begins: the last export of a day
+    is not to keep the one before it."""
+    old = new_export('A')
+    export_id = new_export('A')
+    age(map_export_root / old)
+    export_job.save_layer(export_id, 0, make_image())
+    job = await jobs.wait_for_job(export_job.start_export(export_id), timeout=60)
+    assert job['status'] == 'complete'
+    assert sorted(i.name for i in map_export_root.iterdir()) == [export_id]

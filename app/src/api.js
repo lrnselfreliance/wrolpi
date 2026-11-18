@@ -1800,10 +1800,26 @@ const EXPORT_POLL_FAILURES = 10;
 // onStatus(text): told how far along it is.  isCancelled(): asked, between steps, whether to stop;
 // the server is then told to stop the export and remove what was sent.  Rejects with
 // ExportCancelled when it was stopped.
+//
+// However it ends, the server is told to remove what it has of the export: the images are a hundred
+// megabytes and the PDF tens, on a disk which may be an SD card.
 export async function exportMapPdf(
     {width, height, dpi, title, bounds, layers, sheet},
     {onStatus = () => undefined, isCancelled = () => false, pollMs = 1000} = {},
 ) {
+    const exports = `${API_URI}/map/export`;
+    let exportId = null;
+    // Best effort: the server removes old exports itself, later.
+    const remove = async () => {
+        if (exportId) await fetch(`${exports}/${exportId}`, {method: 'DELETE'}).catch(() => undefined);
+    };
+    try {
+        return await sendAndFetch();
+    } finally {
+        await remove();
+    }
+
+    async function sendAndFetch() {
     const send = async (url, init, fallback) => {
         let response;
         try {
@@ -1815,14 +1831,9 @@ export async function exportMapPdf(
         return response;
     };
     const pause = () => new Promise(resolve => setTimeout(resolve, pollMs));
-    const exports = `${API_URI}/map/export`;
-    let exportId = null;
-    // Stopped by the person exporting: the server cancels the Job and removes the images.  Best
-    // effort: the export is stopped for the person either way, and the server removes old exports.
+    // Stopped by the person exporting: removing the export cancels its Job.
     const stopIfCancelled = async () => {
-        if (!isCancelled()) return;
-        if (exportId) await fetch(`${exports}/${exportId}`, {method: 'DELETE'}).catch(() => undefined);
-        throw new ExportCancelled();
+        if (isCancelled()) throw new ExportCancelled();
     };
 
     await stopIfCancelled();
@@ -1893,6 +1904,7 @@ export async function exportMapPdf(
         }
         if (++failures >= EXPORT_POLL_FAILURES) throw new Error('Could not fetch the PDF');
         await pause();
+    }
     }
 }
 

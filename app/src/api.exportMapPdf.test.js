@@ -59,6 +59,8 @@ describe('exportMapPdf', () => {
             'POST /map/export/abc/start',
             'GET /jobs/job-1', 'GET /jobs/job-1', 'GET /jobs/job-1', 'GET /jobs/job-1',
             'GET /map/export/abc/pdf',
+            // With the PDF in hand, the server need keep nothing of the export.
+            'DELETE /map/export/abc',
         ]);
         expect(statuses).toEqual([
             'Sending the map…',
@@ -92,6 +94,14 @@ describe('exportMapPdf', () => {
     test('says why the map was refused', async () => {
         fakeServer([], {replies: {'POST /map/export': () => reply(400, {error: 'A map of 0x0 pixels can not be exported'})}});
         await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toThrow('A map of 0x0 pixels can not be exported');
+    });
+
+    test('has the server remove what was sent when the export fails', async () => {
+        const calls = fakeServer([{status: 'complete'}], {
+            replies: {'POST /map/export/abc/layer/1': () => Promise.reject(new Error('network'))},
+        });
+        await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toThrow('Could not reach the server');
+        expect(calls.at(-1)).toBe('DELETE /map/export/abc');
     });
 
     test('says why the Job failed', async () => {

@@ -202,6 +202,13 @@ SHEET_TEXT_LENGTH = 300
 SHEET_CREDITS = 40
 
 
+def _export_text(value) -> str:
+    """What was sent as text of an exported map (its title, the name of a layer), as it can be written in a PDF:
+    no longer than a line of a sheet, and with nothing in it which is not a character."""
+    text = str(value or '').replace('\x00', '')
+    return text.encode('utf-8', 'replace').decode('utf-8')[:SHEET_TEXT_LENGTH]
+
+
 def _sheet_contours(contours) -> dict:
     """How far apart the contour lines of a map are, as the browser says it, for `export.Sheet`.  A map with no
     contour lines says nothing; what is said is written on the sheet only when it is an interval (see
@@ -250,15 +257,15 @@ async def post_export(request: Request):
     try:
         meta = request.json
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
-        names = [str(i) for i in meta['layers']]
-        title = str(meta.get('title') or '')[:SHEET_TEXT_LENGTH] or None
+        names = [_export_text(i) for i in meta['layers']]
+        title = _export_text(meta.get('title')) or None
         bounds = meta.get('bounds')
         sheet = meta.get('sheet')
         if sheet is not None:
             sheet = export.Sheet(
-                name=str(sheet.get('name') or '')[:SHEET_TEXT_LENGTH] or None,
-                credits=[str(i)[:SHEET_TEXT_LENGTH] for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
-                date=str(sheet.get('date') or '')[:SHEET_TEXT_LENGTH] or None,
+                name=_export_text(sheet.get('name')) or None,
+                credits=[_export_text(i) for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
+                date=_export_text(sheet.get('date')) or None,
                 **_sheet_contours(sheet.get('contours')),
                 legend=legend_as_sent(sheet.get('legend')),
             )

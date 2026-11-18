@@ -83,6 +83,10 @@ def test_daemon_serves_the_library_read_only(tmp_path):
                  "config/ssl/ca.key", "config/cookies.txt.enc", "config/.sync/config/wrolpi.db"):
         (media / path).parent.mkdir(parents=True, exist_ok=True)
         (media / path).write_text(path)
+    # Links that anyone able to write to the library could make, to what the daemon leaves out.  Relative: rsync
+    # already makes an absolute link point nowhere.
+    (media / "videos/keys").symlink_to("../config/ssl")
+    (media / "videos/key").symlink_to("../config/ssl/ca.key")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -103,6 +107,19 @@ def test_daemon_serves_the_library_read_only(tmp_path):
         assert listing.returncode == 0, listing.stderr
         listed = {line.split()[-1] for line in listing.stdout.splitlines() if line.startswith("-")}
         assert listed == {"videos/a.mp4", "config/tags.yaml", "config/.sync/config/wrolpi.db"}
+
+        # Followed links are refused; without the option the links arrive as links, never as what they point at.
+        for option in ("--copy-links", "--copy-unsafe-links", "--copy-dirlinks"):
+            followed = subprocess.run(["rsync", "-r", option, url, str(tmp_path / "followed")],
+                                      capture_output=True, text=True)
+            assert followed.returncode != 0, option
+            assert "refuse" in followed.stderr, followed.stderr
+        leaked = [i for i in (tmp_path / "followed").rglob("*") if i.is_file() and "ssl/ca.key" in i.read_text()]
+        assert not leaked, "a link let a client read the TLS key"
+        copied = tmp_path / "copied"
+        assert subprocess.run(["rsync", "-a", url, f"{copied}/"], capture_output=True).returncode == 0
+        assert (copied / "videos/key").is_symlink() and (copied / "videos/keys").is_symlink()
+        assert not (copied / "config/ssl").exists()
 
         (tmp_path / "new.txt").write_text("new")
         write = subprocess.run(["rsync", str(tmp_path / "new.txt"), url], capture_output=True, text=True)

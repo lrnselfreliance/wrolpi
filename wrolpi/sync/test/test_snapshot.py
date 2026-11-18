@@ -6,6 +6,7 @@ from http import HTTPStatus
 
 import pytest
 
+from wrolpi.common import enable_wrol_mode
 from wrolpi.db import get_db_file
 from wrolpi.sync import backup, snapshot
 from wrolpi.sync.status import get_snapshot_status
@@ -90,6 +91,20 @@ async def test_snapshot_refused(async_client, test_session, test_directory, test
     request, response = await async_client.post('/api/sync/snapshot')
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert not get_snapshot_status()['requested']
+
+
+@pytest.mark.asyncio
+async def test_snapshot_refused_in_wrol_mode(async_client, test_session, test_directory, test_wrolpi_config):
+    """WROL Mode writes nothing new: no snapshot is made, whether it is asked for now or was asked for before."""
+    snapshot.request_snapshot()
+    enable_wrol_mode()
+
+    request, response = await async_client.post('/api/sync/snapshot')
+    assert response.status_code == HTTPStatus.BAD_REQUEST and 'WROL Mode' in response.json['error']
+
+    await snapshot.snapshot_tick()
+    assert get_snapshot_status()['state'] == 'error' and 'WROL Mode' in get_snapshot_status()['last_error']
+    assert not (test_directory / snapshot.SNAPSHOT_PATH).exists()
 
 
 def test_backup_drive_does_not_copy_the_snapshot(test_directory, tmp_path):

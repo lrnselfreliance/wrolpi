@@ -11,7 +11,7 @@ import shutil
 from typing import Optional
 
 from wrolpi import flags
-from wrolpi.common import logger, get_media_directory, is_secondary
+from wrolpi.common import logger, get_media_directory, is_secondary, wrol_mode_enabled
 from wrolpi.dates import now
 from wrolpi.db import get_db_file
 from wrolpi.sync.backup import snapshot_database_if_changed
@@ -36,6 +36,9 @@ def snapshot_skip_reason() -> Optional[str]:
     """Why a snapshot cannot be made now, or None."""
     if is_secondary():
         return 'A secondary WROLPi is not copied; its primary is'
+    if wrol_mode_enabled():
+        # Like the backup drive: nothing new is written in WROL Mode.  A snapshot made earlier is still served.
+        return 'WROL Mode is enabled'
     if not PYTEST and not flags.db_up.is_set():
         return 'The database is not up'
     try:

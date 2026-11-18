@@ -287,8 +287,8 @@ def test_images_are_compressed_as_they_are_added():
     kept, the layers of a quadrangle are more memory than a Raspberry Pi has to spare."""
     doc = pymupdf.open()
     page = doc.new_page(width=WIDTH, height=HEIGHT)
-    export._insert_layer(doc, page, page.rect, ExportLayer('Satellite', make_image(image_format='JPEG')))
-    export._insert_layer(doc, page, page.rect, ExportLayer('Water', make_image((0, 0, 255, 200), box=(0, 0, 30, 90))))
+    export._insert_layer(doc, page, page.rect, ExportLayer('Satellite', make_image(image_format='JPEG')), {})
+    export._insert_layer(doc, page, page.rect, ExportLayer('Water', make_image((0, 0, 255, 200), box=(0, 0, 30, 90))), {})
 
     streams = [xref for xref in range(1, doc.xref_length()) if doc.xref_is_stream(xref)]
     images = [xref for xref in streams if doc.xref_get_key(xref, 'Subtype')[1] == '/Image']
@@ -465,3 +465,25 @@ async def test_api_export_text_which_is_not_text(async_client):
     request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
     assert layer_names(response.content) == ['Roads ?']
     assert pymupdf.open(stream=response.content).metadata['title'] == 'A ? map'
+
+
+def test_images_of_one_name_are_one_pdf_layer():
+    """A layer of the map may be several images, with other layers drawn between them (the parks of the land
+    are under the water, and its piers are over it).  They are one layer of the PDF, and each is drawn where it
+    was given: turning the layer off hides them all."""
+    pdf = build_layered_pdf([
+        ExportLayer('Land Cover', make_image((0, 200, 0, 255))),
+        ExportLayer('Water', make_image((0, 0, 255, 255), box=(0, 0, 30, 90))),
+        ExportLayer('Land Cover', make_image((90, 90, 90, 255), box=(0, 0, 10, 90))),
+    ], WIDTH, HEIGHT, dpi=300)
+    assert layer_names(pdf) == ['Land Cover', 'Water']
+    doc = pymupdf.open(stream=pdf, filetype='pdf')
+    page = doc[0]
+    assert len(page.get_images()) == 3
+
+    def color(x):
+        pixmap = page.get_pixmap(dpi=300)
+        return pixmap.pixel(x, 45)
+
+    # From the left: the pier over the water, the water over the park, the park.
+    assert [color(x) for x in (5, 20, 50)] == [(90, 90, 90), (0, 0, 255), (0, 200, 0)]

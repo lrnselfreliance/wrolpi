@@ -249,8 +249,8 @@ async def post_export(request: Request):
 
     `DELETE /api/map/export/<export_id>` stops an export at any of those steps, and removes what was sent.
 
-    The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each layer from the bottom
-    up, `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
+    The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each image from the bottom
+    up (images of one name are one layer of the PDF), `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
     is, and `sheet`: with which the map is put on a sheet with a margin and a grid; `name`, `credits` and `date`
     are written on it, `contours` (`{"interval": 40, "unit": "feet"}`, or "meters") when the map has contour
     lines, and `legend`: the lines of the map as they are drawn (see `modules.map.sheet.Sheet`)."""

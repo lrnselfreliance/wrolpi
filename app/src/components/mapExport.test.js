@@ -131,14 +131,52 @@ describe('the layers of the PDF', () => {
     const groups = exportGroups(STYLE_LAYERS, {layerGroups: LAYER_GROUPS, overlayLabels: OVERLAY_LABELS});
 
     test('are the layers which are on, as the layer control names them, from the bottom up', () => {
+        // The water of a second basemap file is over the buildings of the first, as it is on the map:
+        // Water is two images, of one name.
         expect(groups.map(g => g.name)).toEqual([
-            BACKGROUND_GROUP, 'Buildings', 'Water', 'Roads - Minor', 'Satellite imagery', 'Infrastructure', 'Labels',
-            'Infrastructure (labels)',
+            BACKGROUND_GROUP, 'Water', 'Buildings', 'Water', 'Roads - Minor', 'Satellite imagery', 'Infrastructure',
+            'Labels', 'Infrastructure (labels)',
+        ]);
+    });
+
+    test('a group whose layers are apart is drawn where each part which fills an area is', () => {
+        const layers = [
+            {id: 'background', type: 'background'},
+            {id: 'landuse_park', type: 'fill'},
+            {id: 'roads_runway', type: 'line'},
+            {id: 'water', type: 'fill'},
+            {id: 'water_stream', type: 'line'},
+            {id: 'landuse_pier', type: 'fill'},
+            {id: 'roads_pier', type: 'line'},
+            {id: 'roads_minor_casing', type: 'line'},
+            {id: 'roads_highway_casing', type: 'line'},
+            {id: 'roads_minor', type: 'line'},
+            {id: 'roads_highway', type: 'line'},
+            {id: 'roads_rail', type: 'line'},
+        ];
+        const drawn = exportGroups(layers, {layerGroups: {
+            'Water': ['water'], 'Land Cover': ['landuse_park', 'landuse_pier'],
+            'Roads - Highway': ['roads_highway'], 'Roads - Minor': ['roads_minor'],
+            'Rail & Runways': ['roads_rail', 'roads_runway'],
+        }}).map(g => [g.name, g.ids]);
+        expect(drawn).toEqual([
+            [BACKGROUND_GROUP, ['background']],
+            // A park is under the water of its lake, and a pier is over it.
+            ['Land Cover', ['landuse_park']],
+            ['Water', ['water', 'water_stream']],
+            ['Land Cover', ['landuse_pier']],
+            // What is in no group is drawn where it is, with the name of the ground.
+            [BACKGROUND_GROUP, ['roads_pier']],
+            // Lines hide nothing: those of a group are drawn together, where the last of them are.
+            ['Roads - Minor', ['roads_minor_casing', 'roads_minor']],
+            ['Roads - Highway', ['roads_highway_casing', 'roads_highway']],
+            ['Rail & Runways', ['roads_runway', 'roads_rail']],
         ]);
     });
 
     test('each has the layers of the style which are of it', () => {
-        const ids = Object.fromEntries(groups.map(g => [g.name, g.ids]));
+        const ids = {};
+        for (const group of groups) ids[group.name] = [...(ids[group.name] || []), ...group.ids];
         // What is in no group is the ground the rest is drawn on.
         expect(ids[BACKGROUND_GROUP]).toEqual(['background', 'earth']);
         // Of every basemap file.

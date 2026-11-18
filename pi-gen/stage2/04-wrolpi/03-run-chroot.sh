@@ -106,6 +106,8 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 systemctl enable wrolpi-first-startup.service
 # Enable Controller service to start on boot.
 systemctl enable wrolpi-controller.service
+# Serve the library to secondary WROLPis.
+systemctl enable wrolpi-rsyncd.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
 

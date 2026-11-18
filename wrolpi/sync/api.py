@@ -12,9 +12,9 @@ from wrolpi.api_utils import api_app, json_response, perpetual_signal
 from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig, SecondaryRole, SyncInProgress, WROLModeEnabled
-from wrolpi.sync import backup, lib, schema
+from wrolpi.sync import backup, lib, schema, snapshot
 from wrolpi.sync.config import get_sync_config
-from wrolpi.sync.status import get_backup_status, get_sync_status
+from wrolpi.sync.status import get_backup_status, get_snapshot_status, get_sync_status
 from wrolpi.vars import DOCKERIZED
 
 sync_bp = Blueprint('Sync', '/api/sync')
@@ -51,6 +51,7 @@ async def perpetual_sync_worker():
     # One loop, so a secondary's sync and its backup never run at once; the backup copies what the sync pulled.
     await lib.sync_tick()
     await backup.backup_tick()
+    await snapshot.snapshot_tick()
 
 
 @sync_bp.get('/info')
@@ -78,7 +79,18 @@ async def get_manifest(_: Request, query: schema.ManifestRequest):
 @openapi.definition(summary="The progress of this secondary's sync")
 async def get_status(_: Request):
     return json_response(dict(sync=get_sync_status(), sync_running=bool(flags.sync_running.is_set()),
-                              backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set())))
+                              backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set()),
+                              snapshot=get_snapshot_status()))
+
+
+@sync_bp.post('/snapshot')
+@openapi.definition(summary="Make a snapshot of this WROLPi's database for a secondary to copy")
+async def post_snapshot(_: Request):
+    if reason := snapshot.snapshot_skip_reason():
+        raise InvalidConfig(reason)
+    # Made by the perpetual process; `/api/sync/status` says when it is done.
+    snapshot.request_snapshot()
+    return response.empty(HTTPStatus.ACCEPTED)
 
 
 @sync_bp.post('/run')

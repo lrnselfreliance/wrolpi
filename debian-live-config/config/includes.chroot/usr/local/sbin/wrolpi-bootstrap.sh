@@ -280,8 +280,8 @@ fi
 # with --no-block so systemd queues the starts after we exit.
 
 progress "Starting WROLPi services..."
-systemctl enable wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
-systemctl start --no-block wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
+systemctl enable wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi-rsyncd.service
+systemctl start --no-block wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi-rsyncd.service
 
 # If we did anything notable, leave a summary for the XFCE autostart to
 # show as a zenity dialog once the user lands on the desktop.

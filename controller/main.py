@@ -43,6 +43,7 @@ from controller.lib.config import (
     save_config,
     update_config,
 )
+from controller.lib.rsyncd import ensure_rsync_daemon
 from controller.lib.scripts import get_script_status
 from controller.lib.docker_services import (
     can_manage_containers,
@@ -122,6 +123,10 @@ async def lifespan(app: FastAPI):
             apply_samba_from_config()
         else:
             logger.info("Primary drive not mounted - using default configuration")
+
+    # Docker: the library is served to secondary WROLPis from a helper container.  Creating it can take a while.
+    if is_docker_mode():
+        app.state.rsync_daemon_task = asyncio.create_task(asyncio.to_thread(ensure_rsync_daemon))
 
     # After the config (and any migrated hotspot settings) are loaded.  Starting can take a while; do not block.
     from controller.lib.admin import start_hotspot_on_boot

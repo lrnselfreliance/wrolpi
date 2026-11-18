@@ -48,6 +48,39 @@ def update_sync_status(**changes) -> dict:
     return status
 
 
+def default_snapshot_status() -> dict:
+    return dict(
+        state='idle',
+        requested=False,
+        started_at=None,
+        finished_at=None,
+        last_error=None,
+        # Relative to the media directory; where a secondary finds the snapshot.
+        path=None,
+        size=0,
+        # False when the last request found the database unchanged and kept the snapshot it had.
+        written=False,
+    )
+
+
+# Kept out of `shared_ctx.status`, which every `/api/status` poll returns: only a secondary's Controller asks for it.
+SNAPSHOT_STATUS_KEY = 'sync_snapshot_status'
+
+
+def get_snapshot_status() -> dict:
+    from wrolpi.api_utils import api_app
+    return dict(api_app.shared_ctx.cache.get(SNAPSHOT_STATUS_KEY) or default_snapshot_status())
+
+
+def update_snapshot_status(**changes) -> dict:
+    """Merge `changes` into the shared snapshot status (see `update_sync_status`)."""
+    from wrolpi.api_utils import api_app
+    status = get_snapshot_status()
+    status.update(changes)
+    api_app.shared_ctx.cache[SNAPSHOT_STATUS_KEY] = status
+    return status
+
+
 def default_backup_status() -> dict:
     return dict(
         state='idle',

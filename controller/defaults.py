@@ -81,6 +81,14 @@ DEFAULT_CONFIG = {
             "use_https": True,
             "description": "Kiwix/Zim server",
         },
+        {
+            "name": "wrolpi-rsyncd",
+            "systemd_name": "wrolpi-rsyncd",
+            "port": 8873,
+            "viewable": False,
+            "use_https": False,
+            "description": "Library for secondary WROLPis (rsync)",
+        },
         # System services
         {
             "name": "caddy",

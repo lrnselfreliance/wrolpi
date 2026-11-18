@@ -35,7 +35,8 @@ from urllib.parse import quote
 
 import aiohttp
 import yaml
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
@@ -191,7 +192,18 @@ def get_sync_info(session: Session) -> dict:
         role=get_sync_config().role,
         media_directory=str(get_media_directory()),
         max_file_group_id=session.execute(select(func.max(FileGroup.id))).scalar() or 0,
+        # A secondary that replaces its database with this one must run code of the same migration.
+        database_revision=_database_revision(session),
+        # An unmounted media directory looks like an empty library.
+        media_mounted=bool(flags.media_mounted.is_set()),
     )
+
+
+def _database_revision(session: Session) -> Optional[str]:
+    try:
+        return session.execute(text('SELECT version_num FROM alembic_version')).scalar()
+    except OperationalError:
+        return None
 
 
 # ---------------------------------------------------------------------------------------------------------------------

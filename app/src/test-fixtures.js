@@ -81,6 +81,7 @@ export const settingsFixture = (overrides = {}) => ({
     require_media_mounted: false,
     role: 'primary',
     save_ffprobe_json: true,
+    sync_delete_after_days: 30,
     sync_excluded_directories: [],
     sync_primary_url: null,
     sync_window_end: null,

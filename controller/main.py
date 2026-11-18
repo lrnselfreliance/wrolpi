@@ -33,6 +33,7 @@ from controller.api.schemas import HealthResponse
 from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
+from controller.api.sync import router as sync_router
 from controller.lib.config import (
     get_ca_certificate_path,
     get_config_value,
@@ -58,6 +59,7 @@ from controller.lib.status import (
     get_uptime_status,
 )
 from controller.lib.status_worker import status_worker_loop
+from controller.lib.sync import recover_interrupted_sync
 from controller.lib.systemd import get_all_services_status
 
 # Templates directory
@@ -124,6 +126,9 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Primary drive not mounted - using default configuration")
 
+    # A sync that was running when the Controller stopped left the API stopped.
+    app.state.sync_recovery_task = asyncio.create_task(asyncio.to_thread(recover_interrupted_sync))
+
     # Docker: the library is served to secondary WROLPis from a helper container, kept matching the api container.
     if is_docker_mode():
         app.state.rsync_daemon_task = asyncio.create_task(rsync_daemon_loop())
@@ -176,6 +181,7 @@ app.include_router(ready_router)
 app.include_router(scripts_router)
 app.include_router(services_router)
 app.include_router(status_router)
+app.include_router(sync_router)
 
 
 def get_host(request: Request) -> str:

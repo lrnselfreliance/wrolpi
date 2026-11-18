@@ -1,14 +1,17 @@
 import contextlib
+import json
 import shutil
 import sqlite3
 from collections import namedtuple
 from http import HTTPStatus
 
 import pytest
+import yaml
 
-from wrolpi.common import enable_wrol_mode
+from wrolpi.common import enable_wrol_mode, get_wrolpi_config
 from wrolpi.db import get_db_file
-from wrolpi.sync import backup, snapshot
+from wrolpi.sync import backup, lib, snapshot
+from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_snapshot_status, update_snapshot_status
 
 
@@ -128,3 +131,59 @@ def test_backup_drive_does_not_copy_the_snapshot(test_directory, tmp_path):
     """The backup drive gets its own snapshot; the one kept for secondaries is not copied to it as well."""
     command = backup.build_rsync_command(test_directory, tmp_path)
     assert f'--exclude=/{snapshot.SNAPSHOT_DIRECTORY}/' in command
+
+
+@pytest.mark.asyncio
+async def test_delete_after_days_setting(async_client, test_session, test_directory, test_wrolpi_config,
+                                         await_switches):
+    """How long a secondary keeps what its primary deleted: 30 days unless set, and -1 asks to never delete."""
+    request, response = await async_client.get('/api/settings')
+    assert response.json['sync_delete_after_days'] == 30
+
+    for sent, kept in ((7, 7), (0, 0), (-1, None)):
+        request, response = await async_client.put('/api/sync/settings',
+                                                   content=json.dumps(dict(sync_delete_after_days=sent)))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        assert get_sync_config().delete_after_days == kept
+        request, response = await async_client.get('/api/settings')
+        assert response.json['sync_delete_after_days'] == kept
+
+    await await_switches()
+    saved = yaml.safe_load((test_directory / 'config/sync.yaml').read_text())
+    assert 'delete_after_days' in saved and saved['delete_after_days'] is None, 'what the Controller reads'
+
+    request, response = await async_client.put('/api/sync/settings',
+                                               content=json.dumps(dict(sync_delete_after_days=-2)))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_delete_after_days_of_an_older_config(test_directory, test_wrolpi_config):
+    """A sync.yaml written before the setting existed has no key; it gets the default, not "never"."""
+    get_sync_config()._config.pop('delete_after_days', None)
+    assert get_sync_config().delete_after_days == 30
+
+
+def test_apply_primary_wrolpi_config(async_client, test_directory, test_wrolpi_config, make_secondary):
+    """When a secondary's API starts it takes the settings that describe the library from the primary's wrolpi.yaml,
+    which the Controller's sync left; the settings of this machine stay."""
+    sync_directory = test_directory / 'config/.sync'
+    sync_directory.mkdir(parents=True)
+    (sync_directory / 'primary-wrolpi.yaml').write_text(yaml.safe_dump(dict(
+        videos_destination='videos/%(channel_name)s', ignored_directories=['/media/wrolpi/map', 'config', 'elsewhere'],
+        hotspot_ssid='the primary', timezone='Europe/Paris')))
+    (sync_directory / 'primary-info.yaml').write_text(yaml.safe_dump(dict(media_directory='/media/wrolpi')))
+    timezone = get_wrolpi_config().timezone
+
+    assert lib.apply_primary_wrolpi_config() == [], 'only on a secondary'
+
+    make_secondary('https://primary.example')
+    assert lib.apply_primary_wrolpi_config() == ['ignored_directories', 'videos_destination']
+    assert get_wrolpi_config().videos_destination == 'videos/%(channel_name)s'
+    # The primary's absolute paths are this machine's relative ones.
+    assert get_wrolpi_config().ignored_directories == ['map', 'config', 'elsewhere']
+    assert get_wrolpi_config().timezone == timezone
+
+    assert lib.apply_primary_wrolpi_config() == [], 'nothing changed since'
+
+    (sync_directory / 'primary-wrolpi.yaml').write_text('not: [a config')
+    assert lib.apply_primary_wrolpi_config() == []

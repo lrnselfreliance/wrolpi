@@ -171,6 +171,8 @@ def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_de
         '--info=progress2,stats2', '--no-human-readable',
         # The database is copied as a snapshot (see `snapshot_database`).
         '--exclude=/config/wrolpi.db', '--exclude=/config/wrolpi.db-*', '--exclude=/config/.wrolpi.db.backup',
+        # The snapshot kept for secondaries (wrolpi.sync.snapshot); the drive has its own.
+        '--exclude=/config/.sync/',
         # Hard links rebuilt from the configs when WROLPi starts.
         '--exclude=/tags/',
         # Files still being written by a sync, and rsync's own partials.

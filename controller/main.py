@@ -43,6 +43,7 @@ from controller.lib.config import (
     save_config,
     update_config,
 )
+from controller.lib.rsyncd import rsync_daemon_loop
 from controller.lib.scripts import get_script_status
 from controller.lib.docker_services import (
     can_manage_containers,
@@ -123,6 +124,10 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Primary drive not mounted - using default configuration")
 
+    # Docker: the library is served to secondary WROLPis from a helper container, kept matching the api container.
+    if is_docker_mode():
+        app.state.rsync_daemon_task = asyncio.create_task(rsync_daemon_loop())
+
     # After the config (and any migrated hotspot settings) are loaded.  Starting can take a while; do not block.
     from controller.lib.admin import start_hotspot_on_boot
     app.state.hotspot_on_boot_task = asyncio.create_task(asyncio.to_thread(start_hotspot_on_boot))
@@ -142,6 +147,8 @@ async def lifespan(app: FastAPI):
         await status_task
     except asyncio.CancelledError:
         pass
+    if rsync_daemon_task := getattr(app.state, "rsync_daemon_task", None):
+        rsync_daemon_task.cancel()
 
 
 # Create FastAPI app

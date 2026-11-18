@@ -94,6 +94,7 @@ systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
 systemctl enable wrolpi-mounts.service
+systemctl enable wrolpi-rsyncd.service
 systemctl enable wrolpi-cert-renew.timer
 
 # Repair Controller (offline-safe - no pip install)
@@ -210,6 +211,8 @@ if [[ ${rpi} == true ]]; then
 fi
 
 systemctl restart wrolpi-help
+# Restarted, not only started: its config may have changed.
+systemctl restart wrolpi-rsyncd || :
 systemctl start wrolpi.target
 
 set +x

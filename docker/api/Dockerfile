@@ -5,7 +5,7 @@ ENV DENO_TLS_CA_STORE=system
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
-RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip \
+RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip rsync \
     build-essential libsqlite3-dev zlib1g-dev git
 
 # Install tippecanoe (for map search index building via tippecanoe-decode).

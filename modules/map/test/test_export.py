@@ -446,3 +446,22 @@ async def test_api_export_pdf_georeferenced(async_client):
     response, job = await api_export(async_client, images, bounds=[0, 0, 0, 0])
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'edges' in response.json['error']
+
+
+@pytest.mark.asyncio
+async def test_api_export_text_which_is_not_text(async_client):
+    """What is sent as the title of a map, or the name of a layer, may have in it what is no character (half of
+    a pair, a NUL).  It is taken out when the export begins: the Job, after every image is sent, is too late to
+    find that a PDF can not have it."""
+    body = json.dumps(dict(width=WIDTH, height=HEIGHT, dpi=300, title='A \ud800 map\x00', layers=['Ro\x00ads \ud800']))
+    request, response = await async_client.post('/api/map/export', content=body)
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    export_id = response.json['export_id']
+    request, response = await async_client.post(f'/api/map/export/{export_id}/layer/0', content=make_image())
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.post(f'/api/map/export/{export_id}/start')
+    job = await wait_for_job(response.json['job_id'], timeout=60)
+    assert job['status'] == 'complete', job
+    request, response = await async_client.get(f'/api/map/export/{export_id}/pdf')
+    assert layer_names(response.content) == ['Roads ?']
+    assert pymupdf.open(stream=response.content).metadata['title'] == 'A ? map'

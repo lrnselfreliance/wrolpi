@@ -27,6 +27,8 @@ const FALLBACK_CANVAS_SIDE = 4096;
 const MILLIMETERS_PER_INCH = 25.4;
 const TILE_SIZE = 512;
 const RENDER_TIMEOUT_MS = 120_000;
+// How often it is asked whether the map has been too long in drawing.
+const RENDER_WATCH_MS = 1000;
 
 export const BACKGROUND_GROUP = "Background";
 
@@ -158,6 +160,8 @@ export const EXPORT_DETAIL_ZOOM = 14;
 // The layers of a basemap which name roads.
 const ROAD_LABELS = "roads_labels";
 const ROAD_NAMES_SOURCE = "export-road-names:";
+// More room (ems) than the name of a road is long: a name is one line.
+const ROAD_NAME_MAX_EMS = 1000;
 // Which way the name of a road is turned (degrees, clockwise), in what is said of the road.
 const NAME_ANGLE = "export:angle";
 const ROAD_TEXT_SIZE = 12;
@@ -351,6 +355,9 @@ export function exportStyle(style, ignoredPrefixes = [], {zoom = null, roadNames
                     "symbol-placement": "point",
                     "text-rotate": ["get", NAME_ANGLE],
                     "text-rotation-alignment": "map",
+                    // A name along a line is one line; a name at a point is broken into several
+                    // unless it is told it has the room.
+                    "text-max-width": ROAD_NAME_MAX_EMS,
                     visibility: "none",
                 },
             };
@@ -368,11 +375,21 @@ function edgeLongitude(longitude) {
     return longitude;
 }
 
+// Only the time the page can be seen is counted: a browser does not draw a page which can not be
+// seen (another tab is in front of it), and the map is not slow for that.
 function once(map, event, timeoutMs = RENDER_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("The map took too long to draw")), timeoutMs);
+        let seenMs = 0;
+        const timer = setInterval(() => {
+            if (typeof document !== "undefined" && document.hidden) return;
+            seenMs += RENDER_WATCH_MS;
+            if (seenMs >= timeoutMs) {
+                clearInterval(timer);
+                reject(new Error("The map took too long to draw"));
+            }
+        }, RENDER_WATCH_MS);
         map.once(event, () => {
-            clearTimeout(timer);
+            clearInterval(timer);
             resolve();
         });
     });
@@ -385,17 +402,27 @@ function canvasBlob(canvas, type, quality) {
 }
 
 // Whether a canvas has no transparent part.  It is reduced first: looking at every pixel of a sheet
-// is slow, and a part too small to survive the reduction is too small to matter.
+// is slow, and a part too small to survive the reduction is too small to matter.  Its four edges are
+// looked at by themselves: a photograph which ends a little inside the map leaves a strip along an
+// edge, which is narrow enough to be lost in the reduction and wide enough to be seen.
 export function isOpaque(canvas) {
     const small = document.createElement("canvas");
     small.width = 64;
     small.height = Math.max(1, Math.round(64 * canvas.height / canvas.width));
     const context = small.getContext("2d");
     if (!context) return false;
-    context.drawImage(canvas, 0, 0, small.width, small.height);
-    const {data} = context.getImageData(0, 0, small.width, small.height);
-    for (let i = 3; i < data.length; i += 4) {
-        if (data[i] !== 255) return false;
+    const {width, height} = canvas;
+    const parts = [
+        [0, 0, width, height],
+        [0, 0, width, 1], [0, height - 1, width, 1], [0, 0, 1, height], [width - 1, 0, 1, height],
+    ];
+    for (const [x, y, w, h] of parts) {
+        context.clearRect(0, 0, small.width, small.height);
+        context.drawImage(canvas, x, y, w, h, 0, 0, small.width, small.height);
+        const {data} = context.getImageData(0, 0, small.width, small.height);
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i] !== 255) return false;
+        }
     }
     return true;
 }
@@ -545,7 +572,8 @@ function quadFileStem(quad) {
 
 // A name as a part of a file's: "Berthoud".
 function fileNamePart(name) {
-    return String(name).normalize("NFKD").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+    // An accent is left off its letter (Cañon is Canon), not made a gap in the name.
+    return String(name).normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
 }
 
 export function exportFileName(quad, named = null) {

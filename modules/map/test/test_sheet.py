@@ -548,6 +548,14 @@ def test_adjoining_quads_are_never_the_map_itself(bounds):
     assert own.name not in around
 
 
+def test_adjoining_quads_of_the_edges_the_map_gives():
+    """The edges of an exported map are a hair from those of its quadrangle.  What is around it is the same."""
+    around = sheet.adjoining_quads([-149.875, 61.125, -149.75, 61.25])
+    given = [-149.87500000000014, 61.12499878064878, -149.75000000000023, 61.25000121452442]
+    assert sheet.adjoining_quads(given) == around
+    assert around[3:5] == ['Anchorage A-8 NW', 'Anchorage A-7 NW']
+
+
 def test_adjoining_quads_step_past_the_map():
     """The east of a map in the west of a wide quadrangle is the quadrangle after it, not the rest of it."""
     bounds = [-149.875, 61.125, -149.75, 61.25]
@@ -684,3 +692,32 @@ def test_sheet_legend_name_too_long_for_its_column():
         assert len(text) < len(lines[0]['label'])
         left = x - sheet.LEGEND_SAMPLE - 5
         assert x + pymupdf.get_text_length(text, fontsize=sheet.LABEL_SIZE) <= left + sheet.LEGEND_ITEM_WIDTH
+
+
+def test_format_angle_of_no_angle():
+    """An edge on the equator, or on the prime meridian, is on neither side of it; nor is one a hair from it."""
+    assert sheet.format_angle(0, 'N', 'S') == "0°00'"
+    assert sheet.format_angle(-1e-7, 'E', 'W') == "0°00'"
+    assert sheet.format_angle(1e-7, 'N', 'S') == "0°00'"
+    assert sheet.format_angle(-0.125, 'N', 'S') == "0°07'30\"S"
+
+
+@pytest.mark.parametrize('bounds,zone', [
+    # The edges the map gives are a hair outside the quadrangle.
+    ([10, 83.8749999, 10.125, 84.0000001], 32),
+    ([10, -80.0000001, 10.125, -79.875], 32),
+    # Past where the zones end.
+    ([10, 84, 10.125, 84.125], None),
+    ([10, -80.125, 10.125, -80], None),
+])
+def test_sheet_grid_where_the_zones_end(bounds, zone):
+    """A map which ends where the UTM zones do (84 north, 80 south) has a grid; one past there has none."""
+    plan = sheet.plan_sheet(300, 600, bounds, sheet.Sheet())
+    assert plan.zone == zone
+
+
+@pytest.mark.parametrize('date', ['9999-12-31', '0000-01-01', 'yesterday', '', None])
+def test_sheet_of_no_such_day(date):
+    """A sheet whose day is not one is a sheet which does not say where magnetic north is."""
+    plan = sheet.plan_sheet(300, 600, BERTHOUD, sheet.Sheet(date=date))
+    assert plan.magnetic_north is None

@@ -27,6 +27,9 @@ SAME_EDGE = 1
 # A place this near (seconds of arc) past the outer edge of a quadrangle is on that edge: the edges the map gives
 # are a hair from where they are.
 OUTER_EDGE = 0.01
+# A place is where it is to the nearest this much (seconds of arc; 3 meters): the edges the map gives are a hair
+# from where they are, and the middle of an area is often on the edge two quadrangles share.
+NEAREST = 0.1
 
 
 @dataclass
@@ -104,8 +107,8 @@ def quad_name(west: float, south: float, east: float, north: float) -> Optional[
 
     It is the quadrangle which has the middle of the area.  Where the middle is on the east or north edge of a
     quadrangle with none beyond it (an area half of which is the last quadrangle of the land), it is that one."""
-    x = (west + east) / 2 * SECONDS_PER_DEGREE
-    y = (south + north) / 2 * SECONDS_PER_DEGREE
+    x = round((west + east) / 2 * SECONDS_PER_DEGREE / NEAREST) * NEAREST
+    y = round((south + north) / 2 * SECONDS_PER_DEGREE / NEAREST) * NEAREST
     found = _find(x, y) or _find(x, y, outer=OUTER_EDGE)
     if found is None:
         return None

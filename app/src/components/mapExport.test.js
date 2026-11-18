@@ -233,7 +233,7 @@ describe('the style which is exported from', () => {
             id: 'roads_labels_minor', type: 'symbol', source: 'export-road-names:a.pmtiles',
             filter: ['in', 'kind', 'minor_road'],
             layout: {
-                'symbol-placement': 'point', 'text-rotate': ['get', 'export:angle'],
+                'symbol-placement': 'point', 'text-rotate': ['get', 'export:angle'], 'text-max-width': 1000,
                 'text-rotation-alignment': 'map', 'text-size': 12, visibility: 'none',
             },
         });
@@ -554,6 +554,7 @@ describe('drawing the layers', () => {
     beforeEach(() => {
         // The reduced copy which says whether an image has gaps: here, all of it is gaps.
         getContext = jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+            clearRect: jest.fn(),
             drawImage: jest.fn(),
             getImageData: () => ({data: new Uint8ClampedArray([0, 0, 0, 0])}),
         }));
@@ -649,13 +650,31 @@ describe('drawing the layers', () => {
         await renderExport({MapClass: fakeMapClass(gaps), style, frame, groups: photo});
         expect(gaps.captures[0].type).toBe('image/png');
 
+        const opaque = new Uint8ClampedArray([9, 9, 9, 255, 9, 9, 9, 255]);
         getContext.mockImplementation(() => ({
-            drawImage: jest.fn(),
-            getImageData: () => ({data: new Uint8ClampedArray([9, 9, 9, 255, 9, 9, 9, 255])}),
+            clearRect: jest.fn(), drawImage: jest.fn(), getImageData: () => ({data: opaque}),
         }));
         const whole = {captures: []};
         await renderExport({MapClass: fakeMapClass(whole), style, frame, groups: photo});
         expect(whole.captures[0].type).toBe('image/jpeg');
+
+        // A photograph which ends a little inside the map: all of it reduced has no gap to see, and
+        // one of its edges, looked at by itself, is all gap.
+        const looks = [];
+        getContext.mockImplementation(() => ({
+            clearRect: jest.fn(),
+            drawImage: (canvas, x, y, width, height) => looks.push([x, y, width, height]),
+            getImageData: () => ({data: looks.length === 5 ? new Uint8ClampedArray([0, 0, 0, 0]) : opaque}),
+        }));
+        const strip = {captures: []};
+        await renderExport({MapClass: fakeMapClass(strip), style, frame, groups: photo});
+        expect(strip.captures[0].type).toBe('image/png');
+        // All of it, then its top, bottom, left and right edges.
+        const [[, , width, height]] = looks;
+        expect(looks).toEqual([
+            [0, 0, width, height],
+            [0, 0, width, 1], [0, height - 1, width, 1], [0, 0, 1, height], [width - 1, 0, 1, height],
+        ]);
         // What is not a photograph is never a JPEG, gaps or none.
         const drawn = {captures: []};
         await renderExport({MapClass: fakeMapClass(drawn), style, frame, groups: groups.slice(0, 1)});
@@ -700,7 +719,14 @@ describe('drawing the layers', () => {
             const failure = expect(rendering).rejects.toThrow('took too long');
             // Once the map has loaded and is waiting to be drawn, the time runs out.
             for (let i = 0; i < 20; i++) await Promise.resolve();
-            jest.advanceTimersByTime(121_000);
+            // The time the page can not be seen (another tab is in front) is not counted: nothing
+            // is drawn then.
+            const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+            jest.advanceTimersByTime(600_000);
+            hidden.mockRestore();
+            jest.advanceTimersByTime(119_000);
+            expect(record.removed).toBeFalsy();
+            jest.advanceTimersByTime(2_000);
             await failure;
             expect(record.removed).toBe(true);
         } finally {
@@ -824,6 +850,8 @@ describe('what the PDF is called', () => {
         expect(exportFileName(ANCHORAGE, anchorage)).toBe('wrolpi-map_24k_Anchorage_A_8_NW_N61.125_W150.000.pdf');
         expect(exportFileName(BERTHOUD, {name: '../Ni‘ihau: “North”?'})).toBe(
             'wrolpi-map_24k_Ni_ihau_North_N40.250_W105.125.pdf');
+        // An accent is left off its letter.
+        expect(exportFileName(BERTHOUD, {name: 'Cañon City'})).toBe('wrolpi-map_24k_Canon_City_N40.250_W105.125.pdf');
         expect(exportFileName(BERTHOUD, {name: '///'})).toBe('wrolpi-map_24k_N40.250_W105.125.pdf');
         expect(exportTitle(BERTHOUD, berthoud)).toBe('1:24,000 Berthoud, Colorado');
         // A quadrangle of the grid which is not all of the named one is a part of it.

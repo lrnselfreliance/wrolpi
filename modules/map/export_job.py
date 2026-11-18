@@ -16,6 +16,7 @@ import pathlib
 import re
 import shutil
 import stat
+import threading
 import time
 import uuid
 from typing import List, Optional
@@ -109,8 +110,18 @@ def _read_meta(directory: pathlib.Path) -> dict:
     return json.loads((directory / META_FILE).read_text())
 
 
+def _write_whole(path: pathlib.Path, contents: bytes):
+    """Write a file so that whoever reads it reads all of it, or what was there before: never a part."""
+    partial = path.with_name(f'{path.name}.{uuid.uuid4().hex}.part')
+    try:
+        partial.write_bytes(contents)
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
 def _write_meta(directory: pathlib.Path, meta: dict):
-    (directory / META_FILE).write_text(json.dumps(meta))
+    _write_whole(directory / META_FILE, json.dumps(meta).encode())
 
 
 def _layer_file(directory: pathlib.Path, index: int) -> pathlib.Path:
@@ -205,7 +216,7 @@ def save_layer(export_id: str, index: int, image: bytes):
         raise export.InvalidExport(f'The image of the layer {meta["layers"][index]!r} is empty, or is too large')
     if not image.startswith((PNG_MAGIC, JPEG_MAGIC)):
         raise export.InvalidExport(f'The layer {meta["layers"][index]!r} is not a PNG or JPEG image')
-    _layer_file(directory, index).write_bytes(image)
+    _write_whole(_layer_file(directory, index), image)
 
 
 def start_export(export_id: str) -> str:
@@ -238,16 +249,22 @@ def get_export_pdf(export_id: str) -> pathlib.Path:
     return pdf
 
 
-def _make_pdf(directory: pathlib.Path, job) -> dict:
-    """Make the PDF of an export from its images, which are removed whether or not it could be made."""
+def _make_pdf(directory: pathlib.Path, job, stop: threading.Event) -> dict:
+    """Make the PDF of an export from its images, which are removed whether or not it could be made.
+
+    The work stops between two layers when the Job is cancelled, and when `stop` is set: the Job was ended by
+    something other than its being cancelled (the API is stopping), which the Job itself does not say."""
     meta = _read_meta(directory)
     layers = [export.ExportLayer(name=name, path=_layer_file(directory, index))
               for index, name in enumerate(meta['layers'])]
     sheet = export.Sheet(**meta['sheet']) if meta['sheet'] else None
 
+    def stopped() -> bool:
+        return stop.is_set() or job.cancel_requested()
+
     def progress(done: int, steps: int):
         # Between two layers is where the work can be stopped.
-        if job.cancel_requested():
+        if stopped():
             raise ExportCancelled()
         job.set_progress(100 * done / steps)
 
@@ -257,7 +274,7 @@ def _make_pdf(directory: pathlib.Path, job) -> dict:
         # Under another name until all of it is written: a PDF which is there is a whole one.
         partial = directory / f'{PDF_FILE}.part'
         partial.write_bytes(pdf)
-        if job.cancel_requested():
+        if stopped():
             partial.unlink(missing_ok=True)
             raise ExportCancelled()
         partial.rename(directory / PDF_FILE)
@@ -276,12 +293,17 @@ async def map_export_pdf_job(export_id: str):
     directory = _directory(export_id)
     job = get_current_job()
     job.log(f'Making the PDF of the map export {export_id}')
-    work = asyncio.ensure_future(asyncio.to_thread(_make_pdf, directory, job))
+    # Old exports are removed here too: an export may be the last for a long while.
+    await asyncio.to_thread(remove_old_exports)
+    stop = threading.Event()
+    work = asyncio.ensure_future(asyncio.to_thread(_make_pdf, directory, job, stop))
     try:
         # Shielded: cancelling this Job must not let go of the thread, which can not be stopped from here.
         result = await asyncio.shield(work)
     except asyncio.CancelledError:
-        # The thread sees that the Job is cancelled between two layers, and stops.  Wait for it to.
+        # The thread is told to stop, which it does between two layers.  Wait for it to: an API which is stopping
+        # waits for its threads, and is not to wait for all of a PDF.
+        stop.set()
         await asyncio.wait({work})
         if not work.cancelled():
             work.exception()

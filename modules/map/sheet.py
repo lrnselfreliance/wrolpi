@@ -243,13 +243,16 @@ def from_utm(easting: float, northing: float, zone: int, south: bool = False) ->
 
 def format_angle(degrees: float, positive: str = '', negative: str = '', short: bool = False) -> str:
     """An angle in degrees, minutes and seconds, as a sheet has it: 61°07'30".  The seconds are left out when
-    there are none.  `short` leaves the degrees out too (07'30"), as the ticks between a map's corners do."""
+    there are none.  `short` leaves the degrees out too (07'30"), as the ticks between a map's corners do.
+
+    The angle is on the side its seconds are: an edge of a map a hair south of the equator is 0°00', and not
+    south of anything."""
     seconds = round(abs(degrees) * 3600)
     d, m, s = seconds // 3600, seconds // 60 % 60, seconds % 60
     text = f"{m:02d}'" if short else f"{d}°{m:02d}'"
     if s:
         text += f'{s:02d}"'
-    return text + (negative if degrees < 0 else positive)
+    return text + (negative if degrees < 0 and seconds else positive if seconds else '')
 
 
 def graticule_interval(span: float) -> float:
@@ -432,10 +435,11 @@ def _decimal_year(date: Optional[str]) -> Optional[float]:
     """A day (2026-11-15) as a year and a part of one, or None when it is not a day."""
     try:
         day = datetime.date.fromisoformat(str(date).strip()[:10])
+        first = datetime.date(day.year, 1, 1)
+        return day.year + (day - first).days / (datetime.date(day.year + 1, 1, 1) - first).days
     except ValueError:
+        # Not a day, or one with no year after it.
         return None
-    first = datetime.date(day.year, 1, 1)
-    return day.year + (day - first).days / (datetime.date(day.year + 1, 1, 1) - first).days
 
 
 def _format_scale(scale: float) -> str:
@@ -469,7 +473,8 @@ def plan_sheet(map_width: float, map_height: float, bounds: Sequence[float], she
     plan = SheetPlan(width=0, height=0, map_rect=(0, 0, 0, 0), bounds=(west, south, east, north),
                      scale=map_scale(map_width, bounds), name=_latin(sheet.name) if sheet.name else None)
     middle = _middle_latitude(south, north), (west + east) / 2
-    if south >= UTM_SOUTH and north <= UTM_NORTH:
+    # By its middle: the edges of a map are a hair outside it, and a map which ends where the zones do has a grid.
+    if UTM_SOUTH <= middle[0] <= UTM_NORTH:
         plan.zone = utm_zone(middle[1])
 
     notes = [f'Scale {_format_scale(plan.scale)} at the middle of the map.  Projection: Web Mercator.'

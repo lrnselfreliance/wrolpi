@@ -1816,7 +1816,8 @@ export async function exportMapPdf(
     try {
         return await sendAndFetch();
     } finally {
-        await remove();
+        // Not waited for: a server which is slow to answer is not to keep a PDF from who made it.
+        remove();
     }
 
     async function sendAndFetch() {

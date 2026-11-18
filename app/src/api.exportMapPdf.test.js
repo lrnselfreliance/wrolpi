@@ -96,6 +96,16 @@ describe('exportMapPdf', () => {
         await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toThrow('A map of 0x0 pixels can not be exported');
     });
 
+    test('gives the PDF without waiting for the server to remove the export', async () => {
+        const pdf = new Blob(['%PDF-']);
+        const calls = fakeServer([{status: 'complete'}], {
+            // The server never answers.
+            pdf, replies: {'DELETE /map/export/abc': () => new Promise(() => undefined)},
+        });
+        expect(await exportMapPdf(MAP, {pollMs: 0})).toBe(pdf);
+        expect(calls.at(-1)).toBe('DELETE /map/export/abc');
+    });
+
     test('has the server remove what was sent when the export fails', async () => {
         const calls = fakeServer([{status: 'complete'}], {
             replies: {'POST /map/export/abc/layer/1': () => Promise.reject(new Error('network'))},

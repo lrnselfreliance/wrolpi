@@ -27,7 +27,7 @@ def test_create_export(map_export_root):
     meta = json.loads((map_export_root / export_id / 'meta.json').read_text())
     assert meta['layers'] == ['Background', 'Water']
     assert meta['sheet'] == dict(name='A quadrangle', credits=['Somebody'], date='2026-11-15',
-                                 contour_interval=None, contour_unit=None)
+                                 contour_interval=None, contour_unit=None, legend=None)
     assert meta['job_id'] is None
 
     # A map which can not be exported is not begun.

@@ -17,6 +17,7 @@ import {
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
 import {readVectorTile} from "./mapTiles";
+import {exportLegend} from "./mapExportLegend";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
@@ -1081,7 +1082,7 @@ export default function MapViewer() {
                 // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
                 sheet: sheet ? exportSheet(quad, map, groups, new Date(), name, exportContours(
                     groups, LAYER_GROUPS["Contours"], contourInterval(imperial, terrainZoom, frame.zoom), imperial,
-                )) : undefined,
+                ), exportLegend(style, groups, frame.zoom)) : undefined,
             }, {
                 // Once it is being stopped, that is what is said.
                 onStatus: text => !exportCancelledRef.current && setExportStatus(text),

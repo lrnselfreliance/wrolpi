@@ -556,3 +556,131 @@ def test_adjoining_quads_step_past_the_map():
     assert quads.quad_name(-149.75, 61.125, -149.625, 61.25).name == 'Anchorage A-8 NE'
     around = sheet.adjoining_quads(bounds)
     assert around[3:5] == ['Anchorage A-8 NW', 'Anchorage A-7 NW']
+
+
+LEGEND = dict(ground=[0.9, 0.88, 0.85], lines=[
+    dict(label='Highway', color=[1, 1, 1], width=1.2, opacity=1, casing_color=[0.8, 0.8, 0.8], casing_width=2.4),
+    dict(label='Railway', color=[0.6, 0.7, 0.7], width=0.5, opacity=0.5, dash=[0.15, 0.4]),
+    dict(label='Contour', color=[0.6, 0.4, 0.2], width=0.25, opacity=0.3),
+])
+
+
+def test_legend_lines():
+    """The lines of a legend are what a browser sent of them, as far as they are lines."""
+    ground, lines = sheet.legend_lines(LEGEND)
+    assert ground == (0.9, 0.88, 0.85)
+    assert [i.label for i in lines] == ['Highway', 'Railway', 'Contour']
+    assert lines[0] == sheet.LegendLine(label='Highway', color=(1, 1, 1), width=1.2, opacity=1,
+                                        casing_color=(0.8, 0.8, 0.8), casing_width=2.4)
+    assert lines[1].dash == (0.15, 0.4) and lines[1].opacity == 0.5 and lines[1].casing_color is None
+    # As it is sent again (to the Job which makes the PDF), it is the same legend.
+    assert sheet.legend_lines(sheet.legend_as_sent(LEGEND)) == (ground, lines)
+    assert json.loads(json.dumps(sheet.legend_as_sent(LEGEND)))['lines'][0]['label'] == 'Highway'
+
+
+@pytest.mark.parametrize('legend', [
+    None, 'yes', [], {}, dict(lines='roads'), dict(lines=[]), dict(lines=['Highway', None, 7]),
+    dict(lines=[dict(label='', color=[1, 1, 1], width=1)]),
+    dict(lines=[dict(label='No color', width=1)]),
+    dict(lines=[dict(label='No width', color=[1, 1, 1])]),
+    dict(lines=[dict(label='Two parts', color=[1, 1], width=1)]),
+    dict(lines=[dict(label='Not numbers', color=['red', 0, 0], width=1)]),
+    dict(lines=[dict(label='Not a width', color=[1, 0, 0], width='wide')]),
+    dict(lines=[dict(label='Not a width', color=[1, 0, 0], width=math.nan)]),
+    dict(lines=[dict(label='Not a width', color=[1, 0, 0], width=True)]),
+    # Too thin to be seen on the map.
+    dict(lines=[dict(label='Path or track', color=[1, 0, 0], width=0.02, dash=[0.06, 0.02])]),
+    dict(lines=[dict(label='Nothing', color=[1, 0, 0], width=0)]),
+])
+def test_legend_lines_which_are_not(legend):
+    """What is not a legend has no lines, and is on white."""
+    assert sheet.legend_lines(legend) == (sheet.WHITE, [])
+    assert sheet.legend_as_sent(legend) is None
+
+
+def test_legend_lines_are_limited():
+    """A legend has only so many lines, each named in only so many letters and drawn only so wide."""
+    line = dict(label='x' * 500, color=[2, -1, 0.5], width=900, opacity=7, dash=[0, 900] * 20,
+                casing_color=[0, 0, 0], casing_width=900)
+    ground, lines = sheet.legend_lines(dict(ground=[5, 5, 5], lines=[line] * 100))
+    assert ground == (1, 1, 1)
+    assert len(lines) == sheet.LEGEND_LINES
+    assert lines[0].label == 'x' * sheet.LEGEND_LABEL
+    assert lines[0].color == (1, 0, 0.5) and lines[0].opacity == 1
+    assert lines[0].width == sheet.LEGEND_WIDTHS[1] and lines[0].casing_width == 8
+    assert lines[0].dash == (0.1, sheet.LEGEND_SAMPLE) * 3
+    # A casing with no color, or no width, is no casing; dashes which are not numbers are no dashes.
+    ground, lines = sheet.legend_lines(dict(lines=[
+        dict(label='A', color=[0, 0, 0], width=1, casing_width=2),
+        dict(label='B', color=[0, 0, 0], width=1, casing_color=[1, 1, 1]),
+        dict(label='C', color=[0, 0, 0], width=1, dash=[1, 'long']),
+    ]))
+    assert [(i.casing_color, i.casing_width, i.dash) for i in lines] == [(None, 0, ())] * 3
+
+
+def test_sheet_legend():
+    """A sheet with a legend has what each line is called beside a piece of it, under the bars and over the
+    notes, and is longer for it."""
+    with_legend = Sheet(name=SHEET.name, credits=SHEET.credits, date=SHEET.date, legend=LEGEND)
+    plain = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, SHEET)
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, with_legend)
+    assert [i.label for i in plan.legend] == ['Highway', 'Railway', 'Contour'] and not plain.legend
+    assert plan.legend_ground == (0.9, 0.88, 0.85)
+    # One row of lines: the map is wide enough for the three side by side.
+    assert plan.height == pytest.approx(
+        plain.height + sheet.LABEL_SIZE + 8 + sheet.LEGEND_ITEM_HEIGHT + 8)
+
+    doc = pymupdf.open(stream=build(sheet_=with_legend), filetype='pdf')
+    words = {word[4]: (word[0], word[1]) for word in doc[0].get_text('words')}
+    assert words['LEGEND'][1] < words['Highway'][1] == words['Railway'][1] == words['Contour'][1]
+    assert words['FEET'][1] < words['LEGEND'][1] and words['Highway'][1] < words['Scale'][1]
+    assert words['Railway'][0] - words['Highway'][0] == pytest.approx(sheet.LEGEND_ITEM_WIDTH, abs=0.01)
+    assert 'LEGEND' not in page_text(build())
+    # The lines are drawn in their own colors: the page has the brown of a contour line.
+    colors = {tuple(round(c, 2) for c in d['color']) for d in doc[0].get_drawings() if d.get('color')}
+    assert (0.6, 0.4, 0.2) in colors and (0.6, 0.7, 0.7) in colors
+
+
+def test_sheet_legend_of_many_lines_is_in_rows():
+    lines = [dict(label=f'Line {i}', color=[0, 0, 0], width=1) for i in range(9)]
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, Sheet(legend=dict(lines=lines)))
+    columns = int(MAP_WIDTH // sheet.LEGEND_ITEM_WIDTH)
+    assert 1 < columns < 9
+    pen = FakePen()
+    sheet._draw_legend(pen, plan, 54, 100)
+    places = {text: (x, y) for x, y, text, _ in pen.texts}
+    # The line after the last of a row is under the first of it.
+    assert places[f'Line {columns}'][0] == places['Line 0'][0]
+    assert places[f'Line {columns}'][1] == pytest.approx(places['Line 0'][1] + sheet.LEGEND_ITEM_HEIGHT)
+    assert places[f'Line {columns - 1}'][1] == places['Line 0'][1]
+
+
+@pytest.mark.asyncio
+async def test_api_export_pdf_sheet_legend(async_client):
+    """The browser says how the lines of a map are drawn, and the sheet has a legend of them."""
+    images = [('Background', make_image(size=(WIDTH, HEIGHT)))]
+    size = dict(width=WIDTH, height=HEIGHT, dpi=DPI, bounds=ANCHORAGE)
+    response, job = await api_export(async_client, images, **size, sheet=dict(legend=LEGEND))
+    assert response.status_code == HTTPStatus.OK, response.text
+    text = page_text(response.content)
+    assert 'LEGEND' in text and 'Highway' in text and 'Railway' in text
+
+    # What is not a legend is not drawn, and the map is exported.
+    for legend in (None, 'yes', [], {}, dict(lines='roads'), dict(lines=[dict(label='No color', width=1)])):
+        response, job = await api_export(async_client, images, **size, sheet=dict(legend=legend))
+        assert response.status_code == HTTPStatus.OK, json.dumps(legend)
+        assert 'LEGEND' not in page_text(response.content), json.dumps(legend)
+
+
+def test_sheet_legend_name_too_long_for_its_column():
+    """What a line is called is cut to the room beside the line, so it is not under the next line."""
+    lines = [dict(label='A name which is far too long for it ' + str(i), color=[0, 0, 0], width=1) for i in range(3)]
+    plan = sheet.plan_sheet(MAP_WIDTH, MAP_HEIGHT, ANCHORAGE, Sheet(legend=dict(lines=lines)))
+    pen = FakePen()
+    sheet._draw_legend(pen, plan, 54, 100)
+    written = [(x, text) for x, _, text, _ in pen.texts if text.startswith('A name')]
+    assert len(written) == 3
+    for x, text in written:
+        assert len(text) < len(lines[0]['label'])
+        left = x - sheet.LEGEND_SAMPLE - 5
+        assert x + pymupdf.get_text_length(text, fontsize=sheet.LABEL_SIZE) <= left + sheet.LEGEND_ITEM_WIDTH

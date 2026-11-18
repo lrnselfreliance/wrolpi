@@ -514,12 +514,15 @@ export function exportDate(now = new Date()) {
 //
 // contours: {interval, unit} ("feet" or "meters"): how far apart the contour lines of the exported
 // map are, when it has them.
-export function exportSheet(quad, map, groups, now = new Date(), named = null, contours = null) {
+//
+// legend: the lines of the map as they are drawn (of exportLegend), when it has any.
+export function exportSheet(quad, map, groups, now = new Date(), named = null, contours = null, legend = null) {
     return {
         name: quadTitle(named) || quadLabel(quad),
         credits: exportCredits(map, groups),
         date: exportDate(now),
         ...(contours ? {contours} : {}),
+        ...(legend ? {legend} : {}),
     };
 }
 

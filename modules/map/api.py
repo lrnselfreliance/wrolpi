@@ -7,6 +7,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from modules.map import export, export_job, lib, quads, schema, search
 from modules.map.pins import get_map_pins_config
+from modules.map.sheet import legend_as_sent
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
 from wrolpi.events import Events
@@ -244,8 +245,8 @@ async def post_export(request: Request):
     The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each layer from the bottom
     up, `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
     is, and `sheet`: with which the map is put on a sheet with a margin and a grid; `name`, `credits` and `date`
-    are written on it, and `contours` (`{"interval": 40, "unit": "feet"}`, or "meters") when the map has contour
-    lines."""
+    are written on it, `contours` (`{"interval": 40, "unit": "feet"}`, or "meters") when the map has contour
+    lines, and `legend`: the lines of the map as they are drawn (see `modules.map.sheet.Sheet`)."""
     try:
         meta = request.json
         width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
@@ -259,6 +260,7 @@ async def post_export(request: Request):
                 credits=[str(i)[:SHEET_TEXT_LENGTH] for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
                 date=str(sheet.get('date') or '')[:SHEET_TEXT_LENGTH] or None,
                 **_sheet_contours(sheet.get('contours')),
+                legend=legend_as_sent(sheet.get('legend')),
             )
     except Exception:  # noqa Whatever is made of a body which is not the description of a map.
         return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)

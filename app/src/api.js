@@ -482,19 +482,6 @@ export async function getSyncDirectories(path, source) {
     throw new Error(message);
 }
 
-export async function runSync(force = false) {
-    const response = await apiPost(`${API_URI}/sync/run`, {force});
-    if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not start the sync.');
-        toast({type: 'error', title: 'Sync Failed', description: message, time: 5000});
-    }
-    return response;
-}
-
-export async function cancelSync() {
-    return await apiPost(`${API_URI}/sync/cancel`);
-}
-
 export async function runBackup() {
     const response = await apiPost(`${API_URI}/sync/backup/run`);
     if (!response.ok) {

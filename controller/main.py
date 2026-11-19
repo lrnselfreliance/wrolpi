@@ -59,7 +59,7 @@ from controller.lib.status import (
     get_uptime_status,
 )
 from controller.lib.status_worker import status_worker_loop
-from controller.lib.sync import recover_interrupted_sync
+from controller.lib.sync import sync_schedule_loop
 from controller.lib.systemd import get_all_services_status
 
 # Templates directory
@@ -126,8 +126,9 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Primary drive not mounted - using default configuration")
 
-    # A sync that was running when the Controller stopped left the API stopped.
-    app.state.sync_recovery_task = asyncio.create_task(asyncio.to_thread(recover_interrupted_sync))
+    # A secondary syncs within its daily window.  Each tick first recovers a sync that was interrupted (the API it
+    # stopped is started again), so nothing races that recovery.
+    app.state.sync_schedule_task = asyncio.create_task(sync_schedule_loop())
 
     # Docker: the library is served to secondary WROLPis from a helper container, kept matching the api container.
     if is_docker_mode():
@@ -152,8 +153,9 @@ async def lifespan(app: FastAPI):
         await status_task
     except asyncio.CancelledError:
         pass
-    if rsync_daemon_task := getattr(app.state, "rsync_daemon_task", None):
-        rsync_daemon_task.cancel()
+    for name in ("rsync_daemon_task", "sync_schedule_task"):
+        if task := getattr(app.state, name, None):
+            task.cancel()
 
 
 # Create FastAPI app

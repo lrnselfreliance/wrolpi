@@ -273,8 +273,9 @@ async def test_which_fixtures_the_spec_can_vouch_for(async_client):
     api_fixtures = set(re.findall(r'^export const ([a-zA-Z]+Fixture) =', source, re.M))
     # domainsFixture is a list built from domainFixture, syncStatusFixture and backupStatusFixture are
     # statusFixture's `sync` and `backup` (test_sync_status_fixture_matches_the_seed holds them), and the *Context* fixtures are held to
-    # their React contexts by the frontend's own test-fixtures.test.js.
-    api_fixtures -= {'domainsFixture', 'syncStatusFixture', 'backupStatusFixture'}
+    # their React contexts by the frontend's own test-fixtures.test.js.  controllerSyncStatusFixture is the
+    # Controller's, not this API's: controller/test/test_sync.py holds it to the Controller's sync status.
+    api_fixtures -= {'domainsFixture', 'syncStatusFixture', 'backupStatusFixture', 'controllerSyncStatusFixture'}
     api_fixtures = {n for n in api_fixtures if 'Context' not in n}
 
     assert api_fixtures == set(checked) | set(unchecked), (

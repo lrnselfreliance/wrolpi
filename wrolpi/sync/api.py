@@ -9,7 +9,8 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, json_response, perpetual_signal
-from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled
+from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled, \
+    CONTROLLER_URL, aiohttp_post
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig, SecondaryRole, SyncInProgress, WROLModeEnabled
 from wrolpi.sync import backup, lib, schema, snapshot
@@ -48,8 +49,7 @@ async def check_sync_api_lock(request: Request):
 
 @perpetual_signal(sleep=5)
 async def perpetual_sync_worker():
-    # One loop, so a secondary's sync and its backup never run at once; the backup copies what the sync pulled.
-    await lib.sync_tick()
+    # A secondary's sync is the Controller's (controller/lib/sync.py), which stops this API while it runs.
     await backup.backup_tick()
     await snapshot.snapshot_tick()
 
@@ -93,25 +93,38 @@ async def post_snapshot(_: Request):
     return response.empty(HTTPStatus.ACCEPTED)
 
 
+def controller_url() -> str:
+    return 'http://controller' if DOCKERIZED else CONTROLLER_URL
+
+
+async def _ask_controller(path: str):
+    """A secondary's sync runs in the Controller, because this API is stopped while the library is replaced."""
+    try:
+        async with aiohttp_post(f'{controller_url()}/api/sync/{path}', json_={}, timeout=15) as controller_response:
+            if controller_response.status < 300:
+                return response.empty(HTTPStatus.ACCEPTED)
+            body = await controller_response.json(content_type=None)
+    except Exception as e:
+        logger.error(f'Could not reach the Controller to {path} the sync', exc_info=e)
+        raise InvalidConfig('The Controller did not answer')
+    raise InvalidConfig((body or {}).get('detail') or f'The Controller answered {controller_response.status}')
+
+
 @sync_bp.post('/run')
-@openapi.definition(summary='Sync from the primary now', body=schema.SyncRunRequest, validate=True)
+@openapi.definition(summary='Sync from the primary now (the Controller runs it)')
 @wrol_mode_check
-async def post_run(_: Request, body: schema.SyncRunRequest):
+async def post_run(_: Request):
     if not is_secondary():
         raise SecondaryRole('Only a secondary WROLPi syncs from a primary')
-    if flags.sync_running.is_set():
-        raise SyncInProgress()
     if not get_sync_config().primary_url:
         raise InvalidConfig('No primary is configured')
-    lib.request_sync(force=body.force)
-    return response.empty(HTTPStatus.ACCEPTED)
+    return await _ask_controller('run')
 
 
 @sync_bp.post('/cancel')
-@openapi.definition(summary='Stop the running sync')
+@openapi.definition(summary='Stop the running sync (the Controller runs it)')
 async def post_cancel(_: Request):
-    lib.request_sync_cancel()
-    return response.empty(HTTPStatus.ACCEPTED)
+    return await _ask_controller('cancel')
 
 
 @sync_bp.get('/test')

@@ -29,9 +29,12 @@ import subprocess
 import threading
 import time
 import uuid
+import zoneinfo
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
+
+import asyncio
 
 import httpx
 import yaml
@@ -58,6 +61,10 @@ STATE_FILE = "config/sync_state.yaml"
 DEFAULT_DELETE_AFTER_DAYS = 30
 # Never fill the secondary's drive; leave this much free.
 MIN_FREE_BYTES = 1024 ** 3
+# Within the daily sync window, a sync starts this long after the last one finished.
+SYNC_REPEAT_SECONDS = 15 * 60
+# How often the schedule is looked at.
+SCHEDULE_INTERVAL_SECONDS = 60
 SNAPSHOT_TIMEOUT_SECONDS = 60 * 60
 API_START_TIMEOUT_SECONDS = 10 * 60
 # A sync runs unattended with the API stopped: a primary that loses power or its link must end the run, not hold it.
@@ -118,6 +125,9 @@ def default_status() -> dict:
 
 
 _status = None
+# True once the state file was read or written: until then the drive may not be mounted, and what is in memory must
+# not be mistaken for (or saved over) what the last sync recorded.
+_status_from_file = False
 _status_lock = threading.Lock()
 _run_lock = threading.Lock()
 _cancel = threading.Event()
@@ -132,16 +142,19 @@ def _state_file() -> Path:
 
 
 def get_status() -> dict:
-    """The progress and outcome of the sync.  Read from the state file the first time, so a restarted Controller
-    still knows when the last sync succeeded."""
-    global _status
+    """The progress and outcome of the sync.  Read from the state file, so a restarted Controller still knows when
+    the last sync succeeded; read again until that works, as the Controller may start before the drive is mounted."""
+    global _status, _status_from_file
     with _status_lock:
         if _status is None:
             _status = default_status()
+        if not _status_from_file:
             try:
                 saved = yaml.safe_load(checked_path(_state_file()).read_text())
                 if isinstance(saved, dict):
+                    _status = default_status()
                     _status.update({k: v for k, v in saved.items() if k in _status})
+                    _status_from_file = True
             except (OSError, yaml.YAMLError, SyncError):
                 pass
         return dict(_status)
@@ -154,8 +167,10 @@ def update_status(save: bool = False, **changes) -> dict:
         _status.update(changes)
         status = dict(_status)
     if save:
+        global _status_from_file
         try:
             write_file(_state_file(), yaml.safe_dump(status))
+            _status_from_file = True
         except (OSError, SyncError) as e:
             logger.warning("Could not save the sync state: %s", e)
     return status
@@ -374,11 +389,15 @@ class DockerRunner:
     def rsync(self, arguments: list, on_line: Callable[[str], None]) -> int:
         client, api = _get_client(), self._api()
         self.stop_rsync()
-        helper = client.containers.run(
-            api.image.id, arguments, entrypoint="rsync", name=self.HELPER_NAME, detach=True,
+        helper = client.containers.create(
+            api.image.id, arguments, entrypoint="rsync", name=self.HELPER_NAME,
             user=api.attrs["Config"].get("User") or None, volumes_from=[api.name])
         try:
-            stream = helper.logs(stream=True, follow=True)
+            # Attached, not followed through the logs: Docker's logs hold a line until it ends, and rsync's progress
+            # for one large file is a single line, rewritten with carriage returns until the file is done.
+            # Attached before it starts, so nothing it writes is missed.
+            stream = helper.attach(stdout=True, stderr=True, stream=True)
+            helper.start()
 
             def read(_: int = 0) -> bytes:
                 return next(stream, b"")
@@ -672,16 +691,17 @@ def run_sync(runner=None) -> dict:
 
 
 def _finish(runner, api_stopped: bool, **changes) -> dict:
-    """Whatever happened, the API runs again and the lock is free."""
+    """Whatever happened, the API runs again and the lock is free.  The outcome is recorded before the lock is
+    freed: a status that says "running" while no sync holds the lock is taken for an interrupted sync."""
     try:
         if api_stopped:
             runner.start_api()
+        trash = get_media_directory() / TRASH_DIRECTORY
+        return update_status(save=True, phase=None, finished_at=_now(),
+                             trash_bytes=directory_size(trash) if trash.is_dir() and not trash.is_symlink() else 0,
+                             **changes)
     finally:
         _run_lock.release()
-    trash = get_media_directory() / TRASH_DIRECTORY
-    return update_status(save=True, phase=None, finished_at=_now(),
-                         trash_bytes=directory_size(trash) if trash.is_dir() and not trash.is_symlink() else 0,
-                         **changes)
 
 
 def _read_yaml(file: Path) -> dict:
@@ -698,10 +718,11 @@ def request_cancel():
 
 
 def recover_interrupted_sync(runner=None):
-    """Called when the Controller starts.  A sync that was running when the Controller stopped left the API stopped;
-    start it, and say the sync was interrupted."""
+    """A status that says "running" while no sync holds the lock was left by a Controller that stopped during a
+    sync, which left the API stopped: start it, and say the sync was interrupted.  Looked at by every tick of the
+    schedule, before it starts anything, and so also once the state file can be read after the drive mounts."""
     status = get_status()
-    if status["state"] != "running":
+    if status["state"] != "running" or _run_lock.locked():
         return
     logger.warning("A sync was interrupted; starting the API")
     runner = runner or get_runner()
@@ -712,3 +733,64 @@ def recover_interrupted_sync(runner=None):
         runner.start_api()
     update_status(save=True, state="error", phase=None, finished_at=_now(),
                   last_error="The sync was interrupted")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The schedule.
+
+
+def local_now() -> datetime.datetime:
+    """Now, in WROLPi's timezone (wrolpi.yaml), or the system's when none is set."""
+    timezone = _read_yaml(get_media_directory() / "config/wrolpi.yaml").get("timezone")
+    if timezone:
+        with contextlib.suppress(zoneinfo.ZoneInfoNotFoundError, ValueError):
+            return datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
+    return datetime.datetime.now().astimezone()
+
+
+def _parse_time(value) -> Optional[datetime.time]:
+    with contextlib.suppress(TypeError, ValueError):
+        return datetime.time.fromisoformat(str(value))
+    return None
+
+
+def in_window(start: Optional[str], end: Optional[str], now: datetime.time) -> bool:
+    """True if `now` is within the daily window from `start` to `end`, which may run past midnight."""
+    start, end = _parse_time(start), _parse_time(end)
+    if start is None or end is None:
+        return False
+    if start <= end:
+        return start <= now < end
+    return now >= start or now < end
+
+
+def sync_is_due(config: dict, status: dict, now: datetime.datetime) -> bool:
+    """True if the daily sync window is open and the last sync finished long enough ago.  No window: never (a sync
+    only runs when asked)."""
+    if not in_window(config.get("window_start"), config.get("window_end"), now.time()):
+        return False
+    with contextlib.suppress(TypeError, ValueError):
+        finished_at = datetime.datetime.fromisoformat(status["finished_at"])
+        return (now - finished_at).total_seconds() >= SYNC_REPEAT_SECONDS
+    return True
+
+
+def schedule_tick():
+    """Start a sync if one is due.  A sync that cannot start (WROL Mode, a primary, no primary) is not due."""
+    recover_interrupted_sync()
+    config = read_sync_config()
+    if skip_reason(config) is not None:
+        return
+    if sync_is_due(config, get_status(), local_now()):
+        logger.info("The sync window is open")
+        run_sync()
+
+
+async def sync_schedule_loop():
+    """Sync within the daily window for as long as the Controller runs."""
+    while True:
+        try:
+            await asyncio.to_thread(schedule_tick)
+        except Exception as e:
+            logger.error("The sync schedule failed", exc_info=e)
+        await asyncio.sleep(SCHEDULE_INTERVAL_SECONDS)

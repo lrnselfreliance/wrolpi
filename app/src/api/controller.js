@@ -279,3 +279,18 @@ export async function healthCheck() {
 export async function getControllerInfo() {
     return controllerFetch('/info');
 }
+
+// --- Sync (a secondary WROLPi copying its primary; the Controller runs it, because the API is stopped) ---
+
+export async function getSyncStatus() {
+    return controllerFetch('/sync/status');
+}
+
+/** Start a sync now.  Throws with the reason a sync cannot start. */
+export async function runSync() {
+    return controllerFetch('/sync/run', {method: 'POST'});
+}
+
+export async function cancelSync() {
+    return controllerFetch('/sync/cancel', {method: 'POST'});
+}

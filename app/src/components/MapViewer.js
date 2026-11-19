@@ -1128,22 +1128,27 @@ export default function MapViewer() {
                 style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX) && !outside.has(layer.source)),
                 {layerGroups: LAYER_GROUPS, overlayLabels});
             if (!groups.length) throw new Error("No layer of the map is turned on");
-            const frame = exportFrame(
-                quad, {dpi, maxSide: maxCanvasSide(), maxPixels: maxExportPixels(groups.length)});
-            // The map is less sharp than was asked for when this browser, or this many layers, can not be.
-            const sharpness = Math.round(frame.dpi) < dpi ? ` at ${Math.round(frame.dpi)} DPI` : "";
+            // How sharp the map may be depends on how many images it is, which is not known until
+            // the groups have been looked at: one with nothing in it is no image.
+            const maxSide = maxCanvasSide();
+            const frameFor = count => exportFrame(quad, {dpi, maxSide, maxPixels: maxExportPixels(count)});
+            // The zoom of the map is the same however many images it is.
+            const frame = frameFor(groups.length);
             const rendered = await renderExport({
                 MapClass: maplibregl.Map,
                 style,
-                frame,
+                frameFor,
                 groups,
                 ignoredPrefixes: [QUAD_LAYER_PREFIX],
                 readTile: readVectorTile,
                 setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
                 // Stopped between two layers, as soon as the person exporting asks.
                 isCancelled: () => exportCancelledRef.current,
-                onProgress: (name, index, count) => setExportStatus(
-                    `Drawing ${name} (${index + 1} of ${count})${sharpness}…`),
+                onLooking: () => setExportStatus("Looking at the map…"),
+                // The map is less sharp than was asked for when this browser, or this many layers, can not be.
+                onProgress: (name, index, count, drawn) => setExportStatus(
+                    `Drawing ${name} (${index + 1} of ${count})`
+                    + `${Math.round(drawn.dpi) < dpi ? ` at ${Math.round(drawn.dpi)} DPI` : ""}…`),
             });
             const pdf = await exportMapPdf({
                 ...rendered,

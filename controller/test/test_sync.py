@@ -136,8 +136,14 @@ class TestCommand:
                                 f"{media}/config/.sync/incoming/wrolpi.db"]
 
     def test_never_deletes_without_a_trash(self, media):
+        """Without a trash nothing of the library is deleted; only the secondary's stale unfinished files are."""
         command = sync.build_files_command(PRIMARY, media, None)
-        assert "--delete" not in command and "--backup" not in command
+        assert "--backup" not in command
+        protect = command.index("--filter=P *")
+        for pattern in sync.UNFINISHED_PATTERNS:
+            # rsync uses the first rule that matches: the risk rules must come before the protect rule.
+            assert command.index(f"--filter=R {pattern}") < protect, pattern
+            assert command.index(f"--filter=R {pattern}/**") < protect, pattern
 
     @pytest.mark.parametrize("url, expected", [
         ("https://10.0.0.5", "rsync://10.0.0.5:8873/media/"),
@@ -641,3 +647,27 @@ def test_a_primary_that_stops_answering_ends_rsync(media, monkeypatch):
             gave_up.cancel()
             sync._cancel.clear()
     assert code != 0
+
+
+@pytest.mark.skipif(not RSYNC_3, reason="needs rsync 3")
+def test_never_delete_still_removes_stale_logs(tmp_path):
+    """With deletes turned off, a secondary keeps every file its primary no longer has, but not its own write-ahead
+    log beside a database the primary replaced, which SQLite would apply to the new database."""
+    primary, secondary = tmp_path / "primary", tmp_path / "secondary"
+    make_database(primary / "map/region.search.db", "the primary's new index")
+    write(secondary, {"map/region.search.db": "old", "map/region.search.db-wal": "this machine's stale log",
+                      "map/.partial/old.pmtiles": "stale", "videos/deleted on the primary.mp4": "kept",
+                      "kept folder/a.txt": "kept"})
+    command = sync.build_files_command(PRIMARY, secondary, None)
+    # From a local folder rather than a daemon, which takes no connection timeout.
+    command = [i for i in command if not i.startswith("--contimeout")]
+    command[-2] = f"{primary}/"
+    result = subprocess.run(["rsync", *command], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    assert not (secondary / "map/region.search.db-wal").exists()
+    assert not (secondary / "map/.partial/old.pmtiles").exists()
+    assert (secondary / "videos/deleted on the primary.mp4").read_text() == "kept"
+    assert (secondary / "kept folder/a.txt").read_text() == "kept"
+    assert read_database(secondary / "map/region.search.db") == "the primary's new index"
+    assert not (secondary / ".sync-trash").exists()

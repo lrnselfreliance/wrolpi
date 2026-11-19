@@ -260,6 +260,15 @@ def build_files_command(primary_url: str, media_directory: Path, trash: Optional
         if playlists:
             arguments.append(f"--exclude=/{rsync_literal(playlists)}")
     arguments.extend(f"--filter=H {i}" for i in UNFINISHED_PATTERNS)
+    if trash is None:
+        # Nothing of the library is deleted, but the secondary's stale unfinished files must still go: a log left
+        # beside a database the primary replaced would be applied to it.  Only those are at risk (R); everything
+        # else is protected (P) from the --delete that removes them.
+        arguments.append("--delete")
+        for pattern in UNFINISHED_PATTERNS:
+            # The pattern itself, and what is inside it when it is a folder (".partial").
+            arguments.extend([f"--filter=R {pattern}", f"--filter=R {pattern}/**"])
+        arguments.append("--filter=P *")
     # Folders the owner chose not to copy.
     for directory in excluded_directories or []:
         if directory := str(directory).strip("/"):

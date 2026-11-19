@@ -2183,10 +2183,9 @@ def enable_wrol_mode():
     get_wrolpi_config().wrol_mode = True
     from wrolpi.downloader import download_manager
     download_manager.stop()
-    # A secondary in WROL Mode is in use; a running sync stops between pages.  A backup stops too.
-    from wrolpi.sync.lib import request_sync_cancel
+    # A backup stops.  (A secondary's sync is the Controller's, which stops at its next step when it finds WROL Mode
+    # enabled; its API is stopped while it copies, so WROL Mode cannot be enabled then.)
     from wrolpi.sync.backup import request_backup_cancel
-    request_sync_cancel()
     request_backup_cancel()
 
 

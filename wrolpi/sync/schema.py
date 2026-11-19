@@ -5,20 +5,6 @@ from wrolpi.errors import ValidationError
 
 
 @dataclass
-class ManifestRequest:
-    after_id: int = 0
-    limit: int = 500
-
-    def __post_init__(self):
-        self.after_id = int(self.after_id)
-        self.limit = int(self.limit)
-        if self.after_id < 0:
-            raise ValidationError('after_id must not be negative')
-        if not 1 <= self.limit <= 5000:
-            raise ValidationError('limit must be between 1 and 5000')
-
-
-@dataclass
 class SyncDirectoriesRequest:
     # The folder whose sub-folders are listed, relative to the media directory ('' is the media directory).
     path: str = ''

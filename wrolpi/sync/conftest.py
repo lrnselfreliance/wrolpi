@@ -7,12 +7,11 @@ import os
 import pathlib
 import tempfile
 import threading
-from typing import Callable, List
+from typing import Callable
 
 import pytest
 
-from wrolpi.common import get_wrolpi_config, set_test_media_directory
-from wrolpi.sync import lib
+from wrolpi.common import set_test_media_directory
 from wrolpi.sync.config import get_sync_config
 
 
@@ -123,33 +122,6 @@ def make_secondary(test_wrolpi_config):
         get_sync_config()._config.update(role='secondary', primary_url=url)
 
     return make
-
-
-@pytest.fixture
-def fake_primary_api(monkeypatch):
-    """Answer the primary's sync API (info and manifest) from pages captured on the "primary" beforehand; media still
-    comes from the `primary_media_server`."""
-
-    def fake(pages: List[dict], media_directory: pathlib.Path, role: str = 'primary', version: str = None):
-        async def get_info(self):
-            from wrolpi.version import __version__
-            return dict(role=role, version=version or __version__, media_directory=str(media_directory),
-                        max_file_group_id=pages[-1]['max_id'] if pages else 0)
-
-        async def iter_manifest(self, limit: int = lib.MANIFEST_PAGE_LIMIT):
-            for page in pages:
-                yield page
-
-        monkeypatch.setattr(lib.PrimaryClient, 'get_info', get_info)
-        monkeypatch.setattr(lib.PrimaryClient, 'iter_manifest', iter_manifest)
-
-    return fake
-
-
-def manifest_page(*files: tuple, next_after_id=None, max_id: int = 1) -> dict:
-    """A manifest page of one group holding `files`, each (path, size, mtime)."""
-    return dict(groups=[dict(id=1, paths=[dict(path=p, size=s, mtime=m) for p, s, m in files])],
-                next_after_id=next_after_id, max_id=max_id, limit=lib.MANIFEST_PAGE_LIMIT)
 
 
 @contextlib.contextmanager

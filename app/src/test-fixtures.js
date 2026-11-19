@@ -96,33 +96,6 @@ export const settingsFixture = (overrides = {}) => ({
     ...overrides,
 });
 
-/** The `sync` of GET /api/status: a secondary that has never synced. */
-export const syncStatusFixture = (overrides = {}) => ({
-    state: 'idle',
-    phase: null,
-    requested: false,
-    force: false,
-    cancel_requested: false,
-    started_at: null,
-    finished_at: null,
-    last_success_at: null,
-    last_error: null,
-    last_skip_reason: null,
-    primary_url: null,
-    primary_version: null,
-    groups_seen: 0,
-    max_id: 0,
-    files_checked: 0,
-    files_to_download: 0,
-    files_downloaded: 0,
-    bytes_downloaded: 0,
-    files_failed: 0,
-    files_excluded: 0,
-    configs_imported: [],
-    disk_full: false,
-    ...overrides,
-});
-
 /** GET /controller/api/sync/status: a secondary's sync that has never run (controller/lib/sync.py). */
 export const controllerSyncStatusFixture = (overrides = {}) => ({
     state: 'idle',
@@ -198,8 +171,6 @@ export const statusFixture = (overrides = {}) => ({
     memory_stats: {total: 4000000000, used: 1000000000, free: 3000000000, cached: 500000000},
     processes_stats: [],
     sanic_workers: {},
-    // A secondary's sync (wrolpi.sync); idle on a primary.
-    sync: syncStatusFixture(),
     // A backup to a second drive (wrolpi.sync.backup); idle without one.
     backup: backupStatusFixture(),
     version: '1.0.0',

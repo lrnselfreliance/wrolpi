@@ -208,6 +208,26 @@ describe('choosing a quadrangle to export', () => {
         expect(onExport).toHaveBeenCalledWith(BERTHOUD, {sheet: true, dpi: 400, name: null});
     });
 
+    test('the look the map is exported in is chosen, and not while a map is exported', () => {
+        const onLook = jest.fn();
+        const {unmount} = renderPicker(new FakeMap(), {initialQuad: BERTHOUD, look: 'print', onLook});
+        expect(screen.getByRole('radio', {name: 'Print'})).toBeChecked();
+        fireEvent.click(screen.getByRole('radio', {name: 'Dark'}));
+        expect(onLook).toHaveBeenCalledWith('dark');
+        unmount();
+
+        renderPicker(new FakeMap(), {
+            initialQuad: BERTHOUD, look: 'dark', onLook, status: 'Drawing Water (1 of 12)…',
+        });
+        expect(screen.getByRole('radio', {name: 'Dark'})).toBeChecked();
+        expect(screen.getByRole('radio', {name: 'Light'})).toBeDisabled();
+    });
+
+    test('there is no look to choose where none is given', () => {
+        renderPicker(new FakeMap(), {initialQuad: BERTHOUD});
+        expect(screen.queryByRole('radio', {name: 'Print'})).toBeNull();
+    });
+
     test('says what the USGS calls the quadrangle, and exports it by that name', async () => {
         const named = {name: 'Berthoud', state: 'Colorado', exact: true};
         const fetchName = jest.fn().mockResolvedValue(named);

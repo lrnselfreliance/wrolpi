@@ -17,6 +17,9 @@ import {
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
 import {readTileBounds, readVectorTile} from "./mapTiles";
+import {
+    lookStyle, PRINT_CONTOURS, PRINT_LOOK, printLayers, savedExportLook, saveExportLook,
+} from "./mapPrintStyle";
 import {exportLegend} from "./mapExportLegend";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
@@ -128,7 +131,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
     for (let i = 0; i < sources.length; i++) {
         const {name, url} = sources[i];
         styleSources[name] = {type: "vector", url};
-        const fileLayers = layers(name, flavor);
+        // The printed map is not a flavor a basemap has: it is the map's own (see mapPrintStyle.js).
+        const fileLayers = flavor === PRINT_LOOK ? printLayers(name) : layers(name, flavor);
         if (i === 0) {
             // Primary source: use layer IDs as-is.
             allLayers.push(...fileLayers);
@@ -200,7 +204,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 "source-layer": "contours",
                 filter: ["!=", ["get", "level"], 1],
                 layout: {visibility: contourVis},
-                paint: {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
+                paint: flavor === PRINT_LOOK
+                    ? PRINT_CONTOURS.minor : {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
             },
             {
                 id: "contour-lines-major",
@@ -209,7 +214,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 "source-layer": "contours",
                 filter: ["==", ["get", "level"], 1],
                 layout: {visibility: contourVis},
-                paint: {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
+                paint: flavor === PRINT_LOOK
+                    ? PRINT_CONTOURS.major : {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
             },
             {
                 id: "contour-labels",
@@ -229,6 +235,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     "text-color": flavor === "light" ? "rgba(150,100,50,0.8)" : "rgba(210,180,140,0.9)",
                     "text-halo-color": flavor === "light" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)",
                     "text-halo-width": 1,
+                    ...(flavor === PRINT_LOOK ? PRINT_CONTOURS.label : {}),
                 },
             },
         );
@@ -686,6 +693,13 @@ export default function MapViewer() {
     // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
     const [pickingQuad, setPickingQuad] = useState(null);
     const pickingQuadRef = useRef(false);
+    // The look a map is exported in.  While a quadrangle is chosen the map is shown in it: what is
+    // seen is what the PDF will be.
+    const [exportLook, setExportLook] = useState(savedExportLook);
+    const handleExportLook = useCallback(look => {
+        setExportLook(look);
+        saveExportLook(look);
+    }, []);
     // Exporting the chosen quadrangle: how far along it is, or why it could not be done.
     const [exportStatus, setExportStatus] = useState(null);
     // Whether the person exporting has asked for the export which is being made to stop.
@@ -700,6 +714,7 @@ export default function MapViewer() {
     });
     const [searchParams, setSearchParams] = useSearchParams();
     const {theme} = useContext(ThemeContext);
+    const {flavor: lookFlavor, sprite: lookSprite} = lookStyle(pickingQuad ? exportLook : null);
     const {settings, fetchSettings} = useContext(SettingsContext);
 
     // Use URL params if provided, otherwise fall back to saved default location, then 0,0,z2.
@@ -968,23 +983,22 @@ export default function MapViewer() {
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Rebuild style when theme changes.
+    // Rebuild the style when the theme changes, and when the look the map is shown in does.
     useEffect(() => {
         const map = mapRef.current;
         if (!map || !mapReady) return;
 
-        const center = map.getCenter();
-        const zoom = map.getZoom();
+        // What the user turned off is off in the new style too.  Listened for before the style is
+        // set: a style which only differs from the one the map has is in place, and has said so,
+        // before `setStyle` returns.  The map stays where it is: a style of ours says nothing of that.
+        const showAsChosen = () => applyGroupVisibility(map, layerVisibilityRef.current);
+        map.once("style.load", showAsChosen);
         // The overlays are part of the style, as the user last set them.
-        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current,
-            scaleUnit, mapSprite(theme), overlaysRef.current, overlayStateRef.current));
-        map.once("style.load", () => {
-            map.setCenter(center);
-            map.setZoom(zoom);
-            // Re-apply layer visibility state after style rebuild.
-            applyGroupVisibility(map, layerVisibilityRef.current);
-        });
-    }, [theme, mapReady, scaleUnit]);
+        // In the look a map is exported in while one is chosen; as the theme has it otherwise.
+        map.setStyle(buildStyle(activeFilesRef.current, lookFlavor || mapFlavor(theme), hasTerrainRef.current,
+            scaleUnit, lookSprite || mapSprite(theme), overlaysRef.current, overlayStateRef.current));
+        return () => map.off("style.load", showAsChosen);
+    }, [theme, lookFlavor, lookSprite, mapReady, scaleUnit]);
 
     // Remember what the user chose to see of an overlay, and show or hide its layers to match.
     const changeOverlayState = useCallback((file, next) => {
@@ -1336,6 +1350,8 @@ export default function MapViewer() {
             onExport={handleExportPdf}
             onCancel={handleCancelExport}
             fetchName={getMapQuadName}
+            look={exportLook}
+            onLook={handleExportLook}
             status={exportStatus}
             error={exportError}
             onClose={() => {

@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Button, Checkbox, Group, Radio} from "./ui";
 import {EXPORT_DPI, EXPORT_DPIS} from "./mapExport";
+import {EXPORT_LOOKS} from "./mapPrintStyle";
 import {
     EMPTY_FEATURES,
     QUAD_MIN_ZOOM,
@@ -59,11 +60,15 @@ function selectedFeatures(quad) {
 //
 // fetchName(quad): asks for that name; it resolves to null where there is none.
 //
+// look, onLook(look): the look the map is exported in (see mapPrintStyle.js), and what is told when
+// another is chosen.  The map is shown in it, so what is seen is what is exported.
+//
 // While the PDF is being made `status` says how far along it is, and nothing else can be chosen;
 // Cancel then stops it (onCancel()) and does not close the picker.  `error` says why the last one
 // could not be made.
 export default function MapQuadPicker({
     map, scaleUnit, initialQuad = null, onExport, onCancel, onClose, fetchName, status = null, error = null,
+    look = null, onLook = null,
 }) {
     const busy = status !== null;
     const busyRef = useRef(busy);
@@ -218,6 +223,23 @@ export default function MapQuadPicker({
                 />)}
             </Group>
         </Radio.Group>
+        {look && onLook && <Radio.Group
+            size="xs"
+            style={{paddingTop: "0.5rem"}}
+            aria-label="Colors"
+            value={look}
+            onChange={onLook}
+        >
+            <Group gap="md">
+                {EXPORT_LOOKS.map(({value, label}) => <Radio
+                    key={value}
+                    size="xs"
+                    value={value}
+                    label={label}
+                    disabled={busy}
+                />)}
+            </Group>
+        </Radio.Group>}
         {status && <div role="status" style={{paddingTop: "0.25rem"}}>{status}</div>}
         {error && !status && <div role="alert" style={{paddingTop: "0.25rem", color: "var(--danger, #c92a2a)"}}>
             {error}

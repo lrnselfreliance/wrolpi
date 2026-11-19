@@ -19,6 +19,10 @@ jest.mock('maplibre-gl', () => {
         constructor(options) {
             this.options = options;
             this.style = options.style;
+            this.center = {lat: 0, lng: 0};
+            this.moves = [];
+            this.listeners = [];
+            this.controls = [];
             constructed.push(this);
         }
 
@@ -28,7 +32,13 @@ jest.mock('maplibre-gl', () => {
             return this;
         }
 
-        once() {
+        once(event, callback) {
+            this.listeners.push({event, callback});
+            return this;
+        }
+
+        off(event, callback) {
+            this.listeners = this.listeners.filter(i => i.event !== event || i.callback !== callback);
             return this;
         }
 
@@ -38,6 +48,11 @@ jest.mock('maplibre-gl', () => {
 
         setStyle(style) {
             this.style = style;
+            // MapLibre puts a style which only differs from the one it has in place, and says so,
+            // before this returns.
+            const waiting = this.listeners.filter(i => i.event === 'style.load');
+            this.listeners = this.listeners.filter(i => i.event !== 'style.load');
+            waiting.forEach(i => i.callback());
         }
 
         getLayer(id) {
@@ -58,20 +73,26 @@ jest.mock('maplibre-gl', () => {
         }
 
         getCenter() {
-            return {lat: 0, lng: 0};
+            return this.center;
         }
 
         getZoom() {
             return 2;
         }
 
-        setCenter() {
+        setCenter(center) {
+            this.moves.push(center);
+            this.center = center;
         }
 
         setZoom() {
         }
 
-        addControl() {
+        addControl(control) {
+            // A control of the viewer's own (not one of MapLibre's) is put on the page.
+            if (typeof control?.onAdd === 'function') {
+                this.controls.push(global.document.body.appendChild(control.onAdd(this)));
+            }
             return this;
         }
 
@@ -79,6 +100,7 @@ jest.mock('maplibre-gl', () => {
         }
 
         remove() {
+            this.controls.forEach(control => control.remove());
         }
     }
 
@@ -108,7 +130,16 @@ jest.mock('protomaps-themes-base', () => ({
         {id: 'water', type: 'fill', source},
         {id: 'places_locality', type: 'symbol', source},
     ],
+    // The printed map: the same layers, in colors of its own.
+    namedTheme: () => ({}),
+    layersWithCustomTheme: (source) => [
+        {id: 'earth', type: 'fill', source, paint: {'fill-color': 'print'}},
+        {id: 'water', type: 'fill', source},
+        {id: 'places_locality', type: 'symbol', source},
+    ],
 }));
+// Choosing a quadrangle draws on the map, which is not what is looked at here.
+jest.mock('./MapQuadPicker', () => ({onClose}) => <button onClick={onClose}>Close the picker</button>);
 // Contours are generated in the browser from the terrain file; only the URL of that source matters here.
 jest.mock('@acalcutt/maplibre-contour-pmtiles', () => ({
     __esModule: true,
@@ -405,5 +436,30 @@ describe('the text of the map', () => {
             expect([textLayer.id, textLayer.layout['text-font']]).toEqual([textLayer.id, expect.any(Array)]);
             expect(FONTS).toEqual(expect.arrayContaining(textLayer.layout['text-font']));
         }
+    });
+});
+
+describe('the look the map is exported in', () => {
+    const earthColor = map => map.getLayer('earth').paint?.['fill-color'];
+
+    test('is how the map is shown while a quadrangle is chosen, where it is and with what is off still off', async () => {
+        const map = await renderViewer([PLANET]);
+        await click(screen.getByLabelText('Water'));
+        expect(map.visibility('water')).toBe('none');
+        // The map has been moved since it was made.
+        map.center = {lat: 40.3, lng: -105.06};
+
+        await click(screen.getByTitle('Export a 1:24,000 map'));
+        expect(earthColor(map)).toBe('print');
+        expect(map.visibility('water')).toBe('none');
+        // Moved again, while the quadrangle is chosen.
+        map.center = {lat: 61.2, lng: -149.9};
+
+        await click(screen.getByText('Close the picker'));
+        expect(earthColor(map)).toBeUndefined();
+        expect(map.visibility('water')).toBe('none');
+        // Changing the look never moves the map.
+        expect(map.moves).toEqual([]);
+        expect(map.center).toEqual({lat: 61.2, lng: -149.9});
     });
 });

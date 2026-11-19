@@ -82,8 +82,12 @@ LOCAL_PATHS = (
     f"/{SYNC_DIRECTORY}",
     f"/{TRASH_DIRECTORY}", "/lost+found",
 )
-# Anywhere in the library: files still being written on the primary.
-UNFINISHED_PATTERNS = (PARTIAL_DIRECTORY, ".partial", "*.part", "*.aria2", "*.ytdl", "*.db-wal", "*.db-shm")
+# Anywhere in the library: files still being written on the primary, which are not copied.  Hidden from the
+# primary's side only (rsync's "hide"), not excluded: the secondary's own are stale, and must go.  An excluded
+# path is never deleted, so a secondary kept the write-ahead log of a map search database whose database the
+# primary had replaced, and SQLite would apply that log to the new database.  (rsync keeps its own partial
+# directory itself.)
+UNFINISHED_PATTERNS = (".partial", "*.part", "*.aria2", "*.ytdl", "*.db-wal", "*.db-shm")
 
 
 class SyncError(Exception):
@@ -171,11 +175,14 @@ def checked_path(path: Path) -> Path:
 
 def write_file(file: Path, text: str):
     """Write `file` in the media directory without following a link: to a new file of its own, renamed into
-    place."""
+    place.  It belongs to the media directory's owner, like everything else in the library."""
     checked_path(file)
+    owner = get_media_directory().stat()
     temporary = file.with_name(f".{file.name}.{uuid.uuid4().hex}.tmp")
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
     with os.fdopen(descriptor, "w") as fh:
+        with contextlib.suppress(PermissionError):
+            os.fchown(fh.fileno(), owner.st_uid, owner.st_gid)
         fh.write(text)
     os.replace(temporary, file)
 
@@ -252,7 +259,7 @@ def build_files_command(primary_url: str, media_directory: Path, trash: Optional
     for playlists in dict.fromkeys(str(i or "").strip("/") for i in playlists_destinations):
         if playlists:
             arguments.append(f"--exclude=/{rsync_literal(playlists)}")
-    arguments.extend(f"--exclude={i}" for i in UNFINISHED_PATTERNS)
+    arguments.extend(f"--filter=H {i}" for i in UNFINISHED_PATTERNS)
     # Folders the owner chose not to copy.
     for directory in excluded_directories or []:
         if directory := str(directory).strip("/"):
@@ -516,7 +523,8 @@ def replace_database(media_directory: Path):
     database complete."""
     database = checked_path(media_directory / "config/wrolpi.db")
     incoming = checked_path(media_directory / INCOMING_DATABASE)
-    with contextlib.closing(sqlite3.connect(f"file:{incoming}?mode=ro", uri=True)) as connection:
+    # Immutable: read without making a -wal and -shm beside it, which would be left behind when it is moved.
+    with contextlib.closing(sqlite3.connect(f"file:{incoming}?mode=ro&immutable=1", uri=True)) as connection:
         if connection.execute("PRAGMA schema_version").fetchone()[0] == 0:
             raise SyncError("The snapshot from the primary is not a database")
     if database.is_file():

@@ -111,9 +111,11 @@ class TestCommand:
         assert f"--backup-dir={media}/.sync-trash/2026-11-18" in command
         for excluded in ("/tags", "/my playlists", "/lists", "/config/wrolpi.yaml", "/config/sync.yaml", "/config/ssl",
                          "/config/wrolpi.db", "/config/wrolpi.db-wal", "/config/.sync", "/.sync-trash",
-                         "/config/sync_state.yaml", "/config/.wrol_mode", "*.part", ".partial", "*.db-wal",
-                         "/old \\[stuff]", "/a/b"):
+                         "/config/sync_state.yaml", "/config/.wrol_mode", "/old \\[stuff]", "/a/b"):
             assert f"--exclude={excluded}" in command, excluded
+        # Unfinished files are only hidden from the primary's side, so the secondary's stale ones are deleted.
+        for hidden in ("*.part", ".partial", "*.db-wal", "*.db-shm"):
+            assert f"--filter=H {hidden}" in command and f"--exclude={hidden}" not in command, hidden
         # A pattern ending in a slash matches only a directory; a file or link of that name would get through.
         assert not [i for i in command if i.startswith("--exclude=") and i.endswith("/")]
         assert command.count("--exclude=/my playlists") == 1
@@ -134,8 +136,14 @@ class TestCommand:
                                 f"{media}/config/.sync/incoming/wrolpi.db"]
 
     def test_never_deletes_without_a_trash(self, media):
+        """Without a trash nothing of the library is deleted; only the secondary's stale unfinished files are."""
         command = sync.build_files_command(PRIMARY, media, None)
-        assert "--delete" not in command and "--backup" not in command
+        assert "--backup" not in command
+        protect = command.index("--filter=P *")
+        for pattern in sync.UNFINISHED_PATTERNS:
+            # rsync uses the first rule that matches: the risk rules must come before the protect rule.
+            assert command.index(f"--filter=R {pattern}") < protect, pattern
+            assert command.index(f"--filter=R {pattern}/**") < protect, pattern
 
     @pytest.mark.parametrize("url, expected", [
         ("https://10.0.0.5", "rsync://10.0.0.5:8873/media/"),
@@ -187,6 +195,15 @@ class TestRootInAnotherUsersDirectory:
         with pytest.raises(sync.SyncError, match="symbolic link"):
             sync.make_directory(media / sync.SYNC_DIRECTORY / "incoming")
         assert not (tmp_path / "incoming").exists() and not (tmp_path / "primary-info.yaml").exists()
+
+    def test_files_belong_to_the_library_owner(self, media, monkeypatch):
+        chowned = []
+        monkeypatch.setattr(sync.os, "fchown", lambda fd, uid, gid: chowned.append((uid, gid)))
+        sync.make_directory(media / sync.SYNC_DIRECTORY)
+        sync.write_file(media / sync.PRIMARY_INFO, "media_directory: /media/wrolpi\n")
+        owner = media.stat()
+        assert chowned == [(owner.st_uid, owner.st_gid)]
+        assert (media / sync.PRIMARY_INFO).read_text() == "media_directory: /media/wrolpi\n"
 
     def test_directories_belong_to_the_library_owner(self, media, monkeypatch):
         """rsync does not run as root, and must write into what the Controller made."""
@@ -283,22 +300,31 @@ class TestPurge:
 class TestReplaceDatabase:
 
     def test_replaces_and_removes_the_old_log(self, media):
-        """The old write-ahead log left beside the new database would be applied to it."""
+        """A log left beside the old database (by an API that was killed) would be applied to the new one."""
         database = media / "config/wrolpi.db"
         make_database(database, "this secondary's")
         live = sqlite3.connect(database)
         live.execute("PRAGMA journal_mode=WAL")
         live.execute("UPDATE t SET name = 'written to the log'")
         live.commit()
-        assert database.with_name("wrolpi.db-wal").stat().st_size > 0
-        make_database(media / sync.INCOMING_DATABASE, "from the primary")
+        log = database.with_name("wrolpi.db-wal")
+        left_behind = log.read_bytes()
+        assert left_behind
+        live.close()
+        log.write_bytes(left_behind)
+        incoming = media / sync.INCOMING_DATABASE
+        make_database(incoming, "from the primary")
+        with sqlite3.connect(incoming) as connection:
+            # The snapshot of a database in WAL mode is in WAL mode too.
+            connection.execute("PRAGMA journal_mode=WAL")
+        connection.close()
 
         sync.replace_database(media)
-        live.close()
 
-        assert read_database(database) == "from the primary"
         assert not database.with_name("wrolpi.db-wal").exists() and not database.with_name("wrolpi.db-shm").exists()
-        assert not (media / sync.INCOMING_DATABASE).exists()
+        # Nothing is left where the snapshot was; a log there would be applied to the next snapshot.
+        assert not list(incoming.parent.iterdir()), list(incoming.parent.iterdir())
+        assert read_database(database) == "from the primary"
 
     def test_refuses_what_is_not_a_database(self, media):
         make_database(media / "config/wrolpi.db", "this secondary's")
@@ -479,6 +505,8 @@ def test_sync_with_a_real_daemon(media, tmp_path, primary_api, monkeypatch):
     # Where this machine has a directory of its own, the primary has a file of that name.
     (primary / "config/backup").write_text("not a directory on the primary")
     write(media, {"config/backup/tags-20261118.yaml": "this machine's config backup"})
+    # The secondary's own: a log beside a search database the primary replaced, and an unfinished download.
+    write(media, {"map/region.search.db-wal": "this machine's stale log", "map/.partial/old.pmtiles": "stale"})
     write(media, {
         "videos/changed.txt": "older", "videos/deleted on the primary.txt": "gone there",
         "tags/mine/x.txt": "this machine's links", "config/wrolpi.yaml": "hotspot_ssid: mine\n",
@@ -530,8 +558,11 @@ def test_sync_with_a_real_daemon(media, tmp_path, primary_api, monkeypatch):
         assert (media / "config/backup/tags-20261118.yaml").read_text() == "this machine's config backup"
         assert (media / "videos/inside").is_symlink() and (media / "videos/inside").read_text() == "a video"
         assert not (media / "videos/outside").is_symlink() and not (media / "videos/climbs out").is_symlink()
-        # Unfinished files and the excluded folder stay on the primary.
+        # Unfinished files and the excluded folder stay on the primary; the secondary's own stale ones are gone
+        # (to the trash, like any deleted file).
         assert not (media / "map/.partial").exists() and not (media / "map/region.search.db-wal").exists()
+        assert (media / ".sync-trash" / datetime.date.today().isoformat() / "map/region.search.db-wal").read_text() \
+            == "this machine's stale log"
         assert not (media / "excluded").exists()
         # The database is the primary's snapshot, never its database in use; the library settings come along.
         assert read_database(media / "config/wrolpi.db") == "from the primary"
@@ -616,3 +647,27 @@ def test_a_primary_that_stops_answering_ends_rsync(media, monkeypatch):
             gave_up.cancel()
             sync._cancel.clear()
     assert code != 0
+
+
+@pytest.mark.skipif(not RSYNC_3, reason="needs rsync 3")
+def test_never_delete_still_removes_stale_logs(tmp_path):
+    """With deletes turned off, a secondary keeps every file its primary no longer has, but not its own write-ahead
+    log beside a database the primary replaced, which SQLite would apply to the new database."""
+    primary, secondary = tmp_path / "primary", tmp_path / "secondary"
+    make_database(primary / "map/region.search.db", "the primary's new index")
+    write(secondary, {"map/region.search.db": "old", "map/region.search.db-wal": "this machine's stale log",
+                      "map/.partial/old.pmtiles": "stale", "videos/deleted on the primary.mp4": "kept",
+                      "kept folder/a.txt": "kept"})
+    command = sync.build_files_command(PRIMARY, secondary, None)
+    # From a local folder rather than a daemon, which takes no connection timeout.
+    command = [i for i in command if not i.startswith("--contimeout")]
+    command[-2] = f"{primary}/"
+    result = subprocess.run(["rsync", *command], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    assert not (secondary / "map/region.search.db-wal").exists()
+    assert not (secondary / "map/.partial/old.pmtiles").exists()
+    assert (secondary / "videos/deleted on the primary.mp4").read_text() == "kept"
+    assert (secondary / "kept folder/a.txt").read_text() == "kept"
+    assert read_database(secondary / "map/region.search.db") == "the primary's new index"
+    assert not (secondary / ".sync-trash").exists()

@@ -19,12 +19,6 @@ class ManifestRequest:
 
 
 @dataclass
-class SyncRunRequest:
-    # Import every synced config even if the primary's copy did not change.
-    force: bool = False
-
-
-@dataclass
 class SyncDirectoriesRequest:
     # The folder whose sub-folders are listed, relative to the media directory ('' is the media directory).
     path: str = ''

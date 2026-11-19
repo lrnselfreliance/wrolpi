@@ -387,6 +387,7 @@ export async function getSettings() {
         const content = await response.json();
         return {
             archive_destination: content.archive_destination,
+            backup_delete_after_days: content.backup_delete_after_days,
             backup_device_uuid: content.backup_device_uuid,
             backup_directory: content.backup_directory,
             backup_excluded_directories: content.backup_excluded_directories,

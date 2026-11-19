@@ -45,6 +45,7 @@ import {defaultTheme} from './themes/names';
 /** GET /api/settings */
 export const settingsFixture = (overrides = {}) => ({
     archive_destination: 'archive/%(domain_tag)s/%(domain)s',
+    backup_delete_after_days: 30,
     backup_device_uuid: null,
     backup_directory: null,
     backup_excluded_directories: [],

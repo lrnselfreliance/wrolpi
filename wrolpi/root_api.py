@@ -178,6 +178,7 @@ def get_settings(_: Request):
     settings = {
         'archive_destination': wrolpi_config.archive_destination,
         'backup_device_uuid': sync_config.backup_device_uuid,
+        'backup_delete_after_days': sync_config.backup_delete_after_days,
         'backup_directory': sync_config.backup_directory,
         'backup_excluded_directories': sync_config.backup_excluded_directories,
         'backup_window_end': sync_config.backup_window_end,

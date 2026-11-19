@@ -32,6 +32,9 @@ class SyncConfigValidator:
     backup_window_end: str = None
     # Folders (relative to the media directory) never copied to the backup drive.
     backup_excluded_directories: list[str] = field(default_factory=list)
+    # Days the backup drive keeps a file deleted (or replaced) in the media directory, in `.backup-trash`; None never
+    # deletes.
+    backup_delete_after_days: int = None
     # When a backup last finished without errors (ISO 8601); kept so it is known after a restart.
     backup_last_success_at: str = None
 
@@ -55,6 +58,7 @@ class SyncConfig(ConfigFile):
         backup_window_start=None,
         backup_window_end=None,
         backup_excluded_directories=[],
+        backup_delete_after_days=DEFAULT_DELETE_AFTER_DAYS,
         backup_last_success_at=None,
     )
     validator = SyncConfigValidator
@@ -111,6 +115,13 @@ class SyncConfig(ConfigFile):
     @property
     def backup_excluded_directories(self) -> List[str]:
         return list(self._config.get('backup_excluded_directories') or [])
+
+    @property
+    def backup_delete_after_days(self) -> Optional[int]:
+        """None never deletes.  A sync.yaml written before this setting has no key, and gets the default."""
+        if 'backup_delete_after_days' not in self._config:
+            return DEFAULT_DELETE_AFTER_DAYS
+        return self._config['backup_delete_after_days']
 
     @property
     def backup_last_success_at(self) -> Optional[str]:

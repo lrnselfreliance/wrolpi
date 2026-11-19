@@ -29,6 +29,8 @@ class SyncSettingsRequest:
     backup_window_end: Optional[str] = None
     # Days a secondary keeps a file its primary deleted or replaced; -1 never deletes.
     sync_delete_after_days: Optional[int] = None
+    # Days the backup drive keeps a file deleted or replaced in the media directory; -1 never deletes.
+    backup_delete_after_days: Optional[int] = None
     # Folders, relative to the media directory, never copied ([] clears).
     sync_excluded_directories: Optional[List[str]] = None
     backup_excluded_directories: Optional[List[str]] = None
@@ -36,5 +38,6 @@ class SyncSettingsRequest:
     def __post_init__(self):
         if self.role is not None and self.role not in ('primary', 'secondary'):
             raise ValidationError('role must be "primary" or "secondary"')
-        if self.sync_delete_after_days is not None and not -1 <= int(self.sync_delete_after_days) <= 3650:
-            raise ValidationError('sync_delete_after_days must be between 0 and 3650, or -1 to never delete')
+        for key in ('sync_delete_after_days', 'backup_delete_after_days'):
+            if (value := getattr(self, key)) is not None and not -1 <= int(value) <= 3650:
+                raise ValidationError(f'{key} must be between 0 and 3650, or -1 to never delete')

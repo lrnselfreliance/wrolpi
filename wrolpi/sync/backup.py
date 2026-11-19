@@ -410,6 +410,9 @@ async def run_backup() -> dict:
             update_backup_status(phase='database')
             if reason := check_backup_target(str(target), uuid):
                 raise BackupError(f'Stopped: {reason}')
+            # Room for the database snapshot, which is written beside the drive's old one before it replaces it.
+            room = get_db_file().stat().st_size + MIN_FREE_BYTES
+            await asyncio.to_thread(purge_trash, target, delete_after_days, None, room)
             await asyncio.to_thread(snapshot_database_if_changed, target)
             await asyncio.to_thread(purge_trash, target, delete_after_days)
     except BackupCancelled as e:
@@ -439,8 +442,12 @@ async def run_backup() -> dict:
 
 def purge_trash(target: pathlib.Path, delete_after_days: Optional[int], today: datetime.date = None,
                 min_free_bytes: int = MIN_FREE_BYTES) -> List[str]:
-    """Remove the trash folders on the backup drive that have waited `delete_after_days` and, while the drive is
-    nearly full, the oldest of the rest.  A folder is as old as its name says.  Returns their names."""
+    """Remove the trash folders on the backup drive that have waited `delete_after_days` and, while the drive has
+    less than `min_free_bytes` free, the oldest of the rest.  A folder is as old as its name says.  Returns their
+    names.
+
+    The newest folder is never removed for space: moving a file to the trash is a rename, which frees nothing, so a
+    nearly full drive would otherwise delete what this very backup moved there at once."""
     trash = target / TRASH_DIRECTORY
     if trash.is_symlink() or not trash.is_dir():
         return []
@@ -452,9 +459,11 @@ def purge_trash(target: pathlib.Path, delete_after_days: Optional[int], today: d
         with contextlib.suppress(ValueError):
             dated.append((datetime.date.fromisoformat(folder.name), folder))
     purged = []
-    for day, folder in sorted(dated):
+    dated.sort()
+    newest = dated[-1][1] if dated else None
+    for day, folder in dated:
         expired = delete_after_days is not None and (today - day).days >= delete_after_days
-        nearly_full = shutil.disk_usage(target).free < min_free_bytes
+        nearly_full = folder != newest and shutil.disk_usage(target).free < min_free_bytes
         if not expired and not nearly_full:
             continue
         logger.info(f'Removing the backup trash of {folder.name} ({"expired" if expired else "drive nearly full"})')

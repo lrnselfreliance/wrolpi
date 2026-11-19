@@ -527,3 +527,43 @@ async def test_failed_backup_keeps_last_success(async_client, test_directory, te
 
     assert status['state'] == 'error'
     assert get_sync_config().backup_last_success_at == '2026-11-01T02:00:00+00:00'
+
+
+def test_purge_never_removes_the_newest_for_space(tmp_path, monkeypatch):
+    """Moving a file to the trash frees nothing, so on a nearly full drive the trash this backup just filled would be
+    removed by the same backup.  Only age removes the newest folder."""
+    trash = tmp_path / '.backup-trash'
+    for name in ('2026-11-17', '2026-11-18'):
+        (trash / name).mkdir(parents=True)
+    usage = collections.namedtuple('usage', 'total used free')
+    monkeypatch.setattr(backup.shutil, 'disk_usage', lambda _: usage(100, 100, 0))
+    assert backup.purge_trash(tmp_path, 30, date(2026, 11, 18), min_free_bytes=10) == ['2026-11-17']
+    assert (trash / '2026-11-18').is_dir()
+    # 0 days is "delete at once", whatever the space.
+    assert backup.purge_trash(tmp_path, 0, date(2026, 11, 18), min_free_bytes=10) == ['2026-11-18']
+
+
+@pytest.mark.asyncio
+async def test_room_is_made_for_the_database_snapshot(async_client, test_directory, backup_drive, monkeypatch):
+    """The snapshot is written beside the drive's old one: before it, the trash makes room for the whole database,
+    not only the usual 1 GiB."""
+    (test_directory / 'config').mkdir(exist_ok=True)
+    with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
+        db.execute('CREATE TABLE t (v TEXT)')
+    events = []
+
+    async def run_rsync(command, target, uuid):
+        events.append('rsync')
+        return 0, []
+
+    monkeypatch.setattr(backup, '_run_rsync', run_rsync)
+    monkeypatch.setattr(backup, 'purge_trash', lambda target, days, today=None, min_free_bytes=backup.MIN_FREE_BYTES:
+                        events.append(('purge', min_free_bytes)))
+    monkeypatch.setattr(backup, 'snapshot_database_if_changed', lambda target: events.append('snapshot'))
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'idle', status['last_error']
+    database = (test_directory / 'config/wrolpi.db').stat().st_size
+    assert events == [('purge', backup.MIN_FREE_BYTES), 'rsync', ('purge', database + backup.MIN_FREE_BYTES),
+                      'snapshot', ('purge', backup.MIN_FREE_BYTES)]

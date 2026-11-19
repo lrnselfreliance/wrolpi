@@ -574,8 +574,12 @@ def directory_size(directory: Path) -> int:
 
 def purge_trash(media_directory: Path, delete_after_days: Optional[int], today: datetime.date = None,
                 min_free_bytes: int = MIN_FREE_BYTES) -> list:
-    """Remove the trash folders that have waited `delete_after_days` and, while the drive is nearly full, the
-    oldest of the rest.  A folder is as old as its name says, whatever its files' times are.  Returns their names."""
+    """Remove the trash folders that have waited `delete_after_days` and, while the drive has less than
+    `min_free_bytes` free, the oldest of the rest.  A folder is as old as its name says, whatever its files' times
+    are.  Returns their names.
+
+    The newest folder is never removed for space: moving a file to the trash is a rename, which frees nothing, so a
+    nearly full drive would otherwise delete what this very sync moved there at once."""
     trash = media_directory / TRASH_DIRECTORY
     if trash.is_symlink() or not trash.is_dir():
         return []
@@ -587,9 +591,11 @@ def purge_trash(media_directory: Path, delete_after_days: Optional[int], today: 
         with contextlib.suppress(ValueError):
             dated.append((datetime.date.fromisoformat(folder.name), folder))
     purged = []
-    for day, folder in sorted(dated):
+    dated.sort()
+    newest = dated[-1][1] if dated else None
+    for day, folder in dated:
         expired = delete_after_days is not None and (today - day).days >= delete_after_days
-        nearly_full = shutil.disk_usage(media_directory).free < min_free_bytes
+        nearly_full = folder != newest and shutil.disk_usage(media_directory).free < min_free_bytes
         if not expired and not nearly_full:
             continue
         logger.info("Removing the sync trash of %s (%s)", folder.name, "expired" if expired else "drive nearly full")
@@ -630,7 +636,8 @@ def run_sync(runner=None) -> dict:
         snapshot = request_snapshot(primary_url)
         # The trash is what fills the drive, and a full drive fails every run: make room before the copy, not
         # only after a run that succeeded.
-        purge_trash(media_directory, delete_after_days)
+        # Room for the primary's database, too, before anything is stopped.
+        purge_trash(media_directory, delete_after_days, min_free_bytes=int(snapshot.get("size") or 0) + MIN_FREE_BYTES)
         if shutil.disk_usage(media_directory).free - int(snapshot.get("size") or 0) < MIN_FREE_BYTES:
             raise SyncError("Not enough free space for the primary's database")
         _check_cancel()

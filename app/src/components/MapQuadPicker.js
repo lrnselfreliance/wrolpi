@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from "react";
 import {Button, Checkbox, Group, Radio} from "./ui";
 import {EXPORT_DPI, EXPORT_DPIS} from "./mapExport";
-import {EXPORT_LOOKS} from "./mapPrintStyle";
+import {EXPORT_LOOKS, PRINT_LOOK} from "./mapPrintStyle";
 import {
     EMPTY_FEATURES,
     QUAD_MIN_ZOOM,
@@ -240,6 +240,9 @@ export default function MapQuadPicker({
                 />)}
             </Group>
         </Radio.Group>}
+        {look === PRINT_LOOK && onLook && <div style={{paddingTop: "0.25rem", color: "var(--muted)"}}>
+            Its colors can be changed under Layers.
+        </div>}
         {status && <div role="status" style={{paddingTop: "0.25rem"}}>{status}</div>}
         {error && !status && <div role="alert" style={{paddingTop: "0.25rem", color: "var(--danger, #c92a2a)"}}>
             {error}

@@ -14,6 +14,7 @@ export const EXPORT_LOOKS = [
     {value: "dark", label: "Dark"},
 ];
 const STORAGE_KEY_LOOK = "wrolpi-map-export-look";
+const STORAGE_KEY_COLORS = "wrolpi-map-print-colors";
 
 const BLACK = "#1a1a1a";
 const CASING = "#4d4d4d";
@@ -153,17 +154,177 @@ export const PRINT_CONTOURS = {
     label: {"text-color": "rgba(110, 65, 25, 1)", "text-halo-color": "rgba(255, 255, 255, 0.9)"},
 };
 
-// Every color of the printed map.
-export function printTheme() {
-    return {...namedTheme("light"), ...PRINT_COLORS};
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function channels(hex) {
+    return [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
+}
+
+// A color part of the way (0 to 1) to another: `mix("#336699", "#ffffff", 0.4)` is paler.
+export function mix(hex, toward, part) {
+    const to = channels(toward);
+    return "#" + channels(hex)
+        .map((value, index) => Math.round(value + (to[index] - value) * part).toString(16).padStart(2, "0"))
+        .join("");
+}
+
+const paler = (hex, part) => mix(hex, WHITE, part);
+const darker = (hex, part) => mix(hex, "#000000", part);
+
+function rgba(hex, alpha) {
+    return `rgba(${channels(hex).join(", ")}, ${alpha})`;
+}
+
+// The colors of the printed map which a person may choose, in the order they are offered.  Each is
+// of a group of the layer control (`group`), is called `label` there, and is `color` until another
+// is chosen.  A basemap has several colors where a person chooses one (a park and a wood are both
+// what grows), so a chosen color says what the others are:
+//   colors(color): the colors of the basemap (see PRINT_COLORS) it stands for.
+//   paint(color): the paint of layers (see PRINT_PAINT) which is of that color.
+//   contours(color): the paint of the contour lines and their heights (see PRINT_CONTOURS).
+// The edge of a road is not chosen: it is what makes a road a line on paper, and stays dark.
+export const PRINT_SWATCHES = [
+    {
+        id: "water", group: "Water", label: "Water", color: WATER,
+        colors: color => ({water: color, waterway_label: darker(color, 0.55), ocean_label: darker(color, 0.55)}),
+        // A line of water is darker than an area of it: a thin pale line is not seen.
+        paint: color => ({
+            water_stream: {"line-color": darker(color, 0.4)},
+            water_river: {"line-color": darker(color, 0.4)},
+        }),
+    },
+    {
+        id: "vegetation", group: "Land Cover", label: "Parks and woods", color: "#c2e2b0",
+        colors: color => ({
+            park_a: paler(color, 0.4), park_b: color,
+            wood_a: paler(color, 0.25), wood_b: darker(color, 0.06),
+            scrub_a: paler(color, 0.5), scrub_b: paler(color, 0.2),
+            zoo: paler(color, 0.35),
+        }),
+    },
+    {
+        id: "built", group: "Land Cover", label: "Schools, hospitals and industry", color: "#e6e4ec",
+        colors: color => ({
+            hospital: color, school: color, industrial: color, military: color,
+            pedestrian: paler(color, 0.3), aerodrome: color,
+        }),
+    },
+    {
+        id: "bare", group: "Land Cover", label: "Sand and ice", color: "#f4ecd2",
+        colors: color => ({sand: color, beach: color, glacier: paler(color, 0.5)}),
+    },
+    {
+        id: "buildings", group: "Buildings", label: "Buildings", color: "#6e6e6e",
+        colors: color => ({buildings: color}),
+    },
+    {
+        id: "highway", group: "Roads - Highway", label: "Highways", color: HIGHWAY,
+        colors: color => ({highway: color, bridges_highway: color}),
+    },
+    {
+        id: "major", group: "Roads - Major", label: "Major roads", color: MAJOR,
+        colors: color => ({major: color, link: color, bridges_major: color, bridges_link: color}),
+    },
+    {
+        id: "minor", group: "Roads - Minor", label: "Minor roads", color: WHITE,
+        colors: color => ({minor_service: color, minor_a: color, minor_b: color, bridges_minor: color}),
+    },
+    {
+        id: "rail", group: "Rail & Runways", label: "Railways", color: BLACK,
+        colors: color => ({railway: color}),
+    },
+    {
+        id: "boundaries", group: "Boundaries", label: "Boundaries", color: "#5b4b8a",
+        colors: color => ({boundaries: color}),
+    },
+    {
+        id: "contours", group: "Contours", label: "Contours", color: "#8c5523",
+        contours: color => ({
+            minor: {"line-color": rgba(color, 0.55)},
+            major: {"line-color": rgba(color, 0.9)},
+            label: {"text-color": darker(color, 0.2)},
+        }),
+    },
+    {
+        id: "names", group: "Labels", label: "Names", color: BLACK,
+        colors: color => ({
+            roads_label_minor: color, roads_label_major: color, city_label: color, subplace_label: color,
+            address_label: color, state_label: paler(color, 0.3), country_label: paler(color, 0.3),
+        }),
+    },
+    {
+        id: "halo", group: "Labels", label: "Around names", color: WHITE,
+        colors: color => ({
+            roads_label_minor_halo: color, roads_label_major_halo: color, city_label_halo: color,
+            subplace_label_halo: color, state_label_halo: color, address_label_halo: color,
+        }),
+        contours: color => ({label: {"text-halo-color": rgba(color, 0.9)}}),
+    },
+];
+
+// What was chosen ({swatch id: "#rrggbb"}) with all that is not a choice left out: a color of no
+// swatch, a color which is not one, and a color which is the swatch's own.
+export function chosenColors(chosen) {
+    const colors = {};
+    for (const {id, color} of PRINT_SWATCHES) {
+        const value = chosen?.[id];
+        if (typeof value === "string" && HEX_COLOR.test(value) && value.toLowerCase() !== color.toLowerCase()) {
+            colors[id] = value.toLowerCase();
+        }
+    }
+    return colors;
+}
+
+// Each kind of thing a swatch says, with what was chosen over what the printed map has.
+function withChosen(kind, picked, base) {
+    const result = {...base};
+    const colors = chosenColors(picked);
+    for (const swatch of PRINT_SWATCHES) {
+        const color = colors[swatch.id];
+        if (!color || !swatch[kind]) continue;
+        for (const [key, value] of Object.entries(swatch[kind](color))) {
+            result[key] = typeof value === "object" ? {...result[key], ...value} : value;
+        }
+    }
+    return result;
+}
+
+// Every color of the printed map.  colors: what a person chose ({swatch id: "#rrggbb"}).
+export function printTheme(colors = {}) {
+    return withChosen("colors", colors, {...namedTheme("light"), ...PRINT_COLORS});
+}
+
+// The paint of the contour lines and their heights on the printed map.
+export function printContours(colors = {}) {
+    return withChosen("contours", colors, PRINT_CONTOURS);
 }
 
 // The layers of a basemap file (a source of the map's style) as they are printed.
-export function printLayers(source, lang = undefined) {
-    return layersWithCustomTheme(source, printTheme(), lang).map(layer => {
-        const paint = PRINT_PAINT[layer.id];
+export function printLayers(source, colors = {}, lang = undefined) {
+    const paints = withChosen("paint", colors, PRINT_PAINT);
+    return layersWithCustomTheme(source, printTheme(colors), lang).map(layer => {
+        const paint = paints[layer.id];
         return paint ? {...layer, paint: {...layer.paint, ...paint}} : layer;
     });
+}
+
+// The colors a person chose for the printed map, in this browser.
+export function savedPrintColors() {
+    try {
+        return chosenColors(JSON.parse(localStorage.getItem(STORAGE_KEY_COLORS)));
+    } catch (e) {
+        return {};
+    }
+}
+
+// Remember what was chosen; with nothing chosen, nothing is kept.
+export function savePrintColors(colors) {
+    const kept = chosenColors(colors);
+    try {
+        if (Object.keys(kept).length) localStorage.setItem(STORAGE_KEY_COLORS, JSON.stringify(kept));
+        else localStorage.removeItem(STORAGE_KEY_COLORS);
+    } catch (e) { /* ignore */ }
+    return kept;
 }
 
 // The look a map was last exported in, in this browser: the printed map until another is chosen.

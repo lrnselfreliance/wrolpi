@@ -462,4 +462,30 @@ describe('the look the map is exported in', () => {
         expect(map.moves).toEqual([]);
         expect(map.center).toEqual({lat: 61.2, lng: -149.9});
     });
+
+    test('has colors which are chosen where its layers are, while a quadrangle is chosen', async () => {
+        const map = await renderViewer([PLANET]);
+        // The map on the screen has no colors to choose.
+        expect(screen.queryByLabelText('Water: color when printed')).not.toBeInTheDocument();
+
+        await click(screen.getByTitle('Export a 1:24,000 map'));
+        const water = screen.getByLabelText('Water: color when printed');
+        expect(water).toHaveValue('#a9d4f2');
+        expect(screen.queryByText('Reset colors')).not.toBeInTheDocument();
+        await act(async () => {
+            fireEvent.change(water, {target: {value: '#ff00ff'}});
+        });
+        expect(screen.getByLabelText('Water: color when printed')).toHaveValue('#ff00ff');
+        expect(JSON.parse(localStorage.getItem('wrolpi-map-print-colors'))).toEqual({water: '#ff00ff'});
+        // The map was drawn again, where it was.
+        expect(earthColor(map)).toBe('print');
+        expect(map.moves).toEqual([]);
+
+        await click(screen.getByText('Reset colors'));
+        expect(screen.getByLabelText('Water: color when printed')).toHaveValue('#a9d4f2');
+        expect(localStorage.getItem('wrolpi-map-print-colors')).toBeNull();
+
+        await click(screen.getByText('Close the picker'));
+        expect(screen.queryByLabelText('Water: color when printed')).not.toBeInTheDocument();
+    });
 });

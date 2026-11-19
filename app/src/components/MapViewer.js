@@ -18,7 +18,8 @@ import {
 import {MAP_VIEWER_URI} from "./Vars";
 import {readTileBounds, readVectorTile} from "./mapTiles";
 import {
-    lookStyle, PRINT_CONTOURS, PRINT_LOOK, printLayers, savedExportLook, saveExportLook,
+    lookStyle, PRINT_LOOK, PRINT_SWATCHES, printContours, printLayers, savedExportLook, savedPrintColors,
+    saveExportLook, savePrintColors,
 } from "./mapPrintStyle";
 import {exportLegend} from "./mapExportLegend";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
@@ -122,17 +123,19 @@ function initContourSource(file) {
 // `sprite` is deliberately separate from `flavor`: we ship two sprite sets (light, dark)
 // and the monochrome themes draw a `black` basemap, which has no sprites of its own.
 // overlays: the map files which are not a basemap; overlayState: which of them (and of their
-// layers) the user turned on.
+// layers) the user turned on.  printColors: the colors a person chose for the printed map.
 function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric",
-                    sprite = "light", overlays = [], overlayState = {}) {
+                    sprite = "light", overlays = [], overlayState = {}, printColors = {}) {
     const styleSources = {};
+    // The contour lines of the printed map, in the colors a person chose for it.
+    const contours = printContours(printColors);
     const allLayers = [];
 
     for (let i = 0; i < sources.length; i++) {
         const {name, url} = sources[i];
         styleSources[name] = {type: "vector", url};
         // The printed map is not a flavor a basemap has: it is the map's own (see mapPrintStyle.js).
-        const fileLayers = flavor === PRINT_LOOK ? printLayers(name) : layers(name, flavor);
+        const fileLayers = flavor === PRINT_LOOK ? printLayers(name, printColors) : layers(name, flavor);
         if (i === 0) {
             // Primary source: use layer IDs as-is.
             allLayers.push(...fileLayers);
@@ -205,7 +208,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 filter: ["!=", ["get", "level"], 1],
                 layout: {visibility: contourVis},
                 paint: flavor === PRINT_LOOK
-                    ? PRINT_CONTOURS.minor : {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
+                    ? contours.minor : {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
             },
             {
                 id: "contour-lines-major",
@@ -215,7 +218,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 filter: ["==", ["get", "level"], 1],
                 layout: {visibility: contourVis},
                 paint: flavor === PRINT_LOOK
-                    ? PRINT_CONTOURS.major : {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
+                    ? contours.major : {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
             },
             {
                 id: "contour-labels",
@@ -235,7 +238,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     "text-color": flavor === "light" ? "rgba(150,100,50,0.8)" : "rgba(210,180,140,0.9)",
                     "text-halo-color": flavor === "light" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)",
                     "text-halo-width": 1,
-                    ...(flavor === PRINT_LOOK ? PRINT_CONTOURS.label : {}),
+                    ...(flavor === PRINT_LOOK ? contours.label : {}),
                 },
             },
         );
@@ -357,10 +360,29 @@ function OverlayControl({file, label, state, onToggleFile, onToggleLayer, onTogg
     </div>;
 }
 
+// The colors of the printed map which are of a group of the layer control, each to be chosen.
+// colors: what was chosen ({swatch id: "#rrggbb"}); onChange(colors): told what is chosen now.
+function PrintSwatches({group, colors, onChange}) {
+    const swatches = PRINT_SWATCHES.filter(swatch => swatch.group === group);
+    if (!swatches.length) return null;
+    return <span style={{display: "inline-flex", gap: "0.25rem", marginLeft: "auto"}}>
+        {swatches.map(swatch => <input
+            key={swatch.id}
+            type="color"
+            title={`${swatch.label}: color when printed`}
+            aria-label={`${swatch.label}: color when printed`}
+            value={colors[swatch.id] || swatch.color}
+            onChange={e => onChange({...colors, [swatch.id]: e.target.value})}
+            style={{width: "1.25rem", height: "1.25rem", padding: 0, border: "1px solid var(--border)",
+                background: "none", cursor: "pointer"}}
+        />)}
+    </span>;
+}
+
 function LayerControl({
                           map, scaleUnit, onScaleUnitChange, visibilityRef,
                           overlays = [], overlayState = {}, onToggleOverlay, onToggleOverlayLayer,
-                          onToggleAllOverlayLayers,
+                          onToggleAllOverlayLayers, printColors = null, onPrintColors = null,
                       }) {
     const [visibility, setVisibility] = useState(() => {
         const v = getInitialVisibility();
@@ -440,14 +462,24 @@ function LayerControl({
         </div>
         {!collapsed && <div style={{padding: "0.25rem 0.75rem 0.5rem"}}>
             {Object.keys(LAYER_GROUPS).map(name =>
-                <div key={name} style={{padding: "0.125rem 0"}}>
+                <div key={name} style={{padding: "0.125rem 0", display: "flex", alignItems: "center", gap: "0.375rem"}}>
                     <Checkbox
                         label={name}
                         checked={visibility[name]}
                         onChange={(e) => toggleGroup(name, e.currentTarget.checked)}
                     />
+                    {printColors && onPrintColors && <PrintSwatches
+                        group={name} colors={printColors} onChange={onPrintColors}/>}
                 </div>
             )}
+            {printColors && onPrintColors && <div style={{paddingTop: "0.25rem", color: "var(--muted)"}}>
+                Colors are of the printed map.{" "}
+                {Object.keys(printColors).length > 0 && <span
+                    role="button"
+                    style={{cursor: "pointer", textDecoration: "underline"}}
+                    onClick={() => onPrintColors({})}
+                >Reset colors</span>}
+            </div>}
             {overlays.length > 0 &&
                 <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
                     <div style={{fontWeight: 600, paddingBottom: "0.125rem"}}>Overlays</div>
@@ -700,6 +732,9 @@ export default function MapViewer() {
         setExportLook(look);
         saveExportLook(look);
     }, []);
+    // The colors a person chose for the printed map: {swatch id: "#rrggbb"}.
+    const [printColors, setPrintColors] = useState(savedPrintColors);
+    const handlePrintColors = useCallback(colors => setPrintColors(savePrintColors(colors)), []);
     // Exporting the chosen quadrangle: how far along it is, or why it could not be done.
     const [exportStatus, setExportStatus] = useState(null);
     // Whether the person exporting has asked for the export which is being made to stop.
@@ -715,6 +750,8 @@ export default function MapViewer() {
     const [searchParams, setSearchParams] = useSearchParams();
     const {theme} = useContext(ThemeContext);
     const {flavor: lookFlavor, sprite: lookSprite} = lookStyle(pickingQuad ? exportLook : null);
+    // The map is shown as it is printed: its colors can be chosen.
+    const printing = lookFlavor === PRINT_LOOK;
     const {settings, fetchSettings} = useContext(SettingsContext);
 
     // Use URL params if provided, otherwise fall back to saved default location, then 0,0,z2.
@@ -996,9 +1033,9 @@ export default function MapViewer() {
         // The overlays are part of the style, as the user last set them.
         // In the look a map is exported in while one is chosen; as the theme has it otherwise.
         map.setStyle(buildStyle(activeFilesRef.current, lookFlavor || mapFlavor(theme), hasTerrainRef.current,
-            scaleUnit, lookSprite || mapSprite(theme), overlaysRef.current, overlayStateRef.current));
+            scaleUnit, lookSprite || mapSprite(theme), overlaysRef.current, overlayStateRef.current, printColors));
         return () => map.off("style.load", showAsChosen);
-    }, [theme, lookFlavor, lookSprite, mapReady, scaleUnit]);
+    }, [theme, lookFlavor, lookSprite, mapReady, scaleUnit, printColors]);
 
     // Remember what the user chose to see of an overlay, and show or hide its layers to match.
     const changeOverlayState = useCallback((file, next) => {
@@ -1265,6 +1302,8 @@ export default function MapViewer() {
             scaleUnit={scaleUnit}
             onScaleUnitChange={handleScaleUnitChange}
             visibilityRef={layerVisibilityRef}
+            printColors={printing ? printColors : null}
+            onPrintColors={handlePrintColors}
             overlays={overlays}
             overlayState={overlayState}
             onToggleOverlay={handleToggleOverlay}

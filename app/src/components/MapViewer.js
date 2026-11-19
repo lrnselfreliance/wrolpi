@@ -988,18 +988,16 @@ export default function MapViewer() {
         const map = mapRef.current;
         if (!map || !mapReady) return;
 
-        const center = map.getCenter();
-        const zoom = map.getZoom();
+        // What the user turned off is off in the new style too.  Listened for before the style is
+        // set: a style which only differs from the one the map has is in place, and has said so,
+        // before `setStyle` returns.  The map stays where it is: a style of ours says nothing of that.
+        const showAsChosen = () => applyGroupVisibility(map, layerVisibilityRef.current);
+        map.once("style.load", showAsChosen);
         // The overlays are part of the style, as the user last set them.
         // In the look a map is exported in while one is chosen; as the theme has it otherwise.
         map.setStyle(buildStyle(activeFilesRef.current, lookFlavor || mapFlavor(theme), hasTerrainRef.current,
             scaleUnit, lookSprite || mapSprite(theme), overlaysRef.current, overlayStateRef.current));
-        map.once("style.load", () => {
-            map.setCenter(center);
-            map.setZoom(zoom);
-            // Re-apply layer visibility state after style rebuild.
-            applyGroupVisibility(map, layerVisibilityRef.current);
-        });
+        return () => map.off("style.load", showAsChosen);
     }, [theme, lookFlavor, lookSprite, mapReady, scaleUnit]);
 
     // Remember what the user chose to see of an overlay, and show or hide its layers to match.
@@ -1080,9 +1078,6 @@ export default function MapViewer() {
         setExportError(null);
         setExportStatus("Preparing…");
         try {
-            // The map may still be changing to the look it is exported in: its style is that look's
-            // once it has drawn.
-            if (!map.loaded()) await new Promise(resolve => map.once("idle", resolve));
             const style = map.getStyle();
             const overlayLabels = Object.fromEntries(overlaysRef.current.map(
                 file => [overlaySourceId(file), overlayLabel(file, overlaysRef.current)]));

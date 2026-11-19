@@ -22,7 +22,7 @@ from urllib.parse import quote, urlparse
 
 import aiohttp
 import yaml
-from sqlalchemy import func, select, text
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -86,12 +86,12 @@ def _is_unlisted(name: str) -> bool:
 
 
 def get_sync_info(session: Session) -> dict:
-    from wrolpi.files.models import FileGroup
+    """What a secondary's Controller checks before it replaces its library and database with this WROLPi's."""
     return dict(
         version=__version__.strip(),
         role=get_sync_config().role,
+        # The database names files by their full path.
         media_directory=str(get_media_directory()),
-        max_file_group_id=session.execute(select(func.max(FileGroup.id))).scalar() or 0,
         # A secondary that replaces its database with this one must run code of the same migration.
         database_revision=_database_revision(session),
         # An unmounted media directory looks like an empty library.
@@ -111,8 +111,8 @@ def _database_revision(session: Session) -> Optional[str]:
 
 
 def resolve_destination(media_directory: pathlib.Path, path: str) -> Optional[pathlib.Path]:
-    """The secondary's path for a manifest path, or None if the path must not be written: outside the media directory,
-    hidden, protected, or reached through a symlink."""
+    """The path in this WROLPi's media directory for `path` (relative, '/'-separated), or None if it may not be used:
+    outside the media directory, hidden, protected, or reached through a symlink."""
     if not path or path.startswith('/') or '\\' in path:
         return None
     parts = pathlib.PurePosixPath(path).parts

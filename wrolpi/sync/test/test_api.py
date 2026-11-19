@@ -12,14 +12,11 @@ from wrolpi.sync.config import get_sync_config
 
 
 @pytest.mark.asyncio
-async def test_info(async_client, test_session, test_wrolpi_config, make_files_structure, refresh_files):
-    make_files_structure({'docs/a.txt': 'a', 'docs/b.txt': 'b'})
-    await refresh_files()
-
+async def test_info(async_client, test_session, test_wrolpi_config):
     request, response = await async_client.get('/api/sync/info')
     assert response.status_code == HTTPStatus.OK
+    assert set(response.json) == {'version', 'role', 'media_directory', 'database_revision', 'media_mounted'}
     assert response.json['role'] == 'primary'
-    assert response.json['max_file_group_id'] > 0
 
     # The old engine's manifest is gone; a secondary copies with rsync.
     request, response = await async_client.get('/api/sync/manifest')

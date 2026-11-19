@@ -2,15 +2,13 @@ import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {
     cancelBackup,
-    cancelSync,
     getSyncDirectories,
     PrimaryUnreachableError,
     runBackup,
-    runSync,
     saveSyncSettings,
     testSync
 } from "../../api";
-import {getDisks} from "../../api/controller";
+import {cancelSync, getDisks, getSyncStatus, runSync} from "../../api/controller";
 import {humanFileSize, isoDatetimeToAgoPopup, useTitle} from "../Common";
 import {Link} from "react-router";
 import {useDockerized, useSyncRole, useWROLMode} from "../../hooks/customHooks";
@@ -34,18 +32,67 @@ const roleOptions = [
     {value: 'secondary', label: 'Secondary'},
 ];
 
-/** The sync's progress: how many of the primary's FileGroups have been compared. */
-function syncPercent(sync) {
-    if (!sync || !sync.max_id) {
-        return 0;
+// What each step of a sync is called (see controller/lib/sync.py).
+const SYNC_PHASES = {
+    checks: 'Checking the primary',
+    snapshot: 'The primary is copying its database',
+    files: 'Copying files',
+    database: 'Copying the database',
+    starting: 'Starting WROLPi',
+    purge: 'Emptying the trash',
+};
+
+export function syncProgressLabel(sync) {
+    const phase = SYNC_PHASES[sync?.phase] || 'Syncing';
+    if (sync?.phase === 'files' || sync?.phase === 'database') {
+        return `${phase}: ${humanFileSize(sync.bytes_transferred || 0)}`;
     }
-    // FileGroup ids are not contiguous; `groups_seen / max_id` underestimates, it never overshoots.
-    return Math.min(100, Math.round(100 * sync.groups_seen / sync.max_id));
+    return phase;
 }
 
-function syncProgressLabel(sync) {
-    const downloaded = `${sync.files_downloaded} / ${sync.files_to_download} files`;
-    return `${sync.phase === 'configs' ? 'Importing configs' : downloaded} (${humanFileSize(sync.bytes_downloaded)})`;
+// How often the sync's status is asked for, while one runs, and otherwise.
+const SYNC_POLL_RUNNING_MS = 2000;
+const SYNC_POLL_IDLE_MS = 10000;
+
+/**
+ * The sync's status, from the Controller: a secondary's API is stopped while it syncs, so the Controller is the
+ * only one that can say how the sync is going.  Not asked for at all on a primary.
+ */
+export function useSyncStatus() {
+    const role = useSyncRole();
+    const [sync, setSync] = React.useState(null);
+    // The settings (and the role) cannot be read while the API is stopped; a role that is not known yet may be a
+    // secondary in the middle of a sync.
+    const enabled = role !== 'primary';
+    const running = sync?.state === 'running';
+
+    const fetchSync = React.useCallback(async () => {
+        try {
+            setSync(await getSyncStatus());
+        } catch (e) {
+            // The Controller is restarting; ask again later.
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!enabled) {
+            setSync(null);
+            return;
+        }
+        fetchSync();
+        const interval = setInterval(fetchSync, running ? SYNC_POLL_RUNNING_MS : SYNC_POLL_IDLE_MS);
+        return () => clearInterval(interval);
+    }, [enabled, running, fetchSync]);
+
+    return {sync, running, fetchSync};
+}
+
+async function stopSync() {
+    try {
+        await cancelSync();
+    } catch (e) {
+        toast({type: 'error', title: 'Could not stop the sync', description: e.message, time: 5000});
+    }
 }
 
 /**
@@ -73,38 +120,38 @@ export function SecondaryRoleNotice({primaryUrl, content}) {
     </Message>
 }
 
+// A sync that was stopped on purpose is not a problem.
+const STOPPED = ['The sync was cancelled', 'WROL Mode was enabled'];
+
 /** The progress and outcome of a secondary's sync. */
 export function SyncStatus({sync, running}) {
     if (!sync) {
         return null;
     }
+    const stopped = STOPPED.includes(sync.last_error);
     return <div>
-        {running && <Progress percent={syncPercent(sync)} label={syncProgressLabel(sync)}/>}
+        {running && <Progress percent={sync.percent || 0} label={syncProgressLabel(sync)}/>}
         <p>
             <b>Last successful sync:</b> {sync.last_success_at ? isoDatetimeToAgoPopup(sync.last_success_at) : 'Never'}
         </p>
         {!running && sync.finished_at && <p>
-            <b>Last sync:</b> {sync.files_downloaded} files downloaded
-            ({humanFileSize(sync.bytes_downloaded)}), {sync.files_failed} failed
-            {sync.files_excluded > 0 && <>, {sync.files_excluded} excluded</>}
+            <b>Last sync:</b> {sync.files_transferred} files copied ({humanFileSize(sync.bytes_transferred || 0)}),
+            {' '}{sync.files_deleted} moved to the trash
         </p>}
-        {sync.disk_full && <Message kind='error' icon='hdd' title='The drive is full'>
-            Some files were not synced because the drive is nearly full.
-        </Message>}
-        {sync.last_error && !running && <Message kind='error' icon='warning' title='Sync problem'>
-            {sync.last_error}
-        </Message>}
-        {sync.last_skip_reason && !running && <p style={{color: 'var(--muted)'}}>
-            Not synced: {sync.last_skip_reason}
+        {sync.trash_bytes > 0 && <p style={{color: 'var(--muted)'}}>
+            The trash holds {humanFileSize(sync.trash_bytes)} of files the primary deleted or replaced.
         </p>}
+        {!running && (sync.warnings || []).map(warning => <Message key={warning} kind='warning' icon='warning'
+                                                                  title='Sync warning'>{warning}</Message>)}
+        {sync.last_error && !running && (stopped
+            ? <p style={{color: 'var(--muted)'}}>{sync.last_error}.</p>
+            : <Message kind='error' icon='warning' title='Sync problem'>{sync.last_error}</Message>)}
     </div>
 }
 
-/** Covers the app while a secondary syncs; its API refuses requests until the sync finishes. */
+/** Covers the app while a secondary syncs; its API is stopped until the sync finishes. */
 export function SyncingOverlay() {
-    const {status} = React.useContext(StatusContext);
-    const role = useSyncRole();
-    const running = role === 'secondary' && status?.flags?.sync_running === true;
+    const {sync, running} = useSyncStatus();
 
     if (!running) {
         return null;
@@ -114,7 +161,7 @@ export function SyncingOverlay() {
                     position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center',
                     justifyContent: 'center', padding: 16, background: 'rgba(0, 0, 0, 0.6)',
                 }}>
-        <SyncingPanel sync={status.sync} onCancel={cancelSync}/>
+        <SyncingPanel sync={sync} onCancel={stopSync}/>
     </div>
 }
 
@@ -126,7 +173,7 @@ export function SyncingPanel({sync, onCancel}) {
             This WROLPi is copying the library of {sync?.primary_url || 'its primary'}. It is unavailable
             until the sync finishes.
         </p>
-        <Progress percent={syncPercent(sync)} label={sync ? syncProgressLabel(sync) : null}/>
+        <Progress percent={sync?.percent || 0} label={syncProgressLabel(sync)}/>
         <Button color='red' onClick={onCancel} style={{marginTop: '1em'}}>Stop Sync</Button>
     </Panel>
 }
@@ -226,7 +273,7 @@ export function ExcludeFolderModal({open, onClose, value, onSubmit, source}) {
 }
 
 /** The folders a sync or a backup does not copy, and the button that chooses them. */
-export function ExcludedDirectories({value, onChange, source, disabled}) {
+export function ExcludedDirectories({value, onChange, source, disabled, note}) {
     const [open, setOpen] = React.useState(false);
     const excluded = value || [];
     return <div style={{margin: '0.5em 0'}}>
@@ -243,6 +290,7 @@ export function ExcludedDirectories({value, onChange, source, disabled}) {
         <Button icon='folder open' onClick={() => setOpen(true)} disabled={disabled}>Choose Folders</Button>
         <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
             Files already copied into an excluded folder are kept; delete them yourself to free space.
+            {note && <> {note}</>}
         </p>
         <ExcludeFolderModal open={open} onClose={() => setOpen(false)} value={excluded} source={source}
                             onSubmit={chosen => {
@@ -254,7 +302,7 @@ export function ExcludedDirectories({value, onChange, source, disabled}) {
 
 export function SyncSection() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
-    const {status} = React.useContext(StatusContext);
+    const {sync, running, fetchSync} = useSyncStatus();
     const wrolMode = useWROLMode();
     const [state, setState] = React.useState({});
     const [testResult, setTestResult] = React.useState(null);
@@ -267,6 +315,7 @@ export function SyncSection() {
     const windowStart = settings?.sync_window_start;
     const windowEnd = settings?.sync_window_end;
     const excludedKey = JSON.stringify(settings?.sync_excluded_directories || []);
+    const deleteAfterDays = settings?.sync_delete_after_days;
     React.useEffect(() => {
         if (loaded) {
             setState({
@@ -275,9 +324,11 @@ export function SyncSection() {
                 sync_window_start: windowStart || '',
                 sync_window_end: windowEnd || '',
                 sync_excluded_directories: JSON.parse(excludedKey),
+                // null: never delete.
+                sync_delete_after_days: deleteAfterDays === undefined ? 30 : deleteAfterDays,
             });
         }
-    }, [loaded, role, primaryUrl, windowStart, windowEnd, excludedKey]);
+    }, [loaded, role, primaryUrl, windowStart, windowEnd, excludedKey, deleteAfterDays]);
 
     if (!settings) {
         return null;
@@ -285,12 +336,15 @@ export function SyncSection() {
 
     const secondary = state.role === 'secondary';
     const saved = secondary && settings.role === 'secondary' && settings.sync_primary_url;
-    const running = status?.flags?.sync_running === true;
+    const neverDelete = state.sync_delete_after_days === null;
 
     const save = async () => {
         setSaving(true);
         try {
-            const response = await saveSyncSettings(state);
+            // The API takes -1 for "never".
+            const response = await saveSyncSettings({
+                ...state, sync_delete_after_days: neverDelete ? -1 : Number(state.sync_delete_after_days),
+            });
             if (response?.ok) {
                 toast({type: 'success', title: 'Sync settings saved', time: 3000});
                 setTestResult(null);
@@ -306,17 +360,20 @@ export function SyncSection() {
     };
 
     const syncNow = async () => {
-        const response = await runSync();
-        if (response?.ok) {
-            toast({type: 'info', title: 'Sync requested', description: 'The sync starts in a few seconds.', time: 3000});
+        try {
+            await runSync();
+            toast({type: 'info', title: 'Sync started', time: 3000});
+            await fetchSync();
+        } catch (e) {
+            toast({type: 'error', title: 'The sync did not start', description: e.message, time: 5000});
         }
     };
 
     return <Panel>
         <Header as='h3' icon='copy'>Sync</Header>
         <p>
-            A <b>secondary</b> WROLPi keeps a copy of a <b>primary</b> WROLPi's library: its files, tags,
-            channels, domains, playlists, and other library settings. Files deleted on the primary are kept.
+            A <b>secondary</b> WROLPi keeps a copy of a <b>primary</b> WROLPi's library: all of its files (maps
+            and repositories too), its database, tags, channels, playlists, and other library settings.
         </p>
         <div style={{margin: '0.5em 0', maxWidth: '20em'}}>
             <label><b>This WROLPi is</b></label>
@@ -326,8 +383,9 @@ export function SyncSection() {
 
         {secondary && <>
             <Message kind='warning' icon='warning' title='A secondary is overwritten'>
-                Every sync replaces this WROLPi's library with the primary's; changes made here are lost.
-                It does not download, and it is unavailable while it syncs.
+                Every sync replaces this WROLPi's library and database with the primary's; changes made here are
+                lost. It does not download, and it is unavailable while it syncs. Both WROLPis must run the same
+                version.
             </Message>
             <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
                 <label><b>Primary address</b></label>
@@ -353,11 +411,32 @@ export function SyncSection() {
                 Within the window, this secondary syncs every 15 minutes. Leave both empty to sync only with
                 "Sync Now".
             </p>
+            <div style={{margin: '0.5em 0'}}>
+                <label><b>Files the primary deletes</b></label>
+                <div style={{display: 'flex', gap: '1em', alignItems: 'center', flexWrap: 'wrap'}}>
+                    <span style={{display: 'flex', gap: '0.5em', alignItems: 'center'}}>
+                        Delete after
+                        <TextInput type='number' min={0} max={3650} style={{width: '6em'}} aria-label='Days'
+                                   value={neverDelete ? '' : state.sync_delete_after_days}
+                                   disabled={wrolMode || neverDelete}
+                                   onChange={e => setState({...state, sync_delete_after_days: e.currentTarget.value})}/>
+                        days
+                    </span>
+                    <Checkbox checked={neverDelete} disabled={wrolMode} label='Never delete them'
+                              onChange={() => setState({...state, sync_delete_after_days: neverDelete ? 30 : null})}/>
+                </div>
+                <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
+                    A file the primary deletes, or the old version of one it changes, waits in a trash folder
+                    (<code>.sync-trash</code>) for this long. It is removed sooner if the drive is nearly full.
+                </p>
+            </div>
         </>}
 
         {/* The primary's folders can only be listed once this WROLPi knows its primary. */}
         {secondary && saved && <ExcludedDirectories value={state.sync_excluded_directories} source='primary'
                                                     disabled={wrolMode}
+                                                    note="This WROLPi's database is the primary's, so the files of an
+                                                    excluded folder are still listed here; they do not open."
                                                     onChange={value => setState({
                                                         ...state,
                                                         sync_excluded_directories: value
@@ -379,7 +458,7 @@ export function SyncSection() {
             WROL Mode is enabled; this WROLPi does not sync.
         </Message>}
 
-        {settings.role === 'secondary' && <SyncStatus sync={status?.sync} running={running}/>}
+        {settings.role === 'secondary' && <SyncStatus sync={sync} running={running}/>}
     </Panel>
 }
 

@@ -29,9 +29,12 @@ import subprocess
 import threading
 import time
 import uuid
+import zoneinfo
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
+
+import asyncio
 
 import httpx
 import yaml
@@ -58,6 +61,10 @@ STATE_FILE = "config/sync_state.yaml"
 DEFAULT_DELETE_AFTER_DAYS = 30
 # Never fill the secondary's drive; leave this much free.
 MIN_FREE_BYTES = 1024 ** 3
+# Within the daily sync window, a sync starts this long after the last one finished.
+SYNC_REPEAT_SECONDS = 15 * 60
+# How often the schedule is looked at.
+SCHEDULE_INTERVAL_SECONDS = 60
 SNAPSHOT_TIMEOUT_SECONDS = 60 * 60
 API_START_TIMEOUT_SECONDS = 10 * 60
 # A sync runs unattended with the API stopped: a primary that loses power or its link must end the run, not hold it.
@@ -712,3 +719,63 @@ def recover_interrupted_sync(runner=None):
         runner.start_api()
     update_status(save=True, state="error", phase=None, finished_at=_now(),
                   last_error="The sync was interrupted")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The schedule.
+
+
+def local_now() -> datetime.datetime:
+    """Now, in WROLPi's timezone (wrolpi.yaml), or the system's when none is set."""
+    timezone = _read_yaml(get_media_directory() / "config/wrolpi.yaml").get("timezone")
+    if timezone:
+        with contextlib.suppress(zoneinfo.ZoneInfoNotFoundError, ValueError):
+            return datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
+    return datetime.datetime.now().astimezone()
+
+
+def _parse_time(value) -> Optional[datetime.time]:
+    with contextlib.suppress(TypeError, ValueError):
+        return datetime.time.fromisoformat(str(value))
+    return None
+
+
+def in_window(start: Optional[str], end: Optional[str], now: datetime.time) -> bool:
+    """True if `now` is within the daily window from `start` to `end`, which may run past midnight."""
+    start, end = _parse_time(start), _parse_time(end)
+    if start is None or end is None:
+        return False
+    if start <= end:
+        return start <= now < end
+    return now >= start or now < end
+
+
+def sync_is_due(config: dict, status: dict, now: datetime.datetime) -> bool:
+    """True if the daily sync window is open and the last sync finished long enough ago.  No window: never (a sync
+    only runs when asked)."""
+    if not in_window(config.get("window_start"), config.get("window_end"), now.time()):
+        return False
+    with contextlib.suppress(TypeError, ValueError):
+        finished_at = datetime.datetime.fromisoformat(status["finished_at"])
+        return (now - finished_at).total_seconds() >= SYNC_REPEAT_SECONDS
+    return True
+
+
+def schedule_tick():
+    """Start a sync if one is due.  A sync that cannot start (WROL Mode, a primary, no primary) is not due."""
+    config = read_sync_config()
+    if skip_reason(config) is not None:
+        return
+    if sync_is_due(config, get_status(), local_now()):
+        logger.info("The sync window is open")
+        run_sync()
+
+
+async def sync_schedule_loop():
+    """Sync within the daily window for as long as the Controller runs."""
+    while True:
+        try:
+            await asyncio.to_thread(schedule_tick)
+        except Exception as e:
+            logger.error("The sync schedule failed", exc_info=e)
+        await asyncio.sleep(SCHEDULE_INTERVAL_SECONDS)

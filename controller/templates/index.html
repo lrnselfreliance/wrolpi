@@ -169,6 +169,33 @@
             display: block;
         }
 
+        /* A secondary WROLPi copying its primary; its API is stopped meanwhile. */
+        .sync-card {
+            border: 2px solid #3498db;
+            border-radius: 4px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .sync-card.show {
+            display: block;
+        }
+
+        .sync-card .sync-bar {
+            height: 0.6rem;
+            background: rgba(127, 127, 127, 0.3);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .sync-card .sync-bar div {
+            height: 100%;
+            background: #3498db;
+            width: 0;
+        }
+
         .fallback-banner .loading {
             border-color: #333;
             border-top-color: #000;
@@ -943,6 +970,15 @@
 <div style="margin-bottom: 1rem;">
     <a id="proceed-btn" class="btn btn-success" style="{% if not app_ready %}display: none;{% endif %} font-size: 1.1rem; padding: 0.6rem 1.5rem;" href="#">Proceed to WROLPi</a>
     <a id="view-files-btn" class="btn btn-info" style="{% if not app_ready %}display: none;{% endif %} font-size: 1.1rem; padding: 0.6rem 1.5rem; margin-left: 0.5rem;" href="#">View Files</a>
+</div>
+
+<div id="sync-card" class="sync-card" role="status" aria-live="polite">
+    <strong>Syncing from the primary</strong>
+    <p id="sync-text" style="margin: 0.25rem 0;"></p>
+    <div class="sync-bar"><div id="sync-bar"></div></div>
+    <p style="margin: 0.25rem 0; font-size: 0.9em;">WROLPi is unavailable until the sync finishes, then this page
+        returns to it.</p>
+    <button id="sync-stop" class="btn btn-danger" type="button">Stop Sync</button>
 </div>
 
 <div id="fallback-banner" class="fallback-banner">
@@ -3077,6 +3113,52 @@
             refreshToggleButtons();
         }, updateInterval);
     }
+
+    // A secondary WROLPi's sync (controller/lib/sync.py).  Its API is stopped while it runs, which is why this page
+    // is shown; say what is happening.  Relative URLs: /controller/api/... behind Caddy, /api/... when direct.
+    (function () {
+        const PHASES = {
+            checks: 'Checking the primary', snapshot: 'The primary is copying its database',
+            files: 'Copying files', database: 'Copying the database', starting: 'Starting WROLPi',
+            purge: 'Emptying the trash',
+        };
+        const card = document.getElementById('sync-card');
+        const text = document.getElementById('sync-text');
+        const bar = document.getElementById('sync-bar');
+        const stop = document.getElementById('sync-stop');
+
+        async function checkSync() {
+            try {
+                const resp = await fetch('api/sync/status', {signal: AbortSignal.timeout(5000)});
+                if (!resp.ok) {
+                    return;
+                }
+                const sync = await resp.json();
+                const running = sync.state === 'running';
+                card.classList.toggle('show', running);
+                if (running) {
+                    const copied = (sync.phase === 'files' || sync.phase === 'database')
+                        ? ` (${formatBytes(sync.bytes_transferred || 0)})` : '';
+                    text.textContent = `${PHASES[sync.phase] || 'Syncing'}${copied} from ${sync.primary_url || 'the primary'}`;
+                    bar.style.width = `${Math.min(100, sync.percent || 0)}%`;
+                }
+            } catch (e) {
+                // The Controller is busy or restarting; ask again.
+            }
+        }
+
+        stop.addEventListener('click', async () => {
+            stop.disabled = true;
+            try {
+                await fetch('api/sync/cancel', {method: 'POST'});
+            } finally {
+                setTimeout(() => { stop.disabled = false; }, 3000);
+            }
+        });
+
+        checkSync();
+        setInterval(checkSync, 2000);
+    })();
 </script>
 </body>
 </html>

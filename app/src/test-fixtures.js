@@ -123,6 +123,25 @@ export const syncStatusFixture = (overrides = {}) => ({
     ...overrides,
 });
 
+/** GET /controller/api/sync/status: a secondary's sync that has never run (controller/lib/sync.py). */
+export const controllerSyncStatusFixture = (overrides = {}) => ({
+    state: 'idle',
+    phase: null,
+    started_at: null,
+    finished_at: null,
+    last_success_at: null,
+    last_error: null,
+    primary_url: null,
+    primary_version: null,
+    percent: 0,
+    bytes_transferred: 0,
+    files_transferred: 0,
+    files_deleted: 0,
+    trash_bytes: 0,
+    warnings: [],
+    ...overrides,
+});
+
 /** The `backup` of GET /api/status: a backup drive that has never been written. */
 export const backupStatusFixture = (overrides = {}) => ({
     state: 'idle',

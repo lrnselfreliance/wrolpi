@@ -339,11 +339,20 @@ export function SyncSection() {
     const neverDelete = state.sync_delete_after_days === null;
 
     const save = async () => {
+        // An empty box is not "delete at once": that would empty the trash at the next sync.
+        const days = String(state.sync_delete_after_days ?? '').trim();
+        if (secondary && !neverDelete && !/^\d+$/.test(days)) {
+            toast({
+                type: 'error', title: 'Sync settings were not saved', time: 5000,
+                description: 'Enter how many days to keep deleted files, or choose to never delete them.',
+            });
+            return;
+        }
         setSaving(true);
         try {
             // The API takes -1 for "never".
             const response = await saveSyncSettings({
-                ...state, sync_delete_after_days: neverDelete ? -1 : Number(state.sync_delete_after_days),
+                ...state, sync_delete_after_days: neverDelete ? -1 : Number(days),
             });
             if (response?.ok) {
                 toast({type: 'success', title: 'Sync settings saved', time: 3000});

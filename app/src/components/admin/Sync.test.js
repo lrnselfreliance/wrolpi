@@ -177,6 +177,20 @@ describe('SyncSection', () => {
             expect.objectContaining({sync_delete_after_days: -1})));
     });
 
+    it('an empty number of days is not saved as "delete at once"', async () => {
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: 30})});
+        fireEvent.change(screen.getByLabelText('Days'), {target: {value: ''}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error', title: 'Sync settings were not saved'})));
+        expect(saveSyncSettings).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Days'), {target: {value: '0'}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({sync_delete_after_days: 0})));
+    });
+
     it('a secondary that never deletes shows it', () => {
         renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: null})});
         expect(screen.getByLabelText('Never delete them')).toBeChecked();

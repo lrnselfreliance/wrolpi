@@ -125,6 +125,9 @@ def default_status() -> dict:
 
 
 _status = None
+# True once the state file was read or written: until then the drive may not be mounted, and what is in memory must
+# not be mistaken for (or saved over) what the last sync recorded.
+_status_from_file = False
 _status_lock = threading.Lock()
 _run_lock = threading.Lock()
 _cancel = threading.Event()
@@ -139,16 +142,19 @@ def _state_file() -> Path:
 
 
 def get_status() -> dict:
-    """The progress and outcome of the sync.  Read from the state file the first time, so a restarted Controller
-    still knows when the last sync succeeded."""
-    global _status
+    """The progress and outcome of the sync.  Read from the state file, so a restarted Controller still knows when
+    the last sync succeeded; read again until that works, as the Controller may start before the drive is mounted."""
+    global _status, _status_from_file
     with _status_lock:
         if _status is None:
             _status = default_status()
+        if not _status_from_file:
             try:
                 saved = yaml.safe_load(checked_path(_state_file()).read_text())
                 if isinstance(saved, dict):
+                    _status = default_status()
                     _status.update({k: v for k, v in saved.items() if k in _status})
+                    _status_from_file = True
             except (OSError, yaml.YAMLError, SyncError):
                 pass
         return dict(_status)
@@ -161,8 +167,10 @@ def update_status(save: bool = False, **changes) -> dict:
         _status.update(changes)
         status = dict(_status)
     if save:
+        global _status_from_file
         try:
             write_file(_state_file(), yaml.safe_dump(status))
+            _status_from_file = True
         except (OSError, SyncError) as e:
             logger.warning("Could not save the sync state: %s", e)
     return status
@@ -683,16 +691,17 @@ def run_sync(runner=None) -> dict:
 
 
 def _finish(runner, api_stopped: bool, **changes) -> dict:
-    """Whatever happened, the API runs again and the lock is free."""
+    """Whatever happened, the API runs again and the lock is free.  The outcome is recorded before the lock is
+    freed: a status that says "running" while no sync holds the lock is taken for an interrupted sync."""
     try:
         if api_stopped:
             runner.start_api()
+        trash = get_media_directory() / TRASH_DIRECTORY
+        return update_status(save=True, phase=None, finished_at=_now(),
+                             trash_bytes=directory_size(trash) if trash.is_dir() and not trash.is_symlink() else 0,
+                             **changes)
     finally:
         _run_lock.release()
-    trash = get_media_directory() / TRASH_DIRECTORY
-    return update_status(save=True, phase=None, finished_at=_now(),
-                         trash_bytes=directory_size(trash) if trash.is_dir() and not trash.is_symlink() else 0,
-                         **changes)
 
 
 def _read_yaml(file: Path) -> dict:
@@ -709,10 +718,11 @@ def request_cancel():
 
 
 def recover_interrupted_sync(runner=None):
-    """Called when the Controller starts.  A sync that was running when the Controller stopped left the API stopped;
-    start it, and say the sync was interrupted."""
+    """A status that says "running" while no sync holds the lock was left by a Controller that stopped during a
+    sync, which left the API stopped: start it, and say the sync was interrupted.  Looked at by every tick of the
+    schedule, before it starts anything, and so also once the state file can be read after the drive mounts."""
     status = get_status()
-    if status["state"] != "running":
+    if status["state"] != "running" or _run_lock.locked():
         return
     logger.warning("A sync was interrupted; starting the API")
     runner = runner or get_runner()
@@ -767,6 +777,7 @@ def sync_is_due(config: dict, status: dict, now: datetime.datetime) -> bool:
 
 def schedule_tick():
     """Start a sync if one is due.  A sync that cannot start (WROL Mode, a primary, no primary) is not due."""
+    recover_interrupted_sync()
     config = read_sync_config()
     if skip_reason(config) is not None:
         return

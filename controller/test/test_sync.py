@@ -37,6 +37,7 @@ def media(tmp_path, monkeypatch) -> Path:
     (directory / "config/sync.yaml").write_text(yaml.safe_dump(dict(role="secondary", primary_url=PRIMARY)))
     monkeypatch.setenv("MEDIA_DIRECTORY", str(directory))
     monkeypatch.setattr(sync, "_status", None)
+    monkeypatch.setattr(sync, "_status_from_file", False)
     sync._cancel.clear()
     yield directory
     assert not sync._run_lock.locked(), "the test left a sync running"
@@ -354,7 +355,7 @@ class TestRunSync:
         assert yaml.safe_load((media / sync.PRIMARY_INFO).read_text())["media_directory"] == "/media/wrolpi"
         assert (media / sync.PRIMARY_WROLPI_CONFIG).is_file()
         # A restarted Controller reads the state file.
-        sync._status = None
+        sync._status, sync._status_from_file = None, False
         assert sync.get_status()["last_success_at"] == status["last_success_at"]
 
     def test_leaves_out_the_playlists_of_both_machines(self, media, primary_api):
@@ -430,7 +431,7 @@ class TestRunSync:
     def test_interrupted_sync_is_recovered(self, media):
         """A Controller that stopped during a sync left the API stopped."""
         sync.update_status(save=True, state="running", phase="files")
-        sync._status = None
+        sync._status, sync._status_from_file = None, False
         runner = FakeRunner(media)
         sync.recover_interrupted_sync(runner)
         # In Docker rsync is its own container and is still replacing files: it is stopped before the API starts.
@@ -787,3 +788,64 @@ def test_docker_rsync_reads_progress_as_it_comes(media, monkeypatch):
     assert lines == ["     1000  10%", "     5000  50%", "Number of regular files transferred: 1"]
     helper.logs.assert_not_called()
     helper.remove.assert_called_once_with(force=True)
+
+
+class TestRecoveryAndSchedule:
+    """A Controller that starts after an interrupted sync must recover it before the schedule starts another."""
+
+    def interrupted(self, media):
+        (media / "config/sync.yaml").write_text(yaml.safe_dump(dict(
+            role="secondary", primary_url=PRIMARY, window_start="00:00", window_end="23:59")))
+        (media / "config/sync_state.yaml").write_text(yaml.safe_dump(dict(state="running", phase="files",
+                                                                          finished_at=None)))
+
+    def test_tick_recovers_first_and_starts_nothing(self, media, monkeypatch):
+        self.interrupted(media)
+        runner, runs = FakeRunner(media), []
+        monkeypatch.setattr(sync, "get_runner", lambda: runner)
+        monkeypatch.setattr(sync, "run_sync", lambda: runs.append(1))
+        monkeypatch.setattr(sync, "local_now", lambda: datetime.datetime.now().astimezone())
+
+        sync.schedule_tick()
+
+        assert runner.events == ["stop_rsync", "start_api"]
+        assert sync.get_status()["state"] == "error" and sync.get_status()["last_error"] == "The sync was interrupted"
+        assert runs == [], "the recovered sync just finished; the next one waits its 15 minutes"
+
+    def test_a_running_sync_is_not_recovered(self, media, monkeypatch):
+        """A status of "running" while this Controller's own sync holds the lock is no interrupted sync."""
+        self.interrupted(media)
+        runner = FakeRunner(media)
+        assert sync._run_lock.acquire(blocking=False)
+        try:
+            sync.recover_interrupted_sync(runner)
+        finally:
+            sync._run_lock.release()
+        assert runner.events == [] and sync.get_status()["state"] == "running"
+
+    def test_state_file_read_once_the_drive_is_mounted(self, media):
+        """The Controller may start before the drive is mounted: what it could not read is read later, not
+        replaced by an empty record."""
+        state = media / "config/sync_state.yaml"
+        assert not state.exists()
+        assert sync.get_status()["last_success_at"] is None
+        state.write_text(yaml.safe_dump(dict(state="idle", last_success_at="2026-11-18T03:00:00+00:00")))
+        assert sync.get_status()["last_success_at"] == "2026-11-18T03:00:00+00:00"
+        # Once read, what is in memory is the record.
+        sync.update_status(last_error="x")
+        state.write_text(yaml.safe_dump(dict(state="idle", last_success_at=None)))
+        assert sync.get_status()["last_success_at"] == "2026-11-18T03:00:00+00:00"
+
+    def test_outcome_is_recorded_before_the_lock_is_freed(self, media, primary_api, monkeypatch):
+        """Otherwise a tick between the two would take the sync for an interrupted one."""
+        locked_when_saved = []
+        update_status = sync.update_status
+
+        def watch(save=False, **changes):
+            if save and changes.get("finished_at"):
+                locked_when_saved.append(sync._run_lock.locked())
+            return update_status(save=save, **changes)
+
+        monkeypatch.setattr(sync, "update_status", watch)
+        sync.run_sync(FakeRunner(media))
+        assert locked_when_saved == [True]

@@ -168,10 +168,10 @@ describe('SyncSection', () => {
 
     it('saves how long deleted files are kept, or never to delete them', async () => {
         renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: 7})});
-        expect(screen.getByLabelText('Days')).toHaveValue(7);
+        expect(screen.getByLabelText('Files the primary deletes: days')).toHaveValue(7);
 
-        fireEvent.click(screen.getByLabelText('Never delete them'));
-        expect(screen.getByLabelText('Days')).toBeDisabled();
+        fireEvent.click(screen.getByLabelText('Files the primary deletes: never delete them'));
+        expect(screen.getByLabelText('Files the primary deletes: days')).toBeDisabled();
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
             expect.objectContaining({sync_delete_after_days: -1})));
@@ -179,13 +179,13 @@ describe('SyncSection', () => {
 
     it('an empty number of days is not saved as "delete at once"', async () => {
         renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: 30})});
-        fireEvent.change(screen.getByLabelText('Days'), {target: {value: ''}});
+        fireEvent.change(screen.getByLabelText('Files the primary deletes: days'), {target: {value: ''}});
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
             type: 'error', title: 'Sync settings were not saved'})));
         expect(saveSyncSettings).not.toHaveBeenCalled();
 
-        fireEvent.change(screen.getByLabelText('Days'), {target: {value: '0'}});
+        fireEvent.change(screen.getByLabelText('Files the primary deletes: days'), {target: {value: '0'}});
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
             expect.objectContaining({sync_delete_after_days: 0})));
@@ -193,7 +193,7 @@ describe('SyncSection', () => {
 
     it('a secondary that never deletes shows it', () => {
         renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: null})});
-        expect(screen.getByLabelText('Never delete them')).toBeChecked();
+        expect(screen.getByLabelText('Files the primary deletes: never delete them')).toBeChecked();
     });
 
     it('WROL Mode stops syncing', () => {
@@ -221,7 +221,29 @@ describe('BackupDriveSection', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
             backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
+    });
+
+    it('saves how long deleted files are kept on the backup drive', async () => {
+        const settings = {settings: settingsFixture({
+                backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
+                backup_delete_after_days: 7})};
+        renderWithProviders(<BackupDriveSection/>, {settings});
+        const days = await screen.findByLabelText('Files deleted here: days');
+        expect(days).toHaveValue(7);
+
+        // An empty box is not "delete at once".
+        fireEvent.change(days, {target: {value: ''}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error', title: 'Backup drive was not saved'})));
+        expect(saveSyncSettings).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByLabelText('Files deleted here: never delete them'));
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({backup_delete_after_days: -1})));
     });
 
     it('shows the backup and runs it on request', async () => {
@@ -299,6 +321,7 @@ describe('BackupDriveSection folder', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup/wrolpi/library', backup_device_uuid: 'uuid-backup',
             backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
     });
 
@@ -334,6 +357,7 @@ describe('BackupDriveSection window', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
             backup_window_start: '01:00', backup_window_end: '04:30', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
     });
 });

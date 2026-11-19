@@ -849,3 +849,27 @@ class TestRecoveryAndSchedule:
         monkeypatch.setattr(sync, "update_status", watch)
         sync.run_sync(FakeRunner(media))
         assert locked_when_saved == [True]
+
+
+def test_purge_never_removes_the_newest_for_space(media, monkeypatch):
+    """Moving a file to the trash frees nothing, so on a nearly full drive the trash this sync just filled would be
+    removed by the same sync.  Only age removes the newest folder."""
+    trash = media / ".sync-trash"
+    for name in ("2026-11-17", "2026-11-18"):
+        (trash / name).mkdir(parents=True)
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(sync.shutil, "disk_usage", lambda _: usage(100, 100, 0))
+    assert sync.purge_trash(media, 30, datetime.date(2026, 11, 18), min_free_bytes=10) == ["2026-11-17"]
+    assert (trash / "2026-11-18").is_dir()
+    assert sync.purge_trash(media, 0, datetime.date(2026, 11, 18), min_free_bytes=10) == ["2026-11-18"]
+
+
+def test_room_is_made_for_the_primarys_database(media, primary_api, monkeypatch):
+    """Before the API is stopped, the trash makes room for the primary's database, not only the usual 1 GiB."""
+    purges = []
+    monkeypatch.setattr(sync, "purge_trash",
+                        lambda media_directory, days, today=None, min_free_bytes=sync.MIN_FREE_BYTES:
+                        purges.append(min_free_bytes))
+    sync.run_sync(FakeRunner(media))
+    # The snapshot of primary_api is 1000 bytes.
+    assert purges[0] == 1000 + sync.MIN_FREE_BYTES

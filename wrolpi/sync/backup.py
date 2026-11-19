@@ -3,9 +3,11 @@
 The backup drive mirrors the media directory, so if the media drive dies the backup drive can be mounted as the media
 directory and WROLPi starts from it:
 
-1. rsync copies every file that is new or changed (never `--delete`: a file deleted from the media directory stays on
-   the backup drive).  The Tags Directory and the playlists directory are not copied; they are hard links that
-   WROLPi rebuilds from the configs when it starts.
+1. rsync copies every file that is new or changed.  A file deleted from the media directory, or the old version of one
+   that changed, is moved to a dated folder in `.backup-trash` on the backup drive and removed after
+   `backup_delete_after_days` (sync.yaml), or sooner when the drive is nearly full; with no number of days nothing
+   is deleted.  The Tags Directory and the playlists directory are not copied; they are hard links that WROLPi
+   rebuilds from the configs when it starts.
 2. The database is not copied by rsync (a live database copied as files can be torn); SQLite's backup API writes a
    consistent snapshot instead.
 
@@ -15,6 +17,7 @@ leaves an empty directory on the system drive, which must never be filled.
 """
 import asyncio
 import contextlib
+import datetime
 import os
 import pathlib
 import re
@@ -37,6 +40,10 @@ logger = logger.getChild(__name__)
 
 # Within the sync window, back up again this long after the last backup finished; each backup walks the whole library.
 BACKUP_REPEAT_SECONDS = 60 * 60
+# On the backup drive: what the media directory deleted or replaced, in a folder per day.
+TRASH_DIRECTORY = '.backup-trash'
+# Never fill the backup drive with the trash; below this, the oldest trash goes first.
+MIN_FREE_BYTES = 1024 ** 3
 # rsync keeps an interrupted file here (on the backup drive) so the next backup resumes it.
 PARTIAL_DIRECTORY = '.rsync-partial'
 # rsync exit codes: 23 = some files could not be read, 24 = some files vanished while copying.
@@ -156,8 +163,9 @@ def rsync_literal(path: str) -> str:
 
 
 def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_destination: str = None,
-                        excluded_directories: List[str] = None) -> List[str]:
-    """The rsync that copies `source` (the media directory) to `target` (the backup drive), never deleting."""
+                        excluded_directories: List[str] = None, trash: pathlib.Path = None) -> List[str]:
+    """The rsync that copies `source` (the media directory) to `target` (the backup drive).  What `source` no longer
+    has, and the old versions of what changed, are moved to `trash`; without one nothing is deleted."""
     command = list()
     # The backup should not slow the WROLPi down.
     if ionice := shutil.which('ionice'):
@@ -169,6 +177,12 @@ def build_rsync_command(source: pathlib.Path, target: pathlib.Path, playlists_de
         '--archive',
         '--partial', f'--partial-dir={PARTIAL_DIRECTORY}',
         '--info=progress2,stats2', '--no-human-readable',
+    ])
+    if trash is not None:
+        # An excluded path is never deleted: the trash, the drive's database snapshot and rsync's partials stay.
+        command.extend(['--delete', '--backup', f'--backup-dir={trash}'])
+    command.extend([
+        f'--exclude=/{TRASH_DIRECTORY}',
         # The database is copied as a snapshot (see `snapshot_database`).
         '--exclude=/config/wrolpi.db', '--exclude=/config/wrolpi.db-*', '--exclude=/config/.wrolpi.db.backup',
         # The snapshot kept for secondaries (wrolpi.sync.snapshot); the drive has its own.
@@ -266,6 +280,12 @@ def backup_skip_reason() -> Optional[str]:
         return 'WROL Mode is enabled'
     if not PYTEST and not flags.db_up.is_set():
         return 'The database is not up'
+    # An unmounted media directory is an empty folder: copying it with --delete would move the whole backup drive to
+    # the trash.
+    if not PYTEST and get_wrolpi_config().require_media_mounted and not flags.media_mounted.is_set():
+        return 'The media directory is not mounted'
+    if not (get_media_directory() / 'config/wrolpi.yaml').is_file():
+        return 'The media directory holds no WROLPi library'
     if not shutil.which('rsync'):
         return 'rsync is not installed'
     if reason := check_backup_target(config.backup_directory, config.backup_device_uuid):
@@ -370,8 +390,14 @@ async def run_backup() -> dict:
         with flags.backup_running:
             # A folder on the drive is created once the drive has been checked (`backup_skip_reason`).
             target.mkdir(parents=True, exist_ok=True)
+            delete_after_days = config.backup_delete_after_days
+            # Room first: the trash is what fills a backup drive, and a full drive fails every backup.
+            await asyncio.to_thread(purge_trash, target, delete_after_days)
+            trash = None
+            if delete_after_days is not None:
+                trash = target / TRASH_DIRECTORY / datetime.date.today().isoformat()
             command = build_rsync_command(get_media_directory(), target, get_wrolpi_config().playlists_destination,
-                                          config.backup_excluded_directories)
+                                          config.backup_excluded_directories, trash)
             code, errors = await _run_rsync(command, target, uuid)
             if code == RSYNC_PARTIAL:
                 # Unreadable files; everything else was copied.
@@ -384,7 +410,11 @@ async def run_backup() -> dict:
             update_backup_status(phase='database')
             if reason := check_backup_target(str(target), uuid):
                 raise BackupError(f'Stopped: {reason}')
+            # Room for the database snapshot, which is written beside the drive's old one before it replaces it.
+            room = get_db_file().stat().st_size + MIN_FREE_BYTES
+            await asyncio.to_thread(purge_trash, target, delete_after_days, None, room)
             await asyncio.to_thread(snapshot_database_if_changed, target)
+            await asyncio.to_thread(purge_trash, target, delete_after_days)
     except BackupCancelled as e:
         logger.warning(f'Backup stopped: {e}')
         return update_backup_status(state='idle', phase=None, finished_at=now().isoformat(), last_error=str(e),
@@ -408,6 +438,38 @@ async def run_backup() -> dict:
                                 last_error=warning, percent=100,
                                 # A request to stop during the database snapshot (which runs to the end) is done.
                                 cancel_requested=False)
+
+
+def purge_trash(target: pathlib.Path, delete_after_days: Optional[int], today: datetime.date = None,
+                min_free_bytes: int = MIN_FREE_BYTES) -> List[str]:
+    """Remove the trash folders on the backup drive that have waited `delete_after_days` and, while the drive has
+    less than `min_free_bytes` free, the oldest of the rest.  A folder is as old as its name says.  Returns their
+    names.
+
+    The newest folder is never removed for space: moving a file to the trash is a rename, which frees nothing, so a
+    nearly full drive would otherwise delete what this very backup moved there at once."""
+    trash = target / TRASH_DIRECTORY
+    if trash.is_symlink() or not trash.is_dir():
+        return []
+    today = today or datetime.date.today()
+    dated = []
+    for folder in trash.iterdir():
+        if folder.is_symlink() or not folder.is_dir():
+            continue
+        with contextlib.suppress(ValueError):
+            dated.append((datetime.date.fromisoformat(folder.name), folder))
+    purged = []
+    dated.sort()
+    newest = dated[-1][1] if dated else None
+    for day, folder in dated:
+        expired = delete_after_days is not None and (today - day).days >= delete_after_days
+        nearly_full = folder != newest and shutil.disk_usage(target).free < min_free_bytes
+        if not expired and not nearly_full:
+            continue
+        logger.info(f'Removing the backup trash of {folder.name} ({"expired" if expired else "drive nearly full"})')
+        shutil.rmtree(folder, ignore_errors=True)
+        purged.append(folder.name)
+    return purged
 
 
 def backup_is_due(status: dict, local_now) -> bool:

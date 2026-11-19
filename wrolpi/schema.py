@@ -9,6 +9,8 @@ from wrolpi.errors import InvalidDownload, ValidationError
 
 @dataclass
 class SettingsResponse:
+    # None never deletes.
+    backup_delete_after_days: Optional[int]
     backup_device_uuid: Optional[str]
     backup_directory: Optional[str]
     backup_excluded_directories: List[str]

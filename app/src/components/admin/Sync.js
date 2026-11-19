@@ -300,6 +300,34 @@ export function ExcludedDirectories({value, onChange, source, disabled, note}) {
     </div>
 }
 
+/** True if `days` (a number, or the text of the days box) is a whole number of days. */
+export function validDays(days) {
+    return /^\d+$/.test(String(days ?? '').trim());
+}
+
+/**
+ * How long deleted files wait in a trash folder before they are removed; `value` null is "never".  An empty box is
+ * not "delete at once": callers refuse to save it (see `validDays`).
+ */
+export function DeleteDelay({label, value, onChange, disabled, description}) {
+    const never = value === null;
+    return <div style={{margin: '0.5em 0'}}>
+        <label><b>{label}</b></label>
+        <div style={{display: 'flex', gap: '1em', alignItems: 'center', flexWrap: 'wrap'}}>
+            <span style={{display: 'flex', gap: '0.5em', alignItems: 'center'}}>
+                Delete after
+                <TextInput type='number' min={0} max={3650} style={{width: '6em'}} aria-label={`${label}: days`}
+                           value={never ? '' : value} disabled={disabled || never}
+                           onChange={e => onChange(e.currentTarget.value)}/>
+                days
+            </span>
+            <Checkbox checked={never} disabled={disabled} label='Never delete them'
+                      aria-label={`${label}: never delete them`} onChange={() => onChange(never ? 30 : null)}/>
+        </div>
+        <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>{description}</p>
+    </div>
+}
+
 export function SyncSection() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {sync, running, fetchSync} = useSyncStatus();
@@ -341,7 +369,7 @@ export function SyncSection() {
     const save = async () => {
         // An empty box is not "delete at once": that would empty the trash at the next sync.
         const days = String(state.sync_delete_after_days ?? '').trim();
-        if (secondary && !neverDelete && !/^\d+$/.test(days)) {
+        if (secondary && !neverDelete && !validDays(days)) {
             toast({
                 type: 'error', title: 'Sync settings were not saved', time: 5000,
                 description: 'Enter how many days to keep deleted files, or choose to never delete them.',
@@ -420,25 +448,11 @@ export function SyncSection() {
                 Within the window, this secondary syncs every 15 minutes. Leave both empty to sync only with
                 "Sync Now".
             </p>
-            <div style={{margin: '0.5em 0'}}>
-                <label><b>Files the primary deletes</b></label>
-                <div style={{display: 'flex', gap: '1em', alignItems: 'center', flexWrap: 'wrap'}}>
-                    <span style={{display: 'flex', gap: '0.5em', alignItems: 'center'}}>
-                        Delete after
-                        <TextInput type='number' min={0} max={3650} style={{width: '6em'}} aria-label='Days'
-                                   value={neverDelete ? '' : state.sync_delete_after_days}
-                                   disabled={wrolMode || neverDelete}
-                                   onChange={e => setState({...state, sync_delete_after_days: e.currentTarget.value})}/>
-                        days
-                    </span>
-                    <Checkbox checked={neverDelete} disabled={wrolMode} label='Never delete them'
-                              onChange={() => setState({...state, sync_delete_after_days: neverDelete ? 30 : null})}/>
-                </div>
-                <p style={{color: 'var(--muted)', fontSize: '0.9em'}}>
-                    A file the primary deletes, or the old version of one it changes, waits in a trash folder
-                    (<code>.sync-trash</code>) for this long. It is removed sooner if the drive is nearly full.
-                </p>
-            </div>
+            <DeleteDelay label='Files the primary deletes' value={state.sync_delete_after_days} disabled={wrolMode}
+                         onChange={value => setState({...state, sync_delete_after_days: value})}
+                         description={<>A file the primary deletes, or the old version of one it changes, waits in a
+                             trash folder (<code>.sync-trash</code>) for this long. It is removed sooner if the drive
+                             is nearly full.</>}/>
         </>}
 
         {/* The primary's folders can only be listed once this WROLPi knows its primary. */}
@@ -531,6 +545,7 @@ export function BackupDriveSection() {
     const [windowStart, setWindowStart] = React.useState('');
     const [windowEnd, setWindowEnd] = React.useState('');
     const [excluded, setExcluded] = React.useState([]);
+    const [deleteAfterDays, setDeleteAfterDays] = React.useState(30);
     const [saving, setSaving] = React.useState(false);
 
     const savedDirectory = settings?.backup_directory || '';
@@ -554,6 +569,12 @@ export function BackupDriveSection() {
         setExcluded(JSON.parse(savedExcluded));
     }, [savedExcluded]);
 
+    // null: never delete.
+    const savedDeleteAfterDays = settings?.backup_delete_after_days;
+    React.useEffect(() => {
+        setDeleteAfterDays(savedDeleteAfterDays === undefined ? 30 : savedDeleteAfterDays);
+    }, [savedDeleteAfterDays]);
+
     React.useEffect(() => {
         if (dockerized === false) {
             getDisks().then(setDisks).catch(e => setDisksError(e.message));
@@ -573,6 +594,13 @@ export function BackupDriveSection() {
     const running = status?.flags?.backup_running === true;
 
     const save = async () => {
+        if (drive && deleteAfterDays !== null && !validDays(deleteAfterDays)) {
+            toast({
+                type: 'error', title: 'Backup drive was not saved', time: 5000,
+                description: 'Enter how many days to keep deleted files, or choose to never delete them.',
+            });
+            return;
+        }
         setSaving(true);
         try {
             const chosen = options.find(i => i.value === drive);
@@ -583,6 +611,8 @@ export function BackupDriveSection() {
                 backup_window_start: chosen ? windowStart : '',
                 backup_window_end: chosen ? windowEnd : '',
                 backup_excluded_directories: excluded,
+                // The API takes -1 for "never".
+                backup_delete_after_days: deleteAfterDays === null ? -1 : Number(String(deleteAfterDays).trim()),
             });
             if (response?.ok) {
                 toast({type: 'success', title: 'Backup drive saved', time: 3000});
@@ -605,7 +635,8 @@ export function BackupDriveSection() {
         <Header as='h3' icon='hdd'>Backup Drive</Header>
         <p>
             Copy this WROLPi's media directory to a second drive, so the drive can replace the media drive if it
-            fails. Files deleted here are kept on the backup drive.
+            fails. A file deleted here, or the old version of one that changes, is kept on the backup drive for as
+            long as you choose below.
         </p>
         {disksError && <Message kind='error' icon='warning' title='Could not list drives'>{disksError}</Message>}
         <div style={{margin: '0.5em 0', maxWidth: '30em'}}>
@@ -638,6 +669,11 @@ export function BackupDriveSection() {
                 Within the window, the backup drive is updated every hour. Leave both empty to back up only with
                 "Back Up Now".
             </p>
+            <DeleteDelay label='Files deleted here' value={deleteAfterDays} onChange={setDeleteAfterDays}
+                         disabled={wrolMode}
+                         description={<>A file deleted from this WROLPi, or the old version of one that changes,
+                             waits on the backup drive in a trash folder (<code>.backup-trash</code>) for this long.
+                             It is removed sooner if the backup drive is nearly full.</>}/>
             <ExcludedDirectories value={excluded} onChange={setExcluded} source='local' disabled={wrolMode}/>
         </>}
         <div style={{display: 'flex', gap: '0.5em', flexWrap: 'wrap'}}>

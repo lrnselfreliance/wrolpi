@@ -1,3 +1,4 @@
+import collections
 import contextlib
 import os
 import pathlib
@@ -6,7 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 import yaml
@@ -36,6 +37,9 @@ def backup_drive(test_directory, test_wrolpi_config, monkeypatch):
         drive = pathlib.Path(tmp_dir).resolve()
         monkeypatch.setattr(backup, 'check_backup_target', lambda directory, uuid: None)
         get_sync_config()._config.update(backup_directory=str(drive), backup_device_uuid='uuid-1')
+        # A real media directory always has its wrolpi.yaml; a backup refuses one without it.
+        (test_directory / 'config').mkdir(exist_ok=True)
+        (test_directory / 'config/wrolpi.yaml').write_text('version: 1\n')
         yield drive
 
 
@@ -44,11 +48,18 @@ def test_build_rsync_command(monkeypatch):
     command = backup.build_rsync_command(pathlib.Path('/media/wrolpi'), pathlib.Path('/media/backup'), 'playlists')
     assert command[:5] == ['/usr/bin/ionice', '-c3', '/usr/bin/nice', '-n', '19']
     assert command[-2:] == ['/media/wrolpi/', '/media/backup/'], 'trailing slashes copy the contents, not the folder'
-    assert not any(i.startswith('--delete') for i in command), 'a backup never deletes'
+    assert not any(i.startswith('--delete') for i in command), 'without a trash nothing is deleted'
     assert '-H' not in command and '--hard-links' not in command
     for exclude in ('/config/wrolpi.db', '/config/wrolpi.db-*', '/tags/', '/playlists/', '.*.partial',
                     '.rsync-partial/', '/lost+found/'):
         assert f'--exclude={exclude}' in command, exclude
+
+    # With a trash, what the media directory no longer has is moved there; the trash itself is never touched.
+    trash = pathlib.Path('/media/backup/.backup-trash/2026-11-19')
+    command = backup.build_rsync_command(pathlib.Path('/media/wrolpi'), pathlib.Path('/media/backup'), 'playlists',
+                                         trash=trash)
+    assert '--delete' in command and '--backup' in command and f'--backup-dir={trash}' in command
+    assert '--exclude=/.backup-trash' in command
 
     # ionice and nice are optional.
     monkeypatch.setattr(backup.shutil, 'which', lambda name: '/usr/bin/rsync' if name == 'rsync' else None)
@@ -245,7 +256,7 @@ def test_snapshot_database_only_when_changed(async_client, test_directory, tmp_p
 @pytest.mark.asyncio
 async def test_run_backup(async_client, test_directory, backup_drive, events_fixture):
     """Files and configs are copied with their modification times; the database is a snapshot; hard-link directories
-    are not copied; nothing on the backup drive is deleted; a second backup copies nothing."""
+    are not copied; what the media directory no longer has waits in today's trash; a second backup copies nothing."""
     files = {
         'videos/channel/video.mp4': b'video',
         'videos/channel/video.info.json': b'{}',
@@ -261,8 +272,8 @@ async def test_run_backup(async_client, test_directory, backup_drive, events_fix
     with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
         db.execute('CREATE TABLE t (v TEXT)')
         db.execute("INSERT INTO t VALUES ('row')")
-    # Only on the backup drive: never deleted.
-    (backup_drive / 'old.txt').write_text('deleted from the media directory long ago')
+    # Only on the backup drive: deleted from the media directory since the last backup.
+    (backup_drive / 'old.txt').write_text('deleted from the media directory')
 
     status = await backup.run_backup()
 
@@ -274,16 +285,70 @@ async def test_run_backup(async_client, test_directory, backup_drive, events_fix
     assert not (backup_drive / 'tags').exists()
     assert not (backup_drive / 'playlists').exists()
     assert not (backup_drive / 'videos/channel/.video.mp4.partial').exists()
-    assert (backup_drive / 'old.txt').exists()
+    assert not (backup_drive / 'old.txt').exists()
+    trash = backup_drive / '.backup-trash' / date.today().isoformat()
+    assert (trash / 'old.txt').read_text() == 'deleted from the media directory'
     with sqlite3.connect(backup_drive / 'config/wrolpi.db') as copy:
         assert copy.execute('SELECT v FROM t').fetchall() == [('row',)]
-    assert status['files_transferred'] == 3
+    # The three files above, and wrolpi.yaml.
+    assert status['files_transferred'] == 4
     assert status['cancel_requested'] is False
     events_fixture.assert_has_event('backup_completed')
 
     status = await backup.run_backup()
     assert status['state'] == 'idle', status['last_error']
     assert status['files_transferred'] == 0
+    assert (trash / 'old.txt').exists(), 'the trash is not itself deleted by the next backup'
+    assert (backup_drive / 'config/wrolpi.db').is_file(), "the drive's database snapshot is kept"
+
+
+@requires_rsync
+@pytest.mark.asyncio
+async def test_run_backup_never_deletes(async_client, test_directory, backup_drive):
+    """With no number of days, a backup deletes nothing (as backups did before the trash)."""
+    (test_directory / 'config').mkdir(exist_ok=True)
+    with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
+        db.execute('CREATE TABLE t (v TEXT)')
+    (backup_drive / 'old.txt').write_text('deleted from the media directory')
+    get_sync_config()._config['backup_delete_after_days'] = None
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'idle', status['last_error']
+    assert (backup_drive / 'old.txt').exists()
+    assert not (backup_drive / '.backup-trash').exists()
+
+
+def test_purge_trash(tmp_path, monkeypatch):
+    """A trash folder is as old as its name says; while the drive is nearly full the oldest goes first; a link is
+    never followed."""
+    trash = tmp_path / '.backup-trash'
+    for name in ('2026-10-18', '2026-10-19', '2026-10-20', '2026-11-18', 'not a date'):
+        (trash / name).mkdir(parents=True)
+    # 31 and 30 days old: expired.  29 days: kept.
+    today = date(2026, 11, 18)
+    assert backup.purge_trash(tmp_path, 30, today, min_free_bytes=0) == ['2026-10-18', '2026-10-19']
+    assert backup.purge_trash(tmp_path, None, today, min_free_bytes=0) == [], 'never'
+
+    usage = collections.namedtuple('usage', 'total used free')
+    monkeypatch.setattr(backup.shutil, 'disk_usage',
+                        lambda _: usage(100, 0, 5 if (trash / '2026-10-20').exists() else 50))
+    assert backup.purge_trash(tmp_path, 30, today, min_free_bytes=10) == ['2026-10-20']
+    monkeypatch.undo()
+
+    elsewhere = tmp_path / 'elsewhere'
+    (elsewhere / '2020-01-01').mkdir(parents=True)
+    (trash / '2020-01-02').symlink_to(elsewhere / '2020-01-01')
+    assert backup.purge_trash(tmp_path, 30, today, min_free_bytes=0) == []
+    assert (elsewhere / '2020-01-01').is_dir()
+
+
+def test_backup_refuses_an_empty_media_directory(async_client, test_directory, backup_drive):
+    """An unmounted media directory is an empty folder: backing it up with deletes would move the whole backup
+    drive to the trash."""
+    assert backup.backup_skip_reason() is None
+    (test_directory / 'config/wrolpi.yaml').unlink()
+    assert backup.backup_skip_reason() == 'The media directory holds no WROLPi library'
 
 
 @requires_rsync
@@ -462,3 +527,43 @@ async def test_failed_backup_keeps_last_success(async_client, test_directory, te
 
     assert status['state'] == 'error'
     assert get_sync_config().backup_last_success_at == '2026-11-01T02:00:00+00:00'
+
+
+def test_purge_never_removes_the_newest_for_space(tmp_path, monkeypatch):
+    """Moving a file to the trash frees nothing, so on a nearly full drive the trash this backup just filled would be
+    removed by the same backup.  Only age removes the newest folder."""
+    trash = tmp_path / '.backup-trash'
+    for name in ('2026-11-17', '2026-11-18'):
+        (trash / name).mkdir(parents=True)
+    usage = collections.namedtuple('usage', 'total used free')
+    monkeypatch.setattr(backup.shutil, 'disk_usage', lambda _: usage(100, 100, 0))
+    assert backup.purge_trash(tmp_path, 30, date(2026, 11, 18), min_free_bytes=10) == ['2026-11-17']
+    assert (trash / '2026-11-18').is_dir()
+    # 0 days is "delete at once", whatever the space.
+    assert backup.purge_trash(tmp_path, 0, date(2026, 11, 18), min_free_bytes=10) == ['2026-11-18']
+
+
+@pytest.mark.asyncio
+async def test_room_is_made_for_the_database_snapshot(async_client, test_directory, backup_drive, monkeypatch):
+    """The snapshot is written beside the drive's old one: before it, the trash makes room for the whole database,
+    not only the usual 1 GiB."""
+    (test_directory / 'config').mkdir(exist_ok=True)
+    with sqlite3.connect(test_directory / 'config/wrolpi.db') as db:
+        db.execute('CREATE TABLE t (v TEXT)')
+    events = []
+
+    async def run_rsync(command, target, uuid):
+        events.append('rsync')
+        return 0, []
+
+    monkeypatch.setattr(backup, '_run_rsync', run_rsync)
+    monkeypatch.setattr(backup, 'purge_trash', lambda target, days, today=None, min_free_bytes=backup.MIN_FREE_BYTES:
+                        events.append(('purge', min_free_bytes)))
+    monkeypatch.setattr(backup, 'snapshot_database_if_changed', lambda target: events.append('snapshot'))
+
+    status = await backup.run_backup()
+
+    assert status['state'] == 'idle', status['last_error']
+    database = (test_directory / 'config/wrolpi.db').stat().st_size
+    assert events == [('purge', backup.MIN_FREE_BYTES), 'rsync', ('purge', database + backup.MIN_FREE_BYTES),
+                      'snapshot', ('purge', backup.MIN_FREE_BYTES)]

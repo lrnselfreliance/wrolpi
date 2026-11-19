@@ -187,3 +187,20 @@ def test_apply_primary_wrolpi_config(async_client, test_directory, test_wrolpi_c
 
     (sync_directory / 'primary-wrolpi.yaml').write_text('not: [a config')
     assert lib.apply_primary_wrolpi_config() == []
+
+
+@pytest.mark.asyncio
+async def test_backup_delete_after_days_setting(async_client, test_session, test_directory, test_wrolpi_config,
+                                                await_switches):
+    """How long the backup drive keeps what the media directory deleted: 30 days unless set, -1 for never."""
+    request, response = await async_client.get('/api/settings')
+    assert response.json['backup_delete_after_days'] == 30
+
+    for sent, kept in ((7, 7), (-1, None)):
+        request, response = await async_client.put('/api/sync/settings',
+                                                   content=json.dumps(dict(backup_delete_after_days=sent)))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        assert get_sync_config().backup_delete_after_days == kept
+
+    get_sync_config()._config.pop('backup_delete_after_days', None)
+    assert get_sync_config().backup_delete_after_days == 30, 'a sync.yaml from before the setting gets the default'

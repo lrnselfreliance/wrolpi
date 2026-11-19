@@ -904,6 +904,35 @@ describe('what the PDF is called', () => {
     });
 });
 
+describe('what a basemap draws from a deeper zoom', () => {
+    const style = {
+        sources: {a: {type: 'vector', url: 'pmtiles://a'}},
+        layers: [
+            {id: 'water_river', type: 'line', source: 'a', minzoom: 9},
+            {id: 'water_stream', type: 'line', source: 'a', minzoom: 14},
+            {id: 'roads_taxiway', type: 'line', source: 'a', minzoom: 13},
+            {id: 'buildings_3d', type: 'fill-extrusion', source: 'a', minzoom: 15},
+            {id: 'pois', type: 'symbol', source: 'a', minzoom: 14},
+        ],
+    };
+    const minzooms = zoom => Object.fromEntries(
+        exportStyle(style, [], {zoom}).layers.map(layer => [layer.id, layer.minzoom]));
+
+    test('is drawn on a quadrangle, which is drawn a little short of there', () => {
+        // A quadrangle at 40 degrees.
+        expect(minzooms(13.85)).toEqual({
+            water_river: 9, water_stream: 13, roads_taxiway: 13, buildings_3d: 15, pois: 14,
+        });
+        // Far north, a quadrangle is drawn from tiles two zooms short.
+        expect(minzooms(12.7)).toMatchObject({water_stream: 12, roads_taxiway: 12, pois: 14});
+    });
+
+    test('is as it was where the map is drawn that deep, and when the zoom is not said', () => {
+        expect(minzooms(14.2)).toMatchObject({water_stream: 14, roads_taxiway: 13});
+        expect(minzooms(null)).toMatchObject({water_stream: 14});
+    });
+});
+
 describe('the map files which are of somewhere else', () => {
     const style = {
         sources: {

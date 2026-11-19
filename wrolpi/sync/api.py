@@ -12,7 +12,7 @@ from wrolpi.common import logger, is_secondary, wrol_mode_check, wrol_mode_enabl
     CONTROLLER_URL, aiohttp_post
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidConfig, SecondaryRole, WROLModeEnabled
-from wrolpi.sync import backup, lib, schema, snapshot
+from wrolpi.sync import backup, lib, notify, schema, snapshot
 from wrolpi.sync.config import get_sync_config
 from wrolpi.sync.status import get_backup_status, get_snapshot_status
 from wrolpi.vars import DOCKERIZED
@@ -26,6 +26,8 @@ async def perpetual_sync_worker():
     # A secondary's sync is the Controller's (controller/lib/sync.py), which stops this API while it runs.
     await backup.backup_tick()
     await snapshot.snapshot_tick()
+    # The Controller cannot send this API's events; announce the syncs it finished.
+    notify.notify_tick()
 
 
 @sync_bp.get('/info')

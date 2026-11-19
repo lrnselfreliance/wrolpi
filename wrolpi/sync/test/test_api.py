@@ -7,7 +7,7 @@ import yaml
 
 from wrolpi.common import get_wrolpi_config, enable_wrol_mode
 from wrolpi.downloader import download_manager
-from wrolpi.sync import api as sync_api, backup, snapshot
+from wrolpi.sync import api as sync_api, backup, notify, snapshot
 from wrolpi.sync.config import get_sync_config
 
 
@@ -76,7 +76,8 @@ async def test_run(async_client, test_wrolpi_config, make_secondary, monkeypatch
 
 @pytest.mark.asyncio
 async def test_worker_runs_the_backup_and_the_snapshot(async_client, test_wrolpi_config, monkeypatch):
-    """The API's loop makes the backup and the primary's database snapshot; a secondary's sync is the Controller's."""
+    """The API's loop makes the backup and the primary's database snapshot, and announces the syncs the Controller
+    finished; a secondary's sync itself is the Controller's."""
     called = []
 
     async def tick(name):
@@ -84,8 +85,9 @@ async def test_worker_runs_the_backup_and_the_snapshot(async_client, test_wrolpi
 
     monkeypatch.setattr(backup, 'backup_tick', lambda: tick('backup'))
     monkeypatch.setattr(snapshot, 'snapshot_tick', lambda: tick('snapshot'))
+    monkeypatch.setattr(notify, 'notify_tick', lambda: called.append('notify'))
     await sync_api.perpetual_sync_worker()
-    assert called == ['backup', 'snapshot']
+    assert called == ['backup', 'snapshot', 'notify']
 
 
 @pytest.mark.asyncio

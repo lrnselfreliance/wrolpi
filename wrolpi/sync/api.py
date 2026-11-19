@@ -171,6 +171,9 @@ async def put_settings(_: Request, body: schema.SyncSettingsRequest):
         if value and not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', value):
             raise InvalidConfig(f'{request_key} must be in HH:MM format')
         changes[config_key] = value or None
+    if body.sync_delete_after_days is not None:
+        days = int(body.sync_delete_after_days)
+        changes['delete_after_days'] = None if days < 0 else days
     for key in ('sync_excluded_directories', 'backup_excluded_directories'):
         if (value := getattr(body, key)) is not None:
             changes[key] = lib.normalize_excluded_directories(value)

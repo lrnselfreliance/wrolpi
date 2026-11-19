@@ -704,6 +704,31 @@ def merge_wrolpi_config(primary_config: dict, primary_media_directory: str) -> d
     return changes
 
 
+# Where the Controller's sync (controller/lib/sync.py) leaves the primary's wrolpi.yaml and /api/sync/info.
+PRIMARY_WROLPI_CONFIG = 'config/.sync/primary-wrolpi.yaml'
+PRIMARY_INFO = 'config/.sync/primary-info.yaml'
+
+
+def apply_primary_wrolpi_config() -> List[str]:
+    """A secondary's wrolpi.yaml is its own (hotspot, timezone), except for the settings that describe the library:
+    those are taken from the copy of the primary's wrolpi.yaml that the last sync left.  Returns the changed keys."""
+    if not is_secondary():
+        return []
+    media_directory = get_media_directory()
+    try:
+        primary_config = _parse_config((media_directory / PRIMARY_WROLPI_CONFIG).read_bytes(), 'wrolpi.yaml')
+        info = yaml.safe_load((media_directory / PRIMARY_INFO).read_text()) or {}
+    except (OSError, yaml.YAMLError, SyncError) as e:
+        if not isinstance(e, FileNotFoundError):
+            logger.error(f"Could not read the primary's wrolpi.yaml: {e}")
+        return []
+    changes = merge_wrolpi_config(primary_config, str(info.get('media_directory') or media_directory))
+    if changes:
+        logger.info(f'Applying library settings from the primary: {sorted(changes)}')
+        get_wrolpi_config().update(changes)
+    return sorted(changes)
+
+
 def _relative_directories(directories: List[str], primary_media_directory: str) -> List[str]:
     relative = list()
     for directory in directories:

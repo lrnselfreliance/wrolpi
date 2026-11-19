@@ -428,6 +428,7 @@ export async function getSettings() {
             require_media_mounted: content.require_media_mounted,
             role: content.role,
             save_ffprobe_json: content.save_ffprobe_json,
+            sync_delete_after_days: content.sync_delete_after_days,
             sync_excluded_directories: content.sync_excluded_directories,
             sync_primary_url: content.sync_primary_url,
             sync_window_end: content.sync_window_end,

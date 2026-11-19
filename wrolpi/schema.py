@@ -45,6 +45,8 @@ class SettingsResponse:
     require_cookies_unlocked: bool
     role: str
     sync_primary_url: Optional[str]
+    # None never deletes.
+    sync_delete_after_days: Optional[int]
     sync_excluded_directories: List[str]
     sync_window_end: Optional[str]
     sync_window_start: Optional[str]

@@ -690,6 +690,8 @@ export default function MapViewer() {
     const [exportStatus, setExportStatus] = useState(null);
     // Whether the person exporting has asked for the export which is being made to stop.
     const exportCancelledRef = useRef(false);
+    // Stops the request an export is in the middle of.
+    const exportAbortRef = useRef(null);
     // Whether a map is being exported, for what is asked outside of React (the map's own buttons).
     const exportingRef = useRef(false);
     const [exportError, setExportError] = useState(null);
@@ -947,6 +949,7 @@ export default function MapViewer() {
             destroyed = true;
             // An export of this map stops with it: nobody is here to be given the PDF.
             exportCancelledRef.current = true;
+            exportAbortRef.current?.abort();
             if (map) {
                 map.remove();
             }
@@ -1054,6 +1057,8 @@ export default function MapViewer() {
         if (!map) return;
         exportCancelledRef.current = false;
         exportingRef.current = true;
+        const abort = new AbortController();
+        exportAbortRef.current = abort;
         // The unit the map measures in is the unit its contour lines are apart in.
         const imperial = scaleUnit === "imperial";
         setExportError(null);
@@ -1097,6 +1102,7 @@ export default function MapViewer() {
                 // Once it is being stopped, that is what is said.
                 onStatus: text => !exportCancelledRef.current && setExportStatus(text),
                 isCancelled: () => exportCancelledRef.current,
+                signal: abort.signal,
             });
             // Stopped while the PDF was on its way: it is not wanted.
             if (!exportCancelledRef.current) saveBlob(pdf, exportFileName(quad, name));
@@ -1115,6 +1121,7 @@ export default function MapViewer() {
     // Stop the export which is being made.  It stops between two steps, and the server stops making the PDF.
     const handleCancelExport = useCallback(() => {
         exportCancelledRef.current = true;
+        exportAbortRef.current?.abort();
         setExportStatus("Stopping…");
     }, []);
 

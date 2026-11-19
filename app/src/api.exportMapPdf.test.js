@@ -156,6 +156,28 @@ describe('exportMapPdf', () => {
         await expect(rejected).rejects.toBeInstanceOf(ExportCancelled);
     });
 
+    test('is stopped in the middle of a request, which the server may never answer', async () => {
+        const abort = new AbortController();
+        let signals = [];
+        const calls = fakeServer([{status: 'complete'}], {
+            replies: {
+                // A layer which is never taken: the request ends when it is stopped, as fetch's does.
+                'POST /map/export/abc/layer/1': () => new Promise((resolve, reject) => {
+                    signals = global.fetch.mock.calls.map(([, init]) => init?.signal);
+                    abort.signal.addEventListener(
+                        'abort', () => reject(Object.assign(new Error('aborted'), {name: 'AbortError'})));
+                    abort.abort();
+                }),
+            },
+        });
+        const rejected = exportMapPdf(MAP, {pollMs: 0, signal: abort.signal});
+        await expect(rejected).rejects.toBeInstanceOf(ExportCancelled);
+        // Every request of the export could be stopped; the one which removes it can not.
+        expect(signals).toEqual([abort.signal, abort.signal, abort.signal]);
+        expect(calls.at(-1)).toBe('DELETE /map/export/abc');
+        expect(global.fetch.mock.calls.at(-1)[1].signal).toBeUndefined();
+    });
+
     test('a Job which someone else cancelled is a cancelled export', async () => {
         fakeServer([{status: 'cancelled'}]);
         await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toBeInstanceOf(ExportCancelled);

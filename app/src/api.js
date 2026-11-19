@@ -1798,6 +1798,8 @@ const EXPORT_POLL_FAILURES = 10;
 // layer is sent, the Job is started and watched, and the PDF is fetched when the Job is done.
 //
 // onStatus(text): told how far along it is.  isCancelled(): asked, between steps, whether to stop;
+// signal: an AbortSignal which stops it at once, in the middle of a request (an image of a layer
+// is tens of megabytes, and a request to a server which has stopped answering never ends);
 // the server is then told to stop the export and remove what was sent.  Rejects with
 // ExportCancelled when it was stopped.
 //
@@ -1805,7 +1807,7 @@ const EXPORT_POLL_FAILURES = 10;
 // megabytes and the PDF tens, on a disk which may be an SD card.
 export async function exportMapPdf(
     {width, height, dpi, title, bounds, layers, sheet},
-    {onStatus = () => undefined, isCancelled = () => false, pollMs = 1000} = {},
+    {onStatus = () => undefined, isCancelled = () => false, signal = undefined, pollMs = 1000} = {},
 ) {
     const exports = `${API_URI}/map/export`;
     let exportId = null;
@@ -1815,6 +1817,9 @@ export async function exportMapPdf(
     };
     try {
         return await sendAndFetch();
+    } catch (e) {
+        // A request which was stopped because the export was is not a failure to be told of.
+        throw signal?.aborted ? new ExportCancelled() : e;
     } finally {
         // Not waited for: a server which is slow to answer is not to keep a PDF from who made it.
         remove();
@@ -1824,7 +1829,7 @@ export async function exportMapPdf(
     const send = async (url, init, fallback) => {
         let response;
         try {
-            response = await fetch(url, init);
+            response = await fetch(url, {...init, signal});
         } catch (e) {
             throw new Error('Could not reach the server');
         }
@@ -1834,7 +1839,7 @@ export async function exportMapPdf(
     const pause = () => new Promise(resolve => setTimeout(resolve, pollMs));
     // Stopped by the person exporting: removing the export cancels its Job.
     const stopIfCancelled = async () => {
-        if (isCancelled()) throw new ExportCancelled();
+        if (isCancelled() || signal?.aborted) throw new ExportCancelled();
     };
 
     await stopIfCancelled();
@@ -1865,7 +1870,7 @@ export async function exportMapPdf(
         await stopIfCancelled();
         let job;
         try {
-            const response = await fetch(`${API_URI}/jobs/${jobId}`);
+            const response = await fetch(`${API_URI}/jobs/${jobId}`, {signal});
             if (response.status === 404) throw Object.assign(new Error('The server forgot the export'), {final: true});
             if (!response.ok) throw new Error('Could not ask how the PDF is coming');
             job = (await response.json()).job;
@@ -1894,7 +1899,7 @@ export async function exportMapPdf(
         await stopIfCancelled();
         let response;
         try {
-            response = await fetch(`${exports}/${exportId}/pdf`);
+            response = await fetch(`${exports}/${exportId}/pdf`, {signal});
         } catch (e) {
             response = null;
         }

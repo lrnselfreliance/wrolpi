@@ -328,9 +328,15 @@ def mils(angle: float) -> int:
     return round(abs(angle) * MILS_PER_DEGREE)
 
 
+def _mils(angle: float) -> str:
+    """An angle in mils, as it is said: "46 mils", and "1 mil"."""
+    count = mils(angle)
+    return f'{count} mil' if count == 1 else f'{count} mils'
+
+
 def _north_of_true(angle: float) -> str:
     """How far a north is from true north, as it is said: 2°34' west (46 mils)."""
-    return f'{_east_or_west(angle)} ({mils(angle)} mils)'
+    return f'{_east_or_west(angle)} ({_mils(angle)})'
 
 
 def adjoining_quads(bounds: Sequence[float]) -> Optional[List[Optional[str]]]:
@@ -753,7 +759,7 @@ def _draw_norths(pen: _Pen, plan: SheetPlan, x: float, y: float):
         east = angle >= 0
         pen.text(tip_x + (3 if east else -3), tip_y + 2, name, align='left' if east else 'right')
         pen.text(x, below, f'{name} {format_angle(_to_the_minute(abs(angle)))} {"E" if east else "W"}'
-                           f'  {mils(angle)} MILS', align='center')
+                           f'  {_mils(angle).upper()}', align='center')
         below += LABEL_SIZE + 2
 
 

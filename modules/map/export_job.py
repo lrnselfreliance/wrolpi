@@ -217,6 +217,10 @@ def save_layer(export_id: str, index: int, image: bytes):
     if not image.startswith((PNG_MAGIC, JPEG_MAGIC)):
         raise export.InvalidExport(f'The layer {meta["layers"][index]!r} is not a PNG or JPEG image')
     _write_whole(_layer_file(directory, index), image)
+    if not (directory / META_FILE).is_file():
+        # The export was removed while this image was on its way: the image is not left behind it.
+        shutil.rmtree(directory, ignore_errors=True)
+        raise ExportNotFound(f'There is no export {export_id!r}')
 
 
 def start_export(export_id: str) -> str:

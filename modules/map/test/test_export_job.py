@@ -399,3 +399,24 @@ async def test_job_removes_old_exports(async_client, map_export_root):
     job = await jobs.wait_for_job(export_job.start_export(export_id), timeout=60)
     assert job['status'] == 'complete'
     assert sorted(i.name for i in map_export_root.iterdir()) == [export_id]
+
+
+def test_image_which_arrives_after_its_export_is_removed(map_export_root, monkeypatch):
+    """An export may be removed while the image of a layer is on its way (the person exporting stopped it, and
+    the request was already here).  The image is not kept: nothing would ever use it, or remove it soon."""
+    export_id = new_export('A', 'B')
+    directory = map_export_root / export_id
+    real_write = export_job._write_whole
+
+    def write_whole(path, contents):
+        # Removed, as by another request, between this image being let in and being written.
+        if path.name.startswith('layer-'):
+            export_job.remove_export(export_id)
+            path.parent.mkdir()
+        real_write(path, contents)
+
+    monkeypatch.setattr(export_job, '_write_whole', write_whole)
+    with pytest.raises(export_job.ExportNotFound):
+        export_job.save_layer(export_id, 0, make_image())
+    assert not directory.exists()
+    assert list(map_export_root.iterdir()) == []

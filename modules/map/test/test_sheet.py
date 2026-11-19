@@ -721,3 +721,17 @@ def test_sheet_of_no_such_day(date):
     """A sheet whose day is not one is a sheet which does not say where magnetic north is."""
     plan = sheet.plan_sheet(300, 600, BERTHOUD, sheet.Sheet(date=date))
     assert plan.magnetic_north is None
+
+
+def test_one_mil_is_a_mil():
+    """An angle of one mil is "1 mil", in the notes and under the norths; more are "mils"."""
+    # Grid north at Berthoud is 0°02' west of true north: one mil.
+    plan = sheet.plan_sheet(300, 600, BERTHOUD, sheet.Sheet(date='2026-11-19'))
+    assert sheet.mils(plan.grid_north) == 1
+    assert '(1 mil) of true north' in ' '.join(plan.notes)
+    text = page_text(build_layered_pdf(
+        [ExportLayer('Background', make_image(size=(WIDTH, HEIGHT)))], WIDTH, HEIGHT, DPI, bounds=BERTHOUD,
+        sheet=sheet.Sheet(date='2026-11-19')))
+    assert '1 MIL' in text and '1 MILS' not in text
+    # Magnetic north there is many.
+    assert re.search(r'MN .* \d{2,} MILS', text)

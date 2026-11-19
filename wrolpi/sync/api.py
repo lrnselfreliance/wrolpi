@@ -4,48 +4,22 @@ import re
 from http import HTTPStatus
 
 from sanic import Request, Blueprint, response
-from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import flags
-from wrolpi.api_utils import api_app, json_response, perpetual_signal
-from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled, \
+from wrolpi.api_utils import json_response, perpetual_signal
+from wrolpi.common import logger, is_secondary, wrol_mode_check, wrol_mode_enabled, \
     CONTROLLER_URL, aiohttp_post
 from wrolpi.db import get_db_session
-from wrolpi.errors import InvalidConfig, SecondaryRole, SyncInProgress, WROLModeEnabled
+from wrolpi.errors import InvalidConfig, SecondaryRole, WROLModeEnabled
 from wrolpi.sync import backup, lib, schema, snapshot
 from wrolpi.sync.config import get_sync_config
-from wrolpi.sync.status import get_backup_status, get_snapshot_status, get_sync_status
+from wrolpi.sync.status import get_backup_status, get_snapshot_status
 from wrolpi.vars import DOCKERIZED
 
 sync_bp = Blueprint('Sync', '/api/sync')
 
 logger = logger.getChild(__name__)
-
-# Requests a secondary answers while it syncs: enough for the UI to show the sync's progress, and to cancel it.
-SYNC_ALLOWED_REQUESTS = frozenset({
-    ('GET', '/api/echo'),
-    ('GET', '/api/events/feed'),
-    ('GET', '/api/settings'),
-    ('GET', '/api/status'),
-    ('GET', '/api/sync/info'),
-    ('GET', '/api/sync/status'),
-    ('POST', '/api/sync/cancel'),
-})
-
-
-@api_app.middleware('request')
-async def check_sync_api_lock(request: Request):
-    """A secondary refuses requests while it replaces its library with its primary's (see wrolpi.sync)."""
-    # The Event costs nothing to check; the Flag confirms it (the Event survives a perpetual process that died).
-    if not api_app.shared_ctx.sync_api_locked.is_set() or not flags.sync_running.is_set():
-        return
-    if request.method == 'OPTIONS' or (request.method, request.path.rstrip('/')) in SYNC_ALLOWED_REQUESTS:
-        return
-    # Answered here rather than raised: the UI polls while it waits, and each refusal would be logged as an error.
-    return json_response(dict(error=SyncInProgress.summary, code=SyncInProgress.code),
-                         SyncInProgress.status_code)
-
 
 @perpetual_signal(sleep=5)
 async def perpetual_sync_worker():
@@ -64,22 +38,11 @@ async def get_info(_: Request):
     return json_response(await asyncio.to_thread(info))
 
 
-@sync_bp.get('/manifest')
-@openapi.definition(summary="One page of this WROLPi's files, for a secondary to compare with its own")
-@validate(query=schema.ManifestRequest)
-async def get_manifest(_: Request, query: schema.ManifestRequest):
-    def page():
-        with get_db_session() as session:
-            return lib.build_manifest_page(session, query.after_id, query.limit)
-
-    return json_response(await asyncio.to_thread(page))
-
-
 @sync_bp.get('/status')
 @openapi.definition(summary="The progress of this secondary's sync")
 async def get_status(_: Request):
-    return json_response(dict(sync=get_sync_status(), sync_running=bool(flags.sync_running.is_set()),
-                              backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set()),
+    # A secondary's sync is the Controller's: /controller/api/sync/status.
+    return json_response(dict(backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set()),
                               snapshot=get_snapshot_status()))
 
 

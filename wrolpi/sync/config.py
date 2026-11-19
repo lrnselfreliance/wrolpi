@@ -13,7 +13,7 @@ from wrolpi.sync.status import get_backup_status, update_backup_status
 @dataclass
 class SyncConfigValidator:
     version: int = None
-    # 'primary' or 'secondary'; a secondary copies its library from `primary_url` (see wrolpi.sync.lib).
+    # 'primary' or 'secondary'; a secondary copies its library from `primary_url` (see controller/lib/sync.py).
     role: str = None
     primary_url: str = None
     # The daily window ('HH:MM') in which a secondary syncs; none means only "Sync Now".

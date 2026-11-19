@@ -34,11 +34,6 @@ export class ApiDownError extends Error {
 
 const apiDownError = new ApiDownError('API is down');
 
-// A secondary WROLPi refuses requests while it copies its library from its primary.  Like a down API, callers
-// treat it quietly; the app shows the sync's progress instead (see SyncingOverlay).
-export class SyncingError extends ApiDownError {
-}
-
 async function apiCall(url, method, body, ms = 60_000) {
     let init = {method};
     if (body !== undefined) {
@@ -64,9 +59,6 @@ async function apiCall(url, method, body, ms = 60_000) {
         let copy = response.clone();
         const content = await copy.json();
         const code = content['code'];
-        if (response.status === 503 && code === 'SYNCING') {
-            throw new SyncingError('This WROLPi is syncing from its primary');
-        }
         console.error('API error response json', content);
         if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({

@@ -403,18 +403,15 @@ def test_backup_is_due_hourly_in_window(test_wrolpi_config):
 
 
 def test_backup_and_sync_windows_are_separate(test_wrolpi_config):
-    """The sync window (a secondary's sync) does not start backups, and the backup window does not start syncs."""
-    from wrolpi.sync.lib import sync_is_due
+    """The sync window (a secondary's sync, which the Controller schedules) does not start backups."""
     local_now = datetime(2026, 11, 5, 3, 0, tzinfo=timezone.utc)
     never = dict(finished_at=None)
 
     get_sync_config()._config.update(window_start='01:00', window_end='05:00')
-    assert sync_is_due(never, local_now)
     assert not backup.backup_is_due(never, local_now)
 
     get_sync_config()._config.update(window_start=None, window_end=None,
                                      backup_window_start='02:00', backup_window_end='04:00')
-    assert not sync_is_due(never, local_now)
     assert backup.backup_is_due(never, local_now)
 
 

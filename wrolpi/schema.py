@@ -141,7 +141,6 @@ class FlagsStatusResponse:
     media_mounted: bool
     outdated_zims: bool
     refresh_complete: bool
-    sync_running: bool
 
 
 @dataclass
@@ -202,33 +201,6 @@ class DownloadsSummaryResponse:
 
 
 @dataclass
-class SyncStatusResponse:
-    """The progress of a secondary WROLPi copying its library from its primary (see wrolpi.sync)."""
-    state: str  # 'idle', 'running', or 'error'
-    phase: Optional[str]  # 'files', 'configs', or None
-    requested: bool
-    force: bool
-    cancel_requested: bool
-    started_at: Optional[str]
-    finished_at: Optional[str]
-    last_success_at: Optional[str]
-    last_error: Optional[str]
-    last_skip_reason: Optional[str]
-    primary_url: Optional[str]
-    primary_version: Optional[str]
-    groups_seen: int
-    max_id: int
-    files_checked: int
-    files_to_download: int
-    files_downloaded: int
-    bytes_downloaded: int
-    files_failed: int
-    files_excluded: int
-    configs_imported: List[str]
-    disk_full: bool
-
-
-@dataclass
 class BackupStatusResponse:
     """The progress of copying this WROLPi's media directory to its backup drive (see wrolpi.sync.backup)."""
     state: str  # 'idle', 'running', or 'error'
@@ -277,7 +249,6 @@ class StatusResponse:
     memory_stats: MemoryStatusStat
     processes_stats: List[ProcessStatusStat]
     sanic_workers: dict
-    sync: SyncStatusResponse
     version: str
     # `str` here was wrong too; wrol_mode_enabled() returns a bool.
     wrol_mode: bool

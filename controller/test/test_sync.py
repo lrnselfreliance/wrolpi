@@ -759,3 +759,31 @@ def test_frontend_fixture_matches_the_status():
     assert match, "controllerSyncStatusFixture is not in test-fixtures.js in the expected form"
     keys = set(re.findall(r"^    ([a-z0-9_]+):", match.group(1), re.M))
     assert keys == set(sync.default_status())
+
+
+def test_docker_rsync_reads_progress_as_it_comes(media, monkeypatch):
+    """The helper's output is read by attaching to it before it starts.  Docker's logs would hold rsync's progress
+    for a large file (one line, rewritten with carriage returns) until the file was done."""
+    from unittest import mock
+    events = []
+    helper = mock.Mock()
+    helper.attach.side_effect = lambda **kwargs: events.append(("attach", kwargs)) or iter(
+        [b"     1000  10%\r", b"     5000  50%\r", b"Number of regular files transferred: 1\n"])
+    helper.start.side_effect = lambda: events.append(("start", None))
+    helper.wait.return_value = {"StatusCode": 0}
+    api = mock.Mock()
+    api.image.id, api.name, api.attrs = "sha256:image", "wrolpi-api-1", {"Config": {"User": "1000:1000"}}
+    client = mock.Mock()
+    client.containers.create.return_value = helper
+    client.containers.get.side_effect = lambda name: api if name == "wrolpi-api-1" else (_ for _ in ()).throw(
+        RuntimeError("no such container"))
+    monkeypatch.setattr(sync, "_get_client", lambda: client)
+
+    lines = []
+    assert sync.DockerRunner().rsync(["--version"], lines.append) == 0
+
+    assert [i[0] for i in events] == ["attach", "start"], "attached before it starts"
+    assert events[0][1]["stream"] is True
+    assert lines == ["     1000  10%", "     5000  50%", "Number of regular files transferred: 1"]
+    helper.logs.assert_not_called()
+    helper.remove.assert_called_once_with(force=True)

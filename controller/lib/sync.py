@@ -381,11 +381,15 @@ class DockerRunner:
     def rsync(self, arguments: list, on_line: Callable[[str], None]) -> int:
         client, api = _get_client(), self._api()
         self.stop_rsync()
-        helper = client.containers.run(
-            api.image.id, arguments, entrypoint="rsync", name=self.HELPER_NAME, detach=True,
+        helper = client.containers.create(
+            api.image.id, arguments, entrypoint="rsync", name=self.HELPER_NAME,
             user=api.attrs["Config"].get("User") or None, volumes_from=[api.name])
         try:
-            stream = helper.logs(stream=True, follow=True)
+            # Attached, not followed through the logs: Docker's logs hold a line until it ends, and rsync's progress
+            # for one large file is a single line, rewritten with carriage returns until the file is done.
+            # Attached before it starts, so nothing it writes is missed.
+            stream = helper.attach(stdout=True, stderr=True, stream=True)
+            helper.start()
 
             def read(_: int = 0) -> bytes:
                 return next(stream, b"")

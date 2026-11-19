@@ -63,21 +63,23 @@ API_START_TIMEOUT_SECONDS = 10 * 60
 # rsync: 23 = some files could not be transferred, 24 = some files vanished while copying (the primary is in use).
 RSYNC_PARTIAL, RSYNC_VANISHED = 23, 24
 
-# Never copied from the primary: what belongs to this machine, and what WROLPi rebuilds.
+# Never copied from the primary: what belongs to this machine, and what WROLPi rebuilds.  No trailing slash: a
+# pattern that ends in one matches only a directory, and a file or link of that name on the primary would then
+# replace this machine's directory.
 LOCAL_PATHS = (
     # Hard links, rebuilt from the database when the API starts.
-    "/tags/",
+    "/tags",
     # This machine's settings and state.
     "/config/wrolpi.yaml", "/config/sync.yaml", "/config/controller.yaml", "/config/fstab.yaml",
-    "/config/.fstab-migrated", "/config/smb.conf", f"/{STATE_FILE}", "/config/.wrol_mode", "/config/ssl/",
-    "/config/cookies.txt", "/config/cookies.txt.enc", "/config/backup/",
+    "/config/.fstab-migrated", "/config/smb.conf", f"/{STATE_FILE}", "/config/.wrol_mode", "/config/ssl",
+    "/config/cookies.txt", "/config/cookies.txt.enc", "/config/backup",
     # The database arrives as a snapshot, in its own step.
     "/config/wrolpi.db", "/config/wrolpi.db-wal", "/config/wrolpi.db-shm", "/config/wrolpi.db.lock",
-    f"/{SYNC_DIRECTORY}/",
-    f"/{TRASH_DIRECTORY}/", "/lost+found/",
+    f"/{SYNC_DIRECTORY}",
+    f"/{TRASH_DIRECTORY}", "/lost+found",
 )
 # Anywhere in the library: files still being written on the primary.
-UNFINISHED_PATTERNS = (f"{PARTIAL_DIRECTORY}/", ".partial/", "*.part", "*.aria2", "*.ytdl", "*.db-wal", "*.db-shm")
+UNFINISHED_PATTERNS = (PARTIAL_DIRECTORY, ".partial", "*.part", "*.aria2", "*.ytdl", "*.db-wal", "*.db-shm")
 
 
 class SyncError(Exception):
@@ -129,9 +131,10 @@ def get_status() -> dict:
         if _status is None:
             _status = default_status()
             try:
-                saved = yaml.safe_load(_state_file().read_text()) or {}
-                _status.update({k: v for k, v in saved.items() if k in _status})
-            except (OSError, yaml.YAMLError):
+                saved = yaml.safe_load(checked_path(_state_file()).read_text())
+                if isinstance(saved, dict):
+                    _status.update({k: v for k, v in saved.items() if k in _status})
+            except (OSError, yaml.YAMLError, SyncError):
                 pass
         return dict(_status)
 
@@ -144,13 +147,47 @@ def update_status(save: bool = False, **changes) -> dict:
         status = dict(_status)
     if save:
         try:
-            file = _state_file()
-            temporary = file.with_name(f".{file.name}.tmp")
-            temporary.write_text(yaml.safe_dump(status))
-            os.replace(temporary, file)
-        except OSError as e:
+            write_file(_state_file(), yaml.safe_dump(status))
+        except (OSError, SyncError) as e:
             logger.warning("Could not save the sync state: %s", e)
     return status
+
+
+def checked_path(path: Path) -> Path:
+    """`path`, which is inside the media directory, refused if it or a directory on the way to it is a symbolic
+    link.  The Controller runs as root, and the media directory belongs to another user: a link there would have
+    root read, write or delete somewhere else."""
+    current = get_media_directory()
+    for part in path.relative_to(current).parts:
+        current = current / part
+        if current.is_symlink():
+            raise SyncError(f"{current} is a symbolic link")
+    return path
+
+
+def write_file(file: Path, text: str):
+    """Write `file` in the media directory without following a link: to a new file of its own, renamed into
+    place."""
+    checked_path(file)
+    temporary = file.with_name(f".{file.name}.{uuid.uuid4().hex}.tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    with os.fdopen(descriptor, "w") as fh:
+        fh.write(text)
+    os.replace(temporary, file)
+
+
+def make_directory(directory: Path) -> Path:
+    """Make a directory in the media directory that belongs to the media directory's owner, as rsync (which does
+    not run as root) must write into it."""
+    media_directory = get_media_directory()
+    checked_path(directory)
+    owner = media_directory.stat()
+    missing = [i for i in (directory, *directory.parents) if media_directory in i.parents and not i.exists()]
+    directory.mkdir(parents=True, exist_ok=True)
+    for path in missing:
+        with contextlib.suppress(PermissionError):
+            os.chown(path, owner.st_uid, owner.st_gid, follow_symlinks=False)
+    return directory
 
 
 def read_sync_config() -> dict:
@@ -189,8 +226,11 @@ def build_files_command(primary_url: str, media_directory: Path, trash: Optional
 
     `trash` is where deleted and replaced files are moved; None never deletes."""
     arguments = [
-        # Not --archive: owner and group are this machine's.
-        "--recursive", "--links", "--perms", "--times", "--devices", "--specials",
+        # Not --archive: owner and group are this machine's, and a library holds no devices.
+        "--recursive", "--perms", "--times",
+        # A link is copied only if it points inside the library.  One that points elsewhere would, on this machine,
+        # point at this machine's files, which the web server would then serve.
+        "--links", "--safe-links",
         "--partial", f"--partial-dir={PARTIAL_DIRECTORY}",
         "--info=progress2,stats2", "--no-human-readable",
     ]
@@ -199,12 +239,12 @@ def build_files_command(primary_url: str, media_directory: Path, trash: Optional
         arguments.extend(["--delete", "--backup", f"--backup-dir={trash}"])
     arguments.extend(f"--exclude={i}" for i in LOCAL_PATHS)
     if playlists := (playlists_destination or "").strip("/"):
-        arguments.append(f"--exclude=/{rsync_literal(playlists)}/")
+        arguments.append(f"--exclude=/{rsync_literal(playlists)}")
     arguments.extend(f"--exclude={i}" for i in UNFINISHED_PATTERNS)
     # Folders the owner chose not to copy.
     for directory in excluded_directories or []:
         if directory := str(directory).strip("/"):
-            arguments.append(f"--exclude=/{rsync_literal(directory)}/")
+            arguments.append(f"--exclude=/{rsync_literal(directory)}")
     arguments.extend([rsync_url(primary_url), f"{media_directory}/"])
     return arguments
 
@@ -276,9 +316,8 @@ class DockerRunner:
         if not can_manage_containers():
             raise SyncError("Docker management is not available")
         # Asked of the containers themselves: the paths Docker reports for one folder can differ.
-        probe = get_media_directory() / SYNC_DIRECTORY / f".probe-{uuid.uuid4().hex}"
-        probe.parent.mkdir(parents=True, exist_ok=True)
-        probe.touch()
+        probe = make_directory(get_media_directory() / SYNC_DIRECTORY) / f".probe-{uuid.uuid4().hex}"
+        write_file(probe, "")
         try:
             seen = self._api().exec_run(["test", "-e", str(probe)]).exit_code == 0
         finally:
@@ -451,8 +490,8 @@ def replace_database(media_directory: Path):
     The old write-ahead log must be gone first: left beside the new database it would be applied to it.  It is
     emptied by a checkpoint rather than only deleted, so a run that stops between the two steps leaves the old
     database complete."""
-    database = media_directory / "config/wrolpi.db"
-    incoming = media_directory / INCOMING_DATABASE
+    database = checked_path(media_directory / "config/wrolpi.db")
+    incoming = checked_path(media_directory / INCOMING_DATABASE)
     with contextlib.closing(sqlite3.connect(f"file:{incoming}?mode=ro", uri=True)) as connection:
         if connection.execute("PRAGMA schema_version").fetchone()[0] == 0:
             raise SyncError("The snapshot from the primary is not a database")
@@ -478,11 +517,13 @@ def purge_trash(media_directory: Path, delete_after_days: Optional[int], today: 
     """Remove the trash folders that have waited `delete_after_days` and, while the drive is nearly full, the
     oldest of the rest.  A folder is as old as its name says, whatever its files' times are.  Returns their names."""
     trash = media_directory / TRASH_DIRECTORY
-    if not trash.is_dir():
+    if trash.is_symlink() or not trash.is_dir():
         return []
     today = today or datetime.date.today()
     dated = []
     for folder in trash.iterdir():
+        if folder.is_symlink() or not folder.is_dir():
+            continue
         with contextlib.suppress(ValueError):
             dated.append((datetime.date.fromisoformat(folder.name), folder))
     purged = []
@@ -530,8 +571,7 @@ def run_sync(runner=None) -> dict:
             raise SyncError("Not enough free space for the primary's database")
         _check_cancel()
 
-        sync_directory = media_directory / SYNC_DIRECTORY
-        (sync_directory / "incoming").mkdir(parents=True, exist_ok=True)
+        make_directory(media_directory / SYNC_DIRECTORY / "incoming")
         update_status(save=True, phase="files")
         runner.stop_api()
         api_stopped = True
@@ -554,7 +594,7 @@ def run_sync(runner=None) -> dict:
         update_status(save=True, phase="database", percent=0)
         for source, target in (("config/wrolpi.yaml", PRIMARY_WROLPI_CONFIG),):
             runner.rsync(["--times", rsync_url(primary_url, source), str(media_directory / target)], lambda _: None)
-        (media_directory / PRIMARY_INFO).write_text(yaml.safe_dump(primary))
+        write_file(media_directory / PRIMARY_INFO, yaml.safe_dump(primary))
         code = runner.rsync(
             build_database_command(primary_url, media_directory),
             lambda line: update_status(**{k: v for k, v in parse_rsync_line(line).items() if k == "percent"}))
@@ -591,7 +631,8 @@ def _finish(runner, api_stopped: bool, **changes) -> dict:
         _run_lock.release()
     trash = get_media_directory() / TRASH_DIRECTORY
     return update_status(save=True, phase=None, finished_at=_now(),
-                         trash_bytes=directory_size(trash) if trash.is_dir() else 0, **changes)
+                         trash_bytes=directory_size(trash) if trash.is_dir() and not trash.is_symlink() else 0,
+                         **changes)
 
 
 def _read_yaml(file: Path) -> dict:

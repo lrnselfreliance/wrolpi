@@ -141,6 +141,8 @@ export const PRINT_PAINT = {
     // A path is not drawn on a screen until the map is deeper than a quadrangle is drawn.
     roads_other: {"line-width": 1.2, "line-dasharray": [4, 2]},
     roads_bridges_other: {"line-width": 1.2, "line-dasharray": [4, 2]},
+    // A basemap draws a ramp on a bridge in the color of a minor road on one, not in a ramp's.
+    roads_bridges_link: {"line-color": MAJOR},
     roads_rail: {"line-opacity": 1},
     boundaries: {"line-width": 1.2},
     boundaries_country: {"line-width": 1.6},
@@ -223,7 +225,9 @@ export const PRINT_SWATCHES = [
     },
     {
         id: "major", group: "Roads - Major", label: "Major roads", color: MAJOR,
-        colors: color => ({major: color, link: color, bridges_major: color, bridges_link: color}),
+        colors: color => ({major: color, link: color, bridges_major: color}),
+        // A ramp on a bridge, which a basemap does not draw in a color of its own.
+        paint: color => ({roads_bridges_link: {"line-color": color}}),
     },
     {
         id: "minor", group: "Roads - Minor", label: "Minor roads", color: WHITE,

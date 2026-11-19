@@ -474,11 +474,14 @@ function LayerControl({
             )}
             {printColors && onPrintColors && <div style={{paddingTop: "0.25rem", color: "var(--muted)"}}>
                 Colors are of the printed map.{" "}
-                {Object.keys(printColors).length > 0 && <span
-                    role="button"
-                    style={{cursor: "pointer", textDecoration: "underline"}}
+                {Object.keys(printColors).length > 0 && <button
+                    type="button"
+                    style={{
+                        cursor: "pointer", textDecoration: "underline", background: "none", border: "none",
+                        padding: 0, font: "inherit", color: "inherit",
+                    }}
                     onClick={() => onPrintColors({})}
-                >Reset colors</span>}
+                >Reset colors</button>}
             </div>}
             {overlays.length > 0 &&
                 <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>

@@ -99,9 +99,21 @@ describe('the colors a person chooses for the printed map', () => {
         expect(byId.water_stream.paint['line-width']).toBe(PRINT_PAINT.water_stream['line-width']);
         expect(JSON.stringify(byId.roads_minor.paint['line-color'])).toContain('#00ff00');
         // The edge of a road is not chosen.
+        expect(byId.roads_bridges_link.paint['line-color']).toBe(PRINT_COLORS.major);
         expect(byId.roads_minor_casing.paint['line-color']).toBe('#4d4d4d');
         // What was not chosen is as it was.
         expect(byId.roads_highway.paint['line-color']).toBe(PRINT_COLORS.highway);
+    });
+
+    test('a ramp is the color of a major road, on a bridge as off one', () => {
+        const ramps = colors => {
+            const byId = Object.fromEntries(printLayers('a.pmtiles', colors).map(layer => [layer.id, layer]));
+            return [byId.roads_link.paint['line-color'], byId.roads_bridges_link.paint['line-color']];
+        };
+        expect(ramps({})).toEqual([PRINT_COLORS.major, PRINT_COLORS.major]);
+        expect(ramps({major: '#123456'})).toEqual(['#123456', '#123456']);
+        // The color of a minor road is not a ramp's.
+        expect(ramps({minor: '#00ff00'})).toEqual([PRINT_COLORS.major, PRINT_COLORS.major]);
     });
 
     test('several colors of a basemap are shades of the one chosen', () => {

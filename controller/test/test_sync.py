@@ -72,8 +72,12 @@ class FakeRunner:
     def start_api(self):
         self.events.append("start_api")
 
+    def stop_rsync(self):
+        self.events.append("stop_rsync")
+
     def rsync(self, arguments, on_line):
         if arguments[-1].endswith("/"):
+            self.files_command = arguments
             self.events.append("files")
             on_line("     1234567  42%   10.00MB/s    0:00:01")
             on_line("Number of regular files transferred: 7")
@@ -81,7 +85,7 @@ class FakeRunner:
                 self.on_files()
             return self.code
         if arguments[-1].endswith("primary-wrolpi.yaml"):
-            Path(arguments[-1]).write_text("videos_destination: videos\n")
+            Path(arguments[-1]).write_text("videos_destination: videos\nplaylists_destination: lists\n")
             return 0
         self.events.append("database")
         make_database(Path(arguments[-1]), "from the primary")
@@ -101,17 +105,20 @@ class TestCommand:
 
     def test_copies_everything_but_what_is_local(self, media):
         command = sync.build_files_command(PRIMARY, media, media / ".sync-trash/2026-11-18", ["old [stuff]", "a/b/"],
-                                           "my playlists")
+                                           ["my playlists", "lists", "my playlists"])
         assert command[-2:] == ["rsync://primary.example:8873/media/", f"{media}/"]
         assert "--delete" in command and "--backup" in command
         assert f"--backup-dir={media}/.sync-trash/2026-11-18" in command
-        for excluded in ("/tags", "/my playlists", "/config/wrolpi.yaml", "/config/sync.yaml", "/config/ssl",
+        for excluded in ("/tags", "/my playlists", "/lists", "/config/wrolpi.yaml", "/config/sync.yaml", "/config/ssl",
                          "/config/wrolpi.db", "/config/wrolpi.db-wal", "/config/.sync", "/.sync-trash",
                          "/config/sync_state.yaml", "/config/.wrol_mode", "*.part", ".partial", "*.db-wal",
                          "/old \\[stuff]", "/a/b"):
             assert f"--exclude={excluded}" in command, excluded
         # A pattern ending in a slash matches only a directory; a file or link of that name would get through.
         assert not [i for i in command if i.startswith("--exclude=") and i.endswith("/")]
+        assert command.count("--exclude=/my playlists") == 1
+        # A primary that stops answering ends the run; rsync alone would wait forever with the API stopped.
+        assert "--contimeout=30" in command and "--timeout=300" in command
         # Only links that stay inside the library, and no device files.
         assert "--safe-links" in command and "--devices" not in command and "--specials" not in command
         # An ignored directory is still part of the library: nothing leaves out the map or the repos.
@@ -122,6 +129,7 @@ class TestCommand:
     def test_database_is_never_judged_the_same_by_size_and_time(self, media):
         command = sync.build_database_command(PRIMARY, media)
         assert "--ignore-times" in command and f"--copy-dest={media}/config" in command
+        assert "--contimeout=30" in command and "--timeout=300" in command
         assert command[-2:] == ["rsync://primary.example:8873/media/config/.sync/config/wrolpi.db",
                                 f"{media}/config/.sync/incoming/wrolpi.db"]
 
@@ -233,6 +241,9 @@ class TestChecks:
         (dict(version="2.0"), "WROLPi version"),
         (dict(database_revision="def"), "database migration"),
         (dict(database_revision=None), "database migration"),
+        # The database names every file by its full path.
+        (dict(media_directory="/data/library"), "media directory"),
+        (dict(media_directory=None), "media directory"),
     ])
     def test_check_primary_refuses(self, change, message):
         with pytest.raises(sync.SyncError, match=message):
@@ -318,6 +329,36 @@ class TestRunSync:
         sync._status = None
         assert sync.get_status()["last_success_at"] == status["last_success_at"]
 
+    def test_leaves_out_the_playlists_of_both_machines(self, media, primary_api):
+        """The primary names its playlists directory in its own wrolpi.yaml, which is fetched before the copy: its
+        hard links would arrive as full copies.  This machine's own playlists directory must not be deleted."""
+        (media / "config/wrolpi.yaml").write_text("playlists_destination: mine\n")
+        runner = FakeRunner(media)
+        sync.run_sync(runner)
+        assert "--exclude=/lists" in runner.files_command and "--exclude=/mine" in runner.files_command
+
+    def test_trash_is_purged_even_when_the_copy_fails(self, media, primary_api):
+        """A full drive fails every copy, and the trash is what fills it: it must be emptied before the copy."""
+        (media / ".sync-trash/2020-01-01").mkdir(parents=True)
+        status = sync.run_sync(FakeRunner(media, code=12))
+        assert status["state"] == "error"
+        assert not (media / ".sync-trash/2020-01-01").exists()
+
+    @pytest.mark.parametrize("config", [
+        dict(delete_after_days="soon"), dict(primary_url=["not", "text"]), dict(sync_excluded_directories=5),
+    ])
+    def test_a_bad_setting_ends_the_run_and_frees_it(self, media, primary_api, config):
+        """sync.yaml can be edited by hand.  A value that cannot be used must not leave "A sync is already running"
+        behind until the Controller restarts."""
+        (media / "config/sync.yaml").write_text(yaml.safe_dump(dict(dict(role="secondary", primary_url=PRIMARY),
+                                                                    **config)))
+        runner = FakeRunner(media)
+        status = sync.run_sync(runner)
+        assert status["state"] == "error" and status["last_error"]
+        assert not sync._run_lock.locked()
+        assert runner.events.count("stop_api") == runner.events.count("start_api")
+        assert sync.skip_reason(dict(role="secondary", primary_url=PRIMARY)) is None
+
     def test_a_refused_primary_changes_nothing(self, media, primary_api, monkeypatch):
         monkeypatch.setattr(sync, "get_primary_info", lambda url: dict(INFO, version="2.0"))
         runner = FakeRunner(media)
@@ -364,7 +405,8 @@ class TestRunSync:
         sync._status = None
         runner = FakeRunner(media)
         sync.recover_interrupted_sync(runner)
-        assert runner.events == ["start_api"]
+        # In Docker rsync is its own container and is still replacing files: it is stopped before the API starts.
+        assert runner.events == ["stop_rsync", "start_api"]
         assert sync.get_status()["state"] == "error" and sync.get_status()["last_error"] == "The sync was interrupted"
 
         runner = FakeRunner(media)
@@ -534,7 +576,43 @@ class TestDockerRunner:
         assert seen == [True], "the probe existed while the api container was asked"
         assert not list((media / sync.SYNC_DIRECTORY).glob(".probe-*")), "and is removed"
 
+    def test_stop_rsync_removes_the_helper(self, media, monkeypatch):
+        from unittest import mock
+        helper = mock.Mock()
+        client = mock.Mock()
+        client.containers.get.return_value = helper
+        monkeypatch.setattr(sync, "_get_client", lambda: client)
+        sync.DockerRunner().stop_rsync()
+        client.containers.get.assert_called_once_with("wrolpi-sync-1")
+        helper.remove.assert_called_once_with(force=True)
+
+        client.containers.get.side_effect = RuntimeError("no such container")
+        sync.DockerRunner().stop_rsync()
+
     def test_accepts_the_same_media_directory(self, media, monkeypatch):
         runner, _ = self.make(monkeypatch, media, exit_code=0)
         runner.check()
         assert not list((media / sync.SYNC_DIRECTORY).glob(".probe-*"))
+
+
+@pytest.mark.skipif(not RSYNC_3, reason="needs rsync 3")
+def test_a_primary_that_stops_answering_ends_rsync(media, monkeypatch):
+    """A primary that accepts the connection and then says nothing (it lost power mid-copy, as far as TCP can tell):
+    rsync gives up, so the run ends and the API is started again."""
+    monkeypatch.setattr(sync, "RSYNC_IO_TIMEOUT_SECONDS", 2)
+    monkeypatch.setattr(sync, "RSYNC_CONNECT_TIMEOUT_SECONDS", 2)
+    with socket.socket() as silent:
+        silent.bind(("127.0.0.1", 0))
+        silent.listen()
+        monkeypatch.setattr(sync, "get_rsyncd_port", lambda: silent.getsockname()[1])
+        # Without its timeouts rsync never returns; stop it, so that is a failure here and not a test that hangs.
+        gave_up = threading.Timer(30, sync._cancel.set)
+        gave_up.start()
+        try:
+            code = LocalRunner().rsync(sync.build_files_command("https://127.0.0.1", media, None), lambda _: None)
+        except sync.SyncCancelled:
+            pytest.fail("rsync waited on a silent primary until it was stopped")
+        finally:
+            gave_up.cancel()
+            sync._cancel.clear()
+    assert code != 0

@@ -60,6 +60,10 @@ DEFAULT_DELETE_AFTER_DAYS = 30
 MIN_FREE_BYTES = 1024 ** 3
 SNAPSHOT_TIMEOUT_SECONDS = 60 * 60
 API_START_TIMEOUT_SECONDS = 10 * 60
+# A sync runs unattended with the API stopped: a primary that loses power or its link must end the run, not hold it.
+# rsync's own default is to wait forever.
+RSYNC_CONNECT_TIMEOUT_SECONDS = 30
+RSYNC_IO_TIMEOUT_SECONDS = 300
 # rsync: 23 = some files could not be transferred, 24 = some files vanished while copying (the primary is in use).
 RSYNC_PARTIAL, RSYNC_VANISHED = 23, 24
 
@@ -215,16 +219,22 @@ def rsync_url(primary_url: str, path: str = "") -> str:
     return f"rsync://{host}:{get_rsyncd_port()}/media/{path}"
 
 
+def timeout_arguments() -> list:
+    return [f"--contimeout={RSYNC_CONNECT_TIMEOUT_SECONDS}", f"--timeout={RSYNC_IO_TIMEOUT_SECONDS}"]
+
+
 def rsync_literal(path: str) -> str:
     """`path` as an rsync pattern that matches only itself (rsync reads `* ? [ \\` as wildcards)."""
     return re.sub(r"([*?\[\\])", r"\\\1", path)
 
 
 def build_files_command(primary_url: str, media_directory: Path, trash: Optional[Path],
-                        excluded_directories: list = None, playlists_destination: str = "playlists") -> list:
+                        excluded_directories: list = None, playlists_destinations: list = ("playlists",)) -> list:
     """The rsync arguments (without `rsync`) that make `media_directory` a copy of the primary's.
 
-    `trash` is where deleted and replaced files are moved; None never deletes."""
+    `trash` is where deleted and replaced files are moved; None never deletes.  `playlists_destinations` are the
+    playlists directories of the primary (hard links there, which would arrive as full copies) and of this machine
+    (its own links, which must not be deleted)."""
     arguments = [
         # Not --archive: owner and group are this machine's, and a library holds no devices.
         "--recursive", "--perms", "--times",
@@ -233,13 +243,15 @@ def build_files_command(primary_url: str, media_directory: Path, trash: Optional
         "--links", "--safe-links",
         "--partial", f"--partial-dir={PARTIAL_DIRECTORY}",
         "--info=progress2,stats2", "--no-human-readable",
+        *timeout_arguments(),
     ]
     if trash is not None:
         # An excluded path is never deleted, so the trash and this machine's own files are safe from --delete.
         arguments.extend(["--delete", "--backup", f"--backup-dir={trash}"])
     arguments.extend(f"--exclude={i}" for i in LOCAL_PATHS)
-    if playlists := (playlists_destination or "").strip("/"):
-        arguments.append(f"--exclude=/{rsync_literal(playlists)}")
+    for playlists in dict.fromkeys(str(i or "").strip("/") for i in playlists_destinations):
+        if playlists:
+            arguments.append(f"--exclude=/{rsync_literal(playlists)}")
     arguments.extend(f"--exclude={i}" for i in UNFINISHED_PATTERNS)
     # Folders the owner chose not to copy.
     for directory in excluded_directories or []:
@@ -253,6 +265,7 @@ def build_database_command(primary_url: str, media_directory: Path) -> list:
     """The rsync arguments that fetch the primary's database snapshot to `INCOMING_DATABASE`."""
     return [
         "--times", "--partial", "--info=progress2,stats2", "--no-human-readable",
+        *timeout_arguments(),
         # The database in use is what the snapshot is built from, so only what differs is sent.
         f"--copy-dest={media_directory / 'config'}",
         # Never judged the same by size and time: two databases of one size, written in the same second, are common
@@ -298,6 +311,9 @@ class SystemdRunner:
     def start_api(self):
         start_service("wrolpi-api")
 
+    def stop_rsync(self):
+        """Nothing to do: rsync is the Controller's child, and systemd stops it with the Controller."""
+
     def rsync(self, arguments: list, on_line: Callable[[str], None]) -> int:
         command = ["runuser", "-u", "wrolpi", "--", "rsync", *arguments]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -334,10 +350,14 @@ class DockerRunner:
     def start_api(self):
         start_container("api")
 
+    def stop_rsync(self):
+        """The helper is its own container: it outlives a Controller that stops, and goes on replacing files."""
+        with contextlib.suppress(Exception):
+            _get_client().containers.get(self.HELPER_NAME).remove(force=True)
+
     def rsync(self, arguments: list, on_line: Callable[[str], None]) -> int:
         client, api = _get_client(), self._api()
-        with contextlib.suppress(Exception):
-            client.containers.get(self.HELPER_NAME).remove(force=True)
+        self.stop_rsync()
         helper = client.containers.run(
             api.image.id, arguments, entrypoint="rsync", name=self.HELPER_NAME, detach=True,
             user=api.attrs["Config"].get("User") or None, volumes_from=[api.name])
@@ -482,6 +502,10 @@ def check_primary(primary: dict, local: dict):
         if not primary.get(key) or primary.get(key) != local.get(key):
             raise SyncError(f"The primary's {name} ({primary.get(key)}) is not this WROLPi's ({local.get(key)}); "
                             "upgrade both to the same version")
+    if not primary.get("media_directory") or primary.get("media_directory") != local.get("media_directory"):
+        # The database names every file by its full path.
+        raise SyncError(f"The primary's media directory ({primary.get('media_directory')}) is not this WROLPi's "
+                        f"({local.get('media_directory')}); its database would find no file here")
 
 
 def replace_database(media_directory: Path):
@@ -549,16 +573,17 @@ def run_sync(runner=None) -> dict:
 
     runner = runner or get_runner()
     media_directory = get_media_directory()
-    primary_url = config["primary_url"].rstrip("/")
-    delete_after_days = get_delete_after_days(config)
     api_stopped = False
     warnings = []
     _cancel.clear()
-    update_status(save=True, state="running", phase="checks", started_at=_now(), finished_at=None, last_error=None,
-                  primary_url=primary_url, primary_version=None, percent=0, bytes_transferred=0,
-                  files_transferred=0, files_deleted=0, warnings=[])
-    logger.warning("Syncing from the primary %s", primary_url)
+    # Everything after the lock is taken is inside the `try`: whatever goes wrong, the lock is released.
     try:
+        primary_url = str(config["primary_url"]).rstrip("/")
+        update_status(save=True, state="running", phase="checks", started_at=_now(), finished_at=None,
+                      last_error=None, primary_url=primary_url, primary_version=None, percent=0,
+                      bytes_transferred=0, files_transferred=0, files_deleted=0, warnings=[])
+        logger.warning("Syncing from the primary %s", primary_url)
+        delete_after_days = get_delete_after_days(config)
         runner.check()
         primary, local = get_primary_info(primary_url), get_local_info()
         update_status(primary_version=primary.get("version"))
@@ -567,11 +592,23 @@ def run_sync(runner=None) -> dict:
 
         update_status(phase="snapshot")
         snapshot = request_snapshot(primary_url)
+        # The trash is what fills the drive, and a full drive fails every run: make room before the copy, not
+        # only after a run that succeeded.
+        purge_trash(media_directory, delete_after_days)
         if shutil.disk_usage(media_directory).free - int(snapshot.get("size") or 0) < MIN_FREE_BYTES:
             raise SyncError("Not enough free space for the primary's database")
         _check_cancel()
 
         make_directory(media_directory / SYNC_DIRECTORY / "incoming")
+        # The primary's wrolpi.yaml names its playlists directory, which must be left out of the copy.
+        code = runner.rsync(["--times", *timeout_arguments(), rsync_url(primary_url, "config/wrolpi.yaml"),
+                             str(media_directory / PRIMARY_WROLPI_CONFIG)], lambda _: None)
+        if code != 0:
+            raise SyncError(f"rsync of the primary's wrolpi.yaml failed with exit code {code}")
+        write_file(media_directory / PRIMARY_INFO, yaml.safe_dump(primary))
+        playlists = [_read_yaml(media_directory / i).get("playlists_destination") or "playlists"
+                     for i in (PRIMARY_WROLPI_CONFIG, "config/wrolpi.yaml")]
+
         update_status(save=True, phase="files")
         runner.stop_api()
         api_stopped = True
@@ -579,10 +616,8 @@ def run_sync(runner=None) -> dict:
         trash = None
         if delete_after_days is not None:
             trash = media_directory / TRASH_DIRECTORY / datetime.date.today().isoformat()
-        wrolpi_config = _read_yaml(media_directory / "config/wrolpi.yaml")
         command = build_files_command(primary_url, media_directory, trash,
-                                      config.get("sync_excluded_directories"),
-                                      wrolpi_config.get("playlists_destination") or "playlists")
+                                      config.get("sync_excluded_directories"), playlists)
         code = runner.rsync(command, lambda line: update_status(**parse_rsync_line(line)))
         if code in (RSYNC_PARTIAL, RSYNC_VANISHED):
             warnings.append("Some files changed on the primary during the sync, or could not be copied; "
@@ -592,9 +627,6 @@ def run_sync(runner=None) -> dict:
         _check_cancel()
 
         update_status(save=True, phase="database", percent=0)
-        for source, target in (("config/wrolpi.yaml", PRIMARY_WROLPI_CONFIG),):
-            runner.rsync(["--times", rsync_url(primary_url, source), str(media_directory / target)], lambda _: None)
-        write_file(media_directory / PRIMARY_INFO, yaml.safe_dump(primary))
         code = runner.rsync(
             build_database_command(primary_url, media_directory),
             lambda line: update_status(**{k: v for k, v in parse_rsync_line(line).items() if k == "percent"}))
@@ -618,7 +650,7 @@ def run_sync(runner=None) -> dict:
         logger.error("Sync failed", exc_info=e)
         return _finish(runner, api_stopped, state="error", last_error=str(e) or type(e).__name__, warnings=warnings)
 
-    logger.warning("Synced from the primary %s", primary_url)
+    logger.warning("Synced from the primary %s", config["primary_url"])
     return _finish(runner, api_stopped, state="idle", last_error=None, last_success_at=_now(), warnings=warnings)
 
 
@@ -655,7 +687,11 @@ def recover_interrupted_sync(runner=None):
     if status["state"] != "running":
         return
     logger.warning("A sync was interrupted; starting the API")
+    runner = runner or get_runner()
+    # Before the API starts: nothing may still be replacing the library under it.
     with contextlib.suppress(Exception):
-        (runner or get_runner()).start_api()
+        runner.stop_rsync()
+    with contextlib.suppress(Exception):
+        runner.start_api()
     update_status(save=True, state="error", phase=None, finished_at=_now(),
                   last_error="The sync was interrupted")

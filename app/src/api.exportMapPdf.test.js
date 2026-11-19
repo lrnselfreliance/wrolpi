@@ -178,6 +178,30 @@ describe('exportMapPdf', () => {
         expect(global.fetch.mock.calls.at(-1)[1].signal).toBeUndefined();
     });
 
+    test.each([
+        ['the Job is asked after', 'GET /jobs/job-1'],
+        ['the PDF is fetched', 'GET /map/export/abc/pdf'],
+    ])('is stopped in the middle of a request while %s', async (_, request) => {
+        const abort = new AbortController();
+        const calls = fakeServer([{status: 'complete'}], {
+            replies: {
+                [request]: () => new Promise((resolve, reject) => {
+                    abort.signal.addEventListener(
+                        'abort', () => reject(Object.assign(new Error('aborted'), {name: 'AbortError'})));
+                    abort.abort();
+                }),
+            },
+        });
+        await expect(exportMapPdf(MAP, {pollMs: 0, signal: abort.signal})).rejects.toBeInstanceOf(ExportCancelled);
+        // Every request up to the one which was stopped, and that one, could be stopped.
+        const stoppable = global.fetch.mock.calls.slice(0, -1).map(([, init]) => init?.signal);
+        expect(stoppable).toHaveLength(calls.indexOf(request) + 1);
+        expect(stoppable.every(signal => signal === abort.signal)).toBe(true);
+        // It is not asked again once it is stopped; the server is only told to remove the export.
+        expect(calls.filter(call => call === request)).toHaveLength(1);
+        expect(calls.at(-1)).toBe('DELETE /map/export/abc');
+    });
+
     test('a Job which someone else cancelled is a cancelled export', async () => {
         fakeServer([{status: 'cancelled'}]);
         await expect(exportMapPdf(MAP, {pollMs: 0})).rejects.toBeInstanceOf(ExportCancelled);

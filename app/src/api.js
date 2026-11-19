@@ -1811,7 +1811,9 @@ export async function exportMapPdf(
 ) {
     const exports = `${API_URI}/map/export`;
     let exportId = null;
-    // Best effort: the server removes old exports itself, later.
+    // Best effort: the server removes old exports itself, later.  An export which is stopped while
+    // it is being described has no id yet to remove it by: what the server made of it is one small
+    // file, which it removes with the old ones.
     const remove = async () => {
         if (exportId) await fetch(`${exports}/${exportId}`, {method: 'DELETE'}).catch(() => undefined);
     };

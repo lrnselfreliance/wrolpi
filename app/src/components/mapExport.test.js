@@ -525,6 +525,8 @@ function fakeMapClass(record, {transparent = true, canvas = () => ({})} = {}) {
         constructor(options) {
             record.options = options;
             record.maps = (record.maps || 0) + 1;
+            record.pixelRatios = [...(record.pixelRatios || []), options.pixelRatio];
+            record.sides = [...(record.sides || []), options.maxCanvasSize?.[0]];
             this.visible = new Set(options.style.layers
                 .filter(l => l.layout.visibility !== 'none').map(l => l.id));
             this.layerIds = new Set(options.style.layers.map(l => l.id));
@@ -569,14 +571,9 @@ function fakeMapClass(record, {transparent = true, canvas = () => ({})} = {}) {
         triggerRepaint() {
         }
 
-        setPixelRatio(pixelRatio) {
-            record.pixelRatios = [...(record.pixelRatios || []), pixelRatio];
-            this.canvas.width = Math.floor(parseInt(record.options.container.style.width, 10) * pixelRatio);
-            this.canvas.height = Math.floor(parseInt(record.options.container.style.height, 10) * pixelRatio);
-        }
-
         remove() {
             record.removed = true;
+            record.removals = (record.removals || 0) + 1;
         }
     };
 }
@@ -749,15 +746,18 @@ describe('drawing the layers', () => {
             });
             // Looked at first, on a small map; told once, before anything is drawn to keep.
             expect(lookings).toEqual([0]);
-            expect(record.options.pixelRatio).toBe(0.5);
             // Two of the three groups have something in them, so the map is as sharp as two may be.
-            expect(record.pixelRatios).toEqual([2]);
+            // It is a map of its own, made that sharp: a canvas is not made larger once it is made.
+            expect(record.pixelRatios).toEqual([0.5, 2]);
+            expect(record.maps).toBe(2);
+            expect(record.removals).toBe(2);
             expect(rendered.layers.map(layer => layer.name)).toEqual(['Water', 'Labels']);
             expect(progress).toEqual([['Water', 0, 2, 300], ['Labels', 1, 2, 300]]);
             expect(rendered.dpi).toBe(300);
             expect(rendered.width).toBe(frame.cssWidth * 2);
-            // The canvas was allowed to be as large as the sharpest map is.
-            expect(record.options.maxCanvasSize[0]).toBe(Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * 2));
+            // Each canvas is allowed to be as large as its map is.
+            const side = Math.max(frame.cssWidth, frame.cssHeight);
+            expect(record.sides).toEqual([Math.ceil(side * 0.5), Math.ceil(side * 2)]);
         });
 
         test('every group is drawn when all have something in them', async () => {
@@ -766,7 +766,7 @@ describe('drawing the layers', () => {
                 MapClass: looking(record), style, frameFor, groups, isBlank: () => false,
             });
             expect(rendered.layers.map(layer => layer.name)).toEqual(groups.map(group => group.name));
-            expect(record.pixelRatios).toEqual([1]);
+            expect(record.pixelRatios).toEqual([0.5, 1]);
             expect(rendered.dpi).toBe(150);
         });
 
@@ -777,6 +777,30 @@ describe('drawing the layers', () => {
             })).rejects.toThrow('Nothing is drawn in any layer of the map');
             expect(record.captures).toEqual([]);
             expect(record.removed).toBe(true);
+        });
+
+        test('a canvas the browser stopped drawing on is not a group with nothing in it', async () => {
+            const record = {captures: []};
+            const lost = fakeMapClass(record, {
+                canvas: () => ({getContext: kind => (kind === 'webgl2' ? {isContextLost: () => true} : null)}),
+            });
+            await expect(renderExport({MapClass: lost, style, frameFor, groups, isBlank: () => true}))
+                .rejects.toThrow('The browser stopped drawing the map');
+            expect(record.captures).toEqual([]);
+            expect(record.removed).toBe(true);
+        });
+
+        test('is stopped after the last group is looked at, before the map to export from is made', async () => {
+            const record = {captures: []};
+            let looked = 0;
+            await expect(renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: () => !++looked,
+                // Stopped while the last group is looked at.
+                isCancelled: () => looked >= groups.length,
+            })).rejects.toMatchObject({cancelled: true});
+            expect(looked).toBe(groups.length);
+            expect(record.maps).toBe(1);
+            expect(record.captures).toEqual([]);
         });
 
         test('is stopped while the groups are looked at', async () => {

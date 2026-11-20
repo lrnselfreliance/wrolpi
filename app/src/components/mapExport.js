@@ -535,8 +535,6 @@ export async function renderExport({
     const cancelled = () => Object.assign(new Error("The export was cancelled"), {cancelled: true});
     // The size, the middle and the zoom of the map are the same however many images it is.
     if (frameFor) frame = frameFor(groups.length);
-    // As sharp as the map may come to be: the canvas is allowed to be that large.
-    const sharpest = frameFor ? frameFor(1) : frame;
     const roadNames = await loadRoadNames(style, frame, readTile, isCancelled);
     // Reading the names is the first of the work, and may be the slowest of it.
     if (isCancelled && isCancelled()) throw cancelled();
@@ -548,25 +546,31 @@ export async function renderExport({
 
     let map;
     try {
-        const side = Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * sharpest.pixelRatio);
-        map = new MapClass({
-            container,
-            style: exportStyle(style, ignoredPrefixes, {zoom: frame.zoom, roadNames}),
-            center: frame.center,
-            zoom: frame.zoom,
-            interactive: false,
-            attributionControl: false,
-            pixelRatio: frameFor ? Math.min(LOOKING_PIXEL_RATIO, sharpest.pixelRatio) : frame.pixelRatio,
-            maxCanvasSize: [side, side],
-            // The canvas is read after it is drawn, so what was drawn must still be in it.
-            canvasContextAttributes: {preserveDrawingBuffer: true},
-            // A label is all there at once: nothing is caught half faded in.
-            fadeDuration: 0,
-        });
-        if (setup) setup(map);
-        await once(map, "load");
-
-        const canvas = map.getCanvas();
+        const exported = exportStyle(style, ignoredPrefixes, {zoom: frame.zoom, roadNames});
+        // A map which draws as sharp as `pixelRatio` says.  A map is made as sharp as it is to be:
+        // a browser lets a canvas be larger when it is made than it lets one be made larger later
+        // (some 33 million pixels, less than a quadrangle at 400 DPI).
+        const makeMap = async pixelRatio => {
+            const side = Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * pixelRatio);
+            map = new MapClass({
+                container,
+                style: exported,
+                center: frame.center,
+                zoom: frame.zoom,
+                interactive: false,
+                attributionControl: false,
+                pixelRatio,
+                maxCanvasSize: [side, side],
+                // The canvas is read after it is drawn, so what was drawn must still be in it.
+                canvasContextAttributes: {preserveDrawingBuffer: true},
+                // A label is all there at once: nothing is caught half faded in.
+                fadeDuration: 0,
+            });
+            if (setup) setup(map);
+            await once(map, "load");
+            return map.getCanvas();
+        };
+        let canvas = await makeMap(frameFor ? Math.min(LOOKING_PIXEL_RATIO, frame.pixelRatio) : frame.pixelRatio);
         // Draw a group alone, have `drawn()` look at the canvas, and hide the group again.
         const draw = async (group, drawn) => {
             if (isCancelled && isCancelled()) {
@@ -595,7 +599,10 @@ export async function renderExport({
             if (!seen.length) throw new Error("Nothing is drawn in any layer of the map");
             groups = seen;
             frame = frameFor(groups.length);
-            map.setPixelRatio(frame.pixelRatio);
+            // The small map is done with; the map which is exported from is made in its place.
+            map.remove();
+            map = null;
+            canvas = await makeMap(frame.pixelRatio);
         }
 
         const layers = [];

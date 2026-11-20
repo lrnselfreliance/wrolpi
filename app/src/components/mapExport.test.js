@@ -779,6 +779,30 @@ describe('drawing the layers', () => {
             expect(record.removed).toBe(true);
         });
 
+        test('a canvas the browser stopped drawing on is not a group with nothing in it', async () => {
+            const record = {captures: []};
+            const lost = fakeMapClass(record, {
+                canvas: () => ({getContext: kind => (kind === 'webgl2' ? {isContextLost: () => true} : null)}),
+            });
+            await expect(renderExport({MapClass: lost, style, frameFor, groups, isBlank: () => true}))
+                .rejects.toThrow('The browser stopped drawing the map');
+            expect(record.captures).toEqual([]);
+            expect(record.removed).toBe(true);
+        });
+
+        test('is stopped after the last group is looked at, before the map to export from is made', async () => {
+            const record = {captures: []};
+            let looked = 0;
+            await expect(renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: () => !++looked,
+                // Stopped while the last group is looked at.
+                isCancelled: () => looked >= groups.length,
+            })).rejects.toMatchObject({cancelled: true});
+            expect(looked).toBe(groups.length);
+            expect(record.maps).toBe(1);
+            expect(record.captures).toEqual([]);
+        });
+
         test('is stopped while the groups are looked at', async () => {
             const record = {captures: []};
             let looked = 0;

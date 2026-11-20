@@ -512,6 +512,14 @@ export function isBlankCanvas(canvas) {
     return true;
 }
 
+// Whether the browser has stopped drawing on a map's canvas (it does when it has too many, or is
+// short of memory): such a canvas reads as clear.
+function contextLost(canvas) {
+    if (typeof canvas.getContext !== "function") return false;
+    const context = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    return Boolean(context && typeof context.isContextLost === "function" && context.isContextLost());
+}
+
 // Draw each group of layers of `style` on a map of its own, and return the images:
 // {width, height, dpi, bounds, layers: [{name, blob}]}.  `bounds` is the west, south, east and north
 // edges of the images (degrees), which is what says where the PDF is on the Earth: they are read
@@ -594,9 +602,15 @@ export async function renderExport({
             if (onLooking) onLooking();
             const seen = [];
             for (const group of groups) {
-                if (!await draw(group, () => isBlank(canvas))) seen.push(group);
+                const blank = await draw(group, () => isBlank(canvas));
+                // A canvas the browser has stopped drawing on is clear, whatever was to be drawn:
+                // that is not a group with nothing in it, to be left out and not missed.
+                if (blank && contextLost(canvas)) throw new Error("The browser stopped drawing the map");
+                if (!blank) seen.push(group);
             }
             if (!seen.length) throw new Error("Nothing is drawn in any layer of the map");
+            // Stopped while the groups were looked at: the map to export from is not made.
+            if (isCancelled && isCancelled()) throw cancelled();
             groups = seen;
             frame = frameFor(groups.length);
             // The small map is done with; the map which is exported from is made in its place.

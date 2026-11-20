@@ -29,6 +29,11 @@ const TILE_SIZE = 512;
 const RENDER_TIMEOUT_MS = 120_000;
 // How often it is asked whether the map has been too long in drawing.
 const RENDER_WATCH_MS = 1000;
+// How sharp the map is on which the groups are looked at, to see which have anything in them:
+// half as many pixels each way as there are CSS pixels.  Anything drawn is still drawn.
+const LOOKING_PIXEL_RATIO = 0.5;
+// How many rows of a canvas are looked at at once.
+const BLANK_BAND_ROWS = 256;
 
 export const BACKGROUND_GROUP = "Background";
 
@@ -485,6 +490,28 @@ export function isOpaque(canvas) {
     return true;
 }
 
+// Whether nothing is drawn on a canvas: every pixel of it is clear.  Every pixel is looked at (a
+// lone well is a few of them), a band of rows at a time so that no more is in memory than a band.
+export function isBlankCanvas(canvas) {
+    const band = document.createElement("canvas");
+    band.width = canvas.width;
+    band.height = Math.min(BLANK_BAND_ROWS, canvas.height);
+    const context = band.getContext("2d", {willReadFrequently: true});
+    // Not known to be blank, so it is drawn.
+    if (!context) return false;
+    for (let top = 0; top < canvas.height; top += band.height) {
+        const rows = Math.min(band.height, canvas.height - top);
+        context.clearRect(0, 0, band.width, band.height);
+        context.drawImage(canvas, 0, top, canvas.width, rows, 0, 0, canvas.width, rows);
+        // Only whether a pixel is seen at all: one which is not may still have a trace of a color.
+        const {data} = context.getImageData(0, 0, canvas.width, rows);
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i] !== 0) return false;
+        }
+    }
+    return true;
+}
+
 // Draw each group of layers of `style` on a map of its own, and return the images:
 // {width, height, dpi, bounds, layers: [{name, blob}]}.  `bounds` is the west, south, east and north
 // edges of the images (degrees), which is what says where the PDF is on the Earth: they are read
@@ -492,13 +519,24 @@ export function isOpaque(canvas) {
 //
 // MapClass: maplibregl.Map.  setup(map): called with the new map before it draws anything.
 // readTile: how to read a tile of a source (see loadRoadNames); without it small roads have no names.
-// onProgress(name, index, count): called before each group is drawn.  isCancelled(): asked before
-// each group whether to stop; when it is so nothing more is drawn, and this rejects with an error
-// whose `cancelled` is true.
+// onProgress(name, index, count, frame): called before each group is drawn, with the frame it is
+// drawn in.  isCancelled(): asked before each group whether to stop; when it is so nothing more is
+// drawn, and this rejects with an error whose `cancelled` is true.
+//
+// frame: how the map is drawn (see exportFrame).  Or frameFor(count): the frame of a map of that
+// many images.  How sharp a map may be depends on how many images it is, and a group in which
+// nothing is drawn (a basemap file with no runway in the quadrangle) is no image: so the groups are
+// first looked at on a small map, onLooking() is told, and only those with something in them are
+// drawn, as sharp as that many may be.  isBlank(canvas): whether nothing is drawn on a canvas.
 export async function renderExport({
-    MapClass, style, frame, groups, setup, onProgress, isCancelled, readTile, ignoredPrefixes = [],
+    MapClass, style, frame, frameFor, groups, setup, onProgress, onLooking, isCancelled, readTile,
+    ignoredPrefixes = [], isBlank = isBlankCanvas,
 }) {
     const cancelled = () => Object.assign(new Error("The export was cancelled"), {cancelled: true});
+    // The size, the middle and the zoom of the map are the same however many images it is.
+    if (frameFor) frame = frameFor(groups.length);
+    // As sharp as the map may come to be: the canvas is allowed to be that large.
+    const sharpest = frameFor ? frameFor(1) : frame;
     const roadNames = await loadRoadNames(style, frame, readTile, isCancelled);
     // Reading the names is the first of the work, and may be the slowest of it.
     if (isCancelled && isCancelled()) throw cancelled();
@@ -510,7 +548,7 @@ export async function renderExport({
 
     let map;
     try {
-        const side = Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * frame.pixelRatio);
+        const side = Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * sharpest.pixelRatio);
         map = new MapClass({
             container,
             style: exportStyle(style, ignoredPrefixes, {zoom: frame.zoom, roadNames}),
@@ -518,7 +556,7 @@ export async function renderExport({
             zoom: frame.zoom,
             interactive: false,
             attributionControl: false,
-            pixelRatio: frame.pixelRatio,
+            pixelRatio: frameFor ? Math.min(LOOKING_PIXEL_RATIO, sharpest.pixelRatio) : frame.pixelRatio,
             maxCanvasSize: [side, side],
             // The canvas is read after it is drawn, so what was drawn must still be in it.
             canvasContextAttributes: {preserveDrawingBuffer: true},
@@ -529,12 +567,11 @@ export async function renderExport({
         await once(map, "load");
 
         const canvas = map.getCanvas();
-        const layers = [];
-        for (const [index, group] of groups.entries()) {
+        // Draw a group alone, have `drawn()` look at the canvas, and hide the group again.
+        const draw = async (group, drawn) => {
             if (isCancelled && isCancelled()) {
                 throw cancelled();
             }
-            if (onProgress) onProgress(group.name, index, groups.length);
             const show = visibility => {
                 for (const id of group.ids) {
                     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
@@ -544,12 +581,35 @@ export async function renderExport({
             const idle = once(map, "idle");
             map.triggerRepaint();
             await idle;
-            // A photograph with no gaps is far smaller as a JPEG; anything else needs to be seen through.
-            const blob = group.raster && isOpaque(canvas)
-                ? await canvasBlob(canvas, "image/jpeg", 0.9)
-                : await canvasBlob(canvas, "image/png");
-            layers.push({name: group.name, blob});
+            const result = await drawn();
             show("none");
+            return result;
+        };
+
+        if (frameFor) {
+            if (onLooking) onLooking();
+            const seen = [];
+            for (const group of groups) {
+                if (!await draw(group, () => isBlank(canvas))) seen.push(group);
+            }
+            if (!seen.length) throw new Error("Nothing is drawn in any layer of the map");
+            groups = seen;
+            frame = frameFor(groups.length);
+            map.setPixelRatio(frame.pixelRatio);
+        }
+
+        const layers = [];
+        for (const [index, group] of groups.entries()) {
+            // A group is not said to be drawn when it will not be.
+            if (isCancelled && isCancelled()) throw cancelled();
+            if (onProgress) onProgress(group.name, index, groups.length, frame);
+            const blob = await draw(group, async () => {
+                // A photograph with no gaps is far smaller as a JPEG; anything else needs to be seen through.
+                return group.raster && isOpaque(canvas)
+                    ? await canvasBlob(canvas, "image/jpeg", 0.9)
+                    : await canvasBlob(canvas, "image/png");
+            });
+            layers.push({name: group.name, blob});
         }
         const edges = map.getBounds();
         return {

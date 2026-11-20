@@ -6,6 +6,7 @@ import {
     exportContours,
     exportFrame,
     exportGroups,
+    isBlankCanvas,
     exportSheet,
     exportStyle,
     exportTitle,
@@ -519,7 +520,7 @@ describe('the names of small roads', () => {
 
 // As much of a MapLibre map as an export uses.  It records which layers were visible each time
 // its canvas was read.
-function fakeMapClass(record, {transparent = true} = {}) {
+function fakeMapClass(record, {transparent = true, canvas = () => ({})} = {}) {
     return class FakeMap {
         constructor(options) {
             record.options = options;
@@ -528,6 +529,7 @@ function fakeMapClass(record, {transparent = true} = {}) {
                 .filter(l => l.layout.visibility !== 'none').map(l => l.id));
             this.layerIds = new Set(options.style.layers.map(l => l.id));
             this.canvas = {
+                ...canvas(this),
                 width: Math.floor(parseInt(options.container.style.width, 10) * options.pixelRatio),
                 height: Math.floor(parseInt(options.container.style.height, 10) * options.pixelRatio),
                 toBlob: (callback, type) => {
@@ -565,6 +567,12 @@ function fakeMapClass(record, {transparent = true} = {}) {
         }
 
         triggerRepaint() {
+        }
+
+        setPixelRatio(pixelRatio) {
+            record.pixelRatios = [...(record.pixelRatios || []), pixelRatio];
+            this.canvas.width = Math.floor(parseInt(record.options.container.style.width, 10) * pixelRatio);
+            this.canvas.height = Math.floor(parseInt(record.options.container.style.height, 10) * pixelRatio);
         }
 
         remove() {
@@ -719,6 +727,68 @@ describe('drawing the layers', () => {
         const drawn = {captures: []};
         await renderExport({MapClass: fakeMapClass(drawn), style, frame, groups: groups.slice(0, 1)});
         expect(drawn.captures[0].type).toBe('image/png');
+    });
+
+    describe('when how sharp the map may be depends on how many images it is', () => {
+        // A map of fewer images may be sharper.
+        const frameFor = count => ({...frame, pixelRatio: count <= 2 ? 2 : 1, dpi: count <= 2 ? 300 : 150});
+        // Nothing is drawn in the roads of this quadrangle.
+        const blankRoads = canvas => canvas.visible().join() === 'roads_minor';
+        const looking = record => fakeMapClass(record, {
+            canvas: map => ({visible: () => [...map.visible]}),
+        });
+
+        test('a group with nothing in it is not drawn, sent or counted', async () => {
+            const record = {captures: []};
+            const progress = [];
+            const lookings = [];
+            const rendered = await renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: blankRoads,
+                onLooking: () => lookings.push(record.captures.length),
+                onProgress: (name, index, count, drawn) => progress.push([name, index, count, drawn.dpi]),
+            });
+            // Looked at first, on a small map; told once, before anything is drawn to keep.
+            expect(lookings).toEqual([0]);
+            expect(record.options.pixelRatio).toBe(0.5);
+            // Two of the three groups have something in them, so the map is as sharp as two may be.
+            expect(record.pixelRatios).toEqual([2]);
+            expect(rendered.layers.map(layer => layer.name)).toEqual(['Water', 'Labels']);
+            expect(progress).toEqual([['Water', 0, 2, 300], ['Labels', 1, 2, 300]]);
+            expect(rendered.dpi).toBe(300);
+            expect(rendered.width).toBe(frame.cssWidth * 2);
+            // The canvas was allowed to be as large as the sharpest map is.
+            expect(record.options.maxCanvasSize[0]).toBe(Math.ceil(Math.max(frame.cssWidth, frame.cssHeight) * 2));
+        });
+
+        test('every group is drawn when all have something in them', async () => {
+            const record = {captures: []};
+            const rendered = await renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: () => false,
+            });
+            expect(rendered.layers.map(layer => layer.name)).toEqual(groups.map(group => group.name));
+            expect(record.pixelRatios).toEqual([1]);
+            expect(rendered.dpi).toBe(150);
+        });
+
+        test('a map with nothing in any group is not exported', async () => {
+            const record = {captures: []};
+            await expect(renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: () => true,
+            })).rejects.toThrow('Nothing is drawn in any layer of the map');
+            expect(record.captures).toEqual([]);
+            expect(record.removed).toBe(true);
+        });
+
+        test('is stopped while the groups are looked at', async () => {
+            const record = {captures: []};
+            let looked = 0;
+            await expect(renderExport({
+                MapClass: looking(record), style, frameFor, groups, isBlank: () => !++looked,
+                isCancelled: () => looked >= 1,
+            })).rejects.toMatchObject({cancelled: true});
+            expect(looked).toBe(1);
+            expect(record.captures).toEqual([]);
+        });
     });
 
     test('stops before a map is made when it is cancelled while the names of roads are read', async () => {
@@ -973,5 +1043,57 @@ describe('the map files which are of somewhere else', () => {
 
     test('are none of a style with no sources', async () => {
         expect((await sourcesOutside({}, BERTHOUD_BOUNDS, readBounds)).size).toBe(0);
+    });
+});
+
+describe('whether nothing is drawn on a canvas', () => {
+    let getContext;
+    afterEach(() => getContext.mockRestore());
+
+    // A canvas of `rows` rows, with something drawn in the rows of `drawn`.
+    const look = (rows, drawn = []) => {
+        const bands = [];
+        getContext = jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+            let top = 0;
+            return {
+                clearRect: jest.fn(),
+                drawImage: (canvas, x, y) => {
+                    top = y;
+                },
+                getImageData: (x, y, width, height) => {
+                    bands.push([top, height]);
+                    const data = new Uint8ClampedArray(width * height * 4);
+                    // One pixel, barely there.
+                    for (const row of drawn) if (row >= top && row < top + height) data[(row - top) * width * 4 + 3] = 1;
+                    return {data};
+                },
+            };
+        });
+        return {blank: isBlankCanvas({width: 4, height: rows}), bands};
+    };
+
+    test('every row is looked at, a band at a time', () => {
+        expect(look(600)).toEqual({blank: true, bands: [[0, 256], [256, 256], [512, 88]]});
+    });
+
+    test('one faint pixel is something drawn, and no more is looked at', () => {
+        expect(look(600, [599]).blank).toBe(false);
+        expect(look(600, [300])).toEqual({blank: false, bands: [[0, 256], [256, 256]]});
+    });
+
+    test('a pixel which is not seen is nothing drawn, whatever color it has a trace of', () => {
+        getContext = jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+            clearRect: jest.fn(),
+            drawImage: jest.fn(),
+            // Red, green and blue, and no alpha: what a map leaves where it drew nothing.
+            getImageData: (x, y, width, height) => ({data: new Uint8ClampedArray(width * height * 4).fill(1)
+                .map((value, index) => (index % 4 === 3 ? 0 : value))}),
+        }));
+        expect(isBlankCanvas({width: 4, height: 4})).toBe(true);
+    });
+
+    test('a canvas which can not be looked at is not taken to be blank', () => {
+        getContext = jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null);
+        expect(isBlankCanvas({width: 4, height: 4})).toBe(false);
     });
 });

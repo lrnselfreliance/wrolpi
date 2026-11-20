@@ -48,24 +48,25 @@ POINTS_PER_INCH = 72
 
 
 # The map is drawn in Web Mercator, in which the area between two meridians and two parallels is a rectangle: the
-# page.  So the page is said to be in that projection, and its four corners are all a reader needs.
+# page.  Its four corners, in latitude and longitude, are all a reader needs to know of where it is.
 #
-# Web Mercator is Mercator on a sphere the size of the WGS 84 equator, with WGS 84 latitudes and longitudes.  The
-# EXTENSION says so to a reader which knows PROJ; one which does not takes it for Mercator on the ellipsoid, which
-# across a page of a map is the same to well within a meter (the corners are given in latitude and longitude, so
-# such a reader only stretches the page a little differently between them).
-WEB_MERCATOR_EPSG = 3857
-WEB_MERCATOR_WKT = (
-    'PROJCS["WGS 84 / Pseudo-Mercator",'
-    'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
-    'PROJECTION["Mercator_1SP"],'
-    'PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],'
-    'PARAMETER["false_easting",0],PARAMETER["false_northing",0],'
-    'UNIT["metre",1],'
-    'EXTENSION["PROJ4","+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m'
-    ' +nadgrids=@null +wktext +no_defs"],'
-    'AUTHORITY["EPSG","3857"]]'
+# What a reader is told of the projection is not Web Mercator, which Adobe Acrobat does not know (it says every
+# place is at 0, 0), but Mercator on the WGS 84 ellipsoid, which every reader knows.  Web Mercator is Mercator on
+# a sphere: across a page of a map the two differ by a stretch from north to south, which the corners say, and
+# what is left is under three centimeters on the ground at any latitude.  (To say only that the page is in
+# latitude and longitude would be read too, and be up to 7 meters out at 61 degrees: a degree of latitude is
+# not as tall at the top of a Mercator page as at the bottom.)
+#
+# The words are Esri's, as GDAL writes them in a PDF: Acrobat reads those.
+PAGE_PROJECTION_EPSG = 3395
+PAGE_PROJECTION_WKT = (
+    'PROJCS["WGS_1984_World_Mercator",'
+    'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+    'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],'
+    'PROJECTION["Mercator"],'
+    'PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],'
+    'PARAMETER["Central_Meridian",0.0],PARAMETER["Standard_Parallel_1",0.0],'
+    'UNIT["Meter",1.0]]'
 )
 # Web Mercator has no poles: this is as far north or south as it goes.
 MAX_LATITUDE = 85.06
@@ -150,7 +151,7 @@ def geospatial_viewport(width: float, height: float, bounds: Sequence[float], na
                         origin: Sequence[float] = (0, 0)) -> str:
     """The value of a page's `/VP`: a viewport which covers the map (`width` by `height` points, its lower left
     corner at `origin`: so far right of, and up from, the page's), and says it is the map between `bounds` (west,
-    south, east, north; degrees of WGS 84) in Web Mercator.
+    south, east, north; degrees of WGS 84), in the projection a reader is told of (see PAGE_PROJECTION_WKT).
 
     A point of the map is given as a part of the way across and up it (0 to 1, from the lower left), and the
     corners are listed as GDAL and the readers which follow it expect: upper left, lower left, lower right,
@@ -166,7 +167,7 @@ def geospatial_viewport(width: float, height: float, bounds: Sequence[float], na
         f' /BBox [{origin[0]:.3f} {origin[1]:.3f} {origin[0] + width:.3f} {origin[1] + height:.3f}]'
         f' /Measure << /Type /Measure /Subtype /GEO'
         f' /Bounds [{corners}] /GPTS [{points}] /LPTS [{corners}]'
-        f' /GCS << /Type /PROJCS /EPSG {WEB_MERCATOR_EPSG} /WKT {_pdf_string(WEB_MERCATOR_WKT)} >>'
+        f' /GCS << /Type /PROJCS /EPSG {PAGE_PROJECTION_EPSG} /WKT {_pdf_string(PAGE_PROJECTION_WKT)} >>'
         f' /PDU [/M /SQM /DEG] >> >>]'
     )
 

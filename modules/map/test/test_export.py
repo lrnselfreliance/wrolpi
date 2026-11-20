@@ -324,8 +324,8 @@ def read_viewport(pdf: bytes) -> dict:
 
 
 def test_pdf_says_where_it_is():
-    """With the edges of the map, the page has a geospatial viewport: all of the page, in Web Mercator, with the
-    latitude and longitude of each of its corners."""
+    """With the edges of the map, the page has a geospatial viewport: all of the page, with the latitude and
+    longitude of each of its corners, in a projection every reader knows."""
     pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72,
                             title='1:24,000 61°07′30″N 150°00′W', bounds=ANCHORAGE)
     viewport = read_viewport(pdf)
@@ -339,8 +339,11 @@ def test_pdf_says_where_it_is():
 
     text = viewport['text']
     assert '/Type/Viewport' in text.replace(' ', '') and '/Subtype/GEO' in text.replace(' ', '')
-    assert '/EPSG 3857' in text
-    assert 'PROJCS["WGS 84 / Pseudo-Mercator"' in text and 'AUTHORITY["EPSG","3857"]' in text
+    # Mercator on the ellipsoid, in Esri's words: Adobe Acrobat puts every place of a page said to be in Web
+    # Mercator at 0, 0.
+    assert '/Type/PROJCS' in text.replace(' ', '') and '/EPSG 3395' in text
+    assert 'PROJCS["WGS_1984_World_Mercator"' in text and 'PROJECTION["Mercator"]' in text
+    assert '3857' not in text and 'Auxiliary_Sphere' not in text and 'Mercator_1SP' not in text
 
     # It is still the PDF it was.
     assert layer_names(pdf) == ['Background']
@@ -487,3 +490,35 @@ def test_images_of_one_name_are_one_pdf_layer():
 
     # From the left: the pier over the water, the water over the park, the park.
     assert [color(x) for x in (5, 20, 50)] == [(90, 90, 90), (0, 0, 255), (0, 200, 0)]
+
+
+@pytest.mark.parametrize('west,south', [(-78.5, 0), (-100, 20), (-105.125, 40.25), (-149.625, 61.25), (-156.75, 71.25),
+                                        (151.125, -33.875)])
+def test_page_is_where_the_projection_it_is_said_to_be_in_puts_it(west, south):
+    """The page is drawn in Web Mercator (a sphere), and a reader is told it is Mercator on the ellipsoid, with
+    the latitude and longitude of its corners.  A reader puts a place on the page by where that projection has
+    it between the corners: that is within 5 centimeters on the ground of where the map drew it, anywhere on a
+    quadrangle, at any latitude."""
+    a, f = 6378137.0, 1 / 298.257223563
+    e = math.sqrt(f * (2 - f))
+
+    def drawn(lat):  # Web Mercator: how far up the page a latitude is drawn.
+        return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+
+    def said(lat):  # Mercator on the ellipsoid: how far up a reader takes it to be.
+        phi = math.radians(lat)
+        return math.log(math.tan(math.pi / 4 + phi / 2) * ((1 - e * math.sin(phi)) / (1 + e * math.sin(phi))) ** (e / 2))
+
+    north = south + 0.125
+    worst = 0
+    for step in range(101):
+        lat = south + 0.125 * step / 100
+        # The part of the way up the page, as it is drawn and as it is read.  (Across the page the two agree.)
+        up_drawn = (drawn(lat) - drawn(south)) / (drawn(north) - drawn(south))
+        up_said = (said(lat) - said(south)) / (said(north) - said(south))
+        # The page is this tall on the ground.
+        height = a * math.radians(0.125)
+        worst = max(worst, abs(up_drawn - up_said) * height)
+    assert worst < 0.05
+    assert f'/EPSG {export.PAGE_PROJECTION_EPSG}' in export.geospatial_viewport(
+        100, 200, [west, south, west + 0.125, north])

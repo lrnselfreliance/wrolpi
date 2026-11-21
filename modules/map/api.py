@@ -1,11 +1,13 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import lib, schema, search
+from modules.map import export, export_job, lib, quads, schema, search
 from modules.map.pins import get_map_pins_config
+from modules.map.sheet import legend_as_sent
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
 from wrolpi.events import Events
@@ -175,3 +177,144 @@ async def rebuild_single_search_index(_: Request, filename: str):
     if started:
         return json_response({'message': f'Search index rebuild started for {filename}'}, HTTPStatus.ACCEPTED)
     return json_response({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/quad')
+@openapi.description('The name of the USGS quadrangle of an area of the map')
+async def get_quad(request: Request):
+    """What the USGS calls the quadrangle between `west`, `south`, `east` and `north` (degrees): `quad` is its
+    `name`, its `state`, and whether it is `exact`ly that area (and not a larger quadrangle which has the middle
+    of it); or null where there is no name, which is most of the world."""
+    try:
+        west, south, east, north = (float(request.args.get(i)) for i in ('west', 'south', 'east', 'north'))
+    except (TypeError, ValueError):
+        return response.json({'error': 'The edges of the area are four numbers'}, HTTPStatus.BAD_REQUEST)
+    if not (-180 <= west < east <= 180 and -90 <= south < north <= 90):
+        # Not so of a number which is not one, either.
+        return response.json({'error': 'The edges are not those of an area of the map'}, HTTPStatus.BAD_REQUEST)
+    # The index is read from its file the first time, which is not for the event loop.
+    name = await asyncio.to_thread(quads.quad_name, west, south, east, north)
+    return json_response({'quad': name.__json__() if name else None})
+
+
+# How much may be written on the sheet of an exported map.
+SHEET_TEXT_LENGTH = 300
+SHEET_CREDITS = 40
+
+
+def _export_text(value) -> str:
+    """What was sent as text of an exported map (its title, the name of a layer), as it can be written in a PDF:
+    no longer than a line of a sheet, and with nothing in it which is not a character."""
+    text = str(value or '').replace('\x00', '')
+    return text.encode('utf-8', 'replace').decode('utf-8')[:SHEET_TEXT_LENGTH]
+
+
+def _sheet_contours(contours) -> dict:
+    """How far apart the contour lines of a map are, as the browser says it, for `export.Sheet`.  A map with no
+    contour lines says nothing; what is said is written on the sheet only when it is an interval (see
+    `modules.map.sheet`)."""
+    if not isinstance(contours, dict):
+        return {}
+    interval = contours.get('interval')
+    if isinstance(interval, bool) or not isinstance(interval, (int, float)):
+        return {}
+    return dict(contour_interval=float(interval), contour_unit=str(contours.get('unit') or '')[:SHEET_TEXT_LENGTH])
+
+
+def _export_error(e: Exception):
+    """The response for an export which could not go on."""
+    if isinstance(e, export_job.ExportNotFound):
+        return response.json({'error': str(e)}, HTTPStatus.NOT_FOUND)
+    if isinstance(e, export_job.ExportNotReady):
+        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
+    if isinstance(e, export_job.ExportStorageError):
+        return response.json({'error': str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+    return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+
+EXPORT_ERRORS = (export.InvalidExport, export_job.ExportNotFound, export_job.ExportNotReady,
+                 export_job.ExportStorageError)
+
+
+@map_bp.post('/export')
+@openapi.description('Begin the export of a map as a PDF')
+async def post_export(request: Request):
+    """The browser draws the map, one image for each layer; the API puts them in a PDF, each in a layer of its own.
+    That takes a minute or two on a Raspberry Pi, so it is a Job:
+
+    1. This request describes the map, and is answered with an `export_id`.
+    2. `POST /api/map/export/<export_id>/layer/<index>` sends the image of each layer.
+    3. `POST /api/map/export/<export_id>/start` is answered with a `job_id`, to watch at `/api/jobs/<job_id>`.
+    4. `GET /api/map/export/<export_id>/pdf` is the PDF, once the Job is complete.
+
+    `DELETE /api/map/export/<export_id>` stops an export at any of those steps, and removes what was sent.
+
+    The JSON body: `width` and `height` in pixels, `dpi`, `title`, `layers`: the name of each image from the bottom
+    up (images of one name are one layer of the PDF), `bounds`: the west, south, east and north edges of the images in degrees, with which the PDF says where it
+    is, and `sheet`: with which the map is put on a sheet with a margin and a grid; `name`, `credits` and `date`
+    are written on it, `contours` (`{"interval": 40, "unit": "feet"}`, or "meters") when the map has contour
+    lines, and `legend`: the lines of the map as they are drawn (see `modules.map.sheet.Sheet`)."""
+    try:
+        meta = request.json
+        width, height, dpi = int(meta['width']), int(meta['height']), float(meta['dpi'])
+        names = [_export_text(i) for i in meta['layers']]
+        title = _export_text(meta.get('title')) or None
+        bounds = meta.get('bounds')
+        sheet = meta.get('sheet')
+        if sheet is not None:
+            sheet = export.Sheet(
+                name=_export_text(sheet.get('name')) or None,
+                credits=[_export_text(i) for i in (sheet.get('credits') or [])[:SHEET_CREDITS]],
+                date=_export_text(sheet.get('date')) or None,
+                **_sheet_contours(sheet.get('contours')),
+                legend=legend_as_sent(sheet.get('legend')),
+            )
+    except Exception:  # noqa Whatever is made of a body which is not the description of a map.
+        return response.json({'error': 'The description of the map is not valid'}, HTTPStatus.BAD_REQUEST)
+
+    try:
+        # Old exports are removed from the disk here, which is not for the event loop.
+        export_id = await asyncio.to_thread(export_job.create_export, names, width, height, dpi, title, bounds, sheet)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return json_response({'export_id': export_id}, HTTPStatus.CREATED)
+
+
+@map_bp.post('/export/<export_id:str>/layer/<index:int>')
+@openapi.description('Send the image (PNG or JPEG) of one layer of a map which is being exported')
+async def post_export_layer(request: Request, export_id: str, index: int):
+    try:
+        await asyncio.to_thread(export_job.save_layer, export_id, index, request.body)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return response.empty()
+
+
+@map_bp.post('/export/<export_id:str>/start')
+@openapi.description('Queue the Job which makes the PDF of a map, all of whose layers have been sent')
+async def post_export_start(_: Request, export_id: str):
+    try:
+        job_id = await asyncio.to_thread(export_job.start_export, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return json_response({'job_id': job_id}, HTTPStatus.ACCEPTED)
+
+
+@map_bp.delete('/export/<export_id:str>')
+@openapi.description('Stop the export of a map: cancel its Job, if it has one, and remove what was sent')
+async def delete_export(_: Request, export_id: str):
+    try:
+        await asyncio.to_thread(export_job.remove_export, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return response.empty()
+
+
+@map_bp.get('/export/<export_id:str>/pdf')
+@openapi.description('The PDF of an exported map, once the Job which makes it is complete')
+async def get_export_pdf(_: Request, export_id: str):
+    try:
+        pdf = await asyncio.to_thread(export_job.get_export_pdf, export_id)
+    except EXPORT_ERRORS as e:
+        return _export_error(e)
+    return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')

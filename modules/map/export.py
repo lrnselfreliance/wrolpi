@@ -1,0 +1,295 @@
+"""Build the PDF of an exported map.
+
+The map is drawn by the browser, which is the only thing that draws it as the user sees it: one image for each
+layer the user has turned on, all of the same area and size.  Here they become one page, each image in a PDF
+layer (an "optional content group") of its own, so a reader can show and hide them as the map can.
+
+The page is also told where on the Earth it is (a "geospatial PDF", ISO 32000-2 section 12.10), so a reader which
+knows how can show coordinates, measure, and put a GPS position on the map.
+
+The map can be put on a sheet (see `modules.map.sheet`): a margin around it with what a printed map has there, and
+a grid over it.
+"""
+import io
+import math
+import pathlib
+import zlib
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Sequence
+
+from PIL import Image
+
+from modules.map.sheet import Sheet, draw_sheet, plan_sheet
+from wrolpi.common import logger
+
+logger = logger.getChild(__name__)
+
+__all__ = ['ExportLayer', 'InvalidExport', 'Sheet', 'build_layered_pdf', 'check_export', 'geospatial_viewport',
+           'MAX_LAYERS', 'MAX_SIDE', 'MAX_PIXELS', 'MAX_TOTAL_PIXELS', 'MIN_DPI', 'MAX_DPI']
+
+# What the browser may ask for.  Every image is decoded, so what an export costs is its pixels, whatever the size
+# of the upload (an image of one color is a few kilobytes however large it is).
+MAX_LAYERS = 64
+MAX_SIDE = 16384
+# The pixels of one layer, which are in memory together (a few bytes each) while it is put in the PDF.  A 1:24,000
+# quadrangle at 300 DPI is 23 to 47 megapixels, more the nearer it is to the equator; at 400 DPI, 40 to 83.  The
+# browser draws a map less sharp than it was asked to rather than send more than this.
+MAX_PIXELS = 64_000_000
+# The pixels of every layer of a map together, which is the work an export is.  A quadrangle of 40 megapixels with
+# 24 layers on is about 960 million.
+MAX_TOTAL_PIXELS = 1_000_000_000
+# How hard an image is compressed in the PDF (zlib, 1 to 9).  Less is a few seconds faster and a much larger file.
+COMPRESSION_LEVEL = 6
+MIN_DPI = 36
+MAX_DPI = 1200
+IMAGE_FORMATS = ('PNG', 'JPEG')
+
+POINTS_PER_INCH = 72
+
+
+# The map is drawn in Web Mercator, in which the area between two meridians and two parallels is a rectangle: the
+# page.  Its four corners, in latitude and longitude, are all a reader needs to know of where it is.
+#
+# What a reader is told of the projection is not Web Mercator, which Adobe Acrobat does not know (it says every
+# place is at 0, 0), but Mercator on the WGS 84 ellipsoid, which every reader knows.  Web Mercator is Mercator on
+# a sphere: across a page of a map the two differ by a stretch from north to south, which the corners say, and
+# what is left is under three centimeters on the ground across a quadrangle, at any latitude.  It grows with the
+# square of how tall the page is (a third of a meter for half a degree, more than a meter for a degree), so a
+# map much taller than a quadrangle wants more than its corners said.  (To say only that the page is in
+# latitude and longitude would be read too, and be up to 7 meters out at 61 degrees on a quadrangle: a degree
+# of latitude is not as tall at the top of a Mercator page as at the bottom.)
+#
+# The words are Esri's, as GDAL writes them in a PDF: Acrobat reads those.
+PAGE_PROJECTION_EPSG = 3395
+PAGE_PROJECTION_WKT = (
+    'PROJCS["WGS_1984_World_Mercator",'
+    'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+    'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],'
+    'PROJECTION["Mercator"],'
+    'PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],'
+    'PARAMETER["Central_Meridian",0.0],PARAMETER["Standard_Parallel_1",0.0],'
+    'UNIT["Meter",1.0]]'
+)
+# Web Mercator has no poles: this is as far north or south as it goes.
+MAX_LATITUDE = 85.06
+# The browser's arithmetic can put the edge of the world a hair past where it is (180.00000000000125 degrees).  An
+# edge within this of 180 degrees is at 180 degrees; one further past it is of a map which crosses the antimeridian.
+LONGITUDE_SLIVER = 1e-8
+
+
+class InvalidExport(ValueError):
+    """The layers sent can not be made into a map."""
+
+
+@dataclass
+class ExportLayer:
+    # What the layer is called in the reader's list of layers.
+    name: str
+    # A PNG or JPEG image, or the file it is in.  The images of a map are a hundred megabytes together, so those
+    # in files are read one at a time, when each is needed.
+    image: Optional[bytes] = None
+    path: Optional[pathlib.Path] = None
+
+    def read(self) -> bytes:
+        return self.image if self.image is not None else pathlib.Path(self.path).read_bytes()
+
+
+def _is_blank(image: Image.Image) -> bool:
+    """True when nothing was drawn: every pixel of the image is transparent."""
+    if image.mode in ('RGBA', 'LA'):
+        return image.getchannel('A').getextrema()[1] == 0
+    if image.mode == 'P' and 'transparency' in image.info:
+        return image.convert('RGBA').getchannel('A').getextrema()[1] == 0
+    return False
+
+
+def _check_layer(layer: ExportLayer, width: int, height: int) -> bool:
+    """Raises InvalidExport when the layer is not an image of the map.  Returns whether there is anything in it."""
+    try:
+        image = Image.open(io.BytesIO(layer.read()))
+        if image.format not in IMAGE_FORMATS:
+            raise InvalidExport(f'The layer {layer.name!r} is not a PNG or JPEG image')
+        if image.size != (width, height):
+            raise InvalidExport(f'The layer {layer.name!r} is {image.size[0]}x{image.size[1]},'
+                                f' but the map is {width}x{height}')
+        return not _is_blank(image)
+    except InvalidExport:
+        raise
+    except Exception as e:
+        # Whatever Pillow makes of something which is not an image.
+        raise InvalidExport(f'The layer {layer.name!r} is not a readable image') from e
+
+
+def _edge_longitude(longitude: float) -> float:
+    """A longitude which is a rounding error past the edge of the world, put on it.  It is not wrapped: the east
+    edge of the last map before the antimeridian is at 180 degrees, not at -180."""
+    if 180 < abs(longitude) < 180 + LONGITUDE_SLIVER:
+        return math.copysign(180.0, longitude)
+    return longitude
+
+
+def _check_bounds(bounds: Sequence[float]) -> List[float]:
+    """The west, south, east and north edges of a map, in degrees.  Raises InvalidExport when they are not."""
+    try:
+        west, south, east, north = (float(i) for i in bounds)
+    except (TypeError, ValueError) as e:
+        raise InvalidExport('The edges of the map are not four numbers') from e
+    west, east = _edge_longitude(west), _edge_longitude(east)
+    edges = [west, south, east, north]
+    if not all(math.isfinite(i) for i in edges) or not (-180 <= west < east <= 180) \
+            or not (-MAX_LATITUDE <= south < north <= MAX_LATITUDE):
+        raise InvalidExport(f'A map with the edges {edges} can not be exported')
+    return edges
+
+
+def _pdf_string(text: str) -> str:
+    """A string as it is written in a PDF: as it is when it is ASCII, else in UTF-16."""
+    if text.isascii():
+        return '(' + text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)') + ')'
+    return '<' + (b'\xfe\xff' + text.encode('utf-16-be')).hex().upper() + '>'
+
+
+def geospatial_viewport(width: float, height: float, bounds: Sequence[float], name: str = None,
+                        origin: Sequence[float] = (0, 0)) -> str:
+    """The value of a page's `/VP`: a viewport which covers the map (`width` by `height` points, its lower left
+    corner at `origin`: so far right of, and up from, the page's), and says it is the map between `bounds` (west,
+    south, east, north; degrees of WGS 84), in the projection a reader is told of (see PAGE_PROJECTION_WKT).
+
+    A point of the map is given as a part of the way across and up it (0 to 1, from the lower left), and the
+    corners are listed as GDAL and the readers which follow it expect: upper left, lower left, lower right,
+    upper right.  The coordinates of each are its latitude, then its longitude.
+    """
+    west, south, east, north = _check_bounds(bounds)
+    corners = '0 1 0 0 1 0 1 1'
+    points = ' '.join(f'{lat:.9f} {lon:.9f}' for lat, lon in ((north, west), (south, west), (south, east),
+                                                              (north, east)))
+    name = f' /Name {_pdf_string(name)}' if name else ''
+    return (
+        f'[<< /Type /Viewport{name}'
+        f' /BBox [{origin[0]:.3f} {origin[1]:.3f} {origin[0] + width:.3f} {origin[1] + height:.3f}]'
+        f' /Measure << /Type /Measure /Subtype /GEO'
+        f' /Bounds [{corners}] /GPTS [{points}] /LPTS [{corners}]'
+        f' /GCS << /Type /PROJCS /EPSG {PAGE_PROJECTION_EPSG} /WKT {_pdf_string(PAGE_PROJECTION_WKT)} >>'
+        f' /PDU [/M /SQM /DEG] >> >>]'
+    )
+
+
+def _compress_stream(doc, xref: int):
+    """Compress the stream of an object of the PDF, when it is not already."""
+    if doc.xref_get_key(xref, 'Filter')[0] != 'null':
+        return
+    doc.update_stream(xref, zlib.compress(doc.xref_stream_raw(xref), COMPRESSION_LEVEL), compress=False)
+    doc.xref_set_key(xref, 'Filter', '/FlateDecode')
+
+
+def _insert_layer(doc, page, rect, layer: ExportLayer, groups: dict):
+    """Put the image of a layer in a rectangle of the page, in the PDF layer of its name: its own, unless an
+    image before it had the name.  (`groups` is the PDF layer of each name so far.)  A layer of the map may be
+    several images, with other layers drawn between them.
+
+    PyMuPDF keeps the pixels of an image uncompressed until the PDF is written: about 90 MB for each layer of a
+    quadrangle, all of them at once.  They are compressed here instead, so only one layer's are ever in memory."""
+    if layer.name not in groups:
+        groups[layer.name] = doc.add_ocg(layer.name, on=True)
+    xref = page.insert_image(rect, stream=layer.read(), oc=groups[layer.name])
+    _compress_stream(doc, xref)
+    # The transparency of a PNG is an image of its own.
+    kind, mask = doc.xref_get_key(xref, 'SMask')
+    if kind == 'xref':
+        _compress_stream(doc, int(mask.split()[0]))
+
+
+def check_export(layer_count: int, width: int, height: int, dpi: float, bounds: Optional[Sequence[float]] = None,
+                 sheet: Optional[Sheet] = None) -> Optional[List[float]]:
+    """Raises InvalidExport when a map of `layer_count` images of `width` by `height` pixels can not be made into a
+    PDF.  No image is read: this is what can be said of a map before its images are sent.  Returns the `bounds`
+    as they are used."""
+    if layer_count < 1:
+        raise InvalidExport('There are no layers to export')
+    if layer_count > MAX_LAYERS:
+        raise InvalidExport(f'A map of more than {MAX_LAYERS} layers can not be exported')
+    if not (0 < width <= MAX_SIDE and 0 < height <= MAX_SIDE) or width * height > MAX_PIXELS:
+        raise InvalidExport(f'A map of {width}x{height} pixels can not be exported')
+    if layer_count * width * height > MAX_TOTAL_PIXELS:
+        raise InvalidExport(f'A map of {layer_count} layers of {width}x{height} pixels is too large to export;'
+                            f' turn some layers off')
+    if not MIN_DPI <= dpi <= MAX_DPI:
+        raise InvalidExport(f'A map can not be exported at {dpi} DPI')
+    if bounds is not None:
+        return _check_bounds(bounds)
+    if sheet is not None:
+        raise InvalidExport('The edges of the map are needed to put it on a sheet')
+    return None
+
+
+def build_layered_pdf(layers: List[ExportLayer], width: int, height: int, dpi: float, title: str = None,
+                      bounds: Optional[Sequence[float]] = None, sheet: Optional[Sheet] = None,
+                      progress: Optional[Callable[[int, int], None]] = None) -> bytes:
+    """A one page PDF of the layers, the first at the bottom, each in a PDF layer of its own.
+
+    A layer in which nothing was drawn is left out.
+
+    @param layers: The images of the map, all `width` by `height` pixels.
+    @param dpi: How many of those pixels are an inch of the page.
+    @param bounds: The west, south, east and north edges of the images, in degrees.  With them the PDF says where
+        it is on the Earth; the images must be Web Mercator, and all of the map between those edges.
+    @param sheet: With this the map is on a sheet, which says this of it.  The sheet needs `bounds`.
+    @param progress: Called with how many steps are done, and how many there are, before each step.  A PDF takes
+        a minute or two on a Raspberry Pi, which is long to wait with nothing said; and it may raise to stop the
+        work.
+    @raise InvalidExport: When the layers are not of one map.
+    """
+    # Before any image is decoded.
+    bounds = check_export(len(layers), width, height, dpi, bounds, sheet)
+
+    # Each layer is looked at, and then each which has anything in it is put in the PDF: two steps a layer.
+    steps = 2 * len(layers)
+
+    def step(done: int):
+        if progress:
+            progress(done, steps)
+
+    drawn = []
+    for index, layer in enumerate(layers):
+        step(index)
+        if _check_layer(layer, width, height):
+            drawn.append(layer)
+    if not drawn:
+        raise InvalidExport('Nothing is drawn in any layer of the map')
+
+    # Not imported at module level: pymupdf also imports onnxruntime (~2s on a Pi 4), which the API must not pay
+    # for at startup.
+    import pymupdf
+
+    doc = pymupdf.open()
+    try:
+        map_width, map_height = width * POINTS_PER_INCH / dpi, height * POINTS_PER_INCH / dpi
+        if sheet is not None:
+            plan = plan_sheet(map_width, map_height, bounds, sheet)
+            page = doc.new_page(width=plan.width, height=plan.height)
+            rect = pymupdf.Rect(plan.map_rect)
+        else:
+            plan = None
+            page = doc.new_page(width=map_width, height=map_height)
+            rect = page.rect
+        groups = {}
+        for index, layer in enumerate(drawn):
+            # A layer which was left out is a step done.
+            step(len(layers) + (len(layers) - len(drawn)) + index)
+            _insert_layer(doc, page, rect, layer, groups)
+        step(steps)
+        if plan is not None:
+            draw_sheet(doc, page, plan)
+            # Every step is done; what is told may still stop the work, here and before the PDF is written.
+            step(steps)
+        if bounds is not None:
+            # A PDF measures up from the bottom of the page.
+            origin = (rect.x0, page.rect.height - rect.y1)
+            doc.xref_set_key(page.xref, 'VP', geospatial_viewport(rect.width, rect.height, bounds, title, origin))
+        doc.set_metadata(dict(title=title or 'Map', creator='WROLPi', producer='WROLPi'))
+        step(steps)
+        pdf = doc.tobytes(garbage=3)
+        step(steps)
+        return pdf
+    finally:
+        doc.close()

@@ -252,10 +252,17 @@ export function buildOverlayLayers(file, state) {
     return styleLayers;
 }
 
-// The style layers of every overlay, in the order they are drawn.  A raster overlay goes under the
-// basemap's labels (`rasters`) so the map stays readable; vector overlays go on top (`vectors`): an
-// overlay with its own style in that style's order, then the generic ones, fills under lines under
-// points.
+// Whether a layer of an overlay is of its labels: its text, its icons, and the points it marks.  The
+// rest of an overlay is its ground: areas, lines, pictures.
+export function isOverlayLabelLayer(layer) {
+    return layer?.type === "symbol" || layer?.type === "circle";
+}
+
+// The style layers of every overlay, in the order they are drawn.  Labels are always on top: the
+// ground of every overlay goes under the basemap's labels (`under`), so an area an overlay fills
+// does not cover the name of what is in it, and the labels of every overlay go over them (`over`).
+// In each, a raster is lowest, then an overlay with its own style in that style's order, then the
+// generic ones, fills under lines under points.
 export function orderOverlayLayers(overlays, state) {
     const rasters = [];
     const styled = [];
@@ -271,7 +278,49 @@ export function orderOverlayLayers(overlays, state) {
             else generic[layer.type].push(layer);
         }
     }
-    return {rasters, vectors: [...styled, ...generic.fill, ...generic.line, ...generic.circle]};
+    const vectors = [...styled, ...generic.fill, ...generic.line, ...generic.circle];
+    return {
+        under: [...rasters, ...vectors.filter(layer => !isOverlayLabelLayer(layer))],
+        over: vectors.filter(isOverlayLabelLayer),
+    };
+}
+
+// The layers of a basemap with every label over all of its ground: the ground in the order it was
+// in, then the labels in the order they were in.
+//
+// A map of several basemap files is their layers one file after another, so the labels of each file
+// but the last are under the land, the water and the roads of the files after it, and under
+// anything which is put under "the labels".  Labels are always on top.
+export function labelsOverGround(layers) {
+    layers = layers || [];
+    return [...layers.filter(l => l.type !== "symbol"), ...layers.filter(l => l.type === "symbol")];
+}
+
+// The source of the contour lines both viewers draw from the terrain.  They are added to a style
+// after the basemap's labels, lines and labels both, and are not of the basemap.
+const CONTOUR_SOURCE = "contours";
+
+// Where the basemap's labels begin: the index of the first of the labels which are over all of the
+// basemap's ground.  Where no label is over its ground, the index after the last of its ground.
+//
+// Not the map's first label: a map of several basemap files has the labels of the first file under
+// the ground of the next, and an overlay put there would be under the land and the water of every
+// file after the first.  Nor before the last layer which is not a label: the contour lines are
+// drawn after the basemap's labels, and an overlay put under them would be over every label.
+export function basemapLabelsStart(layers) {
+    layers = layers || [];
+    const ofBasemap = layer => !isOverlayLayerId(layer.id) && layer.source !== CONTOUR_SOURCE;
+    let lastGround = -1;
+    for (let i = layers.length - 1; i >= 0; i--) {
+        if (ofBasemap(layers[i]) && layers[i].type !== "symbol") {
+            lastGround = i;
+            break;
+        }
+    }
+    for (let i = lastGround + 1; i < layers.length; i++) {
+        if (ofBasemap(layers[i]) && layers[i].type === "symbol") return i;
+    }
+    return lastGround + 1;
 }
 
 // Add the overlays to a style's sources and layers (the basemap's are already there).
@@ -279,10 +328,9 @@ export function addOverlaysToStyle(styleSources, allLayers, overlays, state, url
     for (const file of overlays || []) {
         styleSources[overlaySourceId(file)] = buildOverlaySource(file, urls);
     }
-    const {rasters, vectors} = orderOverlayLayers(overlays, state);
-    const firstLabel = allLayers.findIndex(l => l.type === "symbol");
-    allLayers.splice(firstLabel === -1 ? allLayers.length : firstLabel, 0, ...rasters);
-    allLayers.push(...vectors);
+    const {under, over} = orderOverlayLayers(overlays, state);
+    allLayers.splice(basemapLabelsStart(allLayers), 0, ...under);
+    allLayers.push(...over);
 }
 
 // Add the overlays to a map whose style has loaded, a layer at a time.  For a viewer which cannot
@@ -295,8 +343,9 @@ export function addOverlaysToMap(map, overlays, state, urls) {
         const id = overlaySourceId(file);
         if (!map.getSource(id)) map.addSource(id, buildOverlaySource(file, urls));
     }
-    const firstLabel = (map.getStyle()?.layers || []).find(l => l.type === "symbol");
-    const {rasters, vectors} = orderOverlayLayers(overlays, state);
+    const mapLayers = map.getStyle()?.layers || [];
+    const firstLabel = mapLayers[basemapLabelsStart(mapLayers)];
+    const {under, over} = orderOverlayLayers(overlays, state);
     const add = (layer, before) => {
         if (map.getLayer(layer.id)) return;
         try {
@@ -307,8 +356,8 @@ export function addOverlaysToMap(map, overlays, state, urls) {
             refused[mapPath] = (refused[mapPath] || 0) + 1;
         }
     };
-    for (const layer of rasters) add(layer, firstLabel?.id);
-    for (const layer of vectors) add(layer, undefined);
+    for (const layer of under) add(layer, firstLabel?.id);
+    for (const layer of over) add(layer, undefined);
     return refused;
 }
 

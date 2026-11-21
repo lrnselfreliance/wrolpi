@@ -2,15 +2,17 @@ const fs = require('fs');
 const path = require('path');
 
 // The standalone map viewer (modules/map/static/index.html) has no build step: it loads copies of
-// the shared overlay modules as they are.  The copies must be the modules.
+// the shared map modules as they are.  The copies must be the modules.
 
 const SHARED = __dirname;
 const COPIES = path.join(__dirname, '../../../modules/map/static/js');
 const MODULES = fs.readdirSync(SHARED).filter(name => name.endsWith('.js') && !name.endsWith('.test.js'));
 
 describe('the shared map modules', () => {
-    test('are the two the standalone viewer loads', () => {
-        expect(MODULES.sort()).toEqual(['overlayStyle.js', 'overlays.js']);
+    test('are those the standalone viewer loads', () => {
+        expect(MODULES.sort()).toEqual(['overlayStyle.js', 'overlays.js', 'terrain.js']);
+        const viewer = fs.readFileSync(path.join(COPIES, '../index.html'), 'utf8');
+        for (const name of MODULES) expect(viewer).toContain(`import("/js/${name}")`);
     });
 
     test.each(MODULES)('%s is copied to the standalone viewer as it is (run `npm run sync:map-shared`)', (name) => {

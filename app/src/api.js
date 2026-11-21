@@ -1758,6 +1758,158 @@ export async function setMapDefaultLocation(lat, lon, zoom) {
     }
 }
 
+// Make a PDF of a map from the images of its layers ({name, blob}, from the bottom up).  Returns the
+// PDF (a Blob); throws an Error which says what went wrong.
+// `bounds` is the west, south, east and north edges of the images, in degrees.
+// What exportMapPdf throws when the person exporting stopped it: not a failure to be told of.
+export class ExportCancelled extends Error {
+    constructor() {
+        super('The export was cancelled');
+        this.name = 'ExportCancelled';
+        this.cancelled = true;
+    }
+}
+
+// How many times in a row the server may not answer, while the PDF of an export is made or fetched,
+// before the export is given up on: the API is busy while it makes a PDF, and a Raspberry Pi more so.
+const EXPORT_POLL_FAILURES = 10;
+
+// Make the PDF of a map from the images of its layers (see modules/map/export_job.py).  The PDF is a
+// minute or two of work on a Raspberry Pi, so it is a Job: the map is described, the image of each
+// layer is sent, the Job is started and watched, and the PDF is fetched when the Job is done.
+//
+// onStatus(text): told how far along it is.  isCancelled(): asked, between steps, whether to stop;
+// signal: an AbortSignal which stops it at once, in the middle of a request (an image of a layer
+// is tens of megabytes, and a request to a server which has stopped answering never ends);
+// the server is then told to stop the export and remove what was sent.  Rejects with
+// ExportCancelled when it was stopped.
+//
+// However it ends, the server is told to remove what it has of the export: the images are a hundred
+// megabytes and the PDF tens, on a disk which may be an SD card.
+export async function exportMapPdf(
+    {width, height, dpi, title, bounds, layers, sheet},
+    {onStatus = () => undefined, isCancelled = () => false, signal = undefined, pollMs = 1000} = {},
+) {
+    const exports = `${API_URI}/map/export`;
+    let exportId = null;
+    // Best effort: the server removes old exports itself, later.  An export which is stopped while
+    // it is being described has no id yet to remove it by: what the server made of it is one small
+    // file, which it removes with the old ones.
+    const remove = async () => {
+        if (exportId) await fetch(`${exports}/${exportId}`, {method: 'DELETE'}).catch(() => undefined);
+    };
+    try {
+        return await sendAndFetch();
+    } catch (e) {
+        // A request which was stopped because the export was is not a failure to be told of.
+        throw signal?.aborted ? new ExportCancelled() : e;
+    } finally {
+        // Not waited for: a server which is slow to answer is not to keep a PDF from who made it.
+        remove();
+    }
+
+    async function sendAndFetch() {
+    const send = async (url, init, fallback) => {
+        let response;
+        try {
+            response = await fetch(url, {...init, signal});
+        } catch (e) {
+            throw new Error('Could not reach the server');
+        }
+        if (!response.ok) throw new Error(await getErrorMessage(response, fallback));
+        return response;
+    };
+    const pause = () => new Promise(resolve => setTimeout(resolve, pollMs));
+    // Stopped by the person exporting: removing the export cancels its Job.
+    const stopIfCancelled = async () => {
+        if (isCancelled() || signal?.aborted) throw new ExportCancelled();
+    };
+
+    await stopIfCancelled();
+    onStatus('Sending the map…');
+    const created = await send(exports, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({width, height, dpi, title, bounds, sheet, layers: layers.map(i => i.name)}),
+    }, 'Could not export the map');
+    exportId = (await created.json()).export_id;
+
+    // One layer a request: together they are more than a request may be, and more than a slow
+    // connection sends in the time a request is given.
+    for (const [index, layer] of layers.entries()) {
+        await stopIfCancelled();
+        onStatus(`Sending ${layer.name} (${index + 1} of ${layers.length})…`);
+        await send(`${exports}/${exportId}/layer/${index}`, {method: 'POST', body: layer.blob},
+            `Could not send ${layer.name}`);
+    }
+
+    await stopIfCancelled();
+    const started = await send(`${exports}/${exportId}/start`, {method: 'POST'}, 'Could not make the PDF');
+    const {job_id: jobId} = await started.json();
+
+    let failures = 0;
+    let waited = 0;
+    while (true) {
+        await stopIfCancelled();
+        let job;
+        try {
+            const response = await fetch(`${API_URI}/jobs/${jobId}`, {signal});
+            if (response.status === 404) throw Object.assign(new Error('The server forgot the export'), {final: true});
+            if (!response.ok) throw new Error('Could not ask how the PDF is coming');
+            job = (await response.json()).job;
+            failures = 0;
+        } catch (e) {
+            if (e.final || ++failures >= EXPORT_POLL_FAILURES) {
+                throw e.final ? e : new Error('Could not reach the server');
+            }
+        }
+        if (job?.status === 'complete') break;
+        if (job?.status === 'failed') throw new Error(job.error || 'The PDF could not be made');
+        if (job?.status === 'cancelled') throw new ExportCancelled();
+        if (job?.status === 'pending') {
+            // A Job is taken up within a moment, unless another (a video being transcoded) is in its way.
+            onStatus(++waited > 3 ? 'Waiting for another job to finish…' : 'Starting the PDF…');
+        } else if (job) {
+            onStatus(`Making the PDF (${Math.round(job.progress || 0)}%)…`);
+        }
+        await pause();
+    }
+
+    // The PDF is made, and kept for an hour.  A request which is lost now is asked again: not to be
+    // the reason all of it is done again.
+    onStatus('Fetching the PDF…');
+    for (failures = 0; ; ) {
+        await stopIfCancelled();
+        let response;
+        try {
+            response = await fetch(`${exports}/${exportId}/pdf`, {signal});
+        } catch (e) {
+            response = null;
+        }
+        if (response?.ok) return await response.blob();
+        // What the server refuses, it will refuse again.
+        if (response && response.status < 500) {
+            throw new Error(await getErrorMessage(response, 'Could not fetch the PDF'));
+        }
+        if (++failures >= EXPORT_POLL_FAILURES) throw new Error('Could not fetch the PDF');
+        await pause();
+    }
+    }
+}
+
+// What the USGS calls a quadrangle: {name, state, exact}, or null where it has no name (most of the
+// world), and when it can not be asked.  A map is exported without its name as well as with it.
+export async function getMapQuadName({west, south, east, north}) {
+    try {
+        const response = await apiGet(
+            `${API_URI}/map/quad?west=${west}&south=${south}&east=${east}&north=${north}`);
+        if (!response.ok) return null;
+        return (await response.json()).quad || null;
+    } catch (e) {
+        return null;
+    }
+}
+
 export async function searchMap(query, limit = 12, offset = 0, lat = null, lon = null) {
     let url = `${API_URI}/map/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`;
     if (lat !== null && lon !== null) {

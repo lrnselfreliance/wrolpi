@@ -5,8 +5,23 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
-import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefaultLocation} from "../api";
+import {
+    addMapPin,
+    deleteMapPin,
+    exportMapPdf,
+    getMapQuadName,
+    getMapFiles,
+    getMapPins,
+    searchMap,
+    setMapDefaultLocation,
+} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
+import {readTileBounds, readVectorTile} from "./mapTiles";
+import {
+    lookStyle, PRINT_LOOK, PRINT_SWATCHES, printContours, printLayers, savedExportLook, savedPrintColors,
+    saveExportLook, savePrintColors,
+} from "./mapPrintStyle";
+import {exportLegend} from "./mapExportLegend";
 import {Button, Checkbox, Header, Icon, Panel, TextInput, Toggle} from "./ui";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {mapFlavor, mapSprite} from "../themes/names";
@@ -14,11 +29,13 @@ import {poiPopupHtml} from "./mapPoiPopup";
 import {solarCalculatorPath} from "./calculators/solar";
 import {
     addOverlaysToStyle,
+    labelsOverGround,
     buildOverlayLayers,
     isOverlayEnabled,
     isOverlayLayerEnabled,
     isOverlayLayerId,
     isStyledOverlay,
+    overlaySourceId,
     loadOverlayState,
     mediaUrl,
     overlayColor,
@@ -33,6 +50,23 @@ import {
     setOverlayLayerEnabled,
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
+import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
+import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
+import {quadAt} from "./mapQuads";
+import {
+    EXPORT_DPI,
+    exportFileName,
+    exportFrame,
+    exportGroups,
+    exportContours,
+    exportSheet,
+    exportTitle,
+    maxCanvasSide,
+    maxExportPixels,
+    renderExport,
+    sourcesOutside,
+    saveBlob,
+} from "./mapExport";
 
 // Layer groups matching the standalone viewer.
 const LAYER_GROUPS = {
@@ -68,13 +102,16 @@ const SKIP_SECONDARY = new Set(["background", "earth"]);
 // Set up contour DEM source (must be called once before buildStyle).
 let demSource = null;
 let terrainUrl = null;
-function initContourSource(path) {
-    terrainUrl = mediaUrl(path);
+// How deep the terrain file goes: contours are drawn from as deep as it does.
+let terrainZoom = DEFAULT_TERRAIN_MAX_ZOOM;
+function initContourSource(file) {
+    terrainUrl = mediaUrl(file.path);
     if (demSource) return;
+    terrainZoom = terrainMaxZoom(file);
     demSource = new mlcontour.DemSource({
         url: `pmtiles://${window.location.origin}${terrainUrl}`,
         encoding: "terrarium",
-        maxzoom: 8,
+        maxzoom: terrainZoom,
         worker: true,
     });
     demSource.setupMaplibre(maplibregl);
@@ -86,16 +123,19 @@ function initContourSource(path) {
 // `sprite` is deliberately separate from `flavor`: we ship two sprite sets (light, dark)
 // and the monochrome themes draw a `black` basemap, which has no sprites of its own.
 // overlays: the map files which are not a basemap; overlayState: which of them (and of their
-// layers) the user turned on.
+// layers) the user turned on.  printColors: the colors a person chose for the printed map.
 function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "metric",
-                    sprite = "light", overlays = [], overlayState = {}) {
+                    sprite = "light", overlays = [], overlayState = {}, printColors = {}) {
     const styleSources = {};
+    // The contour lines of the printed map, in the colors a person chose for it.
+    const contours = printContours(printColors);
     const allLayers = [];
 
     for (let i = 0; i < sources.length; i++) {
         const {name, url} = sources[i];
         styleSources[name] = {type: "vector", url};
-        const fileLayers = layers(name, flavor);
+        // The printed map is not a flavor a basemap has: it is the map's own (see mapPrintStyle.js).
+        const fileLayers = flavor === PRINT_LOOK ? printLayers(name, printColors) : layers(name, flavor);
         if (i === 0) {
             // Primary source: use layer IDs as-is.
             allLayers.push(...fileLayers);
@@ -107,6 +147,9 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
             }
         }
     }
+
+    // The labels of every basemap file are over the ground of every file.
+    allLayers.splice(0, allLayers.length, ...labelsOverGround(allLayers));
 
     // Add terrain sources and layers if available.
     if (hasTerrain && demSource) {
@@ -146,27 +189,14 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
             elevationKey: "ele",
             levelKey: "level",
             multiplier: isImperial ? 3.28084 : 1, // meters to feet conversion
-            thresholds: isImperial ? {
-                // [minor, major] contour intervals in feet per zoom level.
-                4: [1000, 5000],
-                5: [500, 2500],
-                6: [200, 1000],
-                7: [200, 1000],
-                8: [100, 500],
-            } : {
-                // [minor, major] contour intervals in meters per zoom level.
-                4: [500, 2500],
-                5: [200, 1000],
-                6: [100, 500],
-                7: [100, 500],
-                8: [50, 200],
-            },
+            // [minor, major] contour intervals per zoom level, as fine as the terrain file can bear.
+            thresholds: contourThresholds(isImperial, terrainZoom),
         });
         const elevUnit = isImperial ? "ft" : "m";
         styleSources["contours"] = {
             type: "vector",
             tiles: [contourUrl],
-            maxzoom: 8,
+            maxzoom: terrainZoom,
         };
 
         allLayers.push(
@@ -177,7 +207,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 "source-layer": "contours",
                 filter: ["!=", ["get", "level"], 1],
                 layout: {visibility: contourVis},
-                paint: {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
+                paint: flavor === PRINT_LOOK
+                    ? contours.minor : {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
             },
             {
                 id: "contour-lines-major",
@@ -186,7 +217,8 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                 "source-layer": "contours",
                 filter: ["==", ["get", "level"], 1],
                 layout: {visibility: contourVis},
-                paint: {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
+                paint: flavor === PRINT_LOOK
+                    ? contours.major : {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
             },
             {
                 id: "contour-labels",
@@ -206,6 +238,7 @@ function buildStyle(sources, flavor = "light", hasTerrain = false, scaleUnit = "
                     "text-color": flavor === "light" ? "rgba(150,100,50,0.8)" : "rgba(210,180,140,0.9)",
                     "text-halo-color": flavor === "light" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.8)",
                     "text-halo-width": 1,
+                    ...(flavor === PRINT_LOOK ? contours.label : {}),
                 },
             },
         );
@@ -327,10 +360,29 @@ function OverlayControl({file, label, state, onToggleFile, onToggleLayer, onTogg
     </div>;
 }
 
+// The colors of the printed map which are of a group of the layer control, each to be chosen.
+// colors: what was chosen ({swatch id: "#rrggbb"}); onChange(colors): told what is chosen now.
+function PrintSwatches({group, colors, onChange}) {
+    const swatches = PRINT_SWATCHES.filter(swatch => swatch.group === group);
+    if (!swatches.length) return null;
+    return <span style={{display: "inline-flex", gap: "0.25rem", marginLeft: "auto"}}>
+        {swatches.map(swatch => <input
+            key={swatch.id}
+            type="color"
+            title={`${swatch.label}: color when printed`}
+            aria-label={`${swatch.label}: color when printed`}
+            value={colors[swatch.id] || swatch.color}
+            onChange={e => onChange({...colors, [swatch.id]: e.target.value})}
+            style={{width: "1.25rem", height: "1.25rem", padding: 0, border: "1px solid var(--border)",
+                background: "none", cursor: "pointer"}}
+        />)}
+    </span>;
+}
+
 function LayerControl({
                           map, scaleUnit, onScaleUnitChange, visibilityRef,
                           overlays = [], overlayState = {}, onToggleOverlay, onToggleOverlayLayer,
-                          onToggleAllOverlayLayers,
+                          onToggleAllOverlayLayers, printColors = null, onPrintColors = null,
                       }) {
     const [visibility, setVisibility] = useState(() => {
         const v = getInitialVisibility();
@@ -410,14 +462,27 @@ function LayerControl({
         </div>
         {!collapsed && <div style={{padding: "0.25rem 0.75rem 0.5rem"}}>
             {Object.keys(LAYER_GROUPS).map(name =>
-                <div key={name} style={{padding: "0.125rem 0"}}>
+                <div key={name} style={{padding: "0.125rem 0", display: "flex", alignItems: "center", gap: "0.375rem"}}>
                     <Checkbox
                         label={name}
                         checked={visibility[name]}
                         onChange={(e) => toggleGroup(name, e.currentTarget.checked)}
                     />
+                    {printColors && onPrintColors && <PrintSwatches
+                        group={name} colors={printColors} onChange={onPrintColors}/>}
                 </div>
             )}
+            {printColors && onPrintColors && <div style={{paddingTop: "0.25rem", color: "var(--muted)"}}>
+                Colors are of the printed map.{" "}
+                {Object.keys(printColors).length > 0 && <button
+                    type="button"
+                    style={{
+                        cursor: "pointer", textDecoration: "underline", background: "none", border: "none",
+                        padding: 0, font: "inherit", color: "inherit",
+                    }}
+                    onClick={() => onPrintColors({})}
+                >Reset colors</button>}
+            </div>}
             {overlays.length > 0 &&
                 <div style={{borderTop: "1px solid var(--border)", marginTop: "0.375rem", paddingTop: "0.375rem"}}>
                     <div style={{fontWeight: 600, paddingBottom: "0.125rem"}}>Overlays</div>
@@ -659,11 +724,37 @@ export default function MapViewer() {
     const [addingPin, setAddingPin] = useState(null); // {lat, lon} when pin dialog is open
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
+    // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
+    // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
+    const [pickingQuad, setPickingQuad] = useState(null);
+    const pickingQuadRef = useRef(false);
+    // The look a map is exported in.  While a quadrangle is chosen the map is shown in it: what is
+    // seen is what the PDF will be.
+    const [exportLook, setExportLook] = useState(savedExportLook);
+    const handleExportLook = useCallback(look => {
+        setExportLook(look);
+        saveExportLook(look);
+    }, []);
+    // The colors a person chose for the printed map: {swatch id: "#rrggbb"}.
+    const [printColors, setPrintColors] = useState(savedPrintColors);
+    const handlePrintColors = useCallback(colors => setPrintColors(savePrintColors(colors)), []);
+    // Exporting the chosen quadrangle: how far along it is, or why it could not be done.
+    const [exportStatus, setExportStatus] = useState(null);
+    // Whether the person exporting has asked for the export which is being made to stop.
+    const exportCancelledRef = useRef(false);
+    // Stops the request an export is in the middle of.
+    const exportAbortRef = useRef(null);
+    // Whether a map is being exported, for what is asked outside of React (the map's own buttons).
+    const exportingRef = useRef(false);
+    const [exportError, setExportError] = useState(null);
     const [scaleUnit, setScaleUnit] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch (e) { return "metric"; }
     });
     const [searchParams, setSearchParams] = useSearchParams();
     const {theme} = useContext(ThemeContext);
+    const {flavor: lookFlavor, sprite: lookSprite} = lookStyle(pickingQuad ? exportLook : null);
+    // The map is shown as it is printed: its colors can be chosen.
+    const printing = lookFlavor === PRINT_LOOK;
     const {settings, fetchSettings} = useContext(SettingsContext);
 
     // Use URL params if provided, otherwise fall back to saved default location, then 0,0,z2.
@@ -690,7 +781,7 @@ export default function MapViewer() {
 
             // Fetch user's PMTiles files first to determine what base layer is needed.
             let hasTerrain = false;
-            let terrainPath = null;
+            let terrainFile = null;
             let overlayFiles = [];
             try {
                 const data = await getMapFiles();
@@ -700,7 +791,7 @@ export default function MapViewer() {
                     overlayFiles = await loadOverlayStyles(foundOverlays);
                     if (terrain) {
                         hasTerrain = true;
-                        terrainPath = terrain.path;
+                        terrainFile = terrain;
                     }
 
                     if (planet) {
@@ -734,7 +825,7 @@ export default function MapViewer() {
 
             // Initialize contour source if terrain data is available.
             if (hasTerrain) {
-                initContourSource(terrainPath);
+                initContourSource(terrainFile);
             }
 
             try {
@@ -785,6 +876,28 @@ export default function MapViewer() {
                 };
                 map.addControl(pinControl, "top-right");
 
+                // Choose a quadrangle to export.
+                const exportButton = document.createElement("button");
+                exportButton.type = "button";
+                exportButton.title = "Export a 1:24,000 map";
+                exportButton.setAttribute("aria-label", "Export a 1:24,000 map");
+                exportButton.textContent = "🖨️";
+                exportButton.style.cssText = pinToggle.style.cssText;
+                exportButton.addEventListener("click", () => {
+                    // Not while a map is being exported: what is said of it, and its Cancel, are there.
+                    if (destroyed || exportingRef.current) return;
+                    setPickingQuad(picking => (picking ? null : {quad: null}));
+                });
+                map.addControl({
+                    onAdd: () => {
+                        const container = document.createElement("div");
+                        container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+                        container.appendChild(exportButton);
+                        return container;
+                    },
+                    onRemove: () => {},
+                }, "top-right");
+
                 // Right-click context menu (desktop).
                 map.on("contextmenu", (e) => {
                     if (destroyed) return;
@@ -813,7 +926,7 @@ export default function MapViewer() {
                 const featuresAt = (point, layers) =>
                     layers.length ? map.queryRenderedFeatures(point, {layers}) : [];
                 map.on("click", (e) => {
-                    if (destroyed) return;
+                    if (destroyed || pickingQuadRef.current) return;
                     const html = overlayPopupHtml(featuresAt(e.point, overlayLayerIds()))
                         || poiPopupHtml(featuresAt(e.point, poiLayerIds()), e.lngLat);
                     if (!html) return;
@@ -824,6 +937,10 @@ export default function MapViewer() {
                 });
                 map.on("mousemove", (e) => {
                     if (destroyed) return;
+                    if (pickingQuadRef.current) {
+                        map.getCanvas().style.cursor = "crosshair";
+                        return;
+                    }
                     const hit = featuresAt(e.point, [...overlayLayerIds(), ...poiLayerIds()]).length;
                     map.getCanvas().style.cursor = hit ? "pointer" : "";
                 });
@@ -885,6 +1002,9 @@ export default function MapViewer() {
 
         return () => {
             destroyed = true;
+            // An export of this map stops with it: nobody is here to be given the PDF.
+            exportCancelledRef.current = true;
+            exportAbortRef.current?.abort();
             if (map) {
                 map.remove();
             }
@@ -903,23 +1023,22 @@ export default function MapViewer() {
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Rebuild style when theme changes.
+    // Rebuild the style when the theme changes, and when the look the map is shown in does.
     useEffect(() => {
         const map = mapRef.current;
         if (!map || !mapReady) return;
 
-        const center = map.getCenter();
-        const zoom = map.getZoom();
+        // What the user turned off is off in the new style too.  Listened for before the style is
+        // set: a style which only differs from the one the map has is in place, and has said so,
+        // before `setStyle` returns.  The map stays where it is: a style of ours says nothing of that.
+        const showAsChosen = () => applyGroupVisibility(map, layerVisibilityRef.current);
+        map.once("style.load", showAsChosen);
         // The overlays are part of the style, as the user last set them.
-        map.setStyle(buildStyle(activeFilesRef.current, mapFlavor(theme), hasTerrainRef.current,
-            scaleUnit, mapSprite(theme), overlaysRef.current, overlayStateRef.current));
-        map.once("style.load", () => {
-            map.setCenter(center);
-            map.setZoom(zoom);
-            // Re-apply layer visibility state after style rebuild.
-            applyGroupVisibility(map, layerVisibilityRef.current);
-        });
-    }, [theme, mapReady, scaleUnit]);
+        // In the look a map is exported in while one is chosen; as the theme has it otherwise.
+        map.setStyle(buildStyle(activeFilesRef.current, lookFlavor || mapFlavor(theme), hasTerrainRef.current,
+            scaleUnit, lookSprite || mapSprite(theme), overlaysRef.current, overlayStateRef.current, printColors));
+        return () => map.off("style.load", showAsChosen);
+    }, [theme, lookFlavor, lookSprite, mapReady, scaleUnit, printColors]);
 
     // Remember what the user chose to see of an overlay, and show or hide its layers to match.
     const changeOverlayState = useCallback((file, next) => {
@@ -972,6 +1091,98 @@ export default function MapViewer() {
         });
         setContextMenu(null);
     }, [contextMenu]);
+
+    useEffect(() => {
+        pickingQuadRef.current = pickingQuad !== null;
+        const map = mapRef.current;
+        if (map) map.getCanvas().style.cursor = pickingQuad ? "crosshair" : "";
+    }, [pickingQuad]);
+
+    const handleExportQuad = useCallback(() => {
+        if (!contextMenu) return;
+        // Start with the quadrangle which was clicked; not while another is being exported.
+        if (!exportingRef.current) setPickingQuad({quad: quadAt(contextMenu.lon, contextMenu.lat)});
+        setContextMenu(null);
+    }, [contextMenu]);
+
+    // Make a PDF of a quadrangle: the layers which are on, drawn as they are on the map.
+    const handleExportPdf = useCallback(async (quad, {sheet = true, dpi = EXPORT_DPI, name = null} = {}) => {
+        const map = mapRef.current;
+        if (!map) return;
+        exportCancelledRef.current = false;
+        exportingRef.current = true;
+        const abort = new AbortController();
+        exportAbortRef.current = abort;
+        // The unit the map measures in is the unit its contour lines are apart in.
+        const imperial = scaleUnit === "imperial";
+        setExportError(null);
+        setExportStatus("Preparing…");
+        try {
+            const style = map.getStyle();
+            const overlayLabels = Object.fromEntries(overlaysRef.current.map(
+                file => [overlaySourceId(file), overlayLabel(file, overlaysRef.current)]));
+            // A map file which is of somewhere else is not drawn.
+            const outside = await sourcesOutside(
+                style, [quad.west, quad.south, quad.east, quad.north], readTileBounds);
+            const groups = exportGroups(
+                style.layers.filter(layer => !layer.id.startsWith(QUAD_LAYER_PREFIX) && !outside.has(layer.source)),
+                {layerGroups: LAYER_GROUPS, overlayLabels});
+            if (!groups.length) throw new Error("No layer of the map is turned on");
+            // How sharp the map may be depends on how many images it is, which is not known until
+            // the groups have been looked at: one with nothing in it is no image.
+            const maxSide = maxCanvasSide();
+            const frameFor = count => exportFrame(quad, {dpi, maxSide, maxPixels: maxExportPixels(count)});
+            // The zoom of the map is the same however many images it is.
+            const frame = frameFor(groups.length);
+            const rendered = await renderExport({
+                MapClass: maplibregl.Map,
+                style,
+                frameFor,
+                groups,
+                ignoredPrefixes: [QUAD_LAYER_PREFIX],
+                readTile: readVectorTile,
+                setup: exportMap => exportMap.on("styleimagemissing", e => addMissingOverlayIcon(exportMap, e.id)),
+                // Stopped between two layers, as soon as the person exporting asks.
+                isCancelled: () => exportCancelledRef.current,
+                onLooking: () => setExportStatus("Looking at the map…"),
+                // The map is less sharp than was asked for when this browser, or this many layers, can not be.
+                onProgress: (name, index, count, drawn) => setExportStatus(
+                    `Drawing ${name} (${index + 1} of ${count})`
+                    + `${Math.round(drawn.dpi) < dpi ? ` at ${Math.round(drawn.dpi)} DPI` : ""}…`),
+            });
+            const pdf = await exportMapPdf({
+                ...rendered,
+                title: exportTitle(quad, name),
+                // With a sheet the map has a margin, a grid and scale bars; without, it is the map alone.
+                sheet: sheet ? exportSheet(quad, map, groups, new Date(), name, exportContours(
+                    groups, LAYER_GROUPS["Contours"], contourInterval(imperial, terrainZoom, frame.zoom), imperial,
+                ), exportLegend(style, groups, frame.zoom)) : undefined,
+            }, {
+                // Once it is being stopped, that is what is said.
+                onStatus: text => !exportCancelledRef.current && setExportStatus(text),
+                isCancelled: () => exportCancelledRef.current,
+                signal: abort.signal,
+            });
+            // Stopped while the PDF was on its way: it is not wanted.
+            if (!exportCancelledRef.current) saveBlob(pdf, exportFileName(quad, name));
+        } catch (e) {
+            // Stopped by the person exporting: nothing went wrong.
+            if (!e?.cancelled) {
+                console.error("Map export failed:", e);
+                setExportError(e?.message || "The map could not be exported");
+            }
+        } finally {
+            exportingRef.current = false;
+            setExportStatus(null);
+        }
+    }, [scaleUnit]);
+
+    // Stop the export which is being made.  It stops between two steps, and the server stops making the PDF.
+    const handleCancelExport = useCallback(() => {
+        exportCancelledRef.current = true;
+        exportAbortRef.current?.abort();
+        setExportStatus("Stopping…");
+    }, []);
 
     const handleExportPng = useCallback(() => {
         const map = mapRef.current;
@@ -1099,6 +1310,8 @@ export default function MapViewer() {
             scaleUnit={scaleUnit}
             onScaleUnitChange={handleScaleUnitChange}
             visibilityRef={layerVisibilityRef}
+            printColors={printing ? printColors : null}
+            onPrintColors={handlePrintColors}
             overlays={overlays}
             overlayState={overlayState}
             onToggleOverlay={handleToggleOverlay}
@@ -1147,6 +1360,14 @@ export default function MapViewer() {
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
+                onClick={handleExportQuad}
+            >
+                Export a 1:24,000 map
+            </div>
+            <div
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
             >
                 Add Pin Here
@@ -1168,6 +1389,23 @@ export default function MapViewer() {
                 Set as Default View
             </div>
         </div>}
+        {mapReady && pickingQuad && <MapQuadPicker
+            key={pickingQuad.quad?.id || "none"}
+            map={mapRef.current}
+            scaleUnit={scaleUnit}
+            initialQuad={pickingQuad.quad}
+            onExport={handleExportPdf}
+            onCancel={handleCancelExport}
+            fetchName={getMapQuadName}
+            look={exportLook}
+            onLook={handleExportLook}
+            status={exportStatus}
+            error={exportError}
+            onClose={() => {
+                setExportError(null);
+                setPickingQuad(null);
+            }}
+        />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}
             lon={addingPin.lon}

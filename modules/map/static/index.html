@@ -294,6 +294,26 @@
         style: function(file) { return dataPath(file.style_map_path); },
     };
 
+    // How a terrain file is read (js/terrain.js, shared with the app's map viewer).  Until it is
+    // loaded, and if it can not be, a terrain file is read as the one WROLPi offers is.
+    var Terrain = {
+        terrainMaxZoom: function() { return 8; },
+        contourThresholds: function(imperial) {
+            return imperial
+                ? {4: [1000, 5000], 5: [500, 2500], 6: [200, 1000], 7: [200, 1000], 8: [100, 500]}
+                : {4: [500, 2500], 5: [200, 1000], 6: [100, 500], 7: [100, 500], 8: [50, 200]};
+        },
+    };
+    var terrainFile = null;
+    var terrainZoom = 8;
+
+    function loadTerrain() {
+        if (!hasTerrain) return Promise.resolve();
+        return import("/js/terrain.js")
+            .then(function(module) { Terrain = module; })
+            .catch(function(err) { console.error("Deeper terrain is not available:", err); });
+    }
+
     function loadOverlays(files) {
         if (!files.length) return Promise.resolve();
         return Promise.all([import("/js/overlays.js"), import("/js/overlayStyle.js")])
@@ -409,6 +429,11 @@
             }
         }
 
+        // The labels of every basemap file are over the ground of every file (as labelsOverGround in
+        // js/overlays.js, which may not have been loaded yet).
+        allLayers = allLayers.filter(function(l) { return l.type !== "symbol"; })
+            .concat(allLayers.filter(function(l) { return l.type === "symbol"; }));
+
         // Terrain (hillshade + contours).
         if (hasTerrain && demSource) {
             var savedVis = getSavedVisibility();
@@ -444,13 +469,10 @@
                 elevationKey: "ele",
                 levelKey: "level",
                 multiplier: isImperial ? 3.28084 : 1,
-                thresholds: isImperial ? {
-                    4: [1000, 5000], 5: [500, 2500], 6: [200, 1000], 7: [200, 1000], 8: [100, 500],
-                } : {
-                    4: [500, 2500], 5: [200, 1000], 6: [100, 500], 7: [100, 500], 8: [50, 200],
-                },
+                // As fine as the terrain file can bear (js/terrain.js).
+                thresholds: Terrain.contourThresholds(isImperial, terrainZoom),
             });
-            sources["contours"] = { type: "vector", tiles: [contourUrl], maxzoom: 8 };
+            sources["contours"] = { type: "vector", tiles: [contourUrl], maxzoom: terrainZoom };
 
             var textColor = flavor === "dark" ? "rgba(210,180,140,0.9)" : "rgba(150,100,50,0.8)";
             var haloColor = flavor === "dark" ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)";
@@ -954,6 +976,7 @@
                         : (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles'));
                     if (isTerrain) {
                         terrainFileName = f.mapPath;
+                        terrainFile = f;
                         hasTerrain = true;
                     } else if (f.kind === "overlay") {
                         // Not the basemap schema: offered in the layer panel, drawn as itself.
@@ -986,16 +1009,18 @@
                     .then(function(r) { hasPlanetOverview = r.ok; })
                     .catch(function() { hasPlanetOverview = false; })
                     .then(function() { return loadOverlays(overlayCandidates); })
+                    .then(function() { return loadTerrain(); })
                     .then(function() { return pmtilesFiles; });
             })
             .then(function(pmtilesFiles) {
 
                 // Initialize contour source if terrain available.
                 if (hasTerrain && !demSource) {
+                    terrainZoom = Terrain.terrainMaxZoom(terrainFile);
                     demSource = new mlcontour.DemSource({
                         url: "pmtiles://" + window.location.origin + dataPath(terrainFileName),
                         encoding: "terrarium",
-                        maxzoom: 8,
+                        maxzoom: terrainZoom,
                         worker: true,
                     });
                     demSource.setupMaplibre(maplibregl);

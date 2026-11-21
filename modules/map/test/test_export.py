@@ -492,33 +492,90 @@ def test_images_of_one_name_are_one_pdf_layer():
     assert [color(x) for x in (5, 20, 50)] == [(90, 90, 90), (0, 0, 255), (0, 200, 0)]
 
 
+def _wkt_parameter(wkt: str, name: str) -> float:
+    return float(re.search(rf'PARAMETER\["{name}",([-0-9.]+)]', wkt).group(1))
+
+
+def _read_as_a_reader_does(viewport: dict, wkt: str, latitude: float, longitude: float):
+    """Where on the page (across and up, 0 to 1) a reader of the PDF puts a place: it projects the corners it
+    is given (/GPTS) in the projection it is told of (the WKT: Mercator on its spheroid), and the place, and puts
+    the place between the corners as they are on the page (/LPTS)."""
+    assert 'PROJECTION["Mercator"]' in wkt
+    a, inverse_flattening = [float(i) for i in re.search(r'SPHEROID\["[^"]*",([0-9.]+),([0-9.]+)]', wkt).groups()]
+    f = 1 / inverse_flattening
+    e = math.sqrt(f * (2 - f))
+    meridian = _wkt_parameter(wkt, 'Central_Meridian')
+    # Mercator of one standard parallel: the scale is that of the parallel.
+    parallel = math.radians(_wkt_parameter(wkt, 'Standard_Parallel_1'))
+    k = math.cos(parallel) / math.sqrt(1 - (e * math.sin(parallel)) ** 2)
+
+    def project(lat, lon):
+        phi = math.radians(lat)
+        y = math.log(math.tan(math.pi / 4 + phi / 2) * ((1 - e * math.sin(phi)) / (1 + e * math.sin(phi))) ** (e / 2))
+        return (a * k * math.radians(lon - meridian) + _wkt_parameter(wkt, 'False_Easting'),
+                a * k * y + _wkt_parameter(wkt, 'False_Northing'))
+
+    gpts, lpts = viewport['gpts'], viewport['lpts']
+    corners = [(project(gpts[i], gpts[i + 1]), (lpts[i], lpts[i + 1])) for i in range(0, 8, 2)]
+    # The page is a rectangle of the projection, so three corners say where the rest of it is.
+    (upper_left, page_ul), (lower_left, page_ll), (lower_right, page_lr), _ = corners
+    x, y = project(latitude, longitude)
+    across = (x - lower_left[0]) / (lower_right[0] - lower_left[0])
+    up = (y - lower_left[1]) / (upper_left[1] - lower_left[1])
+    return (page_ll[0] + across * (page_lr[0] - page_ll[0]), page_ll[1] + up * (page_ul[1] - page_ll[1]))
+
+
+def _drawn(bounds, latitude: float, longitude: float):
+    """Where on the page (across and up, 0 to 1) the map has a place: it is drawn in Web Mercator."""
+    west, south, east, north = bounds
+
+    def y(lat):
+        return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+
+    return (longitude - west) / (east - west), (y(latitude) - y(south)) / (y(north) - y(south))
+
+
 @pytest.mark.parametrize('west,south', [(-78.5, 0), (-100, 20), (-105.125, 40.25), (-149.625, 61.25), (-156.75, 71.25),
-                                        (151.125, -33.875)])
+                                        (151.125, -33.875), (10, 84.875), (-0.0625, -0.0625)])
 def test_page_is_where_the_projection_it_is_said_to_be_in_puts_it(west, south):
     """The page is drawn in Web Mercator (a sphere), and a reader is told it is Mercator on the ellipsoid, with
     the latitude and longitude of its corners.  A reader puts a place on the page by where that projection has
     it between the corners: that is within 5 centimeters on the ground of where the map drew it, anywhere on a
-    quadrangle, at any latitude."""
-    a, f = 6378137.0, 1 / 298.257223563
-    e = math.sqrt(f * (2 - f))
+    quadrangle, at any latitude.  What the reader is told is what the PDF says: its corners and its WKT."""
+    bounds = [west, south, west + 0.125, south + 0.125]
+    pdf = build_layered_pdf([ExportLayer('Background', make_image())], WIDTH, HEIGHT, dpi=72, bounds=bounds)
+    viewport = read_viewport(pdf)
+    wkt = re.search(r'/WKT\s*\((.*)\)\s*>>', viewport['text'], re.S).group(1)
 
-    def drawn(lat):  # Web Mercator: how far up the page a latitude is drawn.
-        return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
-
-    def said(lat):  # Mercator on the ellipsoid: how far up a reader takes it to be.
-        phi = math.radians(lat)
-        return math.log(math.tan(math.pi / 4 + phi / 2) * ((1 - e * math.sin(phi)) / (1 + e * math.sin(phi))) ** (e / 2))
-
-    north = south + 0.125
+    # The page is this wide and this tall on the ground.
+    height = 6378137 * math.radians(0.125)
+    width = height * math.cos(math.radians(south + 0.0625))
     worst = 0
-    for step in range(101):
-        lat = south + 0.125 * step / 100
-        # The part of the way up the page, as it is drawn and as it is read.  (Across the page the two agree.)
-        up_drawn = (drawn(lat) - drawn(south)) / (drawn(north) - drawn(south))
-        up_said = (said(lat) - said(south)) / (said(north) - said(south))
-        # The page is this tall on the ground.
-        height = a * math.radians(0.125)
-        worst = max(worst, abs(up_drawn - up_said) * height)
+    for i in range(21):
+        for j in range(21):
+            lat, lon = south + 0.125 * i / 20, west + 0.125 * j / 20
+            read = _read_as_a_reader_does(viewport, wkt, lat, lon)
+            drawn = _drawn(bounds, lat, lon)
+            worst = max(worst, math.hypot((read[0] - drawn[0]) * width, (read[1] - drawn[1]) * height))
     assert worst < 0.05
-    assert f'/EPSG {export.PAGE_PROJECTION_EPSG}' in export.geospatial_viewport(
-        100, 200, [west, south, west + 0.125, north])
+
+    # The same sum finds a page whose corners are not where they are said to be: here, a second of arc south.
+    moved = dict(viewport, gpts=[v - 1 / 3600 if index % 2 == 0 else v for index, v in enumerate(viewport['gpts'])])
+    middle = (south + 0.0625, west + 0.0625)
+    off = _read_as_a_reader_does(moved, wkt, *middle)[1] - _drawn(bounds, *middle)[1]
+    assert abs(off) * height == pytest.approx(31, abs=1)
+
+
+def test_page_taller_than_a_quadrangle_is_less_well_said():
+    """What is left between the two projections grows with the square of how tall the page is: centimeters on a
+    quadrangle, more than a meter on a page a degree tall.  (A page that tall is not exported yet.)"""
+    def worst(tall):
+        bounds = [-150, 61, -149, 61 + tall]
+        viewport = dict(gpts=[bounds[3], bounds[0], bounds[1], bounds[0], bounds[1], bounds[2], bounds[3], bounds[2]],
+                        lpts=[0, 1, 0, 0, 1, 0, 1, 1])
+        height = 6378137 * math.radians(tall)
+        return max(abs(_read_as_a_reader_does(viewport, export.PAGE_PROJECTION_WKT, 61 + tall * i / 40, -149.5)[1]
+                       - _drawn(bounds, 61 + tall * i / 40, -149.5)[1]) * height for i in range(41))
+
+    assert worst(0.125) < 0.05
+    assert 1 < worst(1) < 2

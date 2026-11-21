@@ -53,9 +53,11 @@ POINTS_PER_INCH = 72
 # What a reader is told of the projection is not Web Mercator, which Adobe Acrobat does not know (it says every
 # place is at 0, 0), but Mercator on the WGS 84 ellipsoid, which every reader knows.  Web Mercator is Mercator on
 # a sphere: across a page of a map the two differ by a stretch from north to south, which the corners say, and
-# what is left is under three centimeters on the ground at any latitude.  (To say only that the page is in
-# latitude and longitude would be read too, and be up to 7 meters out at 61 degrees: a degree of latitude is
-# not as tall at the top of a Mercator page as at the bottom.)
+# what is left is under three centimeters on the ground across a quadrangle, at any latitude.  It grows with the
+# square of how tall the page is (a third of a meter for half a degree, more than a meter for a degree), so a
+# map much taller than a quadrangle wants more than its corners said.  (To say only that the page is in
+# latitude and longitude would be read too, and be up to 7 meters out at 61 degrees on a quadrangle: a degree
+# of latitude is not as tall at the top of a Mercator page as at the bottom.)
 #
 # The words are Esri's, as GDAL writes them in a PDF: Acrobat reads those.
 PAGE_PROJECTION_EPSG = 3395

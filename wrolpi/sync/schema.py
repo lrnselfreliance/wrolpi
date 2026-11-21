@@ -5,26 +5,6 @@ from wrolpi.errors import ValidationError
 
 
 @dataclass
-class ManifestRequest:
-    after_id: int = 0
-    limit: int = 500
-
-    def __post_init__(self):
-        self.after_id = int(self.after_id)
-        self.limit = int(self.limit)
-        if self.after_id < 0:
-            raise ValidationError('after_id must not be negative')
-        if not 1 <= self.limit <= 5000:
-            raise ValidationError('limit must be between 1 and 5000')
-
-
-@dataclass
-class SyncRunRequest:
-    # Import every synced config even if the primary's copy did not change.
-    force: bool = False
-
-
-@dataclass
 class SyncDirectoriesRequest:
     # The folder whose sub-folders are listed, relative to the media directory ('' is the media directory).
     path: str = ''
@@ -47,6 +27,10 @@ class SyncSettingsRequest:
     backup_device_uuid: Optional[str] = None
     backup_window_start: Optional[str] = None
     backup_window_end: Optional[str] = None
+    # Days a secondary keeps a file its primary deleted or replaced; -1 never deletes.
+    sync_delete_after_days: Optional[int] = None
+    # Days the backup drive keeps a file deleted or replaced in the media directory; -1 never deletes.
+    backup_delete_after_days: Optional[int] = None
     # Folders, relative to the media directory, never copied ([] clears).
     sync_excluded_directories: Optional[List[str]] = None
     backup_excluded_directories: Optional[List[str]] = None
@@ -54,3 +38,6 @@ class SyncSettingsRequest:
     def __post_init__(self):
         if self.role is not None and self.role not in ('primary', 'secondary'):
             raise ValidationError('role must be "primary" or "secondary"')
+        for key in ('sync_delete_after_days', 'backup_delete_after_days'):
+            if (value := getattr(self, key)) is not None and not -1 <= int(value) <= 3650:
+                raise ValidationError(f'{key} must be between 0 and 3650, or -1 to never delete')

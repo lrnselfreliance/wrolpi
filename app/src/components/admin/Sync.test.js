@@ -1,21 +1,24 @@
 import React from 'react';
 import {fireEvent, screen, waitFor} from '@testing-library/react';
 import {renderWithProviders} from '../../test-utils';
-import {backupStatusFixture, settingsFixture, statusFixture, syncStatusFixture} from '../../test-fixtures';
+import {backupStatusFixture, controllerSyncStatusFixture, settingsFixture, statusFixture} from '../../test-fixtures';
 import {
     BackupDriveSection, backupDriveOptions, ExcludedDirectories, isExcludedPath, SecondaryRoleMessage, simplifyExcluded,
     splitBackupDirectory, SyncingOverlay, SyncSection,
 } from './Sync';
 
+jest.mock('../ui/toast', () => ({...jest.requireActual('../ui/toast'), toast: jest.fn()}));
+
 jest.mock('../../api/controller', () => ({
     getDisks: jest.fn(),
+    getSyncStatus: jest.fn(),
+    runSync: jest.fn(),
+    cancelSync: jest.fn(),
 }));
 
 jest.mock('../../api', () => ({
     cancelBackup: jest.fn(),
     runBackup: jest.fn(),
-    cancelSync: jest.fn(),
-    runSync: jest.fn(),
     saveSyncSettings: jest.fn(),
     testSync: jest.fn(),
     getSyncDirectories: jest.fn(),
@@ -24,14 +27,16 @@ jest.mock('../../api', () => ({
 }));
 
 import {
-    cancelBackup, cancelSync, getSyncDirectories, PrimaryUnreachableError, runBackup, runSync, saveSyncSettings, testSync,
+    cancelBackup, getSyncDirectories, PrimaryUnreachableError, runBackup, saveSyncSettings, testSync,
 } from '../../api';
-import {getDisks} from '../../api/controller';
+import {cancelSync, getDisks, getSyncStatus, runSync} from '../../api/controller';
+import {toast} from '../ui/toast';
 
 beforeEach(() => {
     // react-scripts resets mock implementations before each test.
-    cancelSync.mockResolvedValue({ok: true});
-    runSync.mockResolvedValue({ok: true});
+    cancelSync.mockResolvedValue({success: true});
+    runSync.mockResolvedValue({success: true});
+    getSyncStatus.mockResolvedValue(controllerSyncStatusFixture());
     saveSyncSettings.mockResolvedValue({ok: true});
     testSync.mockResolvedValue({ok: true, info: {version: '0.30.5-beta'}});
     runBackup.mockResolvedValue({ok: true});
@@ -76,29 +81,39 @@ describe('SecondaryRoleMessage', () => {
 });
 
 describe('SyncingOverlay', () => {
-    const syncing = (sync = {}) => ({
-        status: statusFixture({
-            flags: {sync_running: true},
-            sync: syncStatusFixture({state: 'running', phase: 'files', groups_seen: 50, max_id: 100, ...sync}),
-        }),
+    const running = (sync = {}) => controllerSyncStatusFixture({
+        state: 'running', phase: 'files', percent: 40, bytes_transferred: 5 * 1024 ** 3,
+        primary_url: 'https://192.168.0.10', ...sync,
     });
 
-    it('covers the app while a secondary syncs', () => {
-        renderWithProviders(<SyncingOverlay/>, {settings: secondary(), status: syncing()});
-        expect(screen.getByRole('alertdialog', {name: 'Syncing'})).toBeInTheDocument();
+    it('covers the app while a secondary syncs, from the Controller (the API is stopped)', async () => {
+        getSyncStatus.mockResolvedValue(running());
+        renderWithProviders(<SyncingOverlay/>, {settings: secondary()});
+        expect(await screen.findByRole('alertdialog', {name: 'Syncing'})).toBeInTheDocument();
         expect(screen.getByText('Syncing from the primary')).toBeInTheDocument();
+        expect(screen.getByText(/Copying files: 5/)).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Stop Sync'));
-        expect(cancelSync).toHaveBeenCalled();
+        await waitFor(() => expect(cancelSync).toHaveBeenCalled());
     });
 
-    it('is absent when not syncing', () => {
+    it('is shown when the settings cannot be read, as while the API is stopped', async () => {
+        getSyncStatus.mockResolvedValue(running());
+        renderWithProviders(<SyncingOverlay/>, {settings: {settings: null}});
+        expect(await screen.findByRole('alertdialog', {name: 'Syncing'})).toBeInTheDocument();
+    });
+
+    it('is absent when not syncing', async () => {
         renderWithProviders(<SyncingOverlay/>, {settings: secondary()});
+        await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
         expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     });
 
-    it('is absent on a primary', () => {
-        renderWithProviders(<SyncingOverlay/>, {status: syncing()});
+    it('is absent on a primary, which never asks', async () => {
+        getSyncStatus.mockResolvedValue(running());
+        renderWithProviders(<SyncingOverlay/>);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(getSyncStatus).not.toHaveBeenCalled();
         expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     });
 });
@@ -115,11 +130,16 @@ describe('SyncSection', () => {
     });
 
     it('a secondary shows its primary, window, and sync controls', async () => {
-        const status = {status: statusFixture({sync: syncStatusFixture({last_error: 'The primary did not answer'})})};
-        renderWithProviders(<SyncSection/>, {settings: secondary({sync_window_start: '01:00'}), status});
+        getSyncStatus.mockResolvedValue(controllerSyncStatusFixture({
+            finished_at: '2026-11-19T03:00:00+00:00', last_error: 'The primary did not answer',
+            files_transferred: 12, files_deleted: 3, trash_bytes: 2048,
+        }));
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_window_start: '01:00'})});
         expect(screen.getByDisplayValue('https://192.168.0.10')).toBeInTheDocument();
         expect(screen.getByDisplayValue('01:00')).toBeInTheDocument();
-        expect(screen.getByText('The primary did not answer')).toBeInTheDocument();
+        expect(await screen.findByText('The primary did not answer')).toBeInTheDocument();
+        expect(screen.getByText(/12 files copied/)).toBeInTheDocument();
+        expect(screen.getByText(/3 moved to the trash/)).toBeInTheDocument();
 
         fireEvent.click(screen.getByText('Sync Now'));
         await waitFor(() => expect(runSync).toHaveBeenCalled());
@@ -127,8 +147,53 @@ describe('SyncSection', () => {
         fireEvent.click(screen.getByText('Save'));
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             role: 'secondary', sync_primary_url: 'https://192.168.0.10', sync_window_start: '01:00',
-            sync_window_end: '', sync_excluded_directories: [],
+            sync_window_end: '', sync_excluded_directories: [], sync_delete_after_days: 30,
         }));
+    });
+
+    it('says why a sync did not start', async () => {
+        runSync.mockRejectedValue(new Error('A sync is already running'));
+        renderWithProviders(<SyncSection/>, {settings: secondary()});
+        fireEvent.click(screen.getByText('Sync Now'));
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error', title: 'The sync did not start', description: 'A sync is already running'})));
+    });
+
+    it('a stopped sync is not a problem', async () => {
+        getSyncStatus.mockResolvedValue(controllerSyncStatusFixture({last_error: 'The sync was cancelled'}));
+        renderWithProviders(<SyncSection/>, {settings: secondary()});
+        expect(await screen.findByText('The sync was cancelled.')).toBeInTheDocument();
+        expect(screen.queryByText('Sync problem')).not.toBeInTheDocument();
+    });
+
+    it('saves how long deleted files are kept, or never to delete them', async () => {
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: 7})});
+        expect(screen.getByLabelText('Files the primary deletes: days')).toHaveValue(7);
+
+        fireEvent.click(screen.getByLabelText('Files the primary deletes: never delete them'));
+        expect(screen.getByLabelText('Files the primary deletes: days')).toBeDisabled();
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({sync_delete_after_days: -1})));
+    });
+
+    it('an empty number of days is not saved as "delete at once"', async () => {
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: 30})});
+        fireEvent.change(screen.getByLabelText('Files the primary deletes: days'), {target: {value: ''}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error', title: 'Sync settings were not saved'})));
+        expect(saveSyncSettings).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText('Files the primary deletes: days'), {target: {value: '0'}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({sync_delete_after_days: 0})));
+    });
+
+    it('a secondary that never deletes shows it', () => {
+        renderWithProviders(<SyncSection/>, {settings: secondary({sync_delete_after_days: null})});
+        expect(screen.getByLabelText('Files the primary deletes: never delete them')).toBeChecked();
     });
 
     it('WROL Mode stops syncing', () => {
@@ -156,7 +221,29 @@ describe('BackupDriveSection', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
             backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
+    });
+
+    it('saves how long deleted files are kept on the backup drive', async () => {
+        const settings = {settings: settingsFixture({
+                backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
+                backup_delete_after_days: 7})};
+        renderWithProviders(<BackupDriveSection/>, {settings});
+        const days = await screen.findByLabelText('Files deleted here: days');
+        expect(days).toHaveValue(7);
+
+        // An empty box is not "delete at once".
+        fireEvent.change(days, {target: {value: ''}});
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error', title: 'Backup drive was not saved'})));
+        expect(saveSyncSettings).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByLabelText('Files deleted here: never delete them'));
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith(
+            expect.objectContaining({backup_delete_after_days: -1})));
     });
 
     it('shows the backup and runs it on request', async () => {
@@ -234,6 +321,7 @@ describe('BackupDriveSection folder', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup/wrolpi/library', backup_device_uuid: 'uuid-backup',
             backup_window_start: '', backup_window_end: '', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
     });
 
@@ -269,6 +357,7 @@ describe('BackupDriveSection window', () => {
         await waitFor(() => expect(saveSyncSettings).toHaveBeenCalledWith({
             backup_directory: '/media/wrolpi_backup', backup_device_uuid: 'uuid-backup',
             backup_window_start: '01:00', backup_window_end: '04:30', backup_excluded_directories: [],
+            backup_delete_after_days: 30,
         }));
     });
 });

@@ -4,53 +4,30 @@ import re
 from http import HTTPStatus
 
 from sanic import Request, Blueprint, response
-from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import flags
-from wrolpi.api_utils import api_app, json_response, perpetual_signal
-from wrolpi.common import logger, get_wrolpi_config, is_secondary, wrol_mode_check, wrol_mode_enabled
+from wrolpi.api_utils import json_response, perpetual_signal
+from wrolpi.common import logger, is_secondary, wrol_mode_check, wrol_mode_enabled, \
+    CONTROLLER_URL, aiohttp_post
 from wrolpi.db import get_db_session
-from wrolpi.errors import InvalidConfig, SecondaryRole, SyncInProgress, WROLModeEnabled
-from wrolpi.sync import backup, lib, schema
+from wrolpi.errors import InvalidConfig, SecondaryRole, WROLModeEnabled
+from wrolpi.sync import backup, lib, notify, schema, snapshot
 from wrolpi.sync.config import get_sync_config
-from wrolpi.sync.status import get_backup_status, get_sync_status
+from wrolpi.sync.status import get_backup_status, get_snapshot_status
 from wrolpi.vars import DOCKERIZED
 
 sync_bp = Blueprint('Sync', '/api/sync')
 
 logger = logger.getChild(__name__)
 
-# Requests a secondary answers while it syncs: enough for the UI to show the sync's progress, and to cancel it.
-SYNC_ALLOWED_REQUESTS = frozenset({
-    ('GET', '/api/echo'),
-    ('GET', '/api/events/feed'),
-    ('GET', '/api/settings'),
-    ('GET', '/api/status'),
-    ('GET', '/api/sync/info'),
-    ('GET', '/api/sync/status'),
-    ('POST', '/api/sync/cancel'),
-})
-
-
-@api_app.middleware('request')
-async def check_sync_api_lock(request: Request):
-    """A secondary refuses requests while it replaces its library with its primary's (see wrolpi.sync)."""
-    # The Event costs nothing to check; the Flag confirms it (the Event survives a perpetual process that died).
-    if not api_app.shared_ctx.sync_api_locked.is_set() or not flags.sync_running.is_set():
-        return
-    if request.method == 'OPTIONS' or (request.method, request.path.rstrip('/')) in SYNC_ALLOWED_REQUESTS:
-        return
-    # Answered here rather than raised: the UI polls while it waits, and each refusal would be logged as an error.
-    return json_response(dict(error=SyncInProgress.summary, code=SyncInProgress.code),
-                         SyncInProgress.status_code)
-
-
 @perpetual_signal(sleep=5)
 async def perpetual_sync_worker():
-    # One loop, so a secondary's sync and its backup never run at once; the backup copies what the sync pulled.
-    await lib.sync_tick()
+    # A secondary's sync is the Controller's (controller/lib/sync.py), which stops this API while it runs.
     await backup.backup_tick()
+    await snapshot.snapshot_tick()
+    # The Controller cannot send this API's events; announce the syncs it finished.
+    notify.notify_tick()
 
 
 @sync_bp.get('/info')
@@ -63,43 +40,56 @@ async def get_info(_: Request):
     return json_response(await asyncio.to_thread(info))
 
 
-@sync_bp.get('/manifest')
-@openapi.definition(summary="One page of this WROLPi's files, for a secondary to compare with its own")
-@validate(query=schema.ManifestRequest)
-async def get_manifest(_: Request, query: schema.ManifestRequest):
-    def page():
-        with get_db_session() as session:
-            return lib.build_manifest_page(session, query.after_id, query.limit)
-
-    return json_response(await asyncio.to_thread(page))
-
-
 @sync_bp.get('/status')
 @openapi.definition(summary="The progress of this secondary's sync")
 async def get_status(_: Request):
-    return json_response(dict(sync=get_sync_status(), sync_running=bool(flags.sync_running.is_set()),
-                              backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set())))
+    # A secondary's sync is the Controller's: /controller/api/sync/status.
+    return json_response(dict(backup=get_backup_status(), backup_running=bool(flags.backup_running.is_set()),
+                              snapshot=get_snapshot_status()))
+
+
+@sync_bp.post('/snapshot')
+@openapi.definition(summary="Make a snapshot of this WROLPi's database for a secondary to copy")
+async def post_snapshot(_: Request):
+    if reason := snapshot.snapshot_skip_reason():
+        raise InvalidConfig(reason)
+    # Made by the perpetual process; `/api/sync/status` says when it is done.
+    snapshot.request_snapshot()
+    return response.empty(HTTPStatus.ACCEPTED)
+
+
+def controller_url() -> str:
+    return 'http://controller' if DOCKERIZED else CONTROLLER_URL
+
+
+async def _ask_controller(path: str):
+    """A secondary's sync runs in the Controller, because this API is stopped while the library is replaced."""
+    try:
+        async with aiohttp_post(f'{controller_url()}/api/sync/{path}', json_={}, timeout=15) as controller_response:
+            if controller_response.status < 300:
+                return response.empty(HTTPStatus.ACCEPTED)
+            body = await controller_response.json(content_type=None)
+    except Exception as e:
+        logger.error(f'Could not reach the Controller to {path} the sync', exc_info=e)
+        raise InvalidConfig('The Controller did not answer')
+    raise InvalidConfig((body or {}).get('detail') or f'The Controller answered {controller_response.status}')
 
 
 @sync_bp.post('/run')
-@openapi.definition(summary='Sync from the primary now', body=schema.SyncRunRequest, validate=True)
+@openapi.definition(summary='Sync from the primary now (the Controller runs it)')
 @wrol_mode_check
-async def post_run(_: Request, body: schema.SyncRunRequest):
+async def post_run(_: Request):
     if not is_secondary():
         raise SecondaryRole('Only a secondary WROLPi syncs from a primary')
-    if flags.sync_running.is_set():
-        raise SyncInProgress()
     if not get_sync_config().primary_url:
         raise InvalidConfig('No primary is configured')
-    lib.request_sync(force=body.force)
-    return response.empty(HTTPStatus.ACCEPTED)
+    return await _ask_controller('run')
 
 
 @sync_bp.post('/cancel')
-@openapi.definition(summary='Stop the running sync')
+@openapi.definition(summary='Stop the running sync (the Controller runs it)')
 async def post_cancel(_: Request):
-    lib.request_sync_cancel()
-    return response.empty(HTTPStatus.ACCEPTED)
+    return await _ask_controller('cancel')
 
 
 @sync_bp.get('/test')
@@ -159,6 +149,10 @@ async def put_settings(_: Request, body: schema.SyncSettingsRequest):
         if value and not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', value):
             raise InvalidConfig(f'{request_key} must be in HH:MM format')
         changes[config_key] = value or None
+    for request_key, config_key in (('sync_delete_after_days', 'delete_after_days'),
+                                    ('backup_delete_after_days', 'backup_delete_after_days')):
+        if (days := getattr(body, request_key)) is not None:
+            changes[config_key] = None if int(days) < 0 else int(days)
     for key in ('sync_excluded_directories', 'backup_excluded_directories'):
         if (value := getattr(body, key)) is not None:
             changes[key] = lib.normalize_excluded_directories(value)

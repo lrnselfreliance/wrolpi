@@ -219,12 +219,11 @@ async def test_downloads_summary_fixture_matches_the_download_manager(async_clie
 
 
 @pytest.mark.parametrize('fixture_name, seed_name, response_name', [
-    ('syncStatusFixture', 'default_sync_status', 'SyncStatusResponse'),
     ('backupStatusFixture', 'default_backup_status', 'BackupStatusResponse'),
 ])
 def test_sync_status_fixture_matches_the_seed(fixture_name, seed_name, response_name):
-    """statusFixture's `sync` and `backup` are seeded by wrolpi.sync.status and declared in wrolpi.schema; the
-    fixture, the seed and the declaration must name the same keys."""
+    """statusFixture's `backup` is seeded by wrolpi.sync.status and declared in wrolpi.schema; the fixture, the
+    seed and the declaration must name the same keys."""
     from dataclasses import fields
     from wrolpi import schema
     from wrolpi.sync import status
@@ -271,10 +270,11 @@ async def test_which_fixtures_the_spec_can_vouch_for(async_client):
 
     source = TEST_FIXTURES_JS.read_text()
     api_fixtures = set(re.findall(r'^export const ([a-zA-Z]+Fixture) =', source, re.M))
-    # domainsFixture is a list built from domainFixture, syncStatusFixture and backupStatusFixture are
-    # statusFixture's `sync` and `backup` (test_sync_status_fixture_matches_the_seed holds them), and the *Context* fixtures are held to
-    # their React contexts by the frontend's own test-fixtures.test.js.
-    api_fixtures -= {'domainsFixture', 'syncStatusFixture', 'backupStatusFixture'}
+    # domainsFixture is a list built from domainFixture, backupStatusFixture is statusFixture's `backup`
+    # (test_sync_status_fixture_matches_the_seed holds it), and the *Context* fixtures are held to their React
+    # contexts by the frontend's own test-fixtures.test.js.  controllerSyncStatusFixture is the Controller's, not
+    # this API's: controller/test/test_sync.py holds it to the Controller's sync status.
+    api_fixtures -= {'domainsFixture', 'backupStatusFixture', 'controllerSyncStatusFixture'}
     api_fixtures = {n for n in api_fixtures if 'Context' not in n}
 
     assert api_fixtures == set(checked) | set(unchecked), (

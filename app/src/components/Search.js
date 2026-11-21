@@ -50,11 +50,6 @@ const SUGGESTED_APPS = [
     {location: '/zim', title: 'Zim', description: 'View your Zims'},
     {location: '/zim/manage', title: 'Manage Zim', description: 'Manage your Zims'},
     {
-        location: '/more/calculators?calc=temperature',
-        title: 'Temperature Calculator',
-        description: 'Convert Celsius, Fahrenheit, Kelvin'
-    },
-    {
         location: '/more/calculators?calc=electrical',
         title: 'Electrical Calculator',
         description: 'Convert Volts, Ohms, Amps, Watts, Power Loss.'

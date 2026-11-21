@@ -1,56 +1,93 @@
+import contextlib
 import json
 from http import HTTPStatus
 
 import pytest
 import yaml
 
-from wrolpi import flags
-from wrolpi.api_utils import api_app
 from wrolpi.common import get_wrolpi_config, enable_wrol_mode
 from wrolpi.downloader import download_manager
-from wrolpi.sync import lib
+from wrolpi.sync import api as sync_api, backup, notify, snapshot
 from wrolpi.sync.config import get_sync_config
-from wrolpi.sync.status import get_sync_status, update_sync_status
 
 
 @pytest.mark.asyncio
-async def test_info_and_manifest(async_client, test_session, test_wrolpi_config, make_files_structure,
-                                 refresh_files):
-    make_files_structure({'docs/a.txt': 'a', 'docs/b.txt': 'b'})
-    await refresh_files()
-
+async def test_info(async_client, test_session, test_wrolpi_config):
     request, response = await async_client.get('/api/sync/info')
     assert response.status_code == HTTPStatus.OK
+    assert set(response.json) == {'version', 'role', 'media_directory', 'database_revision', 'media_mounted'}
     assert response.json['role'] == 'primary'
-    assert response.json['max_file_group_id'] > 0
 
-    request, response = await async_client.get('/api/sync/manifest?after_id=0&limit=1')
-    assert response.status_code == HTTPStatus.OK
-    assert len(response.json['groups']) == 1
-    after_id = response.json['next_after_id']
-    assert after_id
+    # The old engine's manifest is gone; a secondary copies with rsync.
+    request, response = await async_client.get('/api/sync/manifest')
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
-    request, response = await async_client.get(f'/api/sync/manifest?after_id={after_id}&limit=1')
-    paths = [p['path'] for g in response.json['groups'] for p in g['paths']]
-    assert len(paths) == 1 and paths[0].startswith('docs/')
 
-    request, response = await async_client.get('/api/sync/manifest?limit=0')
-    assert response.status_code == HTTPStatus.BAD_REQUEST
+class FakeControllerResponse:
+    def __init__(self, status, body=None):
+        self.status, self.body = status, body
+
+    async def json(self, content_type=None):
+        return self.body
+
+
+def fake_controller(monkeypatch, status=None, body=None, error=None):
+    """The Controller answers the API's sync requests with `status` and `body`, or not at all (`error`)."""
+    calls = []
+
+    @contextlib.asynccontextmanager
+    async def aiohttp_post(url, json_, timeout=None, headers=None):
+        calls.append(url)
+        if error:
+            raise error
+        yield FakeControllerResponse(status, body)
+
+    monkeypatch.setattr(sync_api, 'aiohttp_post', aiohttp_post)
+    return calls
 
 
 @pytest.mark.asyncio
-async def test_run(async_client, test_wrolpi_config, make_secondary):
+async def test_run(async_client, test_wrolpi_config, make_secondary, monkeypatch):
+    """The Controller runs a secondary's sync, because it stops this API; the API only asks it to."""
+    calls = fake_controller(monkeypatch, status=HTTPStatus.ACCEPTED)
     request, response = await async_client.post('/api/sync/run', content='{}')
     assert response.status_code == HTTPStatus.FORBIDDEN, 'a primary does not sync'
+    assert calls == []
 
     make_secondary('https://primary.example')
-    request, response = await async_client.post('/api/sync/run', content=json.dumps(dict(force=True)))
+    request, response = await async_client.post('/api/sync/run', content='{}')
     assert response.status_code == HTTPStatus.ACCEPTED
-    assert get_sync_status()['requested'] is True
-    assert get_sync_status()['force'] is True
+    assert calls == ['http://127.0.0.1/api/sync/run']
+    request, response = await async_client.post('/api/sync/cancel')
+    assert response.status_code == HTTPStatus.ACCEPTED
+    assert calls[-1] == 'http://127.0.0.1/api/sync/cancel'
 
-    request, response = await async_client.get('/api/sync/status')
-    assert response.json['sync']['requested'] is True
+    # The Controller's reason is the API's.
+    fake_controller(monkeypatch, status=HTTPStatus.CONFLICT, body=dict(detail='A sync is already running'))
+    request, response = await async_client.post('/api/sync/run', content='{}')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json['error'] == 'A sync is already running'
+
+    fake_controller(monkeypatch, error=ConnectionRefusedError())
+    request, response = await async_client.post('/api/sync/run', content='{}')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json['error'] == 'The Controller did not answer'
+
+
+@pytest.mark.asyncio
+async def test_worker_runs_the_backup_and_the_snapshot(async_client, test_wrolpi_config, monkeypatch):
+    """The API's loop makes the backup and the primary's database snapshot, and announces the syncs the Controller
+    finished; a secondary's sync itself is the Controller's."""
+    called = []
+
+    async def tick(name):
+        called.append(name)
+
+    monkeypatch.setattr(backup, 'backup_tick', lambda: tick('backup'))
+    monkeypatch.setattr(snapshot, 'snapshot_tick', lambda: tick('snapshot'))
+    monkeypatch.setattr(notify, 'notify_tick', lambda: called.append('notify'))
+    await sync_api.perpetual_sync_worker()
+    assert called == ['backup', 'snapshot', 'notify']
 
 
 @pytest.mark.asyncio
@@ -162,55 +199,14 @@ async def test_directories_primary_unreachable(async_client, test_wrolpi_config,
 
 
 @pytest.mark.asyncio
-async def test_api_locked_while_syncing(async_client, test_wrolpi_config, flags_lock, make_secondary):
-    """While a secondary syncs, its API refuses everything but the sync's own progress."""
+async def test_wrol_mode_refuses_a_sync(async_client, test_wrolpi_config, test_download_manager, make_secondary,
+                                        monkeypatch):
+    """WROL Mode means the secondary is in use: no sync is asked of the Controller.  (The Controller itself also
+    refuses, and stops a sync at its next step, when it finds WROL Mode enabled.)"""
     make_secondary()
-    with lib.lock_api():
-        request, response = await async_client.get('/api/files/search?search_str=foo')
-        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-        assert response.json['code'] == 'SYNCING'
-        request, response = await async_client.post('/api/tag', content=json.dumps(dict(name='one')))
-        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-
-        for path in ('/api/status', '/api/sync/status', '/api/settings', '/api/echo'):
-            request, response = await async_client.get(path)
-            assert response.status_code == HTTPStatus.OK, path
-        request, response = await async_client.post('/api/sync/cancel')
-        assert response.status_code == HTTPStatus.ACCEPTED
-        # Nothing may change the sync while it runs, except stopping it.
-        request, response = await async_client.put('/api/sync/settings', content=json.dumps(dict(role='primary')))
-        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-        request, response = await async_client.post('/api/sync/run', content='{}')
-        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-
-        request, response = await async_client.get('/api/status')
-        assert response.json['flags']['sync_running'] is True
-
-    request, response = await async_client.get('/api/settings')
-    assert response.status_code == HTTPStatus.OK
-    assert not api_app.shared_ctx.sync_api_locked.is_set()
-    assert not flags.sync_running.is_set()
-
-
-@pytest.mark.asyncio
-async def test_stale_lock_event_does_not_lock(async_client, test_wrolpi_config, flags_lock):
-    """The Event outlives a perpetual process that died mid-sync; the cleared Flag unlocks the API."""
-    api_app.shared_ctx.sync_api_locked.set()
-    try:
-        request, response = await async_client.get('/api/settings')
-        assert response.status_code == HTTPStatus.OK
-    finally:
-        api_app.shared_ctx.sync_api_locked.clear()
-
-
-@pytest.mark.asyncio
-async def test_wrol_mode_cancels_sync(async_client, test_wrolpi_config, test_download_manager, make_secondary):
-    """WROL Mode means the secondary is in use: a running sync stops, and none start."""
-    make_secondary()
-    update_sync_status(state='running')
+    calls = fake_controller(monkeypatch, status=HTTPStatus.ACCEPTED)
     enable_wrol_mode()
-    assert get_sync_status()['cancel_requested'] is True
-    assert lib.sync_skip_reason() == 'WROL Mode is enabled'
 
     request, response = await async_client.post('/api/sync/run', content='{}')
     assert response.status_code == HTTPStatus.FORBIDDEN
+    assert calls == []

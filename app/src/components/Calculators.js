@@ -2,7 +2,6 @@ import React from "react";
 import {Breadcrumbs, useTitle} from "./Common";
 import {Button, Header, Icon} from "./ui";
 import {useCalcQuery} from "../hooks/customHooks";
-import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
 import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
 import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
 import {Link} from "react-router";
@@ -40,7 +39,6 @@ export const useCalculators = () => {
         {key: 'water', icon: 'tint', button: 'Water Storage', group: 'Preparedness & Storage', contents: <WaterCalculator/>},
         {key: 'ration', icon: 'food', button: 'Food Storage', group: 'Preparedness & Storage', contents: <FoodStorageCalculator/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', group: 'Radio & Communications', contents: <DipoleAntennaCalculator/>},
-        {key: 'temperature', icon: 'thermometer', button: 'Temperature', group: 'Tools & Reference', contents: <TemperatureCalculator/>},
         {key: 'qrCode', icon: 'qrcode', button: 'QR Code', group: 'Tools & Reference', contents: <QRCodeCalculator/>},
         {key: 'otp', icon: 'lock', button: 'One Time Pad', title: 'One Time Pad', group: 'Radio & Communications', contents: <OneTimePadCalculator/>},
         {key: 'vin', icon: 'car', button: 'VIN Decoder', title: 'VIN Decoder', group: 'Tools & Reference', contents: <VinDecoderCalculator/>},

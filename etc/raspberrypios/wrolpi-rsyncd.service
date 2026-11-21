@@ -1,0 +1,15 @@
+[Unit]
+Description=WROLPi library for secondary WROLPis (rsync daemon)
+PartOf=wrolpi.target
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/rsync --daemon --no-detach --config=/opt/wrolpi/controller/rsyncd.conf
+Group=wrolpi
+User=wrolpi
+Restart=on-failure
+# Below everything a person is waiting on.
+Nice=10
+
+[Install]
+WantedBy=default.target

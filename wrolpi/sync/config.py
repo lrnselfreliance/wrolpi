@@ -13,7 +13,7 @@ from wrolpi.sync.status import get_backup_status, update_backup_status
 @dataclass
 class SyncConfigValidator:
     version: int = None
-    # 'primary' or 'secondary'; a secondary copies its library from `primary_url` (see wrolpi.sync.lib).
+    # 'primary' or 'secondary'; a secondary copies its library from `primary_url` (see controller/lib/sync.py).
     role: str = None
     primary_url: str = None
     # The daily window ('HH:MM') in which a secondary syncs; none means only "Sync Now".
@@ -21,6 +21,8 @@ class SyncConfigValidator:
     window_end: str = None
     # Folders (relative to the media directory) a secondary never downloads from its primary.
     sync_excluded_directories: list[str] = field(default_factory=list)
+    # Days a secondary keeps a file its primary deleted or replaced (in `.sync-trash`); None never deletes.
+    delete_after_days: int = None
     # A second drive this WROLPi copies its media directory to (see wrolpi.sync.backup), and the UUID of the drive
     # that must be mounted there.
     backup_directory: str = None
@@ -30,8 +32,15 @@ class SyncConfigValidator:
     backup_window_end: str = None
     # Folders (relative to the media directory) never copied to the backup drive.
     backup_excluded_directories: list[str] = field(default_factory=list)
+    # Days the backup drive keeps a file deleted (or replaced) in the media directory, in `.backup-trash`; None never
+    # deletes.
+    backup_delete_after_days: int = None
     # When a backup last finished without errors (ISO 8601); kept so it is known after a restart.
     backup_last_success_at: str = None
+
+
+# Long enough to notice a file that should not have been deleted on the primary.
+DEFAULT_DELETE_AFTER_DAYS = 30
 
 
 class SyncConfig(ConfigFile):
@@ -43,11 +52,13 @@ class SyncConfig(ConfigFile):
         window_start=None,
         window_end=None,
         sync_excluded_directories=[],
+        delete_after_days=DEFAULT_DELETE_AFTER_DAYS,
         backup_directory=None,
         backup_device_uuid=None,
         backup_window_start=None,
         backup_window_end=None,
         backup_excluded_directories=[],
+        backup_delete_after_days=DEFAULT_DELETE_AFTER_DAYS,
         backup_last_success_at=None,
     )
     validator = SyncConfigValidator
@@ -79,6 +90,13 @@ class SyncConfig(ConfigFile):
         return list(self._config.get('sync_excluded_directories') or [])
 
     @property
+    def delete_after_days(self) -> Optional[int]:
+        """None never deletes.  A sync.yaml written before this setting has no key, and gets the default."""
+        if 'delete_after_days' not in self._config:
+            return DEFAULT_DELETE_AFTER_DAYS
+        return self._config['delete_after_days']
+
+    @property
     def backup_directory(self) -> Optional[str]:
         return self._config.get('backup_directory')
 
@@ -97,6 +115,13 @@ class SyncConfig(ConfigFile):
     @property
     def backup_excluded_directories(self) -> List[str]:
         return list(self._config.get('backup_excluded_directories') or [])
+
+    @property
+    def backup_delete_after_days(self) -> Optional[int]:
+        """None never deletes.  A sync.yaml written before this setting has no key, and gets the default."""
+        if 'backup_delete_after_days' not in self._config:
+            return DEFAULT_DELETE_AFTER_DAYS
+        return self._config['backup_delete_after_days']
 
     @property
     def backup_last_success_at(self) -> Optional[str]:

@@ -34,11 +34,6 @@ export class ApiDownError extends Error {
 
 const apiDownError = new ApiDownError('API is down');
 
-// A secondary WROLPi refuses requests while it copies its library from its primary.  Like a down API, callers
-// treat it quietly; the app shows the sync's progress instead (see SyncingOverlay).
-export class SyncingError extends ApiDownError {
-}
-
 async function apiCall(url, method, body, ms = 60_000) {
     let init = {method};
     if (body !== undefined) {
@@ -64,9 +59,6 @@ async function apiCall(url, method, body, ms = 60_000) {
         let copy = response.clone();
         const content = await copy.json();
         const code = content['code'];
-        if (response.status === 503 && code === 'SYNCING') {
-            throw new SyncingError('This WROLPi is syncing from its primary');
-        }
         console.error('API error response json', content);
         if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({
@@ -395,6 +387,7 @@ export async function getSettings() {
         const content = await response.json();
         return {
             archive_destination: content.archive_destination,
+            backup_delete_after_days: content.backup_delete_after_days,
             backup_device_uuid: content.backup_device_uuid,
             backup_directory: content.backup_directory,
             backup_excluded_directories: content.backup_excluded_directories,
@@ -428,6 +421,7 @@ export async function getSettings() {
             require_media_mounted: content.require_media_mounted,
             role: content.role,
             save_ffprobe_json: content.save_ffprobe_json,
+            sync_delete_after_days: content.sync_delete_after_days,
             sync_excluded_directories: content.sync_excluded_directories,
             sync_primary_url: content.sync_primary_url,
             sync_window_end: content.sync_window_end,
@@ -479,19 +473,6 @@ export async function getSyncDirectories(path, source) {
     }
     const message = await getErrorMessage(response, 'Could not list the folders.');
     throw new Error(message);
-}
-
-export async function runSync(force = false) {
-    const response = await apiPost(`${API_URI}/sync/run`, {force});
-    if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not start the sync.');
-        toast({type: 'error', title: 'Sync Failed', description: message, time: 5000});
-    }
-    return response;
-}
-
-export async function cancelSync() {
-    return await apiPost(`${API_URI}/sync/cancel`);
 }
 
 export async function runBackup() {

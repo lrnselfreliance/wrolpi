@@ -178,6 +178,7 @@ def get_settings(_: Request):
     settings = {
         'archive_destination': wrolpi_config.archive_destination,
         'backup_device_uuid': sync_config.backup_device_uuid,
+        'backup_delete_after_days': sync_config.backup_delete_after_days,
         'backup_directory': sync_config.backup_directory,
         'backup_excluded_directories': sync_config.backup_excluded_directories,
         'backup_window_end': sync_config.backup_window_end,
@@ -217,6 +218,7 @@ def get_settings(_: Request):
         'role': sync_config.role,
         'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
         'sync_primary_url': sync_config.primary_url,
+        'sync_delete_after_days': sync_config.delete_after_days,
         'sync_excluded_directories': sync_config.sync_excluded_directories,
         'sync_window_end': sync_config.window_end,
         'sync_window_start': sync_config.window_start,

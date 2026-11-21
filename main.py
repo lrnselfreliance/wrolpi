@@ -22,6 +22,7 @@ from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
 from wrolpi.perpetual import register_perpetual_process, perpetual_process_health_check
+from wrolpi.sync.lib import apply_primary_wrolpi_config
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED
 from wrolpi.version import get_version_string
 
@@ -275,6 +276,11 @@ async def start_single_tasks(app: Sanic):
 
     # Import configs that require the database.
     if wrolpi_config.successful_import and not wrolpi_config.wrol_mode:
+        try:
+            # A secondary's library settings are its primary's; before the configs that depend on them.
+            apply_primary_wrolpi_config()
+        except Exception as e:
+            logger.error("Failed to apply the primary's library settings", exc_info=e)
         from wrolpi.common import import_all_db_configs
         await import_all_db_configs()
 

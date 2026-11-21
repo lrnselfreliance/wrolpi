@@ -33,6 +33,7 @@ from controller.api.schemas import HealthResponse
 from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
+from controller.api.sync import router as sync_router
 from controller.lib.config import (
     get_ca_certificate_path,
     get_config_value,
@@ -43,6 +44,7 @@ from controller.lib.config import (
     save_config,
     update_config,
 )
+from controller.lib.rsyncd import rsync_daemon_loop
 from controller.lib.scripts import get_script_status
 from controller.lib.docker_services import (
     can_manage_containers,
@@ -57,6 +59,7 @@ from controller.lib.status import (
     get_uptime_status,
 )
 from controller.lib.status_worker import status_worker_loop
+from controller.lib.sync import sync_schedule_loop
 from controller.lib.systemd import get_all_services_status
 
 # Templates directory
@@ -123,6 +126,14 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Primary drive not mounted - using default configuration")
 
+    # A secondary syncs within its daily window.  Each tick first recovers a sync that was interrupted (the API it
+    # stopped is started again), so nothing races that recovery.
+    app.state.sync_schedule_task = asyncio.create_task(sync_schedule_loop())
+
+    # Docker: the library is served to secondary WROLPis from a helper container, kept matching the api container.
+    if is_docker_mode():
+        app.state.rsync_daemon_task = asyncio.create_task(rsync_daemon_loop())
+
     # After the config (and any migrated hotspot settings) are loaded.  Starting can take a while; do not block.
     from controller.lib.admin import start_hotspot_on_boot
     app.state.hotspot_on_boot_task = asyncio.create_task(asyncio.to_thread(start_hotspot_on_boot))
@@ -142,6 +153,9 @@ async def lifespan(app: FastAPI):
         await status_task
     except asyncio.CancelledError:
         pass
+    for name in ("rsync_daemon_task", "sync_schedule_task"):
+        if task := getattr(app.state, name, None):
+            task.cancel()
 
 
 # Create FastAPI app
@@ -169,6 +183,7 @@ app.include_router(ready_router)
 app.include_router(scripts_router)
 app.include_router(services_router)
 app.include_router(status_router)
+app.include_router(sync_router)
 
 
 def get_host(request: Request) -> str:

@@ -289,7 +289,6 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
     const [progress, setProgress] = useState(null);
-    const [allWeapon, setAllWeapon] = useState(null);
     const {status} = useContext(StatusContext) || {};
     const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
@@ -417,11 +416,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             No targets yet: right-click the map and choose Add Target Here.
         </div>}
         {targets.length > 1 && <div style={{marginBottom: "0.5rem"}}>
-            <WeaponPicker label="Set every target's weapon" value={allWeapon || targets[0]}
-                          onChange={(weapon) => {
-                              setAllWeapon(weapon);
-                              onAllTargetsWeapon?.(weapon);
-                          }}/>
+            {/* Empty until chosen, and always applied: the targets may have any weapons now. */}
+            <Select label="Set every target's weapon" size="xs" data={WEAPON_CHOICES.slice(0, -1)} value={null}
+                    placeholder="Choose a weapon for every target" searchable maxDropdownHeight={320}
+                    comboboxProps={DROPDOWN} aria-label="Every target's weapon"
+                    onChange={(key) => key && onAllTargetsWeapon?.({
+                        weapon: key, fission_fraction: targetWeapon({weapon: key}).fissionFraction,
+                    })}/>
         </div>}
         <div style={{maxHeight: "14rem", overflowY: "auto", marginBottom: "0.5rem"}}>
             {targets.map((t) => <TargetRow key={t.id} target={t} onWeapon={(weapon) => onTargetWeapon?.(t, weapon)}/>)}

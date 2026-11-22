@@ -1712,6 +1712,26 @@ export async function mapUnsubscribe(region) {
     }
 }
 
+// The forecast winds aloft last fetched for a place (the fallout simulator), or null.
+export async function getFalloutWinds(lat, lon) {
+    const response = await apiGet(`${API_URI}/map/fallout/winds?lat=${lat}&lon=${lon}`);
+    if (response.ok) {
+        return (await response.json()).winds;
+    }
+    return null;
+}
+
+// Fetch the forecast winds aloft for a place (the fallout simulator); null when it cannot be.
+export async function fetchFalloutWinds(lat, lon) {
+    const response = await apiPost(`${API_URI}/map/fallout/winds`, {lat, lon});
+    if (response.ok) {
+        return (await response.json()).winds;
+    }
+    const message = await getErrorMessage(response, 'Could not fetch the winds aloft');
+    toast({type: 'error', title: 'Fallout', description: message, time: 5000});
+    return null;
+}
+
 export async function getMapPins() {
     const response = await apiGet(`${API_URI}/map/pins`);
     if (response.ok) {

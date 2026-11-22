@@ -5,9 +5,10 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import export, export_job, lib, quads, schema, search
+from modules.map import export, export_job, lib, quads, schema, search, winds
 from modules.map.pins import get_map_pins_config
 from modules.map.sheet import legend_as_sent
+from wrolpi import flags
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
 from wrolpi.events import Events
@@ -318,3 +319,27 @@ async def get_export_pdf(_: Request, export_id: str):
     except EXPORT_ERRORS as e:
         return _export_error(e)
     return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')
+
+
+@map_bp.get('/fallout/winds')
+@openapi.description('The forecast winds aloft last fetched for a place, for the fallout simulator')
+def get_fallout_winds(request: Request):
+    try:
+        lat, lon = float(request.args.get('lat')), float(request.args.get('lon'))
+    except (TypeError, ValueError):
+        return response.json({'error': 'lat and lon are required'}, HTTPStatus.BAD_REQUEST)
+    return json_response(dict(winds=winds.cached_winds(lat, lon)), HTTPStatus.OK)
+
+
+@map_bp.post('/fallout/winds')
+@openapi.description('Fetch the forecast winds aloft for a place, for the fallout simulator')
+@validate(schema.MapFalloutWindsRequest)
+async def post_fallout_winds(_: Request, body: schema.MapFalloutWindsRequest):
+    if not flags.have_internet.is_set():
+        return response.json({'error': 'WROLPi has no Internet, so it cannot fetch a forecast'},
+                             HTTPStatus.SERVICE_UNAVAILABLE)
+    try:
+        forecast = await winds.fetch_winds(body.lat, body.lon)
+    except winds.WindsError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_GATEWAY)
+    return json_response(dict(winds=forecast), HTTPStatus.OK)

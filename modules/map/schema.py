@@ -25,3 +25,10 @@ class MapPinRequest:
 class MapPinUpdateRequest:
     label: str = None
     color: str = None
+
+
+@dataclass
+class MapFalloutWindsRequest:
+    # A browser sends a whole number of degrees as an integer.
+    lat: float | int
+    lon: float | int

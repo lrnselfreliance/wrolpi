@@ -1741,12 +1741,13 @@ export async function updateMapTargetWeapon(pinId, weapon) {
     return response.ok;
 }
 
-// Fetch the field of forecast winds aloft over `places` ([[lat, lon]], the targets; the fallout
-// simulator); null when it cannot be.
+// Start the Job which fetches the field of forecast winds aloft over `places` ([[lat, lon]], the
+// targets; the fallout simulator): {job_id, points, spacing, seconds (about how long it takes)}, or
+// null when it cannot be.
 export async function fetchFalloutWinds(places) {
     const response = await apiPost(`${API_URI}/map/fallout/winds`, {places});
     if (response.ok) {
-        return (await response.json()).winds;
+        return await response.json();
     }
     const message = await getErrorMessage(response, 'Could not fetch the winds aloft');
     toast({type: 'error', title: 'Fallout', description: message, time: 5000});

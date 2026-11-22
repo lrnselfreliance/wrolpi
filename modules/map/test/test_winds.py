@@ -6,6 +6,14 @@ import pytest
 
 from modules.map import winds
 from wrolpi import flags
+from wrolpi.jobs import COMPLETE, FAILED, wait_for_job
+
+
+@pytest.fixture(autouse=True)
+def unpaced():
+    """Requests are not a minute apart in tests, and a field is fetched in one."""
+    with mock.patch('modules.map.winds.BATCH_SECONDS', 0), mock.patch('modules.map.winds.BATCH', 1000):
+        yield
 
 
 def forecast(lat=61.0, lon=-149.0, elevation=100.0, hours=2):
@@ -86,13 +94,21 @@ def test_parse_forecast_rejects_nonsense():
 @pytest.mark.asyncio
 async def test_fetch_wind_field(test_directory):
     """A field is fetched in batches, kept, and found again as the latest."""
-    requested = []
+    requested, heard, slept = [], [], []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+
     places = [(61.2, -149.3), (40.6, -75.4)]
     with mock.patch('modules.map.winds.request_forecast', fake_service(requested)), \
-            mock.patch('modules.map.winds.BATCH', 50):
-        field = await winds.fetch_wind_field(places)
+            mock.patch('modules.map.winds.BATCH', 50), mock.patch('modules.map.winds.BATCH_SECONDS', 61), \
+            mock.patch('modules.map.winds.asyncio.sleep', sleep):
+        field = await winds.fetch_wind_field(places, lambda done, total: heard.append((done, total)))
     spacing, points = winds.field_points(places)
     assert len(requested) == -(-len(points) // 50)
+    # Each request after the first waits out the rest of a minute from the one before it.
+    assert len(slept) == len(requested) - 1 and all(50 < s <= 61 for s in slept)
+    assert heard[-1] == (len(points), len(points)) and len(heard) == len(requested)
     assert field['spacing'] == spacing
     assert [(p['lat'], p['lon']) for p in field['points']] == points
     assert len(field['winds']) == len(points) and len(field['winds'][0]) == len(field['hours']) == 2
@@ -135,8 +151,38 @@ async def test_fetch_wind_field_failure(test_directory):
 
 
 @pytest.mark.asyncio
+async def test_fetch_wind_field_slows_down(test_directory):
+    """Told too many have been asked of it, the service is asked again a minute later, once."""
+    answers = [winds.WindsError('The forecast service answered HTTP 429')]
+    slept = []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+
+    service = fake_service([])
+
+    async def busy_then_fine(url):
+        if answers:
+            raise answers.pop()
+        return await service(url)
+
+    with mock.patch('modules.map.winds.request_forecast', busy_then_fine), \
+            mock.patch('modules.map.winds.asyncio.sleep', sleep):
+        field = await winds.fetch_wind_field([(10, 10)])
+    assert len(slept) == 1 and field['points']
+
+    async def always_busy(url):
+        raise winds.WindsError('The forecast service answered HTTP 429')
+
+    with mock.patch('modules.map.winds.request_forecast', always_busy), \
+            mock.patch('modules.map.winds.asyncio.sleep', sleep):
+        with pytest.raises(winds.WindsError, match='429'):
+            await winds.fetch_wind_field([(10, 10)])
+
+
+@pytest.mark.asyncio
 async def test_winds_api(async_client, test_directory, flags_lock):
-    """The field is fetched on request, kept, and given back without fetching again."""
+    """The field is fetched by a Job on request, kept, and given back without fetching again."""
     request, response = await async_client.get('/api/map/fallout/winds/latest')
     assert response.status_code == HTTPStatus.OK
     assert response.json['winds'] is None
@@ -146,10 +192,13 @@ async def test_winds_api(async_client, test_directory, flags_lock):
         with mock.patch('modules.map.winds.request_forecast', fake_service([])):
             request, response = await async_client.post('/api/map/fallout/winds',
                                                         content=json.dumps({'places': [[61.2, -149.3], [61, -150]]}))
+            assert response.status_code == HTTPStatus.ACCEPTED
+            assert response.json['spacing'] == 1 and response.json['seconds'] == 0
+            job = await wait_for_job(response.json['job_id'], timeout=10)
     finally:
         flags.have_internet.clear()
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['winds']['spacing'] == 1
+    assert job['status'] == COMPLETE and job['progress'] == 100
+    assert job['result']['spacing'] == 1
 
     request, response = await async_client.get('/api/map/fallout/winds/latest')
     assert response.json['winds']['points'][0]['elevation'] == 100.0
@@ -171,10 +220,16 @@ async def test_winds_api_errors(async_client, test_directory, flags_lock):
         async def broken(url):
             raise winds.WindsError('The forecast service answered HTTP 500')
 
+        # Too spread out for a field.
+        with mock.patch('modules.map.winds.MAX_POINTS', 5):
+            places = [[0, lon] for lon in range(-180, 180, 30)]
+            request, response = await async_client.post('/api/map/fallout/winds', content=json.dumps({'places': places}))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
         with mock.patch('modules.map.winds.request_forecast', broken):
             request, response = await async_client.post('/api/map/fallout/winds',
                                                         content=json.dumps({'places': [[61, -149]]}))
-        assert response.status_code == HTTPStatus.BAD_GATEWAY
-        assert 'HTTP 500' in response.json['error']
+            job = await wait_for_job(response.json['job_id'], timeout=10)
+        assert job['status'] == FAILED and 'HTTP 500' in job['error']
     finally:
         flags.have_internet.clear()

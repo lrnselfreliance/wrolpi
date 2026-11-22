@@ -10,11 +10,14 @@ up to about 24 km, free and without an API key, for many places in one request. 
 only when the user asks for one (it needs the Internet), and is kept so the simulator can use it
 offline.  Its points are on whole degrees, so the forecast service is never told where a target is.
 
-The free service allows 10,000 calls a day, a place costing about one call for every ten variables
-asked of it (here sixty): a field is kept to MAX_POINTS points, by spacing them further apart over a
-wide region.
+The free service allows 600 calls a minute and 10,000 a day, a place costing about one call for
+every ten variables asked of it (here sixty).  So a field is kept to MAX_POINTS points, by spacing
+them further apart over a wide region, and is fetched as a Job, BATCH places a minute: a field over
+a whole country takes a few minutes.
 """
+import asyncio
 import json
+import time
 import math
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
@@ -23,6 +26,7 @@ from urllib.parse import urlencode
 from modules.map.lib import get_map_directory
 from wrolpi.common import aiohttp_get, logger
 from wrolpi.dates import now
+from wrolpi.jobs import get_current_job, register_job
 
 logger = logger.getChild(__name__)
 
@@ -34,12 +38,15 @@ FORECAST_DAYS = 2
 TIMEOUT = 60
 # How far around each target the field reaches (degrees): as far as fallout which shows is carried.
 MARGIN = 6
-# No more points than this in a field: about 1,800 of the free service's 10,000 calls a day.
-MAX_POINTS = 300
+# No more points than this in a field: up to 3,240 of the free service's 5,000 calls an hour and
+# 10,000 a day, fetched in about six minutes.
+MAX_POINTS = 540
 # The spacings (degrees) a field's points may have, the closest first.
 SPACINGS = (1, 2, 3, 4, 5, 6, 8, 10)
-# Places asked for in one request.
-BATCH = 100
+# Places asked for in one request (each costs six calls; 600 calls a minute are allowed), and how
+# long (s) from one request to the next.
+BATCH = 90
+BATCH_SECONDS = 61
 # Fields kept on disk; the newest is the one used.
 KEPT_FIELDS = 3
 
@@ -49,12 +56,13 @@ class WindsError(Exception):
 
 
 def field_points(places: Sequence[Tuple[float, float]], margin: float = MARGIN,
-                 max_points: int = MAX_POINTS) -> Tuple[int, List[Tuple[int, int]]]:
+                 max_points: int = None) -> Tuple[int, List[Tuple[int, int]]]:
     """The points of a field over `places` ([(lat, lon)]): the spacing (degrees), and the points
     ([(lat, lon)], on whole multiples of the spacing) within `margin` degrees of any place, as close
     together as `max_points` allows."""
     if not places:
         raise WindsError('A field needs at least one place')
+    max_points = max_points or MAX_POINTS
     for spacing in SPACINGS:
         points = set()
         for lat, lon in places:
@@ -148,25 +156,43 @@ async def request_forecast(url: str) -> list:
     return data if isinstance(data, list) else [data]
 
 
-async def fetch_wind_field(places: Sequence[Tuple[float, float]]) -> dict:
+async def request_batch(url: str) -> list:
+    """The forecasts of a request; asked once more, a minute later, when the service says too many
+    have been asked of it."""
+    for attempt in range(2):
+        try:
+            return await request_forecast(url)
+        except WindsError as e:
+            if attempt or 'HTTP 429' not in str(e):
+                raise
+            logger.warning('The forecast service asked us to slow down; trying again in a minute')
+            await asyncio.sleep(BATCH_SECONDS)
+        except Exception as e:
+            raise WindsError(f'Could not reach the forecast service: {e}') from e
+
+
+async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None) -> dict:
     """Fetch the field over `places` ([(lat, lon)]), keep it, and return it:
 
     {source, fetched_at, spacing (degrees), points: [{lat, lon, elevation}], hours: [time (UTC,
     ISO)], winds: [for each point: [for each hour: [[height (m above sea level), speed (m/s),
-    direction FROM (degrees)], ...]]], rain: [for each point: [mm in each hour]]}"""
+    direction FROM (degrees)], ...]]], rain: [for each point: [mm in each hour]]}
+
+    `progress(done, total)`, if given, hears how many points have been fetched."""
     spacing, points = field_points(places)
     forecasts = []
+    last = None
     for start in range(0, len(points), BATCH):
         batch = points[start:start + BATCH]
-        try:
-            answered = await request_forecast(forecast_url(batch))
-        except WindsError:
-            raise
-        except Exception as e:
-            raise WindsError(f'Could not reach the forecast service: {e}') from e
+        if last is not None:
+            await asyncio.sleep(max(BATCH_SECONDS - (time.monotonic() - last), 0))
+        last = time.monotonic()
+        answered = await request_batch(forecast_url(batch))
         if len(answered) != len(batch):
             raise WindsError(f'The forecast service answered for {len(answered)} of {len(batch)} places')
         forecasts.extend(parse_forecast(f) for f in answered)
+        if progress:
+            progress(len(forecasts), len(points))
 
     # Every point has the same hours (Open-Meteo forecasts the same hours everywhere); a point which
     # is short of any is given its last.
@@ -196,3 +222,18 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]]) -> dict:
     for old in sorted(directory.glob('field-*.json'), reverse=True)[KEPT_FIELDS:]:
         old.unlink(missing_ok=True)
     return field
+
+
+@register_job('fallout_winds')
+async def fallout_winds_job(places: list) -> dict:
+    """Fetch and keep the field of winds over `places` ([[lat, lon]]) as a Job."""
+    job = get_current_job()
+    spacing, points = field_points([tuple(p) for p in places])
+    job.log(f'Fetching the winds aloft at {len(points)} points every {spacing} degrees')
+
+    def progress(done, total):
+        job.set_progress(100 * done / total)
+        job.log(f'Fetched {done} of {total} points')
+
+    field = await fetch_wind_field([tuple(p) for p in places], progress)
+    return dict(spacing=field['spacing'], points=len(field['points']), fetched_at=field['fetched_at'])

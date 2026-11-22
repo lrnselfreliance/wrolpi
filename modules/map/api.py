@@ -348,7 +348,7 @@ def get_latest_fallout_winds(_: Request):
 
 
 @map_bp.post('/fallout/winds')
-@openapi.description('Fetch the field of forecast winds aloft over places (the targets)')
+@openapi.description('Start a Job which fetches the field of forecast winds aloft over places (the targets)')
 @validate(schema.MapFalloutWindsRequest)
 async def post_fallout_winds(_: Request, body: schema.MapFalloutWindsRequest):
     if not flags.have_internet.is_set():
@@ -359,7 +359,12 @@ async def post_fallout_winds(_: Request, body: schema.MapFalloutWindsRequest):
     except (TypeError, ValueError):
         return response.json({'error': 'places are [lat, lon]'}, HTTPStatus.BAD_REQUEST)
     try:
-        field = await winds.fetch_wind_field(places)
+        spacing, points = winds.field_points(places)
     except winds.WindsError as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_GATEWAY)
-    return json_response(dict(winds=field), HTTPStatus.OK)
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    # A minute for every batch but the first: the forecast service allows so many a minute.
+    job_id = winds.fallout_winds_job.enqueue(description=f'Fallout: fetch the winds aloft at {len(points)} points',
+                                             places=[list(p) for p in places])
+    return json_response(dict(job_id=job_id, points=len(points), spacing=spacing,
+                              seconds=winds.BATCH_SECONDS * ((len(points) - 1) // winds.BATCH)),
+                         HTTPStatus.ACCEPTED)

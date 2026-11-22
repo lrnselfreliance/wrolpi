@@ -36,6 +36,8 @@ export const WEAPON_CHOICES = [
     {group: "Other", items: [{value: CUSTOM, label: "A yield of my own"}]},
 ];
 const DEFAULT_WEAPON = "w87-0";
+// The panel floats over the map (z-index 1002); its dropdowns open above it.
+const DROPDOWN = {zIndex: 1100};
 const WINDS = [
     {value: "manual", label: "One wind at every height"},
     ...shots.shots.map((s) => ({value: s.name, label: `Winds aloft of ${s.name} (${s.date.slice(0, 10)})`})),
@@ -205,7 +207,7 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             Surface burst at {lat.toFixed(3)}, {lon.toFixed(3)}
         </div>
         <Select label="Weapon" size="xs" data={WEAPON_CHOICES} value={weaponKey} onChange={chooseWeapon}
-                searchable allowDeselect={false} maxDropdownHeight={320}/>
+                searchable allowDeselect={false} maxDropdownHeight={320} comboboxProps={DROPDOWN}/>
         {weapon && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>
             {weapon.group}, {weapon.status}.{" "}
             {weapon.yield_range_kt
@@ -217,7 +219,7 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
         <NumberInput label="Fission fraction (%), assumed" size="xs" min={1} max={100} value={fission}
                      onChange={(v) => setFission(Math.min(100, Math.max(1, Number(v) || 1)))}/>
         <Select label="Wind" size="xs" data={WINDS} value={wind} onChange={(v) => v && setWind(v)}
-                allowDeselect={false}/>
+                allowDeselect={false} comboboxProps={DROPDOWN}/>
         {wind === "manual" && <div style={{display: "flex", gap: "0.5rem"}}>
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>

@@ -23,3 +23,11 @@ export function formatYield(kt) {
     if (kt >= 1000) return `${+(kt / 1000).toFixed(2)} Mt`;
     return `${+kt.toFixed(1)} kt`;
 }
+
+// A yield with how much of it is fission, which is what makes fallout: "300 kt, half fission";
+// "15 kt" when all of it is.
+export function formatYieldAndFission(kt, fissionFraction) {
+    if (fissionFraction >= 1) return formatYield(kt);
+    const share = fissionFraction === 0.5 ? 'half' : `${Math.round(fissionFraction * 100)}%`;
+    return `${formatYield(kt)}, ${share} fission`;
+}

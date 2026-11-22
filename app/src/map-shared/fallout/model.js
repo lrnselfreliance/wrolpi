@@ -435,6 +435,74 @@ export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalizati
     return {x0: west, y0: south, cell, nx, ny, values};
 }
 
+// The finest cell (m) a burst's narrow spots are looked at on, and how many of them a coarse cell is
+// split into across, at most.
+const FINE_CELL = 250;
+const MOST_SPLITS = 32;
+
+// `grid` (as depositionGrid gives it, of `spots`), with the peaks of narrow spots kept.
+//
+// A grid over many bursts far apart has cells kilometers wide, and a cell's value is the average over
+// it: the hot, narrow fallout close to a small burst's ground zero, hundreds of meters wide, would be
+// averaged down into a lower band.  So each burst's spots narrower than half a cell (spots of one
+// `run`, as combineBursts gives them; all one run without it) are also put on a fine grid, and each
+// cell gains the most any part of it is above the cell's average, by the burst which raises it most.
+// The cell's average, which sums the bursts, is kept beneath.
+export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
+    const coarse = grid.cell;
+    const runs = new Map();
+    for (const s of spots) {
+        if (!(s.sigma < coarse / 2)) continue;
+        const run = s.run ?? 0;
+        if (!runs.has(run)) runs.set(run, []);
+        runs.get(run).push(s);
+    }
+    if (!runs.size) return grid;
+    const extra = new Float64Array(grid.values.length);
+    for (const narrow of runs.values()) {
+        const narrowest = Math.min(...narrow.map((s) => s.sigma));
+        const splits = Math.min(Math.ceil(coarse / Math.max(Math.min(narrowest / 2, FINE_CELL), 25)), MOST_SPLITS);
+        if (splits < 2) continue;
+        // The coarse cells the narrow spots reach.
+        let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity;
+        for (const s of narrow) {
+            i0 = Math.min(i0, Math.floor((s.x - 3 * s.sigma - grid.x0) / coarse));
+            i1 = Math.max(i1, Math.floor((s.x + 3 * s.sigma - grid.x0) / coarse));
+            j0 = Math.min(j0, Math.floor((s.y - 3 * s.sigma - grid.y0) / coarse));
+            j1 = Math.max(j1, Math.floor((s.y + 3 * s.sigma - grid.y0) / coarse));
+        }
+        i0 = Math.max(i0, 0);
+        j0 = Math.max(j0, 0);
+        i1 = Math.min(i1, grid.nx - 1);
+        j1 = Math.min(j1, grid.ny - 1);
+        if (i1 < i0 || j1 < j0) continue;
+        const cols = i1 - i0 + 1, rows = j1 - j0 + 1;
+        const fine = depositionGrid(narrow, {
+            yieldKt, fissionFraction, normalization, cellSize: coarse / splits,
+            bounds: [grid.x0 + i0 * coarse, grid.y0 + j0 * coarse, grid.x0 + (i1 + 1) * coarse, grid.y0 + (j1 + 1) * coarse],
+        });
+        for (let j = 0; j < rows; j++) {
+            for (let i = 0; i < cols; i++) {
+                let most = 0, sum = 0;
+                for (let b = 0; b < splits; b++) {
+                    const row = (j * splits + b) * fine.nx + i * splits;
+                    if (j * splits + b >= fine.ny) break;
+                    for (let a = 0; a < splits && i * splits + a < fine.nx; a++) {
+                        const v = fine.values[row + a];
+                        sum += v;
+                        if (v > most) most = v;
+                    }
+                }
+                const k = (j0 + j) * grid.nx + i0 + i;
+                const above = most - sum / (splits * splits);
+                if (above > extra[k]) extra[k] = above;
+            }
+        }
+    }
+    const values = Float64Array.from(grid.values, (v, k) => v + extra[k]);
+    return {...grid, values};
+}
+
 // The area (square miles) where the dose rate is at least each of `doseRates`.
 export function contourAreas(grid, doseRates, scale = 1) {
     const cellSqMi = (grid.cell / 1000) ** 2 / SQ_KM_PER_SQ_MI;

@@ -1,10 +1,10 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Select} from "./ui";
-import {depositionGrid, landingSpots, profileFromTable} from "../map-shared/fallout/model.js";
+import {depositionGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
-import {formatYield, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
+import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
 import {
     fieldCovers,
     fieldWinds,
@@ -41,7 +41,7 @@ export const DOSE_BANDS = [
 export const WEAPON_CHOICES = [
     ...WEAPON_GROUPS.map((g) => ({
         group: g.name,
-        items: g.weapons.map((w) => ({value: w.key, label: `${w.name}, ${formatYield(w.yield_kt)}`})),
+        items: g.weapons.map((w) => ({value: w.key, label: `${w.name}, ${formatYieldAndFission(w.yield_kt, w.fission_fraction)}`})),
     })),
     {group: "Other", items: [{value: CUSTOM_WEAPON, label: "A yield of my own"}]},
 ];
@@ -198,7 +198,9 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
         if (offMap.length) console.warn(`Fallout: some spots of ${offMap.length} bursts were not on the map`, offMap);
         // As far as the faintest band drawn: no further, where nothing would show.
         const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
-        return depositionGrid(combineBursts(origin, runs), {yieldKt: 1, boundsFloor: floor});
+        const spots = combineBursts(origin, runs);
+        // The hot fallout close to a small burst is not averaged away in a grid over them all.
+        return sharpenGrid(depositionGrid(spots, {yieldKt: 1, boundsFloor: floor}), spots);
     };
     // On flat ground first: that is where the plumes are, so the terrain under them can be read.
     let grid = await run(null);
@@ -275,7 +277,8 @@ function TargetRow({target, onWeapon}) {
     return <div style={{marginBottom: "0.375rem"}}>
         <div><span aria-hidden>☢ </span><strong>{target.label}</strong></div>
         <div style={muted}>
-            {chosen.weapon ? chosen.weapon.name : "A yield of my own"}, {formatYield(chosen.yieldKt)}{" "}
+            {chosen.weapon ? chosen.weapon.name : "A yield of my own"},{" "}
+            {formatYieldAndFission(chosen.yieldKt, chosen.fissionFraction)}{" "}
             <a href="#" onClick={(e) => {
                 e.preventDefault();
                 setChanging(!changing);
@@ -491,7 +494,12 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                   onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
         <div style={{margin: "0.5rem 0"}}>
-            <div style={{fontWeight: 600}}>Dose rate 1 hour after the bursts</div>
+            <div style={{fontWeight: 600}}>Dose rate, as at 1 hour after the bursts</div>
+            <div style={muted}>
+                R/hr: roentgens an hour, about 10 mSv each. All the fallout is shown as if it were
+                already down 1 hour after the bursts. Downwind it arrives hours later, and has
+                weakened by then: about 10 times less 7 hours after the bursts.
+            </div>
             {DOSE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
                 <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem",
                     background: `rgb(${b.color.join(",")})`, opacity: 0.8}}/>
@@ -499,8 +507,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             </div>)}
         </div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
-            An estimate, not a forecast. Prototype: against fallout measured after test bursts it
-            is within about 2 to 4 times, and tends to show more than was measured.
+            An estimate, not a forecast. Prototype: on six Nevada test bursts it showed about 4
+            times the areas measured (from 2 to 8 times), more than was measured on every one.
             {busy && (progress ? ` Calculating ${progress.done} of ${progress.total}…` : " Calculating…")}
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>

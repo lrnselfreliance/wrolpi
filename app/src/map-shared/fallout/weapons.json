@@ -74,9 +74,10 @@
     },
     {
       "name": "France",
+      "_note": "SIPRI26: the TNA's yield is only bounded (less than 300 kt; MBDA calls it 'medium energy'), and it is thought to follow the TNO design, 150 kt. The old TN 81's 300 kt is not this warhead's.",
       "weapons": [
         {"key": "tno", "name": "TNO / TNO-2 (M51 submarine missile)", "yield_kt": 150, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "4-6 x 150 kt TNO"},
-        {"key": "tna", "name": "TNA (ASMPA-R cruise missile)", "yield_kt": 300, "yield_range_kt": [150, 300], "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "ASMPA-R/1 x [<300 kt]"}
+        {"key": "tna", "name": "TNA (ASMPA-R cruise missile)", "yield_kt": 150, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "ASMPA-R/1 x [<300 kt]"}
       ]
     },
     {

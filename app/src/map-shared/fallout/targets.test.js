@@ -1,5 +1,5 @@
 import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, offsetFrom, targetWeapon} from './targets.js';
-import {depositionGrid, landingSpots, SOURCE_NORMALIZATION} from './model.js';
+import {depositionGrid, landingSpots, sharpenGrid, SOURCE_NORMALIZATION} from './model.js';
 
 describe('a target\'s weapon', () => {
     test('is the one chosen for it, with its yield and fission share', () => {
@@ -57,3 +57,46 @@ describe('bursts far apart', () => {
         expect(combined.x - dx).toBeCloseTo(1000 * Math.cos(40 * Math.PI / 180) / Math.cos(25 * Math.PI / 180), 6);
     });
 });
+
+describe('a small burst far from a large one', () => {
+    // The highest dose rate (R/hr) on `grid` within `radius` m of x, y.
+    function hottest(grid, x, y, radius) {
+        let most = 0;
+        for (let j = 0; j < grid.ny; j++) {
+            for (let i = 0; i < grid.nx; i++) {
+                const cx = grid.x0 + (i + 0.5) * grid.cell, cy = grid.y0 + (j + 0.5) * grid.cell;
+                if (Math.hypot(cx - x, cy - y) <= radius) most = Math.max(most, grid.values[j * grid.nx + i]);
+            }
+        }
+        return most;
+    }
+
+    test('keeps its hot fallout close to ground zero on a grid over both', () => {
+        const profile = [[0, 0, 10]];
+        const small = {lat: 40, lon: -100}, large = {lat: 40, lon: -95.3};
+        const smallSpots = landingSpots({yieldKt: 1, profile});
+        const alone = depositionGrid(smallSpots, {yieldKt: 1, boundsFloor: 0.1});
+        const own = hottest(alone, 0, 0, 4000);
+        expect(own).toBeGreaterThan(100);
+
+        const spots = combineBursts(small, [
+            {burst: small, spots: smallSpots, yieldKt: 1, fissionFraction: 1},
+            {burst: large, spots: landingSpots({yieldKt: 300, profile}), yieldKt: 300, fissionFraction: 0.5},
+        ]);
+        const coarse = depositionGrid(spots, {yieldKt: 1, boundsFloor: 0.1});
+        expect(coarse.cell).toBeGreaterThan(1000);
+        // Averaged over cells kilometers wide, the 100 R/hr fallout is gone...
+        expect(hottest(coarse, 0, 0, 4000)).toBeLessThan(100);
+        // ...and sharpened, it is kept.
+        const sharp = sharpenGrid(coarse, spots);
+        expect(hottest(sharp, 0, 0, 4000)).toBeGreaterThan(Math.max(100, own * 0.6));
+        expect(hottest(sharp, 0, 0, 4000)).toBeLessThan(own * 1.2);
+        // Far downwind, where only wide fallout lands, the grid is as it was.
+        const [lx, ly] = offsetFrom(small, large);
+        const k = Math.floor((ly + 200000 - coarse.y0) / coarse.cell) * coarse.nx
+            + Math.floor((lx - coarse.x0) / coarse.cell);
+        expect(coarse.values[k]).toBeGreaterThan(0);
+        expect(sharp.values[k]).toBe(coarse.values[k]);
+    });
+});
+

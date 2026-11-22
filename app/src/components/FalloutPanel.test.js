@@ -13,12 +13,12 @@ describe('the fallout panel\'s weapons', () => {
     test('each read differently, by name and yield', () => {
         const labels = WEAPON_CHOICES.flatMap((g) => g.items.map((i) => i.label));
         expect(new Set(labels).size).toBe(labels.length);
-        expect(labels).toContain('B61-12 bomb, 0.3 kt');
+        expect(labels).toContain('B61-12 bomb, 0.3 kt, half fission');
     });
 
     test('say their yield', () => {
         const w88 = WEAPON_CHOICES[0].items.find((i) => i.value === 'w88');
-        expect(w88.label).toBe('W88 (Trident II D5), 455 kt');
+        expect(w88.label).toBe('W88 (Trident II D5), 455 kt, half fission');
     });
 });
 

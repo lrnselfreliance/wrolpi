@@ -41,9 +41,8 @@ class MapPinUpdateRequest:
 
 @dataclass
 class MapFalloutWindsRequest:
-    # A browser sends a whole number of degrees as an integer.
-    lat: float | int
-    lon: float | int
+    # The places ([lat, lon]) the field of winds is to cover: the targets.
+    places: list
 
 
 @dataclass

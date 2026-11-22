@@ -35,13 +35,6 @@ export function offsetFrom(origin, point) {
     return [(point.lon - origin.lon) * perLon, (point.lat - origin.lat) * METERS_PER_DEGREE];
 }
 
-// The middle of `points` ({lat, lon}).
-export function middleOf(points) {
-    const lat = points.reduce((a, p) => a + p.lat, 0) / points.length;
-    const lon = points.reduce((a, p) => a + p.lon, 0) / points.length;
-    return {lat, lon};
-}
-
 // The landing spots of several bursts on one map, around `origin`: runs are [{burst ({lat, lon}),
 // spots (as landingSpots gives them, around the burst), yieldKt, fissionFraction}].  Each spot is
 // moved to where it is from `origin`, and carries its burst's fission yield (kt), so the spots of

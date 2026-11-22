@@ -1,12 +1,21 @@
-import React, {useContext, useEffect, useRef, useState} from "react";
+import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Select} from "./ui";
 import {depositionGrid, landingSpots, profileFromTable} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
 import {formatYield, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
-import {forecastAge, forecastExpired, forecastProfile, nearestHour, rainAhead} from "../map-shared/fallout/winds.js";
-import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, middleOf, targetWeapon} from "../map-shared/fallout/targets.js";
+import {
+    fieldCovers,
+    fieldWinds,
+    forecastAge,
+    forecastExpired,
+    nearestHour,
+    nearestPoint,
+    prepareField,
+    rainNear,
+} from "../map-shared/fallout/winds.js";
+import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
 import {fetchFalloutWinds, getLatestFalloutWinds} from "../api";
 import {StatusContext} from "../contexts/contexts";
 
@@ -104,10 +113,9 @@ export function gridCorners(grid, lon, lat) {
     return [[west, north], [east, north], [east, south], [west, south]];
 }
 
-// The wind profile the model takes, for the wind chosen: a forecast hour (heights above ground zero,
-// `groundElevation` m above sea level), one wind at every height, or a sample.
-export function windProfile({wind, direction, speed, forecast, hour, groundElevation}) {
-    if (wind === FORECAST && forecast) return forecastProfile(forecast.hours[hour], groundElevation);
+// The wind profile the model takes, for a wind not of the forecast: one wind at every height (also
+// while there is no forecast), or a sample.
+export function windProfile({wind, direction, speed}) {
     const rows = wind === "manual" || wind === FORECAST
         ? [[0, direction, speed]]
         : shots.shots.find((s) => s.name === wind).wind.map(([z, d, s], _, all) => [z - all[0][0], d, s]);
@@ -158,11 +166,13 @@ function yielder() {
 }
 
 // The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) on one grid around the first:
-// {grid, origin, terrainStatus}.  `profileFor(groundElevation)` gives the winds over a burst.
-// `onProgress(done, total)` hears how far it has got, `onFlat(grid)` gets the fallout on flat ground
-// while the terrain is read, and `cancelled()` stops it.
-export async function simulateBursts(bursts, {profileFor, forecastElevation = 0, useTerrain = true,
-    cancelled = () => false, onProgress = () => null, onFlat = () => null}) {
+// {grid, origin, terrainStatus}.  `windsFor(burst, groundElevation)` gives the winds over a burst, as
+// landingSpots takes them ({profile} or {winds}), or `profileFor(groundElevation)` its profile.
+// `groundOf(burst)` is how high (m) its ground is until the terrain is read.  `onProgress(done,
+// total)` hears how far it has got, `onFlat(grid)` gets the fallout on flat ground while the terrain
+// is read, and `cancelled()` stops it.
+export async function simulateBursts(bursts, {windsFor = null, profileFor = null, groundOf = () => 0,
+    useTerrain = true, cancelled = () => false, onProgress = () => null, onFlat = () => null}) {
     const origin = bursts[0];
     const pause = yielder();
     const total = useTerrain ? bursts.length * 2 : bursts.length;
@@ -171,10 +181,9 @@ export async function simulateBursts(bursts, {profileFor, forecastElevation = 0,
         const runs = [], offMap = [];
         for (const b of bursts) {
             const terrain = terrainOf ? terrainOf(b) : null;
-            const ground = terrain ? terrain.elevation : forecastElevation;
-            const spots = landingSpots({
-                yieldKt: b.yieldKt, profile: profileFor(ground), terrain, siteElevation: Math.max(ground, 0),
-            });
+            const ground = terrain ? terrain.elevation : groundOf(b);
+            const winds = windsFor ? windsFor(b, ground) : {profile: profileFor(ground)};
+            const spots = landingSpots({yieldKt: b.yieldKt, ...winds, terrain, siteElevation: Math.max(ground, 0)});
             // A spot not on the map (from ground with no number under it) would break the whole grid.
             const finite = spots.filter((s) => Number.isFinite(s.x) && Number.isFinite(s.y) && s.sigma > 0);
             if (finite.length < spots.length) offMap.push(b);
@@ -282,6 +291,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [wind, setWind] = useState(FORECAST);
     const [direction, setDirection] = useState(270);
     const [speed, setSpeed] = useState(20);
+    // The field of forecast winds over the targets fetched most recently.
     const [forecast, setForecast] = useState(null);
     const [hour, setHour] = useState(0);
     const [fetching, setFetching] = useState(false);
@@ -306,25 +316,28 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         getLatestFalloutWinds().then((latest) => {
             if (cancelled || !latest) return;
             setForecast(latest);
-            setHour(nearestHour(latest));
+            setHour(nearestHour(latest.hours));
         });
         return () => {
             cancelled = true;
         };
     }, []);
 
+    const prepared = useMemo(() => forecast ? prepareField(forecast) : null, [forecast]);
+    const useField = wind === FORECAST && !!prepared;
+
     const fetchForecast = async () => {
-        // For the middle of the bursts, or of the map when there are none.
-        const place = bursts.length ? middleOf(bursts) : (() => {
+        // Over the bursts, or the middle of the map when there are none.
+        const places = bursts.length ? bursts.map((b) => [b.lat, b.lon]) : (() => {
             const c = map.getCenter();
-            return {lat: c.lat, lon: c.lng};
+            return [[c.lat, c.lng]];
         })();
         setFetching(true);
-        const fetched = await fetchFalloutWinds(place.lat, place.lon);
+        const fetched = await fetchFalloutWinds(places);
         setFetching(false);
         if (!fetched) return;
         setForecast(fetched);
-        setHour(nearestHour(fetched));
+        setHour(nearestHour(fetched.hours));
         setWind(FORECAST);
     };
 
@@ -337,14 +350,18 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             return;
         }
         setBusy(true);
-        const winds = {wind, direction: Number(direction) || 0, speed: Number(speed) || 0, forecast, hour};
-        // Until the terrain is read, ground zero is as high as the forecast's ground.
-        const forecastElevation = forecast && wind === FORECAST ? forecast.elevation : 0;
+        const profile = windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0});
+        const startMs = useField ? Date.parse(forecast.hours[hour]) : 0;
+        // Each burst is carried by the winds where it is, from the hour chosen.
+        const windsFor = useField
+            ? (b, groundElevation) => ({winds: fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation, startMs})})
+            : () => ({profile});
+        // Until the terrain is read, ground zero is as high as the forecast's ground near it.
+        const groundOf = useField ? (b) => forecast.points[nearestPoint(prepared, b.lat, b.lon)].elevation : () => 0;
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
             const result = await simulateBursts(bursts, {
-                profileFor: (groundElevation) => windProfile({...winds, groundElevation}),
-                forecastElevation, useTerrain, cancelled: () => cancelled,
+                windsFor, groundOf, useTerrain, cancelled: () => cancelled,
                 onProgress: (done, total) => !cancelled && setProgress({done, total}),
                 // Something to look at while the terrain is read.
                 onFlat: (grid) => {
@@ -438,8 +455,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         <Select label="Wind" size="xs" data={WINDS} value={wind} onChange={(v) => v && setWind(v)}
                 allowDeselect={false} comboboxProps={DROPDOWN}/>
         {wind === FORECAST && <ForecastControls
-            forecast={forecast} hour={hour} onHour={setHour} online={online} fetching={fetching}
-            onFetch={fetchForecast}/>}
+            forecast={forecast} prepared={prepared} bursts={bursts} hour={hour} onHour={setHour} online={online}
+            fetching={fetching} onFetch={fetchForecast}/>}
         {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
@@ -466,8 +483,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     </div>;
 }
 
-// The forecast winds aloft: which hour, how old, and fetching a new one.
-function ForecastControls({forecast, hour, onHour, online, fetching, onFetch}) {
+// The forecast winds aloft: which hour, how old, where they reach, and fetching a new field.
+function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fetching, onFetch}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     const fetchButton = <Button size="xs" onClick={onFetch} disabled={!online || fetching}
                                 style={{marginTop: "0.25rem"}}>
@@ -480,23 +497,29 @@ function ForecastControls({forecast, hour, onHour, online, fetching, onFetch}) {
             <div>{fetchButton}</div>
         </div>;
     }
-    const nearest = nearestHour(forecast);
-    const hours = forecast.hours.map((h, i) => ({value: String(i), label: hourLabel(h.time, i === nearest)}));
+    const nearest = nearestHour(forecast.hours);
+    const hours = forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
     const age = forecastAge(forecast);
-    const rain = rainAhead(forecast, hour);
+    const outside = bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length;
+    const rainy = bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length;
+    const points = forecast.points.length;
     return <div>
         <Select label="Hour of the bursts" size="xs" data={hours} value={String(hour)}
                 onChange={(v) => v !== null && onHour(Number(v))} allowDeselect={false}
                 maxDropdownHeight={240} comboboxProps={DROPDOWN}/>
         <div style={muted}>
-            {forecast.source}, for {Math.abs(forecast.lat)}°{forecast.lat >= 0 ? "N" : "S"}{" "}
-            {Math.abs(forecast.lon)}°{forecast.lon >= 0 ? "E" : "W"}, fetched{" "}
-            {age < 1 ? "within the hour" : `${Math.round(age)} hours ago`}.
-            {forecastExpired(forecast) && " It has run out: its last hour is shown."}
+            {forecast.source}, {points === 1 ? "1 place" : `${points} places`} {forecast.spacing}° apart,
+            fetched {age < 1 ? "within the hour" : `${Math.round(age)} hours ago`}. Fallout is carried by
+            the wind where it is, as it changes hour by hour.
+            {forecastExpired(forecast) && " It has run out: its last hour is used from then on."}
         </div>
-        {rain >= RAIN_WARNING_MM && <div style={{...muted, color: "var(--warning)"}}>
-            Rain is forecast ({rain.toFixed(1)} mm in the 6 hours from then). Rain brings fallout down
-            in concentrated places this map does not show.
+        {outside > 0 && <div style={{...muted, color: "var(--warning)"}}>
+            {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside these winds: the nearest are
+            used. Fetch again to cover {outside === 1 ? "it" : "them"}.
+        </div>}
+        {rainy > 0 && <div style={{...muted, color: "var(--warning)"}}>
+            Rain is forecast near {rainy === 1 ? "1 burst" : `${rainy} bursts`} in the 6 hours from then.
+            Rain brings fallout down in concentrated places this map does not show.
         </div>}
         {fetchButton}
     </div>;

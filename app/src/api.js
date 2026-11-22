@@ -1712,16 +1712,7 @@ export async function mapUnsubscribe(region) {
     }
 }
 
-// The forecast winds aloft last fetched for a place (the fallout simulator), or null.
-export async function getFalloutWinds(lat, lon) {
-    const response = await apiGet(`${API_URI}/map/fallout/winds?lat=${lat}&lon=${lon}`);
-    if (response.ok) {
-        return (await response.json()).winds;
-    }
-    return null;
-}
-
-// The forecast winds aloft fetched most recently, for any place (the fallout simulator), or null.
+// The field of forecast winds aloft fetched most recently (the fallout simulator), or null.
 export async function getLatestFalloutWinds() {
     const response = await apiGet(`${API_URI}/map/fallout/winds/latest`);
     if (response.ok) {
@@ -1750,9 +1741,10 @@ export async function updateMapTargetWeapon(pinId, weapon) {
     return response.ok;
 }
 
-// Fetch the forecast winds aloft for a place (the fallout simulator); null when it cannot be.
-export async function fetchFalloutWinds(lat, lon) {
-    const response = await apiPost(`${API_URI}/map/fallout/winds`, {lat, lon});
+// Fetch the field of forecast winds aloft over `places` ([[lat, lon]], the targets; the fallout
+// simulator); null when it cannot be.
+export async function fetchFalloutWinds(places) {
+    const response = await apiPost(`${API_URI}/map/fallout/winds`, {places});
     if (response.ok) {
         return (await response.json()).winds;
     }

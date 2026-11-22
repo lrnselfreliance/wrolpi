@@ -24,18 +24,9 @@ describe('the fallout panel\'s weapons', () => {
 
 describe('the fallout panel\'s winds', () => {
     const {windProfile, hourLabel} = require('./FalloutPanel');
-    const forecast = {
-        elevation: 600,
-        hours: [{time: '2026-11-22T00:00Z', winds: [[610, 2, 180], [1500, 10, 270]]}],
-    };
-
-    test('take a forecast hour\'s winds, at heights above ground zero', () => {
-        const profile = windProfile({wind: 'forecast', forecast, hour: 0, groundElevation: 100});
-        expect(profile.map((p) => p[0])).toEqual([510, 1400]);
-    });
 
     test('fall back to one wind at every height until there is a forecast', () => {
-        const profile = windProfile({wind: 'forecast', forecast: null, direction: 270, speed: 10});
+        const profile = windProfile({wind: 'forecast', direction: 270, speed: 10});
         expect(profile).toHaveLength(1);
         expect(profile[0][1]).toBeGreaterThan(0);
     });
@@ -53,6 +44,17 @@ describe('the fallout of several bursts', () => {
         {lat: 40, lon: -105, yieldKt: 10, fissionFraction: 0.5},
         {lat: 40.5, lon: -104, yieldKt: 100, fissionFraction: 0.5},
     ];
+
+    test('carries each burst by its own winds, from its own ground', async () => {
+        const asked = [];
+        const windsFor = (b, ground) => {
+            asked.push([b.lat, ground]);
+            return {profile: [[0, 10, 0]]};
+        };
+        const result = await simulateBursts(bursts, {windsFor, groundOf: (b) => b.lat * 10, useTerrain: false});
+        expect(asked).toEqual([[40, 400], [40.5, 405]]);
+        expect(result.grid.values.some((v) => v > 0)).toBe(true);
+    });
 
     test('is drawn on one grid around the first burst', async () => {
         const one = await simulateBursts(bursts.slice(0, 1), {profileFor, useTerrain: false});

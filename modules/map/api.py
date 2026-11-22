@@ -341,31 +341,25 @@ async def get_export_pdf(_: Request, export_id: str):
     return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')
 
 
-@map_bp.get('/fallout/winds')
-@openapi.description('The forecast winds aloft last fetched for a place, for the fallout simulator')
-def get_fallout_winds(request: Request):
-    try:
-        lat, lon = float(request.args.get('lat')), float(request.args.get('lon'))
-    except (TypeError, ValueError):
-        return response.json({'error': 'lat and lon are required'}, HTTPStatus.BAD_REQUEST)
-    return json_response(dict(winds=winds.cached_winds(lat, lon)), HTTPStatus.OK)
-
-
 @map_bp.get('/fallout/winds/latest')
-@openapi.description('The forecast winds aloft fetched most recently, for any place')
+@openapi.description('The field of forecast winds aloft fetched most recently')
 def get_latest_fallout_winds(_: Request):
-    return json_response(dict(winds=winds.latest_winds()), HTTPStatus.OK)
+    return json_response(dict(winds=winds.latest_field()), HTTPStatus.OK)
 
 
 @map_bp.post('/fallout/winds')
-@openapi.description('Fetch the forecast winds aloft for a place, for the fallout simulator')
+@openapi.description('Fetch the field of forecast winds aloft over places (the targets)')
 @validate(schema.MapFalloutWindsRequest)
 async def post_fallout_winds(_: Request, body: schema.MapFalloutWindsRequest):
     if not flags.have_internet.is_set():
         return response.json({'error': 'WROLPi has no Internet, so it cannot fetch a forecast'},
                              HTTPStatus.SERVICE_UNAVAILABLE)
     try:
-        forecast = await winds.fetch_winds(body.lat, body.lon)
+        places = [(float(lat), float(lon)) for lat, lon in body.places]
+    except (TypeError, ValueError):
+        return response.json({'error': 'places are [lat, lon]'}, HTTPStatus.BAD_REQUEST)
+    try:
+        field = await winds.fetch_wind_field(places)
     except winds.WindsError as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_GATEWAY)
-    return json_response(dict(winds=forecast), HTTPStatus.OK)
+    return json_response(dict(winds=field), HTTPStatus.OK)

@@ -1,4 +1,4 @@
-import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, middleOf, offsetFrom, targetWeapon} from './targets.js';
+import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, offsetFrom, targetWeapon} from './targets.js';
 import {depositionGrid, landingSpots, SOURCE_NORMALIZATION} from './model.js';
 
 describe('a target\'s weapon', () => {
@@ -26,7 +26,6 @@ describe('several bursts', () => {
         const [x, y] = offsetFrom({lat: 0, lon: 0}, {lat: 1, lon: 1});
         expect(x).toBeCloseTo(111320, 0);
         expect(y).toBeCloseTo(111320, 0);
-        expect(middleOf([{lat: 0, lon: 0}, {lat: 2, lon: 4}])).toEqual({lat: 1, lon: 2});
     });
 
     test('put down the fallout of each, by its fission yield, on one grid', () => {

@@ -52,6 +52,12 @@ const SIZE_BINS = 48;
 const SUBDIVISIONS = 10;
 // How finely a fall is integrated, in meters of height.
 const FALL_STEP = 50;
+// The longest step (m) and time (s) a particle falls in at once through winds which change with
+// place and time.
+const FIELD_STEP = 250;
+const FIELD_SECONDS = 1200;
+// No wind: the profile of fall paths when the winds are taken where and when a particle is.
+const CALM = [[0, 0, 0]];
 // When the cloud stops rising (s) [SIMFIC, Table 1, from DELFIC], for yields of 10^-3 to 10^5 kt.
 const STOP_TIMES = [300, 300, 300, 300, 300, 280, 200, 160, 150];
 
@@ -242,14 +248,14 @@ function updraft(cloud, height, t) {
 // The rise of a particle from `height` in the fireball, until the cloud stops: {height, x, y (m),
 // highest (m), highest at (s), landed (whether it met the ground first), seconds}.  `ground` is
 // ignored when it is null.
-function rise(cloud, path, height, profile, bottom, ground) {
+function rise(cloud, path, height, profile, bottom, ground, winds = null) {
     let z = height, x = 0, y = 0, t = cloud.start, highest = z, highestAt = t;
     while (t < cloud.stop) {
         const dt = Math.min(Math.max(0.02 * t, 0.2), 5, cloud.stop - t);
         const w1 = updraft(cloud, z, t) - speedOn(path, z, bottom);
         const zMid = z + w1 * dt / 2;
         const w2 = updraft(cloud, zMid, t + dt / 2) - speedOn(path, zMid, bottom);
-        const [u, v] = windAt(profile, zMid);
+        const [u, v] = winds ? winds.at(x, y, zMid, t + dt / 2) : windAt(profile, zMid);
         z += w2 * dt;
         x += u * dt;
         y += v * dt;
@@ -262,6 +268,35 @@ function rise(cloud, path, height, profile, bottom, ground) {
         if (!ground && z < bottom) break;
     }
     return {height: z, x, y, highest, highestAt, landed: false, seconds: t};
+}
+
+// Where a particle falling from `height`, `x0` m east and `y0` m north of ground zero, `t0` seconds
+// after the burst, lands, carried by `winds` (see landingSpots) where and when it is: [east, north,
+// seconds] of where it lands and how long it took, or null if it is still falling at `maxSeconds`.
+// It falls by up to FIELD_STEP meters at a time, and for no longer than FIELD_SECONDS, when the
+// winds change little; it lands where the line of its last step meets the ground.
+function landingThrough(winds, diameter, siteElevation, height, x0, y0, t0, bottom, ground, maxSeconds) {
+    let z = height, x = x0, y = y0, t = t0, above = z - ground(x, y);
+    while (z > bottom) {
+        const speed = settlingSpeedAt(diameter, siteElevation + z);
+        const step = Math.min(FIELD_STEP, Math.max(speed * FIELD_SECONDS, FALL_STEP), z - bottom);
+        const middle = z - step / 2;
+        const dt = step / settlingSpeedAt(diameter, siteElevation + middle);
+        const [u, v] = winds.at(x, y, middle, t + dt / 2);
+        const nextAbove = z - step - ground(x + u * dt, y + v * dt);
+        if (nextAbove <= 0) {
+            // Down to the ground, part of the way.
+            const f = above > 0 ? above / (above - nextAbove) : 0;
+            return [x + f * u * dt, y + f * v * dt, t + f * dt - t0];
+        }
+        x += u * dt;
+        y += v * dt;
+        t += dt;
+        z -= step;
+        above = nextAbove;
+        if (t > maxSeconds) return null;
+    }
+    return [x, y, t - t0];
 }
 
 // How wide (sigma, m) a spot is when it lands: as wide as the cloud was where it left it,
@@ -286,8 +321,14 @@ export function landedSigma(sigma0, highest, speed) {
 // north of ground zero, above the ground at ground zero, and the lowest it gets.  A particle lands
 // where it first meets the ground: early on a ridge in its way, late in a valley.  Without it the
 // ground is flat.
+//
+// `winds`, if given, is {at(x, y, z, t)}: the wind [east, north] (m/s) x meters east and y north of
+// ground zero, z meters above its ground, t seconds after the burst; a particle is then carried by
+// the wind where it is, at the height it is, when it is there, and `profile` is not used.
 export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation = 0, maxHours = 48,
-                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, stabilized = null}) {
+                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, stabilized = null,
+                                 winds = null}) {
+    if (winds) profile = CALM;
     const cloud = risingCloud(yieldKt, Math.max(burstHeight, 0), stabilized);
     const down = activityDown(yieldKt, burstHeight);
     // Paths go down to 2 km below ground zero: the first parcel of a size to leave the cloud is
@@ -304,10 +345,15 @@ export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation =
         const first = rise(cloud, path, cloud.initialBase, profile, bottom, null);
         for (let j = 0; j < SUBDIVISIONS; j++) {
             const start = cloud.initialBase + (j + 0.5) / SUBDIVISIONS * (cloud.initialTop - cloud.initialBase);
-            const r = rise(cloud, path, start, profile, bottom, ground);
+            const r = rise(cloud, path, start, profile, bottom, ground, winds);
             let x = r.x, y = r.y, seconds = r.seconds;
             if (!r.landed) {
-                const [dx, dy, fallSeconds] = landing(path, r.height, r.x, r.y, bottom, ground);
+                const landed = winds
+                    ? landingThrough(winds, diameter, siteElevation, r.height, r.x, r.y, r.seconds, bottom, ground,
+                        maxHours * 3600)
+                    : landing(path, r.height, r.x, r.y, bottom, ground);
+                if (!landed) continue;
+                const [dx, dy, fallSeconds] = landed;
                 x = dx;
                 y = dy;
                 seconds += fallSeconds;

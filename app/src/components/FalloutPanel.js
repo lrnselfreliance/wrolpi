@@ -168,18 +168,22 @@ export async function simulateBursts(bursts, {profileFor, forecastElevation = 0,
     const total = useTerrain ? bursts.length * 2 : bursts.length;
     let done = 0;
     const run = async (terrainOf) => {
-        const runs = [];
+        const runs = [], offMap = [];
         for (const b of bursts) {
             const terrain = terrainOf ? terrainOf(b) : null;
             const ground = terrain ? terrain.elevation : forecastElevation;
             const spots = landingSpots({
                 yieldKt: b.yieldKt, profile: profileFor(ground), terrain, siteElevation: Math.max(ground, 0),
             });
-            runs.push({burst: b, spots, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
+            // A spot not on the map (from ground with no number under it) would break the whole grid.
+            const finite = spots.filter((s) => Number.isFinite(s.x) && Number.isFinite(s.y) && s.sigma > 0);
+            if (finite.length < spots.length) offMap.push(b);
+            runs.push({burst: b, spots: finite, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
             onProgress(++done, total);
             await pause();
             if (cancelled()) return null;
         }
+        if (offMap.length) console.warn(`Fallout: some spots of ${offMap.length} bursts were not on the map`, offMap);
         // As far as the faintest band drawn: no further, where nothing would show.
         const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
         return depositionGrid(combineBursts(origin, runs), {yieldKt: 1, boundsFloor: floor});

@@ -35,6 +35,13 @@ describe('an elevation grid', () => {
         expect(terrain.lowest).toBe(0);
     });
 
+    test('around a burst, makes do where the grid has no number', () => {
+        const holey = {west: -1, south: -1, step: 0.5, nx: 2, ny: 2, values: Float32Array.from([0, NaN, 200, 300])};
+        const terrain = terrainAround(holey, -1, -1);
+        expect(Number.isFinite(terrain.lowest)).toBe(true);
+        expect(terrain.ground(0.5 * 111320 * Math.cos(-Math.PI / 180), 0)).toBe(0);
+    });
+
     test('of the Nevada Test Site, has its shots at the elevations recorded for them', () => {
         const nts = decodeGrid(ntsTerrain);
         for (const shot of shots.shots) {

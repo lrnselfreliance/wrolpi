@@ -24,9 +24,17 @@ export function elevationAt(grid, lon, lat) {
     const j = Math.min(Math.floor(fy), grid.ny - 2);
     const dx = fx - i, dy = fy - j;
     const v = grid.values;
-    const at = (a, b) => v[b * grid.nx + a];
-    return (at(i, j) * (1 - dx) + at(i + 1, j) * dx) * (1 - dy)
-        + (at(i, j + 1) * (1 - dx) + at(i + 1, j + 1) * dx) * dy;
+    // A sample with no number is left out, and the others weighed as they are.
+    let sum = 0, weight = 0;
+    for (const [a, b, w] of [[i, j, (1 - dx) * (1 - dy)], [i + 1, j, dx * (1 - dy)],
+        [i, j + 1, (1 - dx) * dy], [i + 1, j + 1, dx * dy]]) {
+        const value = v[b * grid.nx + a];
+        if (w > 0 && Number.isFinite(value)) {
+            sum += value * w;
+            weight += w;
+        }
+    }
+    return weight > 0 ? sum / weight : NaN;
 }
 
 // The terrain around a burst at `lon`, `lat`, as the model takes it: {ground(x, y), lowest, elevation}.
@@ -36,10 +44,15 @@ export function terrainAround(grid, lon, lat) {
     const elevation = elevationAt(grid, lon, lat);
     const perLon = METERS_PER_DEGREE * Math.cos(lat * Math.PI / 180);
     let lowest = Infinity;
-    for (const v of grid.values) lowest = Math.min(lowest, v);
+    for (const v of grid.values) if (Number.isFinite(v)) lowest = Math.min(lowest, v);
+    if (!Number.isFinite(lowest)) lowest = elevation;
     return {
         elevation,
         lowest: lowest - elevation,
-        ground: (x, y) => elevationAt(grid, lon + x / perLon, lat + y / METERS_PER_DEGREE) - elevation,
+        // Where the grid has no number, the ground is as high as ground zero.
+        ground: (x, y) => {
+            const e = elevationAt(grid, lon + x / perLon, lat + y / METERS_PER_DEGREE) - elevation;
+            return Number.isFinite(e) ? e : 0;
+        },
     };
 }

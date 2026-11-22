@@ -16,6 +16,12 @@ function tileX(lon, z) {
     return Math.floor((lon + 180) / 360 * 2 ** z);
 }
 
+// The tile column `x` names at zoom `z`, wrapped around the antimeridian.
+function wrapTileX(x, z) {
+    const n = 2 ** z;
+    return ((x % n) + n) % n;
+}
+
 function tileY(lat, z) {
     const r = lat * Math.PI / 180;
     return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z);
@@ -49,7 +55,8 @@ async function openTerrainFiles() {
 // The terrarium elevation (m) at `lon`, `lat` of the read tiles, or null where none was read.
 function sample(tiles, n, lon, lat) {
     const r = lat * Math.PI / 180;
-    const fx = (lon + 180) / 360 * n;
+    // A plume may cross the antimeridian: longitudes wrap.
+    const fx = ((((lon + 180) % 360) + 360) % 360) / 360 * n;
     const fy = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
     const image = tiles.get(`${Math.floor(fx)}/${Math.floor(fy)}`);
     if (!image) return null;
@@ -59,7 +66,8 @@ function sample(tiles, n, lon, lat) {
     const d = image.data;
     // Terrarium: meters = R * 256 + G + B / 256 - 32768.  Below sea level is the sea floor, mostly:
     // fallout lands on the water.
-    return Math.max(0, d[p] * 256 + d[p + 1] + d[p + 2] / 256 - 32768);
+    const meters = d[p] * 256 + d[p + 1] + d[p + 2] / 256 - 32768;
+    return Number.isFinite(meters) ? Math.max(0, meters) : null;
 }
 
 // An elevation grid over `bounds` ([west, south, east, north], degrees) around ground zero at `lon`,
@@ -88,9 +96,9 @@ export async function loadTerrainGrid(bounds, lon, lat) {
             reads.push((async () => {
                 for (const {tiles: file, header} of covering) {
                     if (header.maxZoom < zoom) continue;
-                    const tile = await file.getZxy(zoom, x, y);
+                    const tile = await file.getZxy(zoom, wrapTileX(x, zoom), y);
                     if (tile?.data) {
-                        tiles.set(`${x}/${y}`, await decodeTile(tile.data));
+                        tiles.set(`${wrapTileX(x, zoom)}/${y}`, await decodeTile(tile.data));
                         return;
                     }
                 }

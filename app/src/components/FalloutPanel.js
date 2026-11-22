@@ -596,10 +596,11 @@ export function legendHeading(show, after) {
 export function legendText(show, after) {
     if (show === TOTAL) {
         return "R: roentgens, about 10 mSv each. The dose of someone outdoors the whole time, from when the "
-            + "fallout arrives. Indoors is less: about 2 to 3 times in a house, 10 or more in a basement.";
+            + "fallout arrives, with the usual decay; real fallout can decay faster or slower, which only "
+            + "readings can tell. Indoors is less: about 2 to 3 times in a house, 10 or more in a basement.";
     }
     return "R/hr: roentgens an hour, about 10 mSv each. " + (after
-        ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts."
+        ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts. That is the usual decay; real fallout can decay faster or slower, which only readings can tell."
         : "All the fallout is shown as if it were already down 1 hour after the bursts. Downwind it arrives hours later, and has weakened by then: about 10 times less 7 hours after the bursts.");
 }
 

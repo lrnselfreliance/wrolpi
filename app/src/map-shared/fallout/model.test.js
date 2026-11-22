@@ -19,6 +19,7 @@ import {
 import {meanError, runNearField, runShot} from './validation.js';
 import data from './nts-shots.json';
 import nearField from './near-field-shots.json';
+import fm from './fm-3-11-3.json';
 
 // A profile of one wind at every height, blowing toward `toward` degrees at `speed` m/s.
 function steady(toward, speed) {
@@ -372,6 +373,83 @@ describe('the total dose, outdoors', () => {
         expect(sum(later)).toBeGreaterThan(sum(grid));
         const most = (grid) => grid.values.reduce((a, v) => Math.max(a, v), 0);
         expect(most(later)).toBeGreaterThan(most(all));
+    });
+});
+
+// Worked problems of the Army's manual, FM 3-3-1 Nuclear Contamination Avoidance (1994), with
+// standard decay (n = 1.2).  Its nomograms are read by eye, to a few percent.
+describe('the decay and dose of FM 3-3-1', () => {
+    test('a reading at H+5 is normalized to H+1 (Appendix F, Situation 1)', () => {
+        // 100 cGy/h at H+5 was 690 cGy/h at H+1.
+        expect(100 / decayFromH1(5)).toBeCloseTo(689.86, 1);
+    });
+
+    test('a stay from H+5 to H+8 under an H+1 rate of 400 (Chapter 6, overlapping fallout, Problem 2)', () => {
+        // The nomogram gives 125 cGy.
+        expect(400 * doseFromH1(5, 8)).toBeGreaterThan(125 * 0.95);
+        expect(400 * doseFromH1(5, 8)).toBeLessThan(125 * 1.05);
+    });
+
+    test('crossing fallout from H+3 for half an hour at an average H+1 rate of 100 (Chapter 6)', () => {
+        // 12 cGy.
+        expect(100 * doseFromH1(3, 3.5)).toBeGreaterThan(12 * 0.95);
+        expect(100 * doseFromH1(3, 3.5)).toBeLessThan(12 * 1.05);
+    });
+});
+
+// The Army's planning figures, FM 3-11.3 Appendix G (2006): what the model should roughly agree with
+// from a kiloton to megatons, the yields of modern weapons, which the test shots above do not reach.
+describe('the cloud and Zone I of FM 3-11.3', () => {
+    test('the stabilized cloud top is within about 10% from 1 kt to 10 Mt', () => {
+        for (const [kt, top] of fm.cloud.rows) {
+            const ratio = stabilizedCloud(kt).top / 1000 / top;
+            expect(ratio).toBeGreaterThan(0.88);
+            expect(ratio).toBeLessThan(1.1);
+        }
+    });
+
+    test('the cloud bottom is within about 25%, and the radius is narrower, up to a third', () => {
+        for (const [kt, , bottom, radius] of fm.cloud.rows) {
+            const c = stabilizedCloud(kt);
+            expect(c.base / 1000 / bottom).toBeGreaterThan(0.74);
+            expect(c.base / 1000 / bottom).toBeLessThan(1.12);
+            expect(c.radius / 1000 / radius).toBeGreaterThan(0.6);
+            expect(c.radius / 1000 / radius).toBeLessThan(1.0);
+        }
+    });
+
+    // The Zone I downwind distance of the nomogram, as its scales were read.
+    function fmZone1(kt, kmh) {
+        const {wind_kmh: w, yield_kt: y, distance_km: d} = fm.zone1;
+        const row = (s, v) => s.a - s.b * Math.log10(v / s.c);
+        const f = (d.x - w.x) / (y.x - w.x);
+        return d.c * Math.pow(10, (d.a - (row(w, kmh) + f * (row(y, kt) - row(w, kmh)))) / d.b);
+    }
+
+    // The model's: the furthest downwind someone outdoors gets 125 cGy (as R) in 4 hours from arrival.
+    function ourZone1(kt, kmh) {
+        const spots = landingSpots({yieldKt: kt, profile: [[0, kmh / 3.6, 0]]})
+            .map((s) => ({...s, activity: s.activity * doseFromH1(s.hours, s.hours + 4)}));
+        const grid = depositionGrid(spots, {yieldKt: kt});
+        let far = 0;
+        for (let j = 0; j < grid.ny; j++) {
+            for (let i = 0; i < grid.nx; i++) {
+                if (grid.values[j * grid.nx + i] >= 125) far = Math.max(far, grid.x0 + (i + 1) * grid.cell);
+            }
+        }
+        return far / 1000;
+    }
+
+    test('the nomogram is read as the manual reads it', () => {
+        for (const [kt, kmh, km] of fm.zone1.examples) expect(Math.abs(fmZone1(kt, kmh) / km - 1)).toBeLessThan(0.03);
+    });
+
+    test('Zone I reaches about as far, from 10 kt to 1 Mt', () => {
+        for (const [kt, kmh] of [[10, 32], [50, 9], [100, 30], [300, 32], [1000, 32]]) {
+            const ratio = ourZone1(kt, kmh) / fmZone1(kt, kmh);
+            expect(ratio).toBeGreaterThan(0.7);
+            expect(ratio).toBeLessThan(1.7);
+        }
     });
 });
 

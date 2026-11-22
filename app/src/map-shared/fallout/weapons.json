@@ -104,8 +104,8 @@
     {
       "name": "Improvised nuclear device",
       "weapons": [
-        {"key": "ind-1", "name": "Improvised device, 1 kt", "yield_kt": 1, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"},
-        {"key": "ind-10", "name": "Improvised device, 10 kt", "yield_kt": 10, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"}
+        {"key": "ind-1", "name": "Improvised device", "yield_kt": 1, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"},
+        {"key": "ind-10", "name": "Improvised device", "yield_kt": 10, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"}
       ]
     }
   ],

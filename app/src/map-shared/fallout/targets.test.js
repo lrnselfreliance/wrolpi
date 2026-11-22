@@ -47,3 +47,14 @@ describe('several bursts', () => {
         expect(combined[spots.length].x - combined[0].x).toBeCloseTo(111320 * Math.cos(40 * Math.PI / 180), 0);
     });
 });
+
+describe('bursts far apart', () => {
+    test('keep their plumes as wide east to west as at their own latitude', () => {
+        const spot = {x: 1000, y: 0, sigma: 1, activity: 1, hours: 1};
+        const origin = {lat: 40, lon: -75}, south = {lat: 25, lon: -80};
+        const [combined] = combineBursts(origin, [{burst: south, spots: [spot], yieldKt: 1, fissionFraction: 1}]);
+        const [dx] = offsetFrom(origin, south);
+        // 1000 m east at 25 degrees is more of a degree of longitude than 1000 m at 40.
+        expect(combined.x - dx).toBeCloseTo(1000 * Math.cos(40 * Math.PI / 180) / Math.cos(25 * Math.PI / 180), 6);
+    });
+});

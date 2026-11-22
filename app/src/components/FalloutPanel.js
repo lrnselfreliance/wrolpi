@@ -46,20 +46,44 @@ const WINDS = [
 // Rain this heavy in the hours ahead (mm) is worth a warning.
 const RAIN_WARNING_MM = 0.5;
 
-// The grid as an image: each cell colored by the highest band it reaches, transparent below them.
-export function gridImage(grid) {
+// Web Mercator's y of `lat` (degrees), and back.
+const mercatorY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+const mercatorLat = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
+// The map takes no latitude past the poles' edge of the Web Mercator world.
+const clampLat = (lat) => Math.min(Math.max(lat, -85), 85);
+
+// The grid's row (from the south) under each of `height` image rows (from the top), for a grid
+// around `lat`.  The map stretches an image evenly in Web Mercator between its corners, but the
+// grid's rows are evenly apart in latitude: over many degrees they part ways, so each image row
+// takes the grid row at its own latitude.
+export function imageRows(grid, lat, height) {
+    const north = clampLat(lat + (grid.y0 + grid.ny * grid.cell) / METERS_PER_DEGREE);
+    const south = clampLat(lat + grid.y0 / METERS_PER_DEGREE);
+    const top = mercatorY(north), bottom = mercatorY(south);
+    const rows = new Int32Array(height);
+    for (let r = 0; r < height; r++) {
+        const rowLat = mercatorLat(top + (r + 0.5) / height * (bottom - top));
+        const j = Math.floor(((rowLat - lat) * METERS_PER_DEGREE - grid.y0) / grid.cell);
+        rows[r] = Math.min(Math.max(j, 0), grid.ny - 1);
+    }
+    return rows;
+}
+
+// The grid as an image for a map, around `lat`: each cell colored by the highest band it reaches,
+// transparent below them.
+export function gridImage(grid, lat) {
     const canvas = document.createElement("canvas");
     canvas.width = grid.nx;
     canvas.height = grid.ny;
     const context = canvas.getContext("2d");
     const image = context.createImageData(grid.nx, grid.ny);
-    for (let j = 0; j < grid.ny; j++) {
-        // The grid's rows run from the south; the image's from the top.
-        const row = (grid.ny - 1 - j) * grid.nx;
+    const rows = imageRows(grid, lat, grid.ny);
+    for (let r = 0; r < grid.ny; r++) {
+        const from = rows[r] * grid.nx, to = r * grid.nx;
         for (let i = 0; i < grid.nx; i++) {
-            const band = DOSE_BANDS.find((b) => grid.values[j * grid.nx + i] >= b.rate);
+            const band = DOSE_BANDS.find((b) => grid.values[from + i] >= b.rate);
             if (!band) continue;
-            const p = (row + i) * 4;
+            const p = (to + i) * 4;
             image.data[p] = band.color[0];
             image.data[p + 1] = band.color[1];
             image.data[p + 2] = band.color[2];
@@ -74,8 +98,7 @@ export function gridImage(grid) {
 // `lon`, `lat`.
 export function gridCorners(grid, lon, lat) {
     const toLon = (x) => lon + x / (METERS_PER_DEGREE * Math.cos(lat * Math.PI / 180));
-    // The map takes no latitude past the poles' edge of the Web Mercator world.
-    const toLat = (y) => Math.min(Math.max(lat + y / METERS_PER_DEGREE, -85), 85);
+    const toLat = (y) => clampLat(lat + y / METERS_PER_DEGREE);
     const west = toLon(grid.x0), east = toLon(grid.x0 + grid.nx * grid.cell);
     const south = toLat(grid.y0), north = toLat(grid.y0 + grid.ny * grid.cell);
     return [[west, north], [east, north], [east, south], [west, south]];
@@ -323,13 +346,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 // Something to look at while the terrain is read.
                 onFlat: (grid) => {
                     if (cancelled) return;
-                    drawn.current = {url: gridImage(grid), coordinates: gridCorners(grid, bursts[0].lon, bursts[0].lat)};
+                    drawn.current = {url: gridImage(grid, bursts[0].lat), coordinates: gridCorners(grid, bursts[0].lon, bursts[0].lat)};
                     draw();
                 },
             });
             if (cancelled || !result) return;
             setProgress(null);
-            drawn.current = {url: gridImage(result.grid), coordinates: gridCorners(result.grid, result.origin.lon, result.origin.lat)};
+            drawn.current = {url: gridImage(result.grid, result.origin.lat), coordinates: gridCorners(result.grid, result.origin.lon, result.origin.lat)};
             draw();
             setTerrainStatus(result.terrainStatus);
             setBusy(false);

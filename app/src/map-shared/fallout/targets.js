@@ -46,12 +46,17 @@ export function middleOf(points) {
 // spots (as landingSpots gives them, around the burst), yieldKt, fissionFraction}].  Each spot is
 // moved to where it is from `origin`, and carries its burst's fission yield (kt), so the spots of
 // every burst go on one grid as if of a single kiloton of fission (depositionGrid with yieldKt 1).
+//
+// The grid's meters east are degrees of longitude at the origin's latitude (as offsetFrom, and the
+// map image, take them); a burst's own meters east are shorter or longer there by how much a degree
+// is at its latitude, so they are scaled to the grid's.
 export function combineBursts(origin, runs) {
     const combined = [];
     for (const {burst, spots, yieldKt, fissionFraction} of runs) {
         const [dx, dy] = offsetFrom(origin, burst);
+        const east = Math.cos(origin.lat * Math.PI / 180) / Math.cos(burst.lat * Math.PI / 180);
         const kt = yieldKt * fissionFraction;
-        for (const s of spots) combined.push({...s, x: s.x + dx, y: s.y + dy, activity: s.activity * kt});
+        for (const s of spots) combined.push({...s, x: dx + s.x * east, y: s.y + dy, activity: s.activity * kt});
     }
     return combined;
 }

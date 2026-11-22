@@ -67,3 +67,26 @@ describe('the fallout of several bursts', () => {
         expect(await simulateBursts(bursts, {profileFor, useTerrain: false, cancelled: () => true})).toBeNull();
     });
 });
+
+describe('the fallout image', () => {
+    const {imageRows} = require('./FalloutPanel');
+
+    test('takes each row from the grid row at its own latitude', () => {
+        // A grid from 20 to 80 degrees north, around 40: a tenth of a degree a row.
+        const grid = {y0: -20 * 111320, cell: 11132, ny: 600, nx: 1};
+        const rows = imageRows(grid, 40, 600);
+        // The top row is the grid's northernmost, the bottom its southernmost.
+        expect(rows[0]).toBe(599);
+        expect(rows[599]).toBe(0);
+        // Halfway down the image, in Web Mercator, is well north of halfway in latitude (50 degrees).
+        expect(rows[300]).toBeGreaterThan(330);
+        for (let r = 1; r < 600; r++) expect(rows[r]).toBeLessThanOrEqual(rows[r - 1]);
+    });
+
+    test('is the plain grid over a small area', () => {
+        const grid = {y0: -5000, cell: 100, ny: 100, nx: 1};
+        const rows = imageRows(grid, 40, 100);
+        expect(rows[0]).toBe(99);
+        expect(Math.abs(rows[50] - 49)).toBeLessThanOrEqual(1);
+    });
+});

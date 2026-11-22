@@ -504,17 +504,26 @@ export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, norm
 }
 
 // How much stronger (or weaker) fallout is `hours` after a burst than at H+1: the Way-Wigner
-// t^-1.2 of fission products' decay [Glasstone and Dolan, 9.145], good from minutes to months.
+// t^-1.2 of fission products' decay [Glasstone and Dolan, 9.145], good from about half an hour to
+// months.
 export function decayFromH1(hours) {
     return Math.pow(hours, -1.2);
 }
 
-// The dose rate (R/hr) `hours` after the bursts on a grid like `like` (as depositionGrid gives it, of
-// `spots`): only the fallout which has landed by then, as strong as it is then.  Every hour's grid
-// has `like`'s cells, so it is drawn in the same place.
-export function landedGrid(spots, like, hours, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
-    const landed = spots.filter((s) => s.hours <= hours);
-    const options = {yieldKt, fissionFraction, normalization};
+// The earliest a spot is taken to land (hours): t^-1.2 is fitted from about half an hour, and
+// grows without bound towards the burst.
+const EARLIEST_ARRIVAL = 0.1;
+
+// A grid like `like` (as depositionGrid gives it), of the spots landed by `hours`, each counted
+// `weight(spot)` times its H+1 dose rate.  Every hour's grid has `like`'s cells, so it is drawn in
+// the same place.
+function timedGrid(spots, like, hours, weight, options) {
+    const landed = [];
+    for (const s of spots) {
+        if (s.hours > hours) continue;
+        const w = weight(s);
+        if (w > 0) landed.push({...s, activity: s.activity * w});
+    }
     let grid = depositionGrid(landed, {
         ...options, cellSize: like.cell,
         bounds: [like.x0, like.y0, like.x0 + like.nx * like.cell, like.y0 + like.ny * like.cell],
@@ -527,9 +536,27 @@ export function landedGrid(spots, like, hours, {yieldKt = 1, fissionFraction = 1
         }
         grid = {...like, values};
     }
-    grid = sharpenGrid(grid, landed, options);
+    return sharpenGrid(grid, landed, options);
+}
+
+// The dose rate (R/hr) `hours` after the bursts on a grid like `like` (of `spots`): only the
+// fallout which has landed by then, as strong as it is then.
+export function landedGrid(spots, like, hours, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
     const decay = decayFromH1(hours);
-    return {...grid, values: grid.values.map((v) => v * decay)};
+    return timedGrid(spots, like, hours, () => decay, {yieldKt, fissionFraction, normalization});
+}
+
+// The dose (R) someone outdoors gets from fallout which has fallen at `arrival` hours, from then
+// until `hours`, for each R/hr of its H+1 dose rate: the integral of t^-1.2, 5 (ta^-0.2 - t^-0.2).
+export function doseFromH1(arrival, hours) {
+    const from = Math.max(arrival, EARLIEST_ARRIVAL);
+    return hours > from ? 5 * (Math.pow(from, -0.2) - Math.pow(hours, -0.2)) : 0;
+}
+
+// The total dose (R) by `hours` after the bursts, of someone outdoors everywhere on a grid like
+// `like` (of `spots`), from when each spot's fallout landed there.
+export function doseGrid(spots, like, hours, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
+    return timedGrid(spots, like, hours, (s) => doseFromH1(s.hours, hours), {yieldKt, fissionFraction, normalization});
 }
 
 // The area (square miles) where the dose rate is at least each of `doseRates`.

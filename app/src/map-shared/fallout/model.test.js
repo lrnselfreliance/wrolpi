@@ -4,6 +4,8 @@ import {
     contourAreas,
     decayFromH1,
     depositionGrid,
+    doseFromH1,
+    doseGrid,
     hotlines,
     landedGrid,
     landingSpots,
@@ -334,6 +336,42 @@ describe('fallout hour by hour', () => {
         // Two days in, everything that lands is down, at 48^-1.2 of its H+1 rate (sharpening only adds).
         expect(sum(late)).toBeGreaterThanOrEqual(sum(all) * decayFromH1(48) * 0.999);
         expect(sum(late)).toBeLessThan(sum(all) * decayFromH1(48) * 1.2);
+    });
+});
+
+describe('the total dose, outdoors', () => {
+    const spots = landingSpots({yieldKt: 10, profile: steady(90, 10)});
+    const all = depositionGrid(spots, {yieldKt: 10, boundsFloor: 0.1});
+    const sum = (grid) => grid.values.reduce((a, v) => a + v, 0);
+
+    test('adds up t^-1.2 from when the fallout lands', () => {
+        // Landed at H+1, forever: 5 times the H+1 rate.
+        expect(doseFromH1(1, Infinity)).toBeCloseTo(5, 10);
+        // From H+1 to H+7: 5 (1 - 7^-0.2).
+        expect(doseFromH1(1, 7)).toBeCloseTo(1.612, 3);
+        // Not yet landed: nothing.
+        expect(doseFromH1(8, 7)).toBe(0);
+        // Very early fallout is counted from 6 minutes.
+        expect(doseFromH1(0.001, 1)).toBeCloseTo(doseFromH1(0.1, 1), 10);
+    });
+
+    test('is the dose rate of each spot, from when it lands, on the same cells', () => {
+        const hours = 12;
+        const grid = doseGrid(spots, all, hours, {yieldKt: 10});
+        expect([grid.x0, grid.y0, grid.cell, grid.nx, grid.ny]).toEqual([all.x0, all.y0, all.cell, all.nx, all.ny]);
+        // On a grid of the H+1 rates, each spot weighted by its dose by then (sharpening only adds).
+        const weighted = spots.filter((s) => s.hours <= hours)
+            .map((s) => ({...s, activity: s.activity * doseFromH1(s.hours, hours)}));
+        const expected = sum(depositionGrid(weighted, {
+            yieldKt: 10, cellSize: all.cell, bounds: [all.x0, all.y0, all.x0 + all.nx * all.cell, all.y0 + all.ny * all.cell],
+        }));
+        expect(sum(grid)).toBeGreaterThanOrEqual(expected * 0.999);
+        expect(sum(grid)).toBeLessThan(expected * 1.2);
+        // More by two weeks than by half a day, and close in, more than the H+1 rate.
+        const later = doseGrid(spots, all, 336, {yieldKt: 10});
+        expect(sum(later)).toBeGreaterThan(sum(grid));
+        const most = (grid) => grid.values.reduce((a, v) => Math.max(a, v), 0);
+        expect(most(later)).toBeGreaterThan(most(all));
     });
 });
 

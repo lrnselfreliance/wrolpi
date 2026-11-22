@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Select} from "./ui";
-import {depositionGrid, landedGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
+import {depositionGrid, doseGrid, landedGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
@@ -36,6 +36,26 @@ export const DOSE_BANDS = [
     {rate: 1, color: [250, 200, 40]},
     {rate: 0.1, color: [250, 240, 150]},
 ];
+
+// The total dose bands drawn (R, outdoors), from the highest, with what such a dose, taken over
+// days, does to a person [Glasstone and Dolan, Table 12.108].
+export const TOTAL_BANDS = [
+    {rate: 1000, color: DOSE_BANDS[0].color, meaning: "nearly everyone dies"},
+    {rate: 450, color: DOSE_BANDS[1].color, meaning: "about half die without care"},
+    {rate: 100, color: DOSE_BANDS[2].color, meaning: "radiation sickness"},
+    {rate: 25, color: DOSE_BANDS[3].color, meaning: "no sickness; a higher cancer risk"},
+    {rate: 5, color: DOSE_BANDS[4].color, meaning: "a radiation worker's yearly limit"},
+];
+// What the map shows: the dose rate, or the total dose of someone outdoors.
+const RATE = "rate";
+const TOTAL = "total";
+const SHOW = [
+    {value: RATE, label: "Dose rate (R/hr)"},
+    {value: TOTAL, label: "Total dose, outdoors (R)"},
+];
+// The total dose with the timeline at its start: over the first two weeks, when fallout does most
+// of its harm.
+const TWO_WEEKS = 336;
 
 // The weapons, grouped by country, then a yield of the user's own.
 export const WEAPON_CHOICES = [
@@ -87,7 +107,7 @@ export function imageRows(grid, lat, height) {
 
 // The grid as an image for a map, around `lat`: each cell colored by the highest band it reaches,
 // transparent below them.
-export function gridImage(grid, lat) {
+export function gridImage(grid, lat, bands = DOSE_BANDS) {
     const canvas = document.createElement("canvas");
     canvas.width = grid.nx;
     canvas.height = grid.ny;
@@ -97,7 +117,7 @@ export function gridImage(grid, lat) {
     for (let r = 0; r < grid.ny; r++) {
         const from = rows[r] * grid.nx, to = r * grid.nx;
         for (let i = 0; i < grid.nx; i++) {
-            const band = DOSE_BANDS.find((b) => grid.values[from + i] >= b.rate);
+            const band = bands.find((b) => grid.values[from + i] >= b.rate);
             if (!band) continue;
             const p = (to + i) * 4;
             image.data[p] = band.color[0];
@@ -314,6 +334,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [progress, setProgress] = useState(null);
     // The hour after the bursts shown, or 0 for all the fallout as at H+1; and whether the hours play.
     const [after, setAfter] = useState(0);
+    const [show, setShow] = useState(RATE);
     const [playing, setPlaying] = useState(false);
     // The fallout last calculated ({grid, spots, origin}), and its images by the hour (0: all of it).
     const result = useRef(null);
@@ -415,7 +436,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             if (cancelled || !ran) return;
             setProgress(null);
             result.current = ran;
-            frames.current = new Map([[0, {url: gridImage(ran.grid, ran.origin.lat), coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)}]]);
+            frames.current = new Map([[`${RATE}:0`, {url: gridImage(ran.grid, ran.origin.lat), coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)}]]);
             // The hour shown is drawn from it.
             setCalculated((n) => n + 1);
             setTerrainStatus(ran.terrainStatus);
@@ -428,18 +449,23 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour]);
 
-    // The hour shown: all the fallout, or what has landed by then, as strong as it is then.
+    // The hour shown: all the fallout, or what has landed by then, as strong as it is then; or the
+    // total dose of someone outdoors by then (by two weeks, at the start).
     useEffect(() => {
         const ran = result.current;
         if (!ran) return;
-        if (!frames.current.has(after)) {
-            const grid = landedGrid(ran.spots, ran.grid, after);
-            frames.current.set(after, {url: gridImage(grid, ran.origin.lat), coordinates: gridCorners(grid, ran.origin.lon, ran.origin.lat)});
+        const key = `${show}:${after}`;
+        if (!frames.current.has(key)) {
+            const grid = show === TOTAL
+                ? doseGrid(ran.spots, ran.grid, after || TWO_WEEKS)
+                : landedGrid(ran.spots, ran.grid, after);
+            const url = gridImage(grid, ran.origin.lat, show === TOTAL ? TOTAL_BANDS : DOSE_BANDS);
+            frames.current.set(key, {url, coordinates: gridCorners(grid, ran.origin.lon, ran.origin.lat)});
         }
-        drawn.current = frames.current.get(after);
+        drawn.current = frames.current.get(key);
         draw();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [after, calculated]);
+    }, [after, show, calculated]);
 
     // Playing, the next hour is shown after this one; from the last, it starts over.
     useEffect(() => {
@@ -530,26 +556,22 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                   onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
         <div style={{margin: "0.5rem 0"}}>
-            <div style={{fontWeight: 600}}>
-                {after ? `Dose rate ${after === 1 ? "1 hour" : `${after} hours`} after the bursts`
-                    : "Dose rate, as at 1 hour after the bursts"}
-            </div>
-            <Timeline after={after} onAfter={(h) => {
+            <Select label="Show" size="xs" data={SHOW} value={show} onChange={(v) => v && setShow(v)}
+                    allowDeselect={false} comboboxProps={DROPDOWN}/>
+            <div style={{fontWeight: 600, marginTop: "0.25rem"}}>{legendHeading(show, after)}</div>
+            <Timeline show={show} after={after} onAfter={(h) => {
                 setPlaying(false);
                 setAfter(h);
             }} playing={playing} onPlaying={(p) => {
                 setPlaying(p);
                 if (p && !after) setAfter(1);
             }} startMs={wind === FORECAST && forecast ? Date.parse(forecast.hours[hour]) : null}/>
-            <div style={muted}>
-                R/hr: roentgens an hour, about 10 mSv each.{" "}
-                {after ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts."
-                    : "All the fallout is shown as if it were already down 1 hour after the bursts. Downwind it arrives hours later, and has weakened by then: about 10 times less 7 hours after the bursts."}
-            </div>
-            {DOSE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
-                <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem",
+            <div style={muted}>{legendText(show, after)}</div>
+            {(show === TOTAL ? TOTAL_BANDS : DOSE_BANDS).map((b) => <div key={b.rate}
+                                                                          style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
+                <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem", flexShrink: 0,
                     background: `rgb(${b.color.join(",")})`, opacity: 0.8}}/>
-                {b.rate}+ R/hr
+                {show === TOTAL ? `${b.rate}+ R: ${b.meaning}` : `${b.rate}+ R/hr`}
             </div>)}
         </div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
@@ -563,9 +585,27 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     </div>;
 }
 
+// The heading of the legend, for what is shown and the hour.
+export function legendHeading(show, after) {
+    const hours = after === 1 ? "1 hour" : `${after} hours`;
+    if (show === TOTAL) return after ? `Total dose by ${hours} after the bursts` : "Total dose in the first two weeks";
+    return after ? `Dose rate ${hours} after the bursts` : "Dose rate, as at 1 hour after the bursts";
+}
+
+// What the legend's bands are, for what is shown and the hour.
+export function legendText(show, after) {
+    if (show === TOTAL) {
+        return "R: roentgens, about 10 mSv each. The dose of someone outdoors the whole time, from when the "
+            + "fallout arrives. Indoors is less: about 2 to 3 times in a house, 10 or more in a basement.";
+    }
+    return "R/hr: roentgens an hour, about 10 mSv each. " + (after
+        ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts."
+        : "All the fallout is shown as if it were already down 1 hour after the bursts. Downwind it arrives hours later, and has weakened by then: about 10 times less 7 hours after the bursts.");
+}
+
 // Which hour after the bursts is shown, 0 for all the fallout as at H+1, and playing them in turn.
 // `startMs` is when the bursts are (the forecast hour), if known.
-export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
+export function Timeline({show = RATE, after, onAfter, playing, onPlaying, startMs}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     const when = after && startMs !== null
         ? `, ${new Date(startMs + after * 3600000).toLocaleString(undefined, {weekday: "short", hour: "numeric", minute: "2-digit"})}`
@@ -579,7 +619,9 @@ export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
                    aria-label="Hours after the bursts" onChange={(e) => onAfter(Number(e.target.value))}/>
         </div>
         <div style={muted}>
-            {after ? `H+${after}${when}: the fallout landed by then` : "All the fallout, as at H+1. Play to watch it land."}
+            {show === TOTAL
+                ? (after ? `H+${after}${when}: the dose by then` : "The first two weeks. Play to watch the dose build.")
+                : (after ? `H+${after}${when}: the fallout landed by then` : "All the fallout, as at H+1. Play to watch it land.")}
         </div>
     </div>;
 }

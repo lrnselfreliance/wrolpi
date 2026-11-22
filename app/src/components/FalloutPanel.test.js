@@ -116,3 +116,32 @@ describe('the fallout timeline', () => {
         expect(onPlaying).toHaveBeenLastCalledWith(false);
     });
 });
+
+describe('the total dose view', () => {
+    const {TOTAL_BANDS, DOSE_BANDS, legendHeading, legendText} = require('./FalloutPanel');
+
+    test('has its own bands, each saying what it does to a person', () => {
+        expect(TOTAL_BANDS.map((b) => b.rate)).toEqual([1000, 450, 100, 25, 5]);
+        for (const b of TOTAL_BANDS) expect(b.meaning.length).toBeGreaterThan(5);
+        // The same colors, highest first.
+        expect(TOTAL_BANDS.map((b) => b.color)).toEqual(DOSE_BANDS.map((b) => b.color));
+    });
+
+    test('says what is shown, by the hour', () => {
+        expect(legendHeading('total', 0)).toBe('Total dose in the first two weeks');
+        expect(legendHeading('total', 6)).toBe('Total dose by 6 hours after the bursts');
+        expect(legendHeading('rate', 0)).toBe('Dose rate, as at 1 hour after the bursts');
+        expect(legendHeading('rate', 1)).toBe('Dose rate 1 hour after the bursts');
+        expect(legendText('total', 0)).toMatch(/outdoors the whole time/);
+        expect(legendText('rate', 3)).toMatch(/landed by then/);
+    });
+
+    test('labels the timeline as a dose', () => {
+        const {screen} = require('@testing-library/react');
+        const {renderWithProviders} = require('../test-utils');
+        const {Timeline} = require('./FalloutPanel');
+        renderWithProviders(<Timeline show="total" after={0} onAfter={() => null} playing={false}
+                                      onPlaying={() => null} startMs={null}/>);
+        expect(screen.getByText(/The first two weeks/)).toBeTruthy();
+    });
+});

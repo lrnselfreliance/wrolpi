@@ -1739,8 +1739,9 @@ export async function getMapPins() {
     }
 }
 
-export async function addMapPin(lat, lon, label, color) {
-    const body = {lat, lon, label, color};
+// `kind` is "pin", or "target": a likely detonation site, shown in the map's nuclear mode.
+export async function addMapPin(lat, lon, label, color, kind = "pin") {
+    const body = {lat, lon, label, color, kind};
     const response = await apiPost(`${API_URI}/map/pins`, body);
     if (response.ok) {
         return await response.json();

@@ -28,6 +28,7 @@ import {mapFlavor, mapSprite} from "../themes/names";
 import {poiPopupHtml} from "./mapPoiPopup";
 import {solarCalculatorPath} from "./calculators/solar";
 import {
+    escapeHtml,
     addOverlaysToStyle,
     labelsOverGround,
     buildOverlayLayers,
@@ -510,7 +511,7 @@ function LayerControl({
 
 const PIN_COLORS = ["red", "blue", "green", "yellow", "orange", "purple"];
 
-function AddPinDialog({lat, lon, onSubmit, onCancel}) {
+function AddPinDialog({lat, lon, target = false, onSubmit, onCancel}) {
     const [label, setLabel] = useState("");
     const [color, setColor] = useState("red");
 
@@ -521,7 +522,10 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
         zIndex: 1002, background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)",
         padding: "1rem", minWidth: "15.625rem",
     }}>
-        <div style={{fontWeight: 600, marginBottom: "0.5rem"}}>Add Pin</div>
+        <div style={{fontWeight: 600, marginBottom: "0.5rem"}}>{target ? "Add Target" : "Add Pin"}</div>
+        {target && <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>
+            A likely detonation site, shown in nuclear mode.
+        </div>}
         <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
         <TextInput
             placeholder="Label"
@@ -722,7 +726,12 @@ export default function MapViewer() {
     const [error, setError] = useState(null);
     const [contextMenu, setContextMenu] = useState(null);
     const navigate = useNavigate();
-    const [addingPin, setAddingPin] = useState(null); // {lat, lon} when pin dialog is open
+    const [addingPin, setAddingPin] = useState(null); // {lat, lon, kind} when pin dialog is open
+    // Nuclear mode: targets (likely detonation sites) are shown, pins added are targets, and fallout
+    // can be simulated.
+    const [nuclear, setNuclear] = useState(false);
+    const nuclearRef = useRef(false);
+    const nuclearButtonRef = useRef(null);
     const [falloutAt, setFalloutAt] = useState(null); // {lat, lon} of the simulated burst
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
@@ -861,11 +870,8 @@ export default function MapViewer() {
                 pinToggle.style.cssText = "font-size:18px;width:29px;height:29px;border:none;cursor:pointer;background:white;border-radius:4px;display:flex;align-items:center;justify-content:center;";
                 pinToggle.addEventListener("click", () => {
                     pinsVisibleRef.current = !pinsVisibleRef.current;
-                    const display = pinsVisibleRef.current ? "" : "none";
                     pinToggle.style.opacity = pinsVisibleRef.current ? "1" : "0.5";
-                    for (const m of markersRef.current) {
-                        m.getElement().style.display = display;
-                    }
+                    showPins();
                 });
                 const pinControl = {
                     onAdd: () => {
@@ -895,6 +901,29 @@ export default function MapViewer() {
                         const container = document.createElement("div");
                         container.className = "maplibregl-ctrl maplibregl-ctrl-group";
                         container.appendChild(exportButton);
+                        return container;
+                    },
+                    onRemove: () => {},
+                }, "top-right");
+
+                // Nuclear mode: targets, and fallout.
+                const nuclearButton = document.createElement("button");
+                nuclearButton.type = "button";
+                nuclearButton.title = "Nuclear mode: targets and fallout";
+                nuclearButton.setAttribute("aria-label", "Nuclear mode");
+                nuclearButton.setAttribute("aria-pressed", "false");
+                nuclearButton.textContent = "☢️";
+                nuclearButton.style.cssText = pinToggle.style.cssText;
+                nuclearButton.addEventListener("click", () => {
+                    if (destroyed) return;
+                    setNuclear(on => !on);
+                });
+                nuclearButtonRef.current = nuclearButton;
+                map.addControl({
+                    onAdd: () => {
+                        const container = document.createElement("div");
+                        container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+                        container.appendChild(nuclearButton);
                         return container;
                     },
                     onRemove: () => {},
@@ -1209,6 +1238,15 @@ export default function MapViewer() {
     }, []);
 
     // --- Pins ---
+    // Show the pins the toggle and the mode allow: pins while pins are shown, and targets only in
+    // nuclear mode too.
+    const showPins = useCallback(() => {
+        for (const m of markersRef.current) {
+            const shown = pinsVisibleRef.current && (!m.wrolpiTarget || nuclearRef.current);
+            m.getElement().style.display = shown ? "" : "none";
+        }
+    }, []);
+
     const loadPins = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
@@ -1220,36 +1258,64 @@ export default function MapViewer() {
         const data = await getMapPins();
         if (!data?.pins) return;
 
-        data.pins.forEach((pin, index) => {
+        data.pins.forEach((pin) => {
+            const target = pin.kind === "target";
             const el = document.createElement("div");
-            el.style.width = "24px";
-            el.style.height = "24px";
-            el.style.borderRadius = "50% 50% 50% 0";
-            el.style.background = pin.color || "red";
-            el.style.border = "2px solid white";
-            el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.4)";
-            el.style.transform = "rotate(-45deg)";
             el.style.cursor = "pointer";
+            if (target) {
+                el.textContent = "☢";
+                el.style.cssText += "width:26px;height:26px;border-radius:50%;background:#ffd43b;color:#000;"
+                    + "border:2px solid #000;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;"
+                    + "align-items:center;justify-content:center;font-size:18px;line-height:1;";
+            } else {
+                el.style.width = "24px";
+                el.style.height = "24px";
+                el.style.borderRadius = "50% 50% 50% 0";
+                el.style.background = pin.color || "red";
+                el.style.border = "2px solid white";
+                el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.4)";
+                el.style.transform = "rotate(-45deg)";
+            }
 
+            const button = (onclick, text, color) => `<button onclick="${onclick}" `
+                + `style="margin-top:4px;margin-right:4px;padding:2px 8px;cursor:pointer;color:${color};`
+                + `border:1px solid ${color};background:none;border-radius:3px;">${text}</button>`;
             const popup = new maplibregl.Popup({offset: 15}).setHTML(
                 `<div style="font-size:13px">` +
-                `<strong>${pin.label || "Pin"}</strong><br/>` +
+                `<strong>${escapeHtml(pin.label || (target ? "Target" : "Pin"))}</strong><br/>` +
+                (target ? `<small>Target</small><br/>` : "") +
                 `<small>${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}</small><br/>` +
-                `<button onclick="window.__deleteMapPin(${pin.id})" ` +
-                `style="margin-top:4px;padding:2px 8px;cursor:pointer;color:red;border:1px solid red;background:none;border-radius:3px;">` +
-                `Delete</button></div>`
+                (target ? button(`window.__simulateFalloutAt(${pin.lat}, ${pin.lon})`, "Simulate fallout", "#333") : "") +
+                button(`window.__deleteMapPin(${pin.id})`, "Delete", "red") +
+                `</div>`
             );
 
             const marker = new maplibregl.Marker({element: el})
                 .setLngLat([pin.lon, pin.lat])
                 .setPopup(popup)
                 .addTo(map);
-
-            if (!pinsVisibleRef.current) {
-                marker.getElement().style.display = "none";
-            }
+            marker.wrolpiTarget = target;
             markersRef.current.push(marker);
         });
+        showPins();
+    }, [showPins]);
+
+    // Nuclear mode on or off: the button says so, targets are shown or hidden, and leaving it closes
+    // the fallout simulation.
+    useEffect(() => {
+        nuclearRef.current = nuclear;
+        const button = nuclearButtonRef.current;
+        if (button) {
+            button.style.background = nuclear ? "#ffd43b" : "white";
+            button.setAttribute("aria-pressed", String(nuclear));
+        }
+        showPins();
+        if (!nuclear) setFalloutAt(null);
+    }, [nuclear, mapReady, showPins]);
+
+    useEffect(() => {
+        window.__simulateFalloutAt = (lat, lon) => setFalloutAt({lat, lon});
+        return () => { delete window.__simulateFalloutAt; };
     }, []);
 
     // Global callback for popup delete buttons.
@@ -1268,9 +1334,9 @@ export default function MapViewer() {
 
     const handleAddPin = useCallback(() => {
         if (!contextMenu) return;
-        setAddingPin({lat: contextMenu.lat, lon: contextMenu.lon});
+        setAddingPin({lat: contextMenu.lat, lon: contextMenu.lon, kind: nuclear ? "target" : "pin"});
         setContextMenu(null);
-    }, [contextMenu]);
+    }, [contextMenu, nuclear]);
 
     const handleSolar = useCallback(() => {
         if (!contextMenu) return;
@@ -1296,9 +1362,9 @@ export default function MapViewer() {
 
     const handleSubmitPin = useCallback(async (label, color) => {
         if (!addingPin) return;
-        const {lat, lon} = addingPin;
+        const {lat, lon, kind} = addingPin;
         setAddingPin(null);  // Prevent double-submit.
-        await addMapPin(lat, lon, label, color);
+        await addMapPin(lat, lon, label, color, kind);
         await loadPins();
     }, [addingPin, loadPins]);
 
@@ -1378,7 +1444,7 @@ export default function MapViewer() {
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
             >
-                Add Pin Here
+                {nuclear ? "Add Target Here" : "Add Pin Here"}
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
@@ -1388,14 +1454,14 @@ export default function MapViewer() {
             >
                 Calculate Solar Performance
             </div>
-            <div
+            {nuclear && <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleFallout}
             >
                 Simulate Fallout Here
-            </div>
+            </div>}
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
@@ -1432,6 +1498,7 @@ export default function MapViewer() {
         {addingPin && <AddPinDialog
             lat={addingPin.lat}
             lon={addingPin.lon}
+            target={addingPin.kind === "target"}
             onSubmit={handleSubmitPin}
             onCancel={() => setAddingPin(null)}
         />}

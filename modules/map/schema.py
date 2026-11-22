@@ -19,6 +19,8 @@ class MapPinRequest:
     lon: float
     label: str
     color: str = "red"
+    # "pin", or "target": a likely detonation site, shown in the map's nuclear mode.
+    kind: str = "pin"
 
 
 @dataclass

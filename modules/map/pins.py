@@ -8,6 +8,10 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 logger = logger.getChild(__name__)
 
 
+# What a pin marks: a place, or a likely detonation site (a target, shown in the map's nuclear mode).
+PIN_KINDS = ('pin', 'target')
+
+
 @dataclass
 class MapPinsConfigValidator:
     version: int = None
@@ -37,7 +41,9 @@ class MapPinsConfig(ConfigFile):
             return 1
         return max(p.get('id', 0) for p in pins) + 1
 
-    def add_pin(self, lat: float, lon: float, label: str, color: str = 'red') -> dict:
+    def add_pin(self, lat: float, lon: float, label: str, color: str = 'red', kind: str = 'pin') -> dict:
+        if kind not in PIN_KINDS:
+            raise ValueError(f'A pin is one of {", ".join(PIN_KINDS)}, not {kind!r}')
         pin = dict(
             id=self._next_pin_id(),
             lat=round(lat, 6),
@@ -46,6 +52,9 @@ class MapPinsConfig(ConfigFile):
             color=color,
             created=str(now().date()),
         )
+        # A pin without a kind is a plain pin, as every pin was before targets.
+        if kind != 'pin':
+            pin['kind'] = kind
         pins = self.pins
         pins.append(pin)
         self.pins = pins

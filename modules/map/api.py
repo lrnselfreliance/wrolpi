@@ -99,7 +99,10 @@ def get_pins(_: Request):
 @openapi.description('Add a map pin')
 @validate(schema.MapPinRequest)
 async def add_pin(_: Request, body: schema.MapPinRequest):
-    pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color)
+    try:
+        pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color, body.kind)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
     return json_response(dict(pin=pin), HTTPStatus.CREATED)
 
 

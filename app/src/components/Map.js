@@ -550,6 +550,17 @@ function PinEditRow({pin, onSave, onCancel}) {
     </Table.Row>;
 }
 
+// A pin's mark in the list: its color, or the radiation sign for a target.
+function PinMark({pin}) {
+    if (pin.kind === "target") {
+        return <span title="Target (shown in nuclear mode)" aria-label="Target">☢</span>;
+    }
+    return <div style={{
+        width: 16, height: 16, borderRadius: "50%",
+        background: pin.color || "red", border: "1px solid var(--border)",
+    }}/>;
+}
+
 function MapPins() {
     // null = pending, undefined = fetch failed, [] = no pins.  The empty row invites the user to
     // add one, so it may only appear for a confirmed empty list.
@@ -620,10 +631,7 @@ function MapPins() {
         }
         return <Table.Row key={pin.id}>
             <Table.Cell>
-                <div style={{
-                    width: 16, height: 16, borderRadius: "50%",
-                    background: pin.color || "red", border: "1px solid var(--border)",
-                }}/>
+                <PinMark pin={pin}/>
             </Table.Cell>
             <Table.Cell>{pin.label}</Table.Cell>
             <Table.Cell>
@@ -668,10 +676,7 @@ function MapPins() {
     const mobileRowFunc = (pin) => {
         return <Table.Row key={pin.id}>
             <Table.Cell>
-                <div style={{
-                    width: 16, height: 16, borderRadius: "50%",
-                    background: pin.color || "red", border: "1px solid var(--border)",
-                }}/>
+                <PinMark pin={pin}/>
             </Table.Cell>
             <Table.Cell>
                 <a href="#" onClick={(e) => {e.preventDefault(); handleNavigate(pin);}}>

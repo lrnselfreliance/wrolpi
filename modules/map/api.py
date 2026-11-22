@@ -107,6 +107,17 @@ async def add_pin(_: Request, body: schema.MapPinRequest):
     return json_response(dict(pin=pin), HTTPStatus.CREATED)
 
 
+@map_bp.put('/pins/targets/weapon')
+@openapi.description('Give every target one weapon')
+@validate(schema.MapTargetsWeaponRequest)
+async def put_targets_weapon(_: Request, body: schema.MapTargetsWeaponRequest):
+    try:
+        count = get_map_pins_config().set_targets_weapon(body.weapon, body.yield_kt, body.fission_fraction)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    return json_response(dict(targets=count), HTTPStatus.OK)
+
+
 @map_bp.delete('/pins/<pin_id:int>')
 @openapi.description('Delete a map pin by ID')
 async def delete_pin(_: Request, pin_id: int):

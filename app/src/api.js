@@ -1730,6 +1730,16 @@ export async function getLatestFalloutWinds() {
     return null;
 }
 
+// Give every target one weapon ({weapon, yield_kt, fission_fraction}), in one change.
+export async function setAllTargetsWeapon(weapon) {
+    const response = await apiPut(`${API_URI}/map/pins/targets/weapon`, weapon);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not save the targets\' weapon');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+    return response.ok;
+}
+
 // Change a target's weapon ({weapon, yield_kt, fission_fraction}).
 export async function updateMapTargetWeapon(pinId, weapon) {
     const response = await apiPut(`${API_URI}/map/pins/${pinId}`, weapon);

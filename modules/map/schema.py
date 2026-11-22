@@ -44,3 +44,12 @@ class MapFalloutWindsRequest:
     # A browser sends a whole number of degrees as an integer.
     lat: float | int
     lon: float | int
+
+
+@dataclass
+class MapTargetsWeaponRequest:
+    # The key of a weapon the simulator offers (or "custom"), the yield (kt) of a custom one, and the
+    # share of the yield from fission.
+    weapon: str
+    yield_kt: Optional[float | int] = None
+    fission_fraction: Optional[float | int] = None

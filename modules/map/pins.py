@@ -94,6 +94,25 @@ class MapPinsConfig(ConfigFile):
         save_map_pins_config.activate_switch()
         return True
 
+    def set_targets_weapon(self, weapon: str, yield_kt: float = None, fission_fraction: float = None) -> int:
+        """Give every target `weapon` in one change of the config (one change per target, made at once,
+        would each write the whole list and undo the others).  Returns how many targets there are."""
+        weapon_fields = check_weapon(weapon, yield_kt, fission_fraction)
+        if not weapon_fields.get('weapon'):
+            raise ValueError('A weapon is named by its key')
+        pins = self.pins
+        count = 0
+        for pin in pins:
+            if pin.get('kind') != 'target':
+                continue
+            for key in ('weapon', 'yield_kt', 'fission_fraction'):
+                pin.pop(key, None)
+            pin.update(weapon_fields)
+            count += 1
+        self.pins = pins
+        save_map_pins_config.activate_switch()
+        return count
+
     def update_pin(self, pin_id: int, label: str = None, color: str = None, weapon: str = None,
                    yield_kt: float = None, fission_fraction: float = None) -> bool:
         weapon_fields = check_weapon(weapon, yield_kt, fission_fraction)

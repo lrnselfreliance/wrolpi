@@ -84,3 +84,30 @@ async def test_pins_api_target_weapon(async_client, test_pins_config):
     assert response.json['pins'][0]['yield_kt'] == 15
     request, response = await async_client.put(f'/api/map/pins/{pin_id}', content=json.dumps({'yield_kt': -1}))
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_set_targets_weapon(test_pins_config):
+    """Every target gets the weapon at once; plain pins are left be."""
+    test_pins_config.add_pin(0, 0, 'Home')
+    for i in range(5):
+        test_pins_config.add_pin(i, i, f'Base {i}', kind='target', weapon='custom', yield_kt=20)
+    assert test_pins_config.set_targets_weapon('w88', fission_fraction=0.5) == 5
+    targets = [p for p in test_pins_config.pins if p.get('kind') == 'target']
+    assert all(p['weapon'] == 'w88' and 'yield_kt' not in p for p in targets)
+    assert 'weapon' not in test_pins_config.pins[0]
+    with pytest.raises(ValueError):
+        test_pins_config.set_targets_weapon('', fission_fraction=0.5)
+
+
+@pytest.mark.asyncio
+async def test_targets_weapon_api(async_client, test_pins_config):
+    for i in range(20):
+        test_pins_config.add_pin(i, i, f'Base {i}', kind='target', weapon='yars')
+    request, response = await async_client.put('/api/map/pins/targets/weapon',
+                                               content=json.dumps({'weapon': 'w76-1', 'fission_fraction': 0.5}))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['targets'] == 20
+    request, response = await async_client.get('/api/map/pins')
+    assert {p['weapon'] for p in response.json['pins']} == {'w76-1'}
+    request, response = await async_client.put('/api/map/pins/targets/weapon', content=json.dumps({'weapon': ''}))
+    assert response.status_code == HTTPStatus.BAD_REQUEST

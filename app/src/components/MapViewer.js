@@ -13,6 +13,7 @@ import {
     getMapFiles,
     getMapPins,
     searchMap,
+    setAllTargetsWeapon,
     updateMapTargetWeapon,
     setMapDefaultLocation,
 } from "../api";
@@ -1389,15 +1390,10 @@ export default function MapViewer() {
         if (await updateMapTargetWeapon(target.id, weapon)) await loadPins();
     }, [loadPins]);
 
-    // One weapon for every target, kept for each.
+    // One weapon for every target, kept for each in one change.
     const handleAllTargetsWeapon = useCallback(async (weapon) => {
-        const targets = pins.filter(p => p.kind === "target");
-        // A few at a time: each is a write of the pins config.
-        for (let i = 0; i < targets.length; i += 8) {
-            await Promise.all(targets.slice(i, i + 8).map(t => updateMapTargetWeapon(t.id, weapon)));
-        }
-        await loadPins();
-    }, [pins, loadPins]);
+        if (await setAllTargetsWeapon(weapon)) await loadPins();
+    }, [loadPins]);
 
     if (error) {
         return <Panel>

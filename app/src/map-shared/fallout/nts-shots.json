@@ -12,6 +12,8 @@
   "shots": [
     {
       "name": "George",
+      "lat": 37.04806,
+      "lon": -116.02111,
       "observed_bearing_deg": 3,
       "observed_bearing_figure": "Figure 62",
       "operation": "Tumbler-Snapper",
@@ -38,6 +40,8 @@
     },
     {
       "name": "Ess",
+      "lat": 37.16833,
+      "lon": -116.04389,
       "observed_bearing_deg": 110,
       "observed_bearing_figure": "Figure 135",
       "operation": "Teapot",
@@ -66,6 +70,8 @@
     },
     {
       "name": "Zucchini",
+      "lat": 37.09472,
+      "lon": -116.02389,
       "observed_bearing_deg": 95,
       "observed_bearing_figure": "Figure 160",
       "operation": "Teapot",
@@ -99,6 +105,8 @@
     },
     {
       "name": "Priscilla",
+      "lat": 36.79806,
+      "lon": -115.92889,
       "observed_bearing_deg": 67,
       "observed_bearing_figure": "Figure 179",
       "operation": "Plumbbob",
@@ -133,6 +141,8 @@
     },
     {
       "name": "Smoky",
+      "lat": 37.18722,
+      "lon": -116.06778,
       "observed_bearing_deg": 100,
       "observed_bearing_figure": "Figure 207",
       "operation": "Plumbbob",
@@ -166,6 +176,8 @@
     },
     {
       "name": "Johnie Boy",
+      "lat": 37.12250,
+      "lon": -116.33304,
       "observed_bearing_deg": 15,
       "observed_bearing_figure": "Figure 327",
       "operation": "Sunbeam",

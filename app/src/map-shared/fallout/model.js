@@ -133,16 +133,16 @@ export function particleSizes(volumeShare = VOLUME_ACTIVITY_SHARE) {
     return sizes;
 }
 
-// The fall of a particle of `diameter` from the top of the cloud to the ground: for each height
-// (every FALL_STEP meters, from the ground up), how far it has gone east and north, and for how
-// many seconds, from there to the ground.
-function fall(diameter, top, profile, siteElevation) {
-    const steps = Math.ceil(top / FALL_STEP);
+// The fall of a particle of `diameter` from the top of the cloud down to `bottom` meters (zero or
+// below: ground lower than ground zero): at each level (every FALL_STEP meters, from `bottom` up),
+// how far it goes east and north, and for how many seconds, from there down to `bottom`.
+function fall(diameter, top, bottom, profile, siteElevation) {
+    const steps = Math.ceil((top - bottom) / FALL_STEP);
     const east = new Float64Array(steps + 1);
     const north = new Float64Array(steps + 1);
     const seconds = new Float64Array(steps + 1);
     for (let i = 1; i <= steps; i++) {
-        const middle = (i - 0.5) * FALL_STEP;
+        const middle = bottom + (i - 0.5) * FALL_STEP;
         const dt = FALL_STEP / settlingSpeed(diameter, siteElevation + middle);
         const [u, v] = windAt(profile, middle);
         east[i] = east[i - 1] + u * dt;
@@ -152,14 +152,33 @@ function fall(diameter, top, profile, siteElevation) {
     return {east, north, seconds};
 }
 
+// Where a particle which starts at level `start` of `path` lands: the first level on the way down at
+// which it is at or below the ground under it.  [east, north, seconds] from where it started.
+function landing(path, start, bottom, ground) {
+    const {east, north, seconds} = path;
+    for (let m = start - 1; m > 0; m--) {
+        const x = east[start] - east[m];
+        const y = north[start] - north[m];
+        if (bottom + m * FALL_STEP <= ground(x, y)) return [x, y, seconds[start] - seconds[m]];
+    }
+    return [east[start] - east[0], north[start] - north[0], seconds[start] - seconds[0]];
+}
+
 // The spots where the activity lands: [{x, y (m east and north of ground zero), sigma (m),
 // activity (share of the burst's activity), hours (in the air)}].
 //
 // `cloud` is as stabilizedCloud gives it (or as observed); `profile` is as profileFromTable gives
 // it.  `diffusivity` (m^2/s) is how fast a spot widens with time in the air; `maxHours` is when
 // the ground is looked at: what lands later is not counted.
+//
+// `terrain`, if given, is {ground(x, y), lowest}: the height (m) of the ground x meters east and y
+// north of ground zero, above the ground at ground zero, and the lowest it gets.  A particle lands
+// where it first meets the ground: early on a ridge in its way, late in a valley.  Without it the
+// ground is flat.
 export function landingSpots({cloud, profile, siteElevation = 0, diffusivity = 1000, maxHours = 48,
-                                 volumeShare = VOLUME_ACTIVITY_SHARE}) {
+                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null}) {
+    const bottom = terrain ? Math.min(0, Math.floor(terrain.lowest / FALL_STEP) * FALL_STEP) : 0;
+    const ground = terrain ? terrain.ground : () => 0;
     // The activity is Gaussian in height between the cap's base and top, which are 2 sigma either
     // side of its center [WSEG-10]; the horizontal sigma is half the radius.
     const center = (cloud.base + cloud.top) / 2;
@@ -176,14 +195,14 @@ export function landingSpots({cloud, profile, siteElevation = 0, diffusivity = 1
     const spots = [];
     for (const {diameter, activity} of particleSizes(volumeShare)) {
         if (activity <= 0) continue;
-        const path = fall(diameter, cloud.top, profile, siteElevation);
+        const path = fall(diameter, cloud.top, bottom, profile, siteElevation);
         for (const {z, weight} of heights) {
-            const k = Math.min(Math.round(z / FALL_STEP), path.seconds.length - 1);
-            const seconds = path.seconds[k];
+            const start = Math.min(Math.round((z - bottom) / FALL_STEP), path.seconds.length - 1);
+            const [x, y, seconds] = landing(path, start, bottom, ground);
             if (seconds > maxHours * 3600) continue;
             spots.push({
-                x: path.east[k],
-                y: path.north[k],
+                x,
+                y,
                 sigma: Math.sqrt(sigmaCloud ** 2 + 2 * diffusivity * seconds),
                 activity: activity * weight / total,
                 hours: seconds / 3600,

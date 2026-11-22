@@ -21,6 +21,7 @@ import {
     stabilizedCloud,
     uniformProfile,
 } from './model.js';
+import {terrainAround} from './terrain.js';
 
 const FEET = 0.3048;
 
@@ -55,7 +56,8 @@ export function shotCloud(shot, observed = false) {
 
 // Run the model on a shot.  options: uniform (one wind, the mean over the cloud), surface (one wind,
 // the one at the ground: what a person would read off a weather report), observedCloud,
-// diffusivity, volumeShare.
+// diffusivity, volumeShare, terrain (an elevation grid, as decodeGrid gives it: particles land on
+// the ground under them, not on a plane at the height of ground zero).
 export function runShot(shot, options = {}) {
     const cloud = shotCloud(shot, options.observedCloud);
     let profile = profileFromTable(shot.wind, shot.site_elevation_ft);
@@ -66,6 +68,7 @@ export function runShot(shot, options = {}) {
         siteElevation: shot.site_elevation_ft * FEET,
         diffusivity: options.diffusivity,
         volumeShare: options.volumeShare,
+        terrain: options.terrain ? terrainAround(options.terrain, shot.lon, shot.lat) : null,
     });
     const grid = depositionGrid(spots, {yieldKt: shot.yield_kt});
     const {dose_rates: rates, observed} = shot.areas_sq_mi;

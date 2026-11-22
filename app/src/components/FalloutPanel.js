@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {Button, NumberInput, Select} from "./ui";
+import {Button, Checkbox, NumberInput, Select} from "./ui";
 import {
     depositionGrid,
     landingSpots,
@@ -7,6 +7,8 @@ import {
     stabilizedCloud,
 } from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
+import {terrainAround} from "../map-shared/fallout/terrain.js";
+import {loadTerrainGrid} from "./falloutTerrain";
 
 // A prototype of the fallout simulator (fallout-plan.md): one surface burst where the user clicked,
 // drawn as the dose rate at H+1 hour.  Nothing is saved.
@@ -64,13 +66,36 @@ export function gridCorners(grid, lon, lat) {
     return [[west, north], [east, north], [east, south], [west, south]];
 }
 
-export function simulate({yieldKt, fissionFraction, wind, direction, speed}) {
+export function windProfile({wind, direction, speed}) {
     const rows = wind === "manual"
         ? [[0, direction, speed]]
         : shots.shots.find((s) => s.name === wind).wind.map(([z, d, s], _, all) => [z - all[0][0], d, s]);
-    const profile = profileFromTable(rows, 0);
-    const spots = landingSpots({cloud: stabilizedCloud(yieldKt), profile});
+    return profileFromTable(rows, 0);
+}
+
+export function simulate({yieldKt, fissionFraction, profile, terrain = null}) {
+    const spots = landingSpots({
+        cloud: stabilizedCloud(yieldKt), profile, terrain,
+        siteElevation: terrain ? Math.max(terrain.elevation, 0) : 0,
+    });
     return depositionGrid(spots, {yieldKt, fissionFraction});
+}
+
+// The area ([west, south, east, north], degrees) where the grid reaches the lowest band, with a margin.
+export function plumeBounds(grid, lon, lat) {
+    const lowest = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
+    let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    for (let j = 0; j < grid.ny; j++) {
+        for (let i = 0; i < grid.nx; i++) {
+            if (grid.values[j * grid.nx + i] < lowest) continue;
+            const x = grid.x0 + (i + 0.5) * grid.cell, y = grid.y0 + (j + 0.5) * grid.cell;
+            x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        }
+    }
+    const margin = Math.max(0.25 * Math.max(x1 - x0, y1 - y0), 20000);
+    const perLon = METERS_PER_DEGREE * Math.cos(lat * Math.PI / 180);
+    return [lon + (x0 - margin) / perLon, lat + (y0 - margin) / METERS_PER_DEGREE,
+        lon + (x1 + margin) / perLon, lat + (y1 + margin) / METERS_PER_DEGREE];
 }
 
 export default function FalloutPanel({map, lat, lon, onClose}) {
@@ -80,20 +105,40 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
     const [direction, setDirection] = useState(270);
     const [speed, setSpeed] = useState(20);
     const [busy, setBusy] = useState(false);
+    const [useTerrain, setUseTerrain] = useState(true);
+    const [terrainStatus, setTerrainStatus] = useState(null);
     const drawn = useRef(null);
 
     useEffect(() => {
         let cancelled = false;
         setBusy(true);
         // Let the panel paint "Calculating" before the model takes the thread.
-        const timer = setTimeout(() => {
-            const grid = simulate({
-                yieldKt: Number(yieldKt), fissionFraction: fission / 100, wind,
-                direction: Number(direction) || 0, speed: Number(speed) || 0,
-            });
+        const timer = setTimeout(async () => {
+            const options = {yieldKt: Number(yieldKt), fissionFraction: fission / 100,
+                profile: windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0})};
+            // On flat ground first: that is where the plume is, so the terrain under it can be read.
+            let grid = simulate(options);
+            let status = "Flat ground (terrain is off).";
+            if (useTerrain) {
+                let loaded = null;
+                try {
+                    loaded = await loadTerrainGrid(plumeBounds(grid, lon, lat), lon, lat);
+                } catch (e) {
+                    console.error("Could not read the terrain", e);
+                }
+                if (cancelled) return;
+                if (loaded) {
+                    grid = simulate({...options, terrain: terrainAround(loaded.grid, lon, lat)});
+                    const covered = Math.round(loaded.coverage * 100);
+                    status = `Follows the terrain (zoom ${loaded.zoom}${covered < 100 ? `, ${covered}% of the area` : ""}).`;
+                } else {
+                    status = "No terrain file covers this place: flat ground.";
+                }
+            }
             if (cancelled) return;
             drawn.current = {url: gridImage(grid), coordinates: gridCorners(grid, lon, lat)};
             draw();
+            setTerrainStatus(status);
             setBusy(false);
         }, 30);
         return () => {
@@ -101,7 +146,7 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             clearTimeout(timer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [yieldKt, fission, wind, direction, speed, lat, lon]);
+    }, [yieldKt, fission, wind, direction, speed, useTerrain, lat, lon]);
 
     // The layer is of the map's style, which a change of style removes: it is put back when the
     // style has loaded.
@@ -151,6 +196,9 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
         </div>}
+        <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}} checked={useTerrain}
+                  onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
+        {terrainStatus && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>{terrainStatus}</div>}
         <div style={{margin: "0.5rem 0"}}>
             <div style={{fontWeight: 600}}>Dose rate 1 hour after the burst</div>
             {DOSE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>

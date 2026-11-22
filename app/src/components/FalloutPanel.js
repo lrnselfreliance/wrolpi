@@ -671,7 +671,8 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
         </div>}
         {rainy > 0 && <div style={{...muted, color: "var(--warning)"}}>
             Rain is forecast near {rainy === 1 ? "1 burst" : `${rainy} bursts`} in the 6 hours from then.
-            Rain brings fallout down in concentrated places this map does not show.
+            Rain washes fallout out of the air where it falls, which this map shows roughly; real rain is
+            patchier than a forecast, and its hot spots may be hotter.
         </div>}
         {fetchButton}
     </div>;

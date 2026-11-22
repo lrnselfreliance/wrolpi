@@ -37,17 +37,24 @@ PRESSURE_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 
 # burst this hour must be in it.  Open-Meteo counts up to a week of a place as one call, so the
 # third day costs nothing.
 FORECAST_DAYS = 3
+# The pressure levels whose relative humidity is asked for: where a rain cloud may be, up to the tops of
+# thunderstorms (about 200 hPa).
+HUMIDITY_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200)
+# A cloud's bottom is the lowest level at least this humid, its top the first above that is less than
+# CLOUD_TOP_RH (percent): HYSPLIT's rule (Moroz et al. 2010, after Draxler and Hess 1997).
+CLOUD_BOTTOM_RH = 80
+CLOUD_TOP_RH = 60
 TIMEOUT = 60
 # How far around each target the field reaches (degrees): as far as fallout which shows is carried.
 MARGIN = 6
-# No more points than this in a field: up to 3,240 of the free service's 5,000 calls an hour and
-# 10,000 a day, fetched in about six minutes.
+# No more points than this in a field: up to about 4,000 of the free service's 5,000 calls an hour and
+# 10,000 a day, fetched in about seven minutes.
 MAX_POINTS = 540
 # The spacings (degrees) a field's points may have, the closest first.
 SPACINGS = (1, 2, 3, 4, 5, 6, 8, 10)
-# Places asked for in one request (each costs six calls; 600 calls a minute are allowed), and how
-# long (s) from one request to the next.
-BATCH = 90
+# Places asked for in one request (each costs 7.4 calls: 74 variables, a call for every ten; 600 calls
+# a minute are allowed), and how long (s) from one request to the next.
+BATCH = 80
 BATCH_SECONDS = 61
 # Fields kept on disk; the newest is the one used.
 KEPT_FIELDS = 3
@@ -85,6 +92,7 @@ def forecast_url(points: Sequence[Tuple[int, int]]) -> str:
     hourly = ['wind_speed_10m', 'wind_direction_10m', 'precipitation']
     for level in PRESSURE_LEVELS:
         hourly += [f'wind_speed_{level}hPa', f'wind_direction_{level}hPa', f'geopotential_height_{level}hPa']
+    hourly += [f'relative_humidity_{level}hPa' for level in HUMIDITY_LEVELS]
     query = dict(latitude=','.join(str(p[0]) for p in points), longitude=','.join(str(p[1]) for p in points),
                  hourly=','.join(hourly), forecast_days=FORECAST_DAYS, wind_speed_unit='ms', timezone='GMT')
     return f'{OPEN_METEO_URL}?{urlencode(query)}'
@@ -94,8 +102,9 @@ def parse_forecast(data: dict) -> dict:
     """An Open-Meteo forecast for one place as the simulator reads it:
 
     {elevation (m, of the forecast's ground), hours: [{time (UTC, ISO), precipitation (mm in the
-    hour), winds: [[height (m above sea level), speed (m/s), direction (degrees the wind blows
-    FROM)], ...]}]}
+    hour), cloud: [bottom, top] (m above sea level, of the cloud rain would fall from) or None,
+    winds: [[height (m above sea level), speed (m/s), direction (degrees the wind blows FROM)],
+    ...]}]}
 
     Each hour's winds start with the wind 10 m above the ground and go up the pressure levels.  A
     level below the ground (high pressure over high ground) is left out, as is anything missing."""
@@ -125,10 +134,26 @@ def parse_forecast(data: dict) -> dict:
         if not winds:
             continue
         winds.sort(key=lambda w: w[0])
-        hours.append(dict(time=f'{time}Z', precipitation=at('precipitation', i) or 0, winds=winds))
+        hours.append(dict(time=f'{time}Z', precipitation=at('precipitation', i) or 0, winds=winds,
+                          cloud=cloud_layer(elevation, [(at(f'geopotential_height_{level}hPa', i),
+                                                         at(f'relative_humidity_{level}hPa', i))
+                                                        for level in HUMIDITY_LEVELS])))
     if not hours:
         raise WindsError('The forecast had no winds')
     return dict(elevation=elevation, hours=hours)
+
+
+def cloud_layer(elevation: float, levels: Sequence[Tuple[Optional[float], Optional[float]]]) -> Optional[List[int]]:
+    """The cloud rain would fall from, as [bottom, top] (m above sea level), from the (height,
+    relative humidity) of each level going up; None without one.  Its bottom is the lowest level
+    above the ground at least CLOUD_BOTTOM_RH humid, its top the first above that which is less than
+    CLOUD_TOP_RH humid (or the highest level)."""
+    known = [(h, rh) for h, rh in levels if h is not None and rh is not None and h > elevation]
+    bottom = next((k for k, (_, rh) in enumerate(known) if rh >= CLOUD_BOTTOM_RH), None)
+    if bottom is None:
+        return None
+    top = next((k for k in range(bottom + 1, len(known)) if known[k][1] < CLOUD_TOP_RH), len(known) - 1)
+    return [round(known[bottom][0]), round(known[top][0])]
 
 
 def winds_directory() -> Path:
@@ -178,7 +203,8 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
 
     {source, fetched_at, spacing (degrees), points: [{lat, lon, elevation}], hours: [time (UTC,
     ISO)], winds: [for each point: [for each hour: [[height (m above sea level), speed (m/s),
-    direction FROM (degrees)], ...]]], rain: [for each point: [mm in each hour]]}
+    direction FROM (degrees)], ...]]], rain: [for each point: [mm in each hour]], clouds: [for each
+    point: [for each hour: [bottom, top] (m above sea level) or None]]}
 
     `progress(done, total)`, if given, hears how many points have been fetched."""
     spacing, points = field_points(places)
@@ -199,12 +225,13 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
     # Every point has the same hours (Open-Meteo forecasts the same hours everywhere); a point which
     # is short of any is given its last.
     hours = [h['time'] for h in max(forecasts, key=lambda f: len(f['hours']))['hours']]
-    winds, rain = [], []
+    winds, rain, clouds = [], [], []
     for forecast in forecasts:
         by_time = {h['time']: h for h in forecast['hours']}
         last = forecast['hours'][-1]
         winds.append([by_time.get(t, last)['winds'] for t in hours])
         rain.append([by_time.get(t, last)['precipitation'] for t in hours])
+        clouds.append([by_time.get(t, last).get('cloud') for t in hours])
     field = dict(
         source='Open-Meteo',
         fetched_at=now().isoformat(),
@@ -213,6 +240,7 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
         hours=hours,
         winds=winds,
         rain=rain,
+        clouds=clouds,
     )
     logger.info(f'Fetched a field of winds aloft: {len(points)} points every {spacing} degrees')
 

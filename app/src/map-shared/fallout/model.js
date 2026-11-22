@@ -56,6 +56,12 @@ const FALL_STEP = 50;
 // place and time.
 const FIELD_STEP = 250;
 const FIELD_SECONDS = 1200;
+// Rain's taking of fallout out of the air [Glasstone and Dolan, Tables 9.74a and b]: inside the rain
+// cloud, per hour; below it, per hour in light, moderate and heavy rain (mm an hour).
+const RAINOUT_PER_HOUR = Math.LN2 / 0.16;
+const WASHOUT = [[1.27, Math.LN2 / 19], [5.08, Math.LN2 / 3.8], [11.94, Math.LN2 / 1.9]];
+// What rain takes out on the way is put down as a spot for every so many meters (m).
+const WET_MERGE = 10000;
 // No wind: the profile of fall paths when the winds are taken where and when a particle is.
 const CALM = [[0, 0, 0]];
 // When the cloud stops rising (s) [SIMFIC, Table 1, from DELFIC], for yields of 10^-3 to 10^5 kt.
@@ -270,33 +276,90 @@ function rise(cloud, path, height, profile, bottom, ground, winds = null) {
     return {height: z, x, y, highest, highestAt, landed: false, seconds: t};
 }
 
+// How fast rain takes fallout out of the air (per second), at `altitude` (m above sea level) in rain
+// of `mmPerHour` falling from `cloud` ([bottom, top], m above sea level, or null where unknown)
+// [Glasstone and Dolan, 9.74 and Tables 9.74a and b].  Inside the rain cloud ("rainout") half is
+// taken in about 0.16 hour, whatever the rain; below it ("washout") half in 19, 3.8 and 1.9 hours of
+// light, moderate and heavy rain (0.05, 0.20 and 0.47 inch an hour).  Above the cloud, none.
+export function scavengingRate(mmPerHour, altitude, cloud) {
+    if (!(mmPerHour > 0)) return 0;
+    if (cloud && altitude > cloud[1]) return 0;
+    if (cloud && altitude >= cloud[0]) return RAINOUT_PER_HOUR / 3600;
+    // Between the three rains, on a straight line in log rain against log rate; beyond them, along
+    // the nearest stretch of it.
+    const k = mmPerHour <= WASHOUT[1][0] ? 0 : 1;
+    const [[r0, l0], [r1, l1]] = [WASHOUT[k], WASHOUT[k + 1]];
+    const slope = Math.log(l1 / l0) / Math.log(r1 / r0);
+    return l0 * Math.pow(mmPerHour / r0, slope) / 3600;
+}
+
 // Where a particle falling from `height`, `x0` m east and `y0` m north of ground zero, `t0` seconds
-// after the burst, lands, carried by `winds` (see landingSpots) where and when it is: [east, north,
-// seconds] of where it lands and how long it took, or null if it is still falling at `maxSeconds`.
-// It falls by up to FIELD_STEP meters at a time, and for no longer than FIELD_SECONDS, when the
-// winds change little; it lands where the line of its last step meets the ground.
-function landingThrough(winds, diameter, siteElevation, height, x0, y0, t0, bottom, ground, maxSeconds) {
+// after the burst, lands, carried by `winds` (see landingSpots) where and when it is: {at: [east,
+// north, seconds] of where it lands and how long it took, or null if it is still falling at
+// `maxSeconds`; remaining: the share of it not taken out by rain on the way}.  What rain takes out
+// is put in `wet` ([{x, y, seconds (after the burst), share}]), a spot for every WET_MERGE meters of
+// its way through rain.  It falls by up to FIELD_STEP meters at a time, and for no longer than
+// FIELD_SECONDS, when the winds change little; it lands where the line of its last step meets the
+// ground.
+function landingThrough(winds, diameter, siteElevation, height, x0, y0, t0, bottom, ground, maxSeconds, wet) {
     let z = height, x = x0, y = y0, t = t0, above = z - ground(x, y);
+    let remaining = 1, washed = null;
+    const flush = () => {
+        if (washed && washed.share > 0) {
+            wet.push({x: washed.sx / washed.share, y: washed.sy / washed.share, seconds: washed.st / washed.share,
+                share: washed.share});
+        }
+        washed = null;
+    };
+    const raining = wet && winds.rainAt;
     while (z > bottom) {
         const speed = settlingSpeedAt(diameter, siteElevation + z);
         const step = Math.min(FIELD_STEP, Math.max(speed * FIELD_SECONDS, FALL_STEP), z - bottom);
         const middle = z - step / 2;
         const dt = step / settlingSpeedAt(diameter, siteElevation + middle);
         const [u, v] = winds.at(x, y, middle, t + dt / 2);
+        if (raining) {
+            const mx = x + u * dt / 2, my = y + v * dt / 2;
+            const [mm, cloud] = winds.rainAt(mx, my, t + dt / 2);
+            const rate = scavengingRate(mm, siteElevation + middle, cloud);
+            if (rate > 0) {
+                // What little would be left is taken with the rest.
+                let taken = remaining * (1 - Math.exp(-rate * dt));
+                if (remaining - taken < 1e-4) taken = remaining;
+                remaining -= taken;
+                if (!washed) washed = {share: 0, sx: 0, sy: 0, st: 0, x0: mx, y0: my};
+                washed.share += taken;
+                washed.sx += taken * mx;
+                washed.sy += taken * my;
+                washed.st += taken * (t + dt / 2);
+                if (Math.hypot(mx - washed.x0, my - washed.y0) > WET_MERGE) flush();
+                if (remaining <= 0) {
+                    flush();
+                    return {at: null, remaining: 0};
+                }
+            } else {
+                flush();
+            }
+        }
         const nextAbove = z - step - ground(x + u * dt, y + v * dt);
         if (nextAbove <= 0) {
             // Down to the ground, part of the way.
             const f = above > 0 ? above / (above - nextAbove) : 0;
-            return [x + f * u * dt, y + f * v * dt, t + f * dt - t0];
+            if (raining) flush();
+            return {at: [x + f * u * dt, y + f * v * dt, t + f * dt - t0], remaining};
         }
         x += u * dt;
         y += v * dt;
         t += dt;
         z -= step;
         above = nextAbove;
-        if (t > maxSeconds) return null;
+        if (t > maxSeconds) {
+            if (raining) flush();
+            return {at: null, remaining};
+        }
     }
-    return [x, y, t - t0];
+    if (raining) flush();
+    return {at: [x, y, t - t0], remaining};
 }
 
 // How wide (sigma, m) a spot is when it lands: as wide as the cloud was where it left it,
@@ -324,7 +387,9 @@ export function landedSigma(sigma0, highest, speed) {
 //
 // `winds`, if given, is {at(x, y, z, t)}: the wind [east, north] (m/s) x meters east and y north of
 // ground zero, z meters above its ground, t seconds after the burst; a particle is then carried by
-// the wind where it is, at the height it is, when it is there, and `profile` is not used.
+// the wind where it is, at the height it is, when it is there, and `profile` is not used.  If it
+// also has rainAt(x, y, t), [mm an hour, cloud ([bottom, top], m above sea level) or null], rain
+// takes fallout out of the air on the way down and puts it down there (spots with `wet`).
 export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation = 0, maxHours = 48,
                                  volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, stabilized = null,
                                  winds = null}) {
@@ -346,32 +411,33 @@ export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation =
         for (let j = 0; j < SUBDIVISIONS; j++) {
             const start = cloud.initialBase + (j + 0.5) / SUBDIVISIONS * (cloud.initialTop - cloud.initialBase);
             const r = rise(cloud, path, start, profile, bottom, ground, winds);
-            let x = r.x, y = r.y, seconds = r.seconds;
-            if (!r.landed) {
-                const landed = winds
-                    ? landingThrough(winds, diameter, siteElevation, r.height, r.x, r.y, r.seconds, bottom, ground,
-                        maxHours * 3600)
-                    : landing(path, r.height, r.x, r.y, bottom, ground);
-                if (!landed) continue;
-                const [dx, dy, fallSeconds] = landed;
-                x = dx;
-                y = dy;
-                seconds += fallSeconds;
-            }
-            if (seconds > maxHours * 3600) continue;
             let radius;
             if (!r.landed && r.height >= cloud.base) radius = cloud.radius;
             else {
                 const f = (r.height - first.height) / Math.max(cloud.base - first.height, 1);
                 radius = cloud.initialRadius + Math.min(Math.max(f, 0), 1) * (cloud.radius - cloud.initialRadius);
             }
-            const falling = Math.max(seconds - r.highestAt, 1);
-            const sigma = landedSigma(radius / 2, r.highest, Math.max(r.highest, 1) / falling);
-            spots.push({
-                x, y, sigma, diameter, highest: r.highest,
-                activity: activity * down / SUBDIVISIONS,
-                hours: seconds / 3600,
-            });
+            const parcel = activity * down / SUBDIVISIONS;
+            // A spot where some of this parcel lands, `seconds` after the burst.
+            const put = (x, y, seconds, share, wet) => {
+                if (seconds > maxHours * 3600 || !(share > 0)) return;
+                const falling = Math.max(seconds - r.highestAt, 1);
+                const sigma = landedSigma(radius / 2, r.highest, Math.max(r.highest, 1) / falling);
+                spots.push({x, y, sigma, diameter, highest: r.highest, activity: parcel * share, hours: seconds / 3600,
+                    ...(wet ? {wet: true} : {})});
+            };
+            if (r.landed) {
+                put(r.x, r.y, r.seconds, 1);
+            } else if (winds) {
+                const wet = [];
+                const landed = landingThrough(winds, diameter, siteElevation, r.height, r.x, r.y, r.seconds, bottom,
+                    ground, maxHours * 3600, wet);
+                for (const w of wet) put(w.x, w.y, w.seconds, w.share, true);
+                if (landed.at) put(landed.at[0], landed.at[1], r.seconds + landed.at[2], landed.remaining);
+            } else {
+                const [x, y, fallSeconds] = landing(path, r.height, r.x, r.y, bottom, ground);
+                put(x, y, r.seconds + fallSeconds, 1);
+            }
         }
     }
     return spots;

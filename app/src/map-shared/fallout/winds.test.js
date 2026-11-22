@@ -1,4 +1,4 @@
-import {landingSpots} from './model.js';
+import {landingSpots, scavengingRate} from './model.js';
 import {
     fieldCovers,
     fieldWinds,
@@ -172,3 +172,67 @@ describe('fallout in a field of winds', () => {
         expect(middle(late)[1]).toBeGreaterThan(middle(late)[0]);
     });
 });
+
+describe('rain', () => {
+    // The hours for half to be taken out at a rate (per second).
+    const half = (rate) => Math.LN2 / rate / 3600;
+
+    test('takes fallout out of the air as Glasstone has it', () => {
+        const cloud = [1000, 5000];
+        // Inside the rain cloud, half in 0.16 hour whatever the rain.
+        expect(half(scavengingRate(1, 3000, cloud))).toBeCloseTo(0.16, 6);
+        expect(half(scavengingRate(20, 3000, cloud))).toBeCloseTo(0.16, 6);
+        // Below it, half in 19, 3.8 and 1.9 hours of light, moderate and heavy rain.
+        expect(half(scavengingRate(1.27, 500, cloud))).toBeCloseTo(19, 6);
+        expect(half(scavengingRate(5.08, 500, cloud))).toBeCloseTo(3.8, 6);
+        expect(half(scavengingRate(11.94, 500, cloud))).toBeCloseTo(1.9, 6);
+        // Between and beyond them, more rain takes more.
+        expect(scavengingRate(3, 500, cloud)).toBeGreaterThan(scavengingRate(2, 500, cloud));
+        expect(scavengingRate(30, 500, cloud)).toBeGreaterThan(scavengingRate(11.94, 500, cloud));
+        // Above the rain cloud, and without rain, none; where the cloud is not known, washout.
+        expect(scavengingRate(10, 6000, cloud)).toBe(0);
+        expect(scavengingRate(0, 3000, cloud)).toBe(0);
+        expect(half(scavengingRate(5.08, 3000, null))).toBeCloseTo(3.8, 6);
+    });
+
+    // A field of west winds, rain falling from a cloud 1 to 4 km high where `raining(lat, lon)`.
+    function rainy(raining, mm = 5) {
+        const f = field(undefined, {lats: [59, 60, 61, 62, 63], lons: [-150, -149, -148, -147, -146, -145, -144, -143]});
+        f.rain = f.points.map(({lat, lon}) => HOURS.map(() => (raining(lat, lon) ? mm : 0)));
+        f.clouds = f.points.map(() => HOURS.map(() => [1000, 4000]));
+        return f;
+    }
+    const run = (f, maxHours = 48) => landingSpots({yieldKt: 10, maxHours,
+        winds: fieldWinds(prepareField(f), {lat0: 61, lon0: -149.5, startMs: START})});
+    const total = (spots) => spots.reduce((a, s) => a + s.activity, 0);
+    const between = (spots, x0, x1) => total(spots.filter((s) => s.x >= x0 && s.x < x1));
+
+    test('moves fallout, but does not make or lose any', () => {
+        // However long it takes to come down: without rain, the finest takes longer than 48 hours.
+        const dry = run(rainy(() => false), 1e6);
+        const wet = run(rainy(() => true), 1e6);
+        expect(dry.some((s) => s.wet)).toBe(false);
+        expect(wet.some((s) => s.wet)).toBe(true);
+        expect(total(wet)).toBeCloseTo(total(dry), 10);
+        // In 48 hours, rain brings down some of what would still be in the air.
+        expect(total(run(rainy(() => true)))).toBeGreaterThan(total(run(rainy(() => false))));
+        // Taken out on the way, it comes down sooner, and nearer.
+        const reach = (spots) => spots.reduce((a, s) => a + s.activity * s.x, 0) / total(spots);
+        expect(reach(wet)).toBeLessThan(reach(dry) * 0.8);
+    });
+
+    test('brings fallout down where it rains: a hot spot downwind', () => {
+        // Rain at the points from 147 W to 145 W: read between the points, it falls from 148 W to
+        // 144 W, about 80 to 300 km downwind.
+        const dry = run(rainy(() => false));
+        const band = run(rainy((lat, lon) => lon >= -147 && lon <= -145));
+        const perLon = 111320 * Math.cos(61 * Math.PI / 180);
+        const [x0, x1] = [(-148 + 149.5) * perLon, (-144 + 149.5) * perLon];
+        expect(between(band, x0, x1)).toBeGreaterThan(between(dry, x0, x1) * 1.5);
+        // Taken out on the way, less is left to come down beyond it.
+        expect(between(band, x1, 1e7)).toBeLessThan(between(dry, x1, 1e7) * 0.7);
+        // Upwind of the rain, nothing changes.
+        expect(between(band, -1e6, x0 - 30000)).toBeCloseTo(between(dry, -1e6, x0 - 30000), 10);
+    });
+});
+

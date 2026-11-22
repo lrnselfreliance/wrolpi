@@ -26,6 +26,12 @@ def forecast(lat=61.0, lon=-149.0, elevation=100.0, hours=2):
         hourly[f'geopotential_height_{level}hPa'] = [height] * hours
         hourly[f'wind_speed_{level}hPa'] = [speed] * hours
         hourly[f'wind_direction_{level}hPa'] = [direction] * hours
+    # Humid from 925 to 700 hPa (a cloud from about 800 m to 3,000 m), dry above.
+    for level, height, rh in [(1000, 50.0, 70), (975, 300.0, 75), (950, 550.0, 78), (925, 800.0, 85),
+                              (900, 1000.0, 90), (850, 1500.0, 95), (800, 2000.0, 90), (700, 3000.0, 82),
+                              (600, 4200.0, 55), (500, 5600.0, 40), (400, 7200.0, 30), (300, 9200.0, 20)]:
+        hourly[f'relative_humidity_{level}hPa'] = [rh] * hours
+        hourly.setdefault(f'geopotential_height_{level}hPa', [height] * hours)
     return {'latitude': lat, 'longitude': lon, 'elevation': elevation, 'hourly': hourly}
 
 
@@ -74,6 +80,8 @@ def test_forecast_url_asks_for_every_place_and_level():
     assert 'latitude=61%2C60' in url and 'longitude=-149%2C-150' in url
     for level in winds.PRESSURE_LEVELS:
         assert f'geopotential_height_{level}hPa' in url
+    for level in winds.HUMIDITY_LEVELS:
+        assert f'relative_humidity_{level}hPa' in url
     assert 'wind_speed_unit=ms' in url
     # The forecast starts at midnight UTC: a third day covers the 48 hours after a burst this hour.
     assert f'forecast_days={winds.FORECAST_DAYS}' in url and winds.FORECAST_DAYS >= 3
@@ -86,6 +94,15 @@ def test_parse_forecast():
     assert [h['time'] for h in parsed['hours']] == ['2026-11-22T00:00Z', '2026-11-22T01:00Z']
     assert parsed['hours'][0]['winds'] == [[110, 2.0, 180], [1500, 10.0, 220], [5600, 25.0, 260]]
     assert parsed['hours'][1]['precipitation'] == 1.5
+    # The cloud rain falls from: from the first level at least 80% humid to the first above it below 60%.
+    assert parsed['hours'][0]['cloud'] == [800, 4200]
+
+
+def test_cloud_layer():
+    assert winds.cloud_layer(0, [(100, 50), (1000, 70)]) is None
+    # Levels below the ground are left out; humid to the top: the top is the highest level.
+    assert winds.cloud_layer(500, [(100, 95), (1000, 85), (2000, 90)]) == [1000, 2000]
+    assert winds.cloud_layer(0, [(100, 85), (1000, None), (2000, 59), (3000, 90)]) == [100, 2000]
 
 
 def test_parse_forecast_rejects_nonsense():
@@ -116,6 +133,7 @@ async def test_fetch_wind_field(test_directory):
     assert len(field['winds']) == len(points) and len(field['winds'][0]) == len(field['hours']) == 2
     assert field['winds'][0][0][0] == [110, 2.0, 180]
     assert field['rain'][0] == [0.0, 1.5]
+    assert field['clouds'][0] == [[800, 4200], [800, 4200]]
     assert winds.latest_field() == field
     # Kept where the file lists do not look.
     assert winds.winds_directory().name.startswith('.')

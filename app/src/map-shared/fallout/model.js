@@ -1,28 +1,27 @@
-// Where the local fallout of a surface burst lands, and how radioactive the ground is there.
+// Where the local fallout of a burst at the ground lands, and how radioactive the ground is there.
 // Shared by the app's map viewer and the standalone viewer: no imports from the app, no
 // dependencies.
 //
-// The stabilized cloud is a cap, a skirt below it and a stem down to the ground, each holding its
-// own share of the activity [Philippe]: the cap Gaussian in height, the skirt and stem even.  The
-// cap is as wide as the stabilized cloud; the stem starts as narrow as the early fireball at the
-// ground and widens up to the cap [DNAF-1].  The activity is
-// carried on particles of every size; each size falls at its own speed through winds which change
-// with height, so the large ones land near ground zero and the small ones far downwind, wherever
-// the winds they fell through took them.  Each (size, starting height) lands as a Gaussian spot,
-// which is as wide as the cloud was, and widens with the time the particle was in the air.
+// All of the activity starts in the early fireball, on particles of every size, and rises with the
+// cloud [SIMFIC].  The cloud's base and top rise with the square root of time to their stabilized
+// heights; inside it the air rises as fast as the cloud, and below it ever slower toward the
+// ground.  Each particle rises with the air less its own settling speed, so a heavy particle drops
+// out of the cloud low and early, near ground zero (the stem's close-in fallout), and a light one
+// rides to the top of the cloud and falls far downwind.  Every particle is carried by the wind at
+// the height it is at, while it rises and while it falls, and lands where it first meets the
+// ground.  Each (size, starting height) lands as a Gaussian spot, as wide as the cloud was where it
+// left it, and widened by the turbulence of the air on the way down.
 //
 // Sources (each where it is used):
-//   [DNAF-1]  DNAF-1: An Analytical Fallout Prediction Model and Code, DNA 6299F (1981), DTIC
-//             ADA130291: cloud heights (Wilsey and Crisco's fits to observed clouds), cloud radius
-//             (a fit to DELFIC), and DELFIC's standard particle size distribution.
-//   [WSEG-10] Documentation and Analysis of the WSEG-10 Fallout Prediction Model, AFIT (1980), DTIC
-//             ADA083515: the cloud's activity is Gaussian, and the cloud is 4 sigma tall and across.
-//   [HPAC]    A Comparison of HPAC Dose-Rate Contour Plots to ... Local Fallout Data ..., AFIT
-//             (2005), DTIC ADA438146: the theoretical source normalization constant.
-//   [Philippe] Philippe et al., Reconstruction of fallout deposition from U.S. atmospheric nuclear
-//             tests conducted in New Mexico and Nevada (arXiv 2307.11040): the shares of the
-//             activity in the cap, skirt and stem, and their heights.  Glasstone and Dolan (1977,
-//             9.61) give about 90% in the head of a land surface burst, the rest in the stem.
+//   [SIMFIC]  H. G. Norment, SIMFIC: A Simple, Efficient Fallout Prediction Model, DNA 5193F
+//             (1979), DTIC ADA089187: the rising cloud, the particles' paths in it, how wide each is
+//             when it leaves it, its widening by turbulence, and the share of the activity which
+//             comes down for a burst above the ground.  SIMFIC matched DELFIC, the Department of
+//             Defense's fallout code, on five test shots from 0.5 to 3380 kt.
+//   [DNAF-1]  H. G. Norment, DNAF-1: An Analytical Fallout Prediction Model and Code, DNA 6299F
+//             (1981), DTIC ADA130291: the stabilized cloud's heights (Wilsey and Crisco's fits to
+//             observed clouds, which SIMFIC uses too), DELFIC's standard particle size distribution,
+//             and the exposure rate of a kiloton of fission products spread over unit area.
 
 import {settlingSpeed} from './atmosphere.js';
 
@@ -30,11 +29,11 @@ const FEET = 0.3048;
 const MPH = 0.44704;
 const SQ_KM_PER_SQ_MI = 2.589988;
 
-// The dose rate at H+1 hour, three feet above an ideal flat plane, of the fission products of one
-// kiloton spread over one square kilometer: (R/hr) km^2 / kt.  The theoretical value [HPAC] is
-// 2590 for the 75% of the activity which falls as local fallout; this is all of it, since the model
-// itself decides how much falls locally (what is on particles too small to land in time does not).
-export const SOURCE_NORMALIZATION = 2590 / 0.75;
+// The exposure rate at H+1 hour, a meter above an ideal flat plane, of the fission products of one
+// kiloton spread over one square kilometer: (R/hr) km^2 / kt [DNAF-1, (31)]: 6.9733e9 R m^2/(hr kt).
+// (Glasstone and Dolan, 9.14, give 2900 rad/hr for a kiloton over a square mile: 7511 per km^2.)
+// It is for all of the activity; the model decides how much of it lands locally.
+export const SOURCE_NORMALIZATION = 6973.3;
 
 // DELFIC's standard distribution of the number of particles over diameter [DNAF-1]: lognormal.
 const NUMBER_MEDIAN_DIAMETER = 0.407e-6;
@@ -49,15 +48,12 @@ export const VOLUME_ACTIVITY_SHARE = 0.6;
 const SMALLEST_DIAMETER = 1e-6;
 const LARGEST_DIAMETER = 4e-3;
 const SIZE_BINS = 48;
-const HEIGHT_BINS = 24;
-const SKIRT_BINS = 8;
-const STEM_BINS = 8;
-
-// The shares of the activity in the cap, the skirt (from half the height of the cap's base up to it)
-// and the stem (from the ground up to the skirt), for a surface or tower burst [Philippe].
-export const CLOUD_PARTS = {cap: 0.775, skirt: 0.15, stem: 0.075};
+// How many heights in the early fireball each particle size starts from.
+const SUBDIVISIONS = 10;
 // How finely a fall is integrated, in meters of height.
 const FALL_STEP = 50;
+// When the cloud stops rising (s) [SIMFIC, Table 1, from DELFIC], for yields of 10^-3 to 10^5 kt.
+const STOP_TIMES = [300, 300, 300, 300, 300, 280, 200, 160, 150];
 
 // A wind table, as rows of [altitude (ft above sea level), direction the wind blows FROM (degrees),
 // speed (mph)], as a profile of [height above ground (m), east (m/s), north (m/s)].
@@ -97,10 +93,8 @@ export function uniformProfile(profile, top) {
     return [[0, u, v]];
 }
 
-// The stabilized cloud of a `yieldKt` burst: cap base and top heights above the ground [DNAF-1, (3)
-// and (4)], its radius [DNAF-1, (5)], and the radius of the early cloud (the fireball, as it starts
-// to rise) [DNAF-1, (2)], in meters.  (The early radius's exponent is read off a smudged scan as
-// 0.33: the cube root by which fireball sizes scale.)
+// The stabilized cloud of a `yieldKt` burst: cap base and top heights above the burst [DNAF-1, (3)
+// and (4)] and its radius [SIMFIC, (2.6.7)], in meters.
 export function stabilizedCloud(yieldKt) {
     const w = yieldKt;
     const base = w <= 4.07 ? 2228 * Math.pow(w, 0.3463) : 2661 * Math.pow(w, 0.2198);
@@ -110,17 +104,38 @@ export function stabilizedCloud(yieldKt) {
     else top = 6474 * Math.pow(w, 0.1650);
     const ln = Math.log(w);
     const radius = Math.exp(6.7553 + 0.32055 * ln + 0.01137478 * ln * ln);
-    const earlyRadius = 108 * Math.pow(w, 0.33);
-    return {base, top, radius, earlyRadius, yieldKt: w};
+    return {base, top, radius};
 }
 
-// How wide (sigma, m) the stem is at the ground [DNAF-1, (23)]: as the early cloud for a small
-// burst, whose fallout starts before the cloud has gone far, and wider for a large one, whose
-// earliest fallout has fallen a long way.
-export function stemSigma(yieldKt, earlyRadius) {
-    if (yieldKt <= 10) return earlyRadius;
-    if (yieldKt >= 1000) return 2.5 * earlyRadius;
-    return earlyRadius * (1 + 3 * Math.log10(yieldKt)) / 4;
+// The rising cloud of a `yieldKt` burst `burstHeight` meters above the ground [SIMFIC, 2.6]: it
+// starts (s after the burst) as the fireball, `initialRadius` wide, between `initialBase` and
+// `initialTop` (m above the ground), and rises until `stop` to between `base` and `top`, `radius`
+// wide.  `stabilized` ({base, top}, m above the burst) is the cloud as observed, if it was.
+export function risingCloud(yieldKt, burstHeight = 0, stabilized = null) {
+    const w = yieldKt;
+    const fit = {...stabilizedCloud(w), ...(stabilized || {})};
+    const y = Math.min(Math.max(Math.log10(w), -3), 5) + 3;
+    const k = Math.min(Math.floor(y), STOP_TIMES.length - 2);
+    const initialRadius = 108 * Math.pow(w, 0.33);
+    const initialBase = burstHeight + 90 * Math.cbrt(w);
+    return {
+        start: 2.07 * Math.pow(w, 0.13),
+        stop: STOP_TIMES[k] + (y - k) * (STOP_TIMES[k + 1] - STOP_TIMES[k]),
+        initialRadius,
+        initialBase,
+        initialTop: initialBase + 1.32288 * initialRadius,
+        base: burstHeight + fit.base,
+        top: burstHeight + Math.max(fit.top, fit.base + 1),
+        radius: fit.radius,
+    };
+}
+
+// The share of the activity which comes down as local fallout from a burst `burstHeight` meters
+// above the ground [SIMFIC, (2.8.2), from DASA 1251 Volume 5]: all of it from a burst on the
+// ground, ever less as the fireball touches the ground less.
+export function activityDown(yieldKt, burstHeight) {
+    const scaled = burstHeight / FEET / Math.cbrt(yieldKt);
+    return scaled > 0 ? Math.pow(0.45345, scaled / 65) : 1;
 }
 
 // The error function (Abramowitz and Stegun 7.1.26; error under 1.5e-7).
@@ -158,9 +173,9 @@ export function particleSizes(volumeShare = VOLUME_ACTIVITY_SHARE) {
     return sizes;
 }
 
-// The fall of a particle of `diameter` from the top of the cloud down to `bottom` meters (zero or
-// below: ground lower than ground zero): at each level (every FALL_STEP meters, from `bottom` up),
-// how far it goes east and north, and for how many seconds, from there down to `bottom`.
+// The fall of a particle of `diameter` from `top` down to `bottom` meters (zero or below: ground
+// lower than ground zero): at each level (every FALL_STEP meters, from `bottom` up), how far it goes
+// east and north, and for how many seconds, from there down to `bottom`.
 function fall(diameter, top, bottom, profile, siteElevation) {
     const steps = Math.ceil((top - bottom) / FALL_STEP);
     const east = new Float64Array(steps + 1);
@@ -177,80 +192,138 @@ function fall(diameter, top, bottom, profile, siteElevation) {
     return {east, north, seconds};
 }
 
-// Where a particle which starts at level `start` of `path` lands: the first level on the way down at
-// which it is at or below the ground under it.  [east, north, seconds] from where it started.
-function landing(path, start, bottom, ground) {
-    const {east, north, seconds} = path;
-    for (let m = start - 1; m > 0; m--) {
-        const x = east[start] - east[m];
-        const y = north[start] - north[m];
-        if (bottom + m * FALL_STEP <= ground(x, y)) return [x, y, seconds[start] - seconds[m]];
-    }
-    return [east[start] - east[0], north[start] - north[0], seconds[start] - seconds[0]];
+// The settling speed (m/s) on `path` at `height`.
+function speedOn(path, height, bottom) {
+    const i = Math.min(Math.max(Math.floor((height - bottom) / FALL_STEP) + 1, 1), path.seconds.length - 1);
+    return FALL_STEP / (path.seconds[i] - path.seconds[i - 1]);
 }
 
-// The heights the activity starts falling from, once the cloud has stabilized: [{z (m above the
-// ground), weight (share of the activity), sigma (m, how wide it is there)}].  `cloud` is as
-// stabilizedCloud gives it; `parts` are the shares of the cap, skirt and stem (CLOUD_PARTS).
-export function cloudHeights(cloud, parts = CLOUD_PARTS) {
-    const heights = [];
-    // The cap is Gaussian in height between its base and top, which are 2 sigma either side of its
-    // center [WSEG-10]; it is half its radius wide [DNAF-1, (26)].
-    const center = (cloud.base + cloud.top) / 2;
-    const sigmaHeight = Math.max((cloud.top - cloud.base) / 4, 1);
-    const capSigma = cloud.radius / 2;
-    const cap = [];
-    for (let j = 0; j < HEIGHT_BINS; j++) {
-        const z = cloud.base + (j + 0.5) / HEIGHT_BINS * (cloud.top - cloud.base);
-        cap.push({z, weight: Math.exp(-0.5 * ((z - center) / sigmaHeight) ** 2), sigma: capSigma});
+// Where a particle falling from `height`, `x0` m east and `y0` m north of ground zero, lands: the
+// first level on the way down at which it is at or below the ground under it.  [east, north,
+// seconds] of where it lands and how long it took.
+function landing(path, height, x0, y0, bottom, ground) {
+    const {east, north, seconds} = path;
+    const start = Math.min(Math.max(Math.round((height - bottom) / FALL_STEP), 0), seconds.length - 1);
+    for (let m = start - 1; m > 0; m--) {
+        const x = x0 + east[start] - east[m];
+        const y = y0 + north[start] - north[m];
+        if (bottom + m * FALL_STEP <= ground(x, y)) return [x, y, seconds[start] - seconds[m]];
     }
-    const capTotal = cap.reduce((a, h) => a + h.weight, 0);
-    for (const h of cap) heights.push({...h, weight: parts.cap * h.weight / capTotal});
-    // Below the cap, the stem widens from the early cloud at the ground to the cap at its base
-    // [DNAF-1, (25)].
-    const groundSigma = Math.min(stemSigma(cloud.yieldKt ?? 1, cloud.earlyRadius ?? capSigma), capSigma);
-    const widthAt = (z) => groundSigma + (capSigma - groundSigma) * z / cloud.base;
-    const even = (low, high, bins, share) => {
-        for (let j = 0; j < bins; j++) {
-            const z = low + (j + 0.5) / bins * (high - low);
-            heights.push({z, weight: share / bins, sigma: widthAt(z)});
-        }
+    return [x0 + east[start] - east[0], y0 + north[start] - north[0], seconds[start] - seconds[0]];
+}
+
+// The cloud's base and top (m) and how fast they rise (m/s) `t` seconds after the burst
+// [SIMFIC, (2.2.1), (2.2.2)].
+function cloudAt(cloud, t) {
+    const span = Math.sqrt(cloud.stop) - Math.sqrt(cloud.start);
+    if (t >= cloud.stop) return {base: cloud.base, top: cloud.top, baseSpeed: 0, topSpeed: 0};
+    const s = (Math.sqrt(t) - Math.sqrt(cloud.start)) / span;
+    return {
+        base: cloud.initialBase + s * (cloud.base - cloud.initialBase),
+        top: cloud.initialTop + s * (cloud.top - cloud.initialTop),
+        baseSpeed: (cloud.base - cloud.initialBase) / (2 * Math.sqrt(t) * span),
+        topSpeed: (cloud.top - cloud.initialTop) / (2 * Math.sqrt(t) * span),
     };
-    if (parts.skirt) even(cloud.base / 2, cloud.base, SKIRT_BINS, parts.skirt);
-    if (parts.stem) even(0, cloud.base / 2, STEM_BINS, parts.stem);
-    return heights;
+}
+
+// How fast the air rises (m/s) at `height` `t` seconds after the burst: inside the cloud, linear
+// between its base and top; below it, slowing linearly to nothing at the ground [SIMFIC, (2.2.3),
+// (2.2.4)]; nothing once the cloud stops.
+function updraft(cloud, height, t) {
+    const c = cloudAt(cloud, t);
+    if (c.baseSpeed === 0) return 0;
+    if (height >= c.base) {
+        const f = Math.min((height - c.base) / Math.max(c.top - c.base, 1), 1);
+        return c.baseSpeed + f * (c.topSpeed - c.baseSpeed);
+    }
+    return c.baseSpeed * Math.max(height, 0) / c.base;
+}
+
+// The rise of a particle from `height` in the fireball, until the cloud stops: {height, x, y (m),
+// highest (m), highest at (s), landed (whether it met the ground first), seconds}.  `ground` is
+// ignored when it is null.
+function rise(cloud, path, height, profile, bottom, ground) {
+    let z = height, x = 0, y = 0, t = cloud.start, highest = z, highestAt = t;
+    while (t < cloud.stop) {
+        const dt = Math.min(Math.max(0.02 * t, 0.2), 5, cloud.stop - t);
+        const w1 = updraft(cloud, z, t) - speedOn(path, z, bottom);
+        const zMid = z + w1 * dt / 2;
+        const w2 = updraft(cloud, zMid, t + dt / 2) - speedOn(path, zMid, bottom);
+        const [u, v] = windAt(profile, zMid);
+        z += w2 * dt;
+        x += u * dt;
+        y += v * dt;
+        t += dt;
+        if (z > highest) {
+            highest = z;
+            highestAt = t;
+        }
+        if (ground && z <= ground(x, y)) return {height: z, x, y, highest, highestAt, landed: true, seconds: t};
+        if (!ground && z < bottom) break;
+    }
+    return {height: z, x, y, highest, highestAt, landed: false, seconds: t};
+}
+
+// How wide (sigma, m) a spot is when it lands: as wide as the cloud was where it left it,
+// `sigma0`, widened by the turbulence of the air while it fell from `highest` m at `speed` m/s
+// on average [SIMFIC, (2.7.3), (2.7.4), after Walton and Wilkins].
+export function landedSigma(sigma0, highest, speed) {
+    const a = Math.pow(sigma0, 2 / 3);
+    const z = Math.pow(Math.max(highest, 1), 2 / 3);
+    if (z < 3.83155 * speed * (1e3 - a)) return Math.sqrt((a + 0.26099 * z / speed) ** 3);
+    return Math.sqrt(7.8297e5 * z / speed + 3e6 * a - 2e9);
 }
 
 // The spots where the activity lands: [{x, y (m east and north of ground zero), sigma (m),
-// activity (share of the burst's activity), hours (in the air)}].
+// activity (share of the burst's activity), hours (after the burst), diameter (m, of its
+// particles), highest (m, the highest they rose)}].
 //
-// `cloud` is as stabilizedCloud gives it (or as observed); `profile` is as profileFromTable gives
-// it.  `diffusivity` (m^2/s) is how fast a spot widens with time in the air; `maxHours` is when
-// the ground is looked at: what lands later is not counted.
+// `yieldKt` and `burstHeight` (m above the ground) are of the burst; `profile` is as
+// profileFromTable gives it; `maxHours` is when the ground is looked at: what lands later is not
+// counted.  `stabilized` is the cloud as observed ({base, top}, m above the burst), if it was.
 //
 // `terrain`, if given, is {ground(x, y), lowest}: the height (m) of the ground x meters east and y
 // north of ground zero, above the ground at ground zero, and the lowest it gets.  A particle lands
 // where it first meets the ground: early on a ridge in its way, late in a valley.  Without it the
 // ground is flat.
-export function landingSpots({cloud, profile, siteElevation = 0, diffusivity = 1000, maxHours = 48,
-                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, parts = CLOUD_PARTS}) {
-    const bottom = terrain ? Math.min(0, Math.floor(terrain.lowest / FALL_STEP) * FALL_STEP) : 0;
+export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation = 0, maxHours = 48,
+                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, stabilized = null}) {
+    const cloud = risingCloud(yieldKt, Math.max(burstHeight, 0), stabilized);
+    const down = activityDown(yieldKt, burstHeight);
+    // Paths go down to 2 km below ground zero: the first parcel of a size to leave the cloud is
+    // followed below the ground until the cloud stops [SIMFIC, 2.6], and valleys may be that deep.
+    const bottom = Math.min(-2000, terrain ? Math.floor(terrain.lowest / FALL_STEP) * FALL_STEP : 0);
     const ground = terrain ? terrain.ground : () => 0;
-    // Where the activity starts falling from: {z, weight (share of the activity), sigma}.
-    const heights = cloudHeights(cloud, parts);
+    const top = Math.max(cloud.top, cloud.initialTop) + 500;
     const spots = [];
     for (const {diameter, activity} of particleSizes(volumeShare)) {
         if (activity <= 0) continue;
-        const path = fall(diameter, cloud.top, bottom, profile, siteElevation);
-        for (const {z, weight, sigma} of heights) {
-            const start = Math.min(Math.round((z - bottom) / FALL_STEP), path.seconds.length - 1);
-            const [x, y, seconds] = landing(path, start, bottom, ground);
+        const path = fall(diameter, top, bottom, profile, siteElevation);
+        // The first of this size to leave the cloud does so from the base of the fireball, as wide as
+        // it; those which leave later, higher, are wider, up to the stabilized cloud [SIMFIC, (2.6.8)].
+        const first = rise(cloud, path, cloud.initialBase, profile, bottom, null);
+        for (let j = 0; j < SUBDIVISIONS; j++) {
+            const start = cloud.initialBase + (j + 0.5) / SUBDIVISIONS * (cloud.initialTop - cloud.initialBase);
+            const r = rise(cloud, path, start, profile, bottom, ground);
+            let x = r.x, y = r.y, seconds = r.seconds;
+            if (!r.landed) {
+                const [dx, dy, fallSeconds] = landing(path, r.height, r.x, r.y, bottom, ground);
+                x = dx;
+                y = dy;
+                seconds += fallSeconds;
+            }
             if (seconds > maxHours * 3600) continue;
+            let radius;
+            if (!r.landed && r.height >= cloud.base) radius = cloud.radius;
+            else {
+                const f = (r.height - first.height) / Math.max(cloud.base - first.height, 1);
+                radius = cloud.initialRadius + Math.min(Math.max(f, 0), 1) * (cloud.radius - cloud.initialRadius);
+            }
+            const falling = Math.max(seconds - r.highestAt, 1);
+            const sigma = landedSigma(radius / 2, r.highest, Math.max(r.highest, 1) / falling);
             spots.push({
-                x,
-                y,
-                sigma: Math.sqrt(sigma ** 2 + 2 * diffusivity * seconds),
-                activity: activity * weight,
+                x, y, sigma, diameter, highest: r.highest,
+                activity: activity * down / SUBDIVISIONS,
                 hours: seconds / 3600,
             });
         }

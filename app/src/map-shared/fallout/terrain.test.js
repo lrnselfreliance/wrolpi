@@ -1,5 +1,5 @@
 import {decodeGrid, elevationAt, terrainAround} from './terrain.js';
-import {landingSpots, stabilizedCloud} from './model.js';
+import {landingSpots} from './model.js';
 import {meanError, runShot} from './validation.js';
 import shots from './nts-shots.json';
 import ntsTerrain from './nts-terrain.json';
@@ -45,13 +45,12 @@ describe('an elevation grid', () => {
 });
 
 describe('fallout over terrain', () => {
-    const cloud = stabilizedCloud(10);
     // Blowing east at 15 m/s at every height.
     const profile = [[0, 15, 0]];
-    const flat = landingSpots({cloud, profile});
+    const flat = landingSpots({yieldKt: 10, profile});
 
     test('lands as on flat ground, when the ground is flat', () => {
-        const spots = landingSpots({cloud, profile, terrain: {ground: () => 0, lowest: 0}});
+        const spots = landingSpots({yieldKt: 10, profile, terrain: {ground: () => 0, lowest: 0}});
         expect(spots).toEqual(flat);
     });
 
@@ -60,7 +59,7 @@ describe('fallout over terrain', () => {
     const share = (spots, test) => spots.filter((s) => test(s.x)).reduce((a, s) => a + s.activity, 0);
 
     test('piles up on a ridge in its way, and spares the valley behind it', () => {
-        const spots = landingSpots({cloud, profile, terrain: ridge});
+        const spots = landingSpots({yieldKt: 10, profile, terrain: ridge});
         const onRidge = (x) => x > 20000 && x < 40000;
         const behind = (x) => x >= 40000 && x < 80000;
         expect(share(spots, onRidge)).toBeGreaterThan(1.3 * share(flat, onRidge));
@@ -68,7 +67,7 @@ describe('fallout over terrain', () => {
     });
 
     test('lands sooner on the ridge, having fallen less far', () => {
-        const spots = landingSpots({cloud, profile, terrain: ridge});
+        const spots = landingSpots({yieldKt: 10, profile, terrain: ridge});
         const hours = (list) => list.filter((s) => s.x > 20000 && s.x < 40000)
             .reduce((a, s) => a + s.activity * s.hours, 0) / share(list, (x) => x > 20000 && x < 40000);
         expect(hours(spots)).toBeLessThan(hours(flat));
@@ -76,7 +75,7 @@ describe('fallout over terrain', () => {
 
     test('lands further on in a valley below ground zero', () => {
         const valley = {ground: (x) => (x > 5000 ? -1000 : 0), lowest: -1000};
-        const spots = landingSpots({cloud, profile, terrain: valley});
+        const spots = landingSpots({yieldKt: 10, profile, terrain: valley});
         const reach = (list) => list.reduce((a, s) => a + s.activity * s.x, 0) / list.reduce((a, s) => a + s.activity, 0);
         expect(reach(spots)).toBeGreaterThan(reach(flat));
     });

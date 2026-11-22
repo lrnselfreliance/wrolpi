@@ -4,7 +4,6 @@ import {
     depositionGrid,
     landingSpots,
     profileFromTable,
-    stabilizedCloud,
 } from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
@@ -75,7 +74,7 @@ export function windProfile({wind, direction, speed}) {
 
 export function simulate({yieldKt, fissionFraction, profile, terrain = null}) {
     const spots = landingSpots({
-        cloud: stabilizedCloud(yieldKt), profile, terrain,
+        yieldKt, profile, terrain,
         siteElevation: terrain ? Math.max(terrain.elevation, 0) : 0,
     });
     return depositionGrid(spots, {yieldKt, fissionFraction});
@@ -208,8 +207,8 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             </div>)}
         </div>
         <div style={{color: "var(--muted)", fontSize: "0.75rem", marginBottom: "0.5rem"}}>
-            An estimate, not a forecast. Prototype: how much activity lands is uncertain by about
-            a factor of two, and below 10 kt the dose near ground zero is likely too low.
+            An estimate, not a forecast. Prototype: against fallout measured after test bursts it
+            is within about 2 to 4 times, and tends to show more than was measured.
             {busy && " Calculating…"}
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>

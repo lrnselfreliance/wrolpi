@@ -51,6 +51,7 @@ import {
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
+import FalloutPanel from "./FalloutPanel";
 import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
 import {quadAt} from "./mapQuads";
 import {
@@ -722,6 +723,7 @@ export default function MapViewer() {
     const [contextMenu, setContextMenu] = useState(null);
     const navigate = useNavigate();
     const [addingPin, setAddingPin] = useState(null); // {lat, lon} when pin dialog is open
+    const [falloutAt, setFalloutAt] = useState(null); // {lat, lon} of the simulated burst
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
     // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
@@ -1276,6 +1278,12 @@ export default function MapViewer() {
         navigate(solarCalculatorPath(contextMenu.lat, contextMenu.lon));
     }, [contextMenu, navigate]);
 
+    const handleFallout = useCallback(() => {
+        if (!contextMenu) return;
+        setContextMenu(null);
+        setFalloutAt({lat: contextMenu.lat, lon: contextMenu.lon});
+    }, [contextMenu]);
+
     const handleSetDefaultLocation = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
@@ -1384,6 +1392,14 @@ export default function MapViewer() {
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
+                onClick={handleFallout}
+            >
+                Simulate Fallout Here
+            </div>
+            <div
+                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleSetDefaultLocation}
             >
                 Set as Default View
@@ -1405,6 +1421,13 @@ export default function MapViewer() {
                 setExportError(null);
                 setPickingQuad(null);
             }}
+        />}
+        {mapReady && falloutAt && <FalloutPanel
+            key={`${falloutAt.lat},${falloutAt.lon}`}
+            map={mapRef.current}
+            lat={falloutAt.lat}
+            lon={falloutAt.lon}
+            onClose={() => setFalloutAt(null)}
         />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}

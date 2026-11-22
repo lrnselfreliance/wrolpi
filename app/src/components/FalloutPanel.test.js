@@ -45,3 +45,25 @@ describe('the fallout panel\'s winds', () => {
         expect(hourLabel('2026-11-22T00:00Z', false)).not.toMatch(/now/);
     });
 });
+
+describe('the fallout of several bursts', () => {
+    const {simulateBursts} = require('./FalloutPanel');
+    const profileFor = () => [[0, 10, 0]];
+    const bursts = [
+        {lat: 40, lon: -105, yieldKt: 10, fissionFraction: 0.5},
+        {lat: 40.5, lon: -104, yieldKt: 100, fissionFraction: 0.5},
+    ];
+
+    test('is drawn on one grid around the first burst', async () => {
+        const one = await simulateBursts(bursts.slice(0, 1), {profileFor, useTerrain: false});
+        const both = await simulateBursts(bursts, {profileFor, useTerrain: false});
+        expect(both.origin).toBe(bursts[0]);
+        const sum = (g) => g.values.reduce((a, v) => a + v, 0) * g.cell ** 2;
+        expect(sum(both.grid)).toBeGreaterThan(sum(one.grid) * 5);
+        expect(both.terrainStatus).toMatch(/terrain is off/);
+    });
+
+    test('stops when it is no longer wanted', async () => {
+        expect(await simulateBursts(bursts, {profileFor, useTerrain: false, cancelled: () => true})).toBeNull();
+    });
+});

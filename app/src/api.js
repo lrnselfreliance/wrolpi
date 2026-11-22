@@ -1721,6 +1721,25 @@ export async function getFalloutWinds(lat, lon) {
     return null;
 }
 
+// The forecast winds aloft fetched most recently, for any place (the fallout simulator), or null.
+export async function getLatestFalloutWinds() {
+    const response = await apiGet(`${API_URI}/map/fallout/winds/latest`);
+    if (response.ok) {
+        return (await response.json()).winds;
+    }
+    return null;
+}
+
+// Change a target's weapon ({weapon, yield_kt, fission_fraction}).
+export async function updateMapTargetWeapon(pinId, weapon) {
+    const response = await apiPut(`${API_URI}/map/pins/${pinId}`, weapon);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not save the target\'s weapon');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+    return response.ok;
+}
+
 // Fetch the forecast winds aloft for a place (the fallout simulator); null when it cannot be.
 export async function fetchFalloutWinds(lat, lon) {
     const response = await apiPost(`${API_URI}/map/fallout/winds`, {lat, lon});
@@ -1739,9 +1758,10 @@ export async function getMapPins() {
     }
 }
 
-// `kind` is "pin", or "target": a likely detonation site, shown in the map's nuclear mode.
-export async function addMapPin(lat, lon, label, color, kind = "pin") {
-    const body = {lat, lon, label, color, kind};
+// `kind` is "pin", or "target": a likely detonation site, shown in the map's nuclear mode.  A target
+// may have `weapon` ({weapon, yield_kt, fission_fraction}).
+export async function addMapPin(lat, lon, label, color, kind = "pin", weapon = null) {
+    const body = {lat, lon, label, color, kind, ...(weapon || {})};
     const response = await apiPost(`${API_URI}/map/pins`, body);
     if (response.ok) {
         return await response.json();

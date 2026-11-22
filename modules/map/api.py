@@ -100,7 +100,8 @@ def get_pins(_: Request):
 @validate(schema.MapPinRequest)
 async def add_pin(_: Request, body: schema.MapPinRequest):
     try:
-        pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color, body.kind)
+        pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color, body.kind,
+                                            body.weapon, body.yield_kt, body.fission_fraction)
     except ValueError as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
     return json_response(dict(pin=pin), HTTPStatus.CREATED)
@@ -118,7 +119,12 @@ async def delete_pin(_: Request, pin_id: int):
 @openapi.description('Update a map pin by ID')
 @validate(schema.MapPinUpdateRequest)
 async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
-    if get_map_pins_config().update_pin(pin_id, body.label, body.color):
+    try:
+        updated = get_map_pins_config().update_pin(pin_id, body.label, body.color, body.weapon, body.yield_kt,
+                                                   body.fission_fraction)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    if updated:
         return response.empty(HTTPStatus.NO_CONTENT)
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
 
@@ -332,6 +338,12 @@ def get_fallout_winds(request: Request):
     except (TypeError, ValueError):
         return response.json({'error': 'lat and lon are required'}, HTTPStatus.BAD_REQUEST)
     return json_response(dict(winds=winds.cached_winds(lat, lon)), HTTPStatus.OK)
+
+
+@map_bp.get('/fallout/winds/latest')
+@openapi.description('The forecast winds aloft fetched most recently, for any place')
+def get_latest_fallout_winds(_: Request):
+    return json_response(dict(winds=winds.latest_winds()), HTTPStatus.OK)
 
 
 @map_bp.post('/fallout/winds')

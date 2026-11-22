@@ -112,6 +112,20 @@ def cached_winds(lat: float, lon: float) -> Optional[dict]:
         return None
 
 
+def latest_winds() -> Optional[dict]:
+    """The forecast fetched most recently, for any place, or None."""
+    latest = None
+    for path in winds_directory().glob('*.json'):
+        try:
+            winds = json.loads(path.read_text())
+        except (OSError, ValueError) as e:
+            logger.warning(f'Could not read the winds kept in {path}', exc_info=e)
+            continue
+        if latest is None or winds.get('fetched_at', '') > latest.get('fetched_at', ''):
+            latest = winds
+    return latest
+
+
 async def request_forecast(url: str) -> dict:
     async with aiohttp_get(url, timeout=TIMEOUT) as response:
         if response.status != 200:

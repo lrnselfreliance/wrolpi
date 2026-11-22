@@ -1,20 +1,18 @@
 import React, {useContext, useEffect, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Select} from "./ui";
-import {
-    depositionGrid,
-    landingSpots,
-    profileFromTable,
-} from "../map-shared/fallout/model.js";
+import {depositionGrid, landingSpots, profileFromTable} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
-import {formatYield, WEAPON_GROUPS, weaponByKey} from "../map-shared/fallout/weapons.js";
+import {formatYield, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
 import {forecastAge, forecastExpired, forecastProfile, nearestHour, rainAhead} from "../map-shared/fallout/winds.js";
-import {fetchFalloutWinds, getFalloutWinds} from "../api";
+import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, middleOf, targetWeapon} from "../map-shared/fallout/targets.js";
+import {fetchFalloutWinds, getLatestFalloutWinds} from "../api";
 import {StatusContext} from "../contexts/contexts";
 
-// A prototype of the fallout simulator (fallout-plan.md): one surface burst where the user clicked,
-// drawn as the dose rate at H+1 hour.  Nothing is saved.
+// The map's fallout view (nuclear mode): the fallout of every saved target at once, and of a burst
+// the user is trying out, in the most recently fetched winds aloft.  Drawn as the dose rate at H+1
+// hour.
 
 const SOURCE = "fallout-dose";
 const LAYER = "fallout-dose";
@@ -30,15 +28,13 @@ export const DOSE_BANDS = [
 ];
 
 // The weapons, grouped by country, then a yield of the user's own.
-const CUSTOM = "custom";
 export const WEAPON_CHOICES = [
     ...WEAPON_GROUPS.map((g) => ({
         group: g.name,
         items: g.weapons.map((w) => ({value: w.key, label: `${w.name}, ${formatYield(w.yield_kt)}`})),
     })),
-    {group: "Other", items: [{value: CUSTOM, label: "A yield of my own"}]},
+    {group: "Other", items: [{value: CUSTOM_WEAPON, label: "A yield of my own"}]},
 ];
-const DEFAULT_WEAPON = "w87-0";
 // The panel floats over the map (z-index 1002); its dropdowns open above it.
 const DROPDOWN = {zIndex: 1100};
 const FORECAST = "forecast";
@@ -74,8 +70,8 @@ export function gridImage(grid) {
     return canvas.toDataURL();
 }
 
-// The corners of the grid (top-left, top-right, bottom-right, bottom-left) as [lon, lat], around a
-// burst at `lon`, `lat`.
+// The corners of the grid (top-left, top-right, bottom-right, bottom-left) as [lon, lat], around
+// `lon`, `lat`.
 export function gridCorners(grid, lon, lat) {
     const toLon = (x) => lon + x / (METERS_PER_DEGREE * Math.cos(lat * Math.PI / 180));
     const toLat = (y) => lat + y / METERS_PER_DEGREE;
@@ -92,20 +88,6 @@ export function windProfile({wind, direction, speed, forecast, hour, groundEleva
         ? [[0, direction, speed]]
         : shots.shots.find((s) => s.name === wind).wind.map(([z, d, s], _, all) => [z - all[0][0], d, s]);
     return profileFromTable(rows, 0);
-}
-
-export function simulate({yieldKt, fissionFraction, profile, terrain = null, siteElevation = 0}) {
-    const spots = landingSpots({
-        yieldKt, profile, terrain,
-        siteElevation: Math.max(terrain ? terrain.elevation : siteElevation, 0),
-    });
-    return depositionGrid(spots, {yieldKt, fissionFraction});
-}
-
-// A forecast hour as the user reads it: the day and time where they are.
-export function hourLabel(time, nearest) {
-    const label = new Date(time).toLocaleString(undefined, {weekday: "short", hour: "numeric", minute: "2-digit"});
-    return nearest ? `${label} (now)` : label;
 }
 
 // The area ([west, south, east, north], degrees) where the grid reaches the lowest band, with a margin.
@@ -125,47 +107,145 @@ export function plumeBounds(grid, lon, lat) {
         lon + (x1 + margin) / perLon, lat + (y1 + margin) / METERS_PER_DEGREE];
 }
 
-export default function FalloutPanel({map, lat, lon, onClose}) {
-    const [weaponKey, setWeaponKey] = useState(DEFAULT_WEAPON);
-    const [customYield, setCustomYield] = useState(100);
-    const [fission, setFission] = useState(weaponByKey(DEFAULT_WEAPON).fission_fraction * 100);
-    const weapon = weaponKey === CUSTOM ? null : weaponByKey(weaponKey);
-    const yieldKt = weapon ? weapon.yield_kt : Math.max(Number(customYield) || 0, 0.001);
-    const chooseWeapon = (key) => {
-        if (!key) return;
-        setWeaponKey(key);
-        // A weapon brings its own fission share; a yield of one's own keeps the last.
-        if (key !== CUSTOM) setFission(weaponByKey(key).fission_fraction * 100);
+// A forecast hour as the user reads it: the day and time where they are.
+export function hourLabel(time, nearest) {
+    const label = new Date(time).toLocaleString(undefined, {weekday: "short", hour: "numeric", minute: "2-digit"});
+    return nearest ? `${label} (now)` : label;
+}
+
+// The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) on one grid around the first:
+// {grid, origin, terrainStatus}.  `profileFor(groundElevation)` gives the winds over a burst.  Waits
+// between bursts so the page stays responsive; `cancelled()` stops it.
+export async function simulateBursts(bursts, {profileFor, forecastElevation = 0, useTerrain = true,
+    cancelled = () => false}) {
+    const origin = bursts[0];
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const run = async (terrainOf) => {
+        const runs = [];
+        for (const b of bursts) {
+            const terrain = terrainOf ? terrainOf(b) : null;
+            const ground = terrain ? terrain.elevation : forecastElevation;
+            const spots = landingSpots({
+                yieldKt: b.yieldKt, profile: profileFor(ground), terrain, siteElevation: Math.max(ground, 0),
+            });
+            runs.push({burst: b, spots, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
+            await pause();
+            if (cancelled()) return null;
+        }
+        return depositionGrid(combineBursts(origin, runs), {yieldKt: 1});
     };
+    // On flat ground first: that is where the plumes are, so the terrain under them can be read.
+    let grid = await run(null);
+    if (!grid) return null;
+    let terrainStatus = "Flat ground (terrain is off).";
+    if (useTerrain) {
+        let loaded = null;
+        try {
+            loaded = await loadTerrainGrid(plumeBounds(grid, origin.lon, origin.lat), origin.lon, origin.lat);
+        } catch (e) {
+            console.error("Could not read the terrain", e);
+        }
+        if (cancelled()) return null;
+        if (loaded) {
+            grid = await run((b) => terrainAround(loaded.grid, b.lon, b.lat));
+            if (!grid) return null;
+            const covered = Math.round(loaded.coverage * 100);
+            terrainStatus = `Follows the terrain (zoom ${loaded.zoom}${covered < 100 ? `, ${covered}% of the area` : ""}).`;
+        } else {
+            terrainStatus = "No terrain file covers this place: flat ground.";
+        }
+    }
+    return {grid, origin, terrainStatus};
+}
+
+// A weapon to burst with: one of those offered, or a yield of one's own.  `value` and onChange's
+// argument are {weapon, yield_kt?, fission_fraction?}, as a target keeps them.
+export function WeaponPicker({value, onChange, label}) {
+    const chosen = targetWeapon(value);
+    const [customYield, setCustomYield] = useState(chosen.yieldKt);
+    const [customFission, setCustomFission] = useState(Math.round(chosen.fissionFraction * 100));
+    useEffect(() => {
+        setCustomYield(chosen.yieldKt);
+        setCustomFission(Math.round(chosen.fissionFraction * 100));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [value?.weapon, value?.yield_kt, value?.fission_fraction]);
+    const choose = (key) => {
+        if (!key || key === chosen.key) return;
+        if (key === CUSTOM_WEAPON) {
+            onChange({weapon: key, yield_kt: chosen.yieldKt, fission_fraction: chosen.fissionFraction});
+        } else {
+            onChange({weapon: key, fission_fraction: targetWeapon({weapon: key}).fissionFraction});
+        }
+    };
+    // A yield of one's own is kept when the user has finished typing it.
+    const keepCustom = () => {
+        const kt = Number(customYield), fission = Number(customFission) / 100;
+        if (!(kt > 0) || !(fission > 0 && fission <= 1)) return;
+        if (kt === chosen.yieldKt && fission === chosen.fissionFraction) return;
+        onChange({weapon: CUSTOM_WEAPON, yield_kt: kt, fission_fraction: fission});
+    };
+    return <div>
+        <Select label={label} size="xs" data={WEAPON_CHOICES} value={chosen.key} onChange={choose} searchable
+                allowDeselect={false} maxDropdownHeight={320} comboboxProps={DROPDOWN} aria-label="Weapon"/>
+        {chosen.weapon && chosen.weapon.yield_range_kt && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>
+            Estimates range from {formatYield(chosen.weapon.yield_range_kt[0])} to{" "}
+            {formatYield(chosen.weapon.yield_range_kt[1])}.
+        </div>}
+        {!chosen.weapon && <div style={{display: "flex", gap: "0.5rem"}}>
+            <NumberInput label="Yield (kt)" size="xs" min={0.01} max={100000} value={customYield}
+                         onChange={setCustomYield} onBlur={keepCustom}/>
+            <NumberInput label="Fission (%)" size="xs" min={1} max={100} value={customFission}
+                         onChange={setCustomFission} onBlur={keepCustom}/>
+        </div>}
+    </div>;
+}
+
+// The fallout view.  `targets` are the saved targets (pins of kind "target"); `burst` ({lat, lon}),
+// if given, is a burst the user is trying out, which `onSaveBurst(burst, weapon)` saves as a target.
+// `onTargetWeapon(target, weapon)` keeps a target's weapon.
+export default function FalloutPanel({map, targets = [], burst = null, onSaveBurst, onTargetWeapon, onClose}) {
+    const [burstWeapon, setBurstWeapon] = useState({weapon: DEFAULT_WEAPON});
     const [wind, setWind] = useState(FORECAST);
+    const [direction, setDirection] = useState(270);
+    const [speed, setSpeed] = useState(20);
     const [forecast, setForecast] = useState(null);
     const [hour, setHour] = useState(0);
     const [fetching, setFetching] = useState(false);
-    const {status} = useContext(StatusContext) || {};
-    const online = !!status?.flags?.have_internet;
-    const [direction, setDirection] = useState(270);
-    const [speed, setSpeed] = useState(20);
     const [busy, setBusy] = useState(false);
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
+    const {status} = useContext(StatusContext) || {};
+    const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
 
-    // The forecast kept for this place, if there is one.
+    const bursts = [
+        ...targets.map((t) => ({lat: t.lat, lon: t.lon, ...targetWeapon(t)})),
+        ...(burst ? [{lat: burst.lat, lon: burst.lon, ...targetWeapon(burstWeapon)}] : []),
+    ];
+    // What the fallout depends on, as one value an effect can watch.
+    const burstsKey = JSON.stringify(bursts.map((b) => [b.lat, b.lon, b.yieldKt, b.fissionFraction]));
+
+    // The forecast fetched most recently.
     useEffect(() => {
         let cancelled = false;
-        getFalloutWinds(lat, lon).then((kept) => {
-            if (cancelled || !kept) return;
-            setForecast(kept);
-            setHour(nearestHour(kept));
+        getLatestFalloutWinds().then((latest) => {
+            if (cancelled || !latest) return;
+            setForecast(latest);
+            setHour(nearestHour(latest));
         });
         return () => {
             cancelled = true;
         };
-    }, [lat, lon]);
+    }, []);
 
     const fetchForecast = async () => {
+        // For the middle of the bursts, or of the map when there are none.
+        const place = bursts.length ? middleOf(bursts) : (() => {
+            const c = map.getCenter();
+            return {lat: c.lat, lon: c.lng};
+        })();
         setFetching(true);
-        const fetched = await fetchFalloutWinds(lat, lon);
+        const fetched = await fetchFalloutWinds(place.lat, place.lon);
         setFetching(false);
         if (!fetched) return;
         setForecast(fetched);
@@ -175,39 +255,26 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
 
     useEffect(() => {
         let cancelled = false;
+        if (!bursts.length) {
+            drawn.current = null;
+            erase();
+            setTerrainStatus(null);
+            return;
+        }
         setBusy(true);
+        const winds = {wind, direction: Number(direction) || 0, speed: Number(speed) || 0, forecast, hour};
+        // Until the terrain is read, ground zero is as high as the forecast's ground.
+        const forecastElevation = forecast && wind === FORECAST ? forecast.elevation : 0;
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
-            const winds = {wind, direction: Number(direction) || 0, speed: Number(speed) || 0, forecast, hour};
-            // Until the terrain is read, ground zero is as high as the forecast's ground.
-            const forecastElevation = forecast && wind === FORECAST ? forecast.elevation : 0;
-            const options = {yieldKt, fissionFraction: fission / 100, siteElevation: forecastElevation,
-                profile: windProfile({...winds, groundElevation: forecastElevation})};
-            // On flat ground first: that is where the plume is, so the terrain under it can be read.
-            let grid = simulate(options);
-            let status = "Flat ground (terrain is off).";
-            if (useTerrain) {
-                let loaded = null;
-                try {
-                    loaded = await loadTerrainGrid(plumeBounds(grid, lon, lat), lon, lat);
-                } catch (e) {
-                    console.error("Could not read the terrain", e);
-                }
-                if (cancelled) return;
-                if (loaded) {
-                    const terrain = terrainAround(loaded.grid, lon, lat);
-                    grid = simulate({...options, terrain,
-                        profile: windProfile({...winds, groundElevation: terrain.elevation})});
-                    const covered = Math.round(loaded.coverage * 100);
-                    status = `Follows the terrain (zoom ${loaded.zoom}${covered < 100 ? `, ${covered}% of the area` : ""}).`;
-                } else {
-                    status = "No terrain file covers this place: flat ground.";
-                }
-            }
-            if (cancelled) return;
-            drawn.current = {url: gridImage(grid), coordinates: gridCorners(grid, lon, lat)};
+            const result = await simulateBursts(bursts, {
+                profileFor: (groundElevation) => windProfile({...winds, groundElevation}),
+                forecastElevation, useTerrain, cancelled: () => cancelled,
+            });
+            if (cancelled || !result) return;
+            drawn.current = {url: gridImage(result.grid), coordinates: gridCorners(result.grid, result.origin.lon, result.origin.lat)};
             draw();
-            setTerrainStatus(status);
+            setTerrainStatus(result.terrainStatus);
             setBusy(false);
         }, 30);
         return () => {
@@ -215,7 +282,7 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             clearTimeout(timer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [yieldKt, fission, wind, direction, speed, useTerrain, lat, lon, forecast, hour]);
+    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour]);
 
     // The layer is of the map's style, which a change of style removes: it is put back when the
     // style has loaded.
@@ -230,64 +297,75 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
         }
     }
 
+    function erase() {
+        try {
+            if (map.getLayer(LAYER)) map.removeLayer(LAYER);
+            if (map.getSource(SOURCE)) map.removeSource(SOURCE);
+        } catch (e) {
+            // The map is gone.
+        }
+    }
+
     useEffect(() => {
         if (!map) return;
         const restore = () => draw();
         map.on("style.load", restore);
         return () => {
             map.off("style.load", restore);
-            try {
-                if (map.getLayer(LAYER)) map.removeLayer(LAYER);
-                if (map.getSource(SOURCE)) map.removeSource(SOURCE);
-            } catch (e) {
-                // The map is gone.
-            }
+            erase();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [map]);
 
+    const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     return <div style={{
-        position: "absolute", left: "0.75rem", bottom: "2.5rem", zIndex: 1002, width: "19rem",
+        position: "absolute", left: "0.75rem", bottom: "2.5rem", zIndex: 1002, width: "20rem",
+        maxHeight: "calc(100% - 4rem)", overflowY: "auto",
         background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)", padding: "0.75rem",
         fontSize: "0.8125rem",
     }}>
-        <div style={{fontWeight: 600}}>Fallout (prototype)</div>
-        <div style={{color: "var(--muted)", marginBottom: "0.5rem"}}>
-            Surface burst at {lat.toFixed(3)}, {lon.toFixed(3)}
+        <div style={{fontWeight: 600}}>Fallout</div>
+        <div style={{...muted, marginBottom: "0.5rem"}}>
+            {targets.length === 1 ? "1 target" : `${targets.length} targets`}
+            {burst ? ", and a burst not saved" : ""}; surface bursts.
         </div>
-        <Select label="Weapon" size="xs" data={WEAPON_CHOICES} value={weaponKey} onChange={chooseWeapon}
-                searchable allowDeselect={false} maxDropdownHeight={320} comboboxProps={DROPDOWN}/>
-        {weapon && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>
-            {weapon.group}, {weapon.status}.{" "}
-            {weapon.yield_range_kt
-                ? `Estimates range from ${formatYield(weapon.yield_range_kt[0])} to ${formatYield(weapon.yield_range_kt[1])}.`
-                : "Yield as published."}
+        {!targets.length && !burst && <div style={muted}>
+            No targets yet: right-click the map and choose Add Target Here.
         </div>}
-        {!weapon && <NumberInput label="Yield (kt)" size="xs" min={0.01} max={100000} value={customYield}
-                                 onChange={setCustomYield}/>}
-        <NumberInput label="Fission fraction (%), assumed" size="xs" min={1} max={100} value={fission}
-                     onChange={(v) => setFission(Math.min(100, Math.max(1, Number(v) || 1)))}/>
+        {targets.map((t) => <div key={t.id} style={{marginBottom: "0.5rem"}}>
+            <div><span aria-hidden>☢ </span><strong>{t.label}</strong>{" "}
+                <span style={muted}>{t.lat.toFixed(3)}, {t.lon.toFixed(3)}</span></div>
+            <WeaponPicker value={t} onChange={(weapon) => onTargetWeapon?.(t, weapon)}/>
+        </div>)}
+        {burst && <div style={{marginBottom: "0.5rem"}}>
+            <div><strong>Burst</strong>{" "}
+                <span style={muted}>{burst.lat.toFixed(3)}, {burst.lon.toFixed(3)}, not saved</span></div>
+            <WeaponPicker value={burstWeapon} onChange={setBurstWeapon}/>
+            <Button size="xs" style={{marginTop: "0.25rem"}} onClick={() => onSaveBurst?.(burst, burstWeapon)}>
+                Save as target
+            </Button>
+        </div>}
         <Select label="Wind" size="xs" data={WINDS} value={wind} onChange={(v) => v && setWind(v)}
                 allowDeselect={false} comboboxProps={DROPDOWN}/>
         {wind === FORECAST && <ForecastControls
             forecast={forecast} hour={hour} onHour={setHour} online={online} fetching={fetching}
-            onFetch={fetchForecast} lat={lat} lon={lon}/>}
+            onFetch={fetchForecast}/>}
         {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
         </div>}
         <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}} checked={useTerrain}
                   onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
-        {terrainStatus && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>{terrainStatus}</div>}
+        {terrainStatus && <div style={muted}>{terrainStatus}</div>}
         <div style={{margin: "0.5rem 0"}}>
-            <div style={{fontWeight: 600}}>Dose rate 1 hour after the burst</div>
+            <div style={{fontWeight: 600}}>Dose rate 1 hour after the bursts</div>
             {DOSE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
                 <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem",
                     background: `rgb(${b.color.join(",")})`, opacity: 0.8}}/>
                 {b.rate}+ R/hr
             </div>)}
         </div>
-        <div style={{color: "var(--muted)", fontSize: "0.75rem", marginBottom: "0.5rem"}}>
+        <div style={{...muted, marginBottom: "0.5rem"}}>
             An estimate, not a forecast. Prototype: against fallout measured after test bursts it
             is within about 2 to 4 times, and tends to show more than was measured.
             {busy && " Calculating…"}
@@ -307,8 +385,8 @@ function ForecastControls({forecast, hour, onHour, online, fetching, onFetch}) {
     </Button>;
     if (!forecast) {
         return <div style={muted}>
-            No forecast is kept for this place
-            {online ? "; until one is fetched, this wind is used at every height:" : ", and WROLPi has no Internet to fetch one. This wind is used at every height:"}
+            No forecast has been fetched
+            {online ? "; until one is, this wind is used at every height:" : ", and WROLPi has no Internet to fetch one. This wind is used at every height:"}
             <div>{fetchButton}</div>
         </div>;
     }
@@ -317,7 +395,7 @@ function ForecastControls({forecast, hour, onHour, online, fetching, onFetch}) {
     const age = forecastAge(forecast);
     const rain = rainAhead(forecast, hour);
     return <div>
-        <Select label="Hour of the burst" size="xs" data={hours} value={String(hour)}
+        <Select label="Hour of the bursts" size="xs" data={hours} value={String(hour)}
                 onChange={(v) => v !== null && onHour(Number(v))} allowDeselect={false}
                 maxDropdownHeight={240} comboboxProps={DROPDOWN}/>
         <div style={muted}>

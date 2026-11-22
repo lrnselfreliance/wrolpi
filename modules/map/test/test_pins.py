@@ -44,3 +44,43 @@ async def test_pins_api_targets(async_client, test_pins_config):
 
     request, response = await async_client.get('/api/map/pins')
     assert [p.get('kind', 'pin') for p in response.json['pins']] == ['target', 'pin']
+
+
+def test_target_weapon(test_pins_config):
+    """A target keeps its weapon; a new weapon replaces the old one's yield and fission share."""
+    target = test_pins_config.add_pin(61, -149, 'Base', kind='target', weapon='custom', yield_kt=20,
+                                      fission_fraction=1.0)
+    assert (target['weapon'], target['yield_kt'], target['fission_fraction']) == ('custom', 20, 1.0)
+    assert test_pins_config.update_pin(target['id'], weapon='w88', fission_fraction=0.5)
+    pin = test_pins_config.pins[0]
+    assert pin['weapon'] == 'w88' and pin['fission_fraction'] == 0.5 and 'yield_kt' not in pin
+    # A label alone leaves the weapon be.
+    assert test_pins_config.update_pin(target['id'], label='Silo')
+    assert test_pins_config.pins[0]['weapon'] == 'w88'
+
+
+def test_target_weapon_checked(test_pins_config):
+    with pytest.raises(ValueError):
+        test_pins_config.add_pin(0, 0, 'Home', weapon='w88')
+    with pytest.raises(ValueError):
+        test_pins_config.add_pin(0, 0, 'Base', kind='target', yield_kt=0)
+    with pytest.raises(ValueError):
+        test_pins_config.add_pin(0, 0, 'Base', kind='target', fission_fraction=1.5)
+    home = test_pins_config.add_pin(0, 0, 'Home')
+    with pytest.raises(ValueError):
+        test_pins_config.update_pin(home['id'], weapon='w88')
+
+
+@pytest.mark.asyncio
+async def test_pins_api_target_weapon(async_client, test_pins_config):
+    request, response = await async_client.post('/api/map/pins', content=json.dumps(
+        {'lat': 61, 'lon': -149, 'label': 'Base', 'kind': 'target', 'weapon': 'w87-0', 'fission_fraction': 0.5}))
+    assert response.status_code == HTTPStatus.CREATED
+    pin_id = response.json['pin']['id']
+    request, response = await async_client.put(f'/api/map/pins/{pin_id}', content=json.dumps(
+        {'weapon': 'custom', 'yield_kt': 15, 'fission_fraction': 1}))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.get('/api/map/pins')
+    assert response.json['pins'][0]['yield_kt'] == 15
+    request, response = await async_client.put(f'/api/map/pins/{pin_id}', content=json.dumps({'yield_kt': -1}))
+    assert response.status_code == HTTPStatus.BAD_REQUEST

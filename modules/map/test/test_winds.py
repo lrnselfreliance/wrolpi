@@ -142,3 +142,20 @@ async def test_winds_api_errors(async_client, test_directory, flags_lock):
         flags.have_internet.clear()
     assert response.status_code == HTTPStatus.BAD_GATEWAY
     assert 'HTTP 500' in response.json['error']
+
+
+@pytest.mark.asyncio
+async def test_latest_winds(async_client, test_directory):
+    """The forecast fetched most recently, wherever it is for, is the latest."""
+    assert winds.latest_winds() is None
+
+    async def fake_request(url):
+        return forecast()
+
+    with mock.patch('modules.map.winds.request_forecast', fake_request):
+        await winds.fetch_winds(61, -149)
+        second = await winds.fetch_winds(40, -105)
+    assert winds.latest_winds() == second
+
+    request, response = await async_client.get('/api/map/fallout/winds/latest')
+    assert response.json['winds']['lat'] == 40

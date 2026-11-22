@@ -13,6 +13,7 @@ import {
     getMapFiles,
     getMapPins,
     searchMap,
+    updateMapTargetWeapon,
     setMapDefaultLocation,
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -52,7 +53,8 @@ import {
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
-import FalloutPanel from "./FalloutPanel";
+import FalloutPanel, {WeaponPicker} from "./FalloutPanel";
+import {DEFAULT_WEAPON} from "../map-shared/fallout/targets.js";
 import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
 import {quadAt} from "./mapQuads";
 import {
@@ -511,9 +513,12 @@ function LayerControl({
 
 const PIN_COLORS = ["red", "blue", "green", "yellow", "orange", "purple"];
 
-function AddPinDialog({lat, lon, target = false, onSubmit, onCancel}) {
+function AddPinDialog({lat, lon, target = false, weapon: initialWeapon = null, onSubmit, onCancel}) {
     const [label, setLabel] = useState("");
     const [color, setColor] = useState("red");
+    // A target's weapon, kept with it.
+    const [weapon, setWeapon] = useState(initialWeapon || {weapon: DEFAULT_WEAPON});
+    const submit = () => label.trim() && onSubmit(label.trim(), color, target ? weapon : null);
 
     // A floating dialog over the canvas — page chrome, not map data, so it is never
     // filtered and keeps flat, bordered surfaces like the rest of the app (no shadow).
@@ -532,9 +537,12 @@ function AddPinDialog({lat, lon, target = false, onSubmit, onCancel}) {
             value={label}
             onChange={e => setLabel(e.target.value)}
             autoFocus
-            onKeyDown={e => e.key === "Enter" && label.trim() && onSubmit(label.trim(), color)}
+            onKeyDown={e => e.key === "Enter" && submit()}
             style={{marginBottom: "0.5rem"}}
         />
+        {target && <div style={{marginBottom: "0.5rem"}}>
+            <WeaponPicker label="Weapon" value={weapon} onChange={setWeapon}/>
+        </div>}
         <div style={{display: "flex", gap: "0.375rem", marginBottom: "0.75rem"}}>
             {PIN_COLORS.map(c =>
                 <div
@@ -552,7 +560,7 @@ function AddPinDialog({lat, lon, target = false, onSubmit, onCancel}) {
             <Button
                 role='primary'
                 size='sm'
-                onClick={() => label.trim() && onSubmit(label.trim(), color)}
+                onClick={submit}
                 disabled={!label.trim()}
             >
                 Add
@@ -732,7 +740,10 @@ export default function MapViewer() {
     const [nuclear, setNuclear] = useState(false);
     const nuclearRef = useRef(false);
     const nuclearButtonRef = useRef(null);
-    const [falloutAt, setFalloutAt] = useState(null); // {lat, lon} of the simulated burst
+    // The fallout view (nuclear mode): open or not, and a burst the user is trying out ({lat, lon}).
+    const [falloutOpen, setFalloutOpen] = useState(false);
+    const [falloutBurst, setFalloutBurst] = useState(null);
+    const [pins, setPins] = useState([]);
     const markersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
     // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
@@ -1257,6 +1268,7 @@ export default function MapViewer() {
 
         const data = await getMapPins();
         if (!data?.pins) return;
+        setPins(data.pins);
 
         data.pins.forEach((pin) => {
             const target = pin.kind === "target";
@@ -1285,7 +1297,7 @@ export default function MapViewer() {
                 `<strong>${escapeHtml(pin.label || (target ? "Target" : "Pin"))}</strong><br/>` +
                 (target ? `<small>Target</small><br/>` : "") +
                 `<small>${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}</small><br/>` +
-                (target ? button(`window.__simulateFalloutAt(${pin.lat}, ${pin.lon})`, "Simulate fallout", "#333") : "") +
+                (target ? button("window.__showFallout()", "Show fallout", "#333") : "") +
                 button(`window.__deleteMapPin(${pin.id})`, "Delete", "red") +
                 `</div>`
             );
@@ -1310,12 +1322,14 @@ export default function MapViewer() {
             button.setAttribute("aria-pressed", String(nuclear));
         }
         showPins();
-        if (!nuclear) setFalloutAt(null);
-    }, [nuclear, mapReady, showPins]);
+        // Nuclear mode opens on the fallout of the saved targets; leaving it closes the view.
+        setFalloutOpen(nuclear);
+        if (!nuclear) setFalloutBurst(null);
+    }, [nuclear, showPins]);
 
     useEffect(() => {
-        window.__simulateFalloutAt = (lat, lon) => setFalloutAt({lat, lon});
-        return () => { delete window.__simulateFalloutAt; };
+        window.__showFallout = () => setFalloutOpen(true);
+        return () => { delete window.__showFallout; };
     }, []);
 
     // Global callback for popup delete buttons.
@@ -1347,7 +1361,8 @@ export default function MapViewer() {
     const handleFallout = useCallback(() => {
         if (!contextMenu) return;
         setContextMenu(null);
-        setFalloutAt({lat: contextMenu.lat, lon: contextMenu.lon});
+        setFalloutBurst({lat: contextMenu.lat, lon: contextMenu.lon});
+        setFalloutOpen(true);
     }, [contextMenu]);
 
     const handleSetDefaultLocation = useCallback(async () => {
@@ -1360,13 +1375,19 @@ export default function MapViewer() {
         setContextMenu(null);
     }, [fetchSettings]);
 
-    const handleSubmitPin = useCallback(async (label, color) => {
+    const handleSubmitPin = useCallback(async (label, color, weapon) => {
         if (!addingPin) return;
         const {lat, lon, kind} = addingPin;
         setAddingPin(null);  // Prevent double-submit.
-        await addMapPin(lat, lon, label, color, kind);
+        const added = await addMapPin(lat, lon, label, color, kind, weapon);
+        // A burst saved as a target is one of the targets now.
+        if (added && falloutBurst && falloutBurst.lat === lat && falloutBurst.lon === lon) setFalloutBurst(null);
         await loadPins();
-    }, [addingPin, loadPins]);
+    }, [addingPin, loadPins, falloutBurst]);
+
+    const handleTargetWeapon = useCallback(async (target, weapon) => {
+        if (await updateMapTargetWeapon(target.id, weapon)) await loadPins();
+    }, [loadPins]);
 
     if (error) {
         return <Panel>
@@ -1488,17 +1509,22 @@ export default function MapViewer() {
                 setPickingQuad(null);
             }}
         />}
-        {mapReady && falloutAt && <FalloutPanel
-            key={`${falloutAt.lat},${falloutAt.lon}`}
+        {mapReady && nuclear && falloutOpen && <FalloutPanel
             map={mapRef.current}
-            lat={falloutAt.lat}
-            lon={falloutAt.lon}
-            onClose={() => setFalloutAt(null)}
+            targets={pins.filter(p => p.kind === "target")}
+            burst={falloutBurst}
+            onSaveBurst={(burst, weapon) => setAddingPin({lat: burst.lat, lon: burst.lon, kind: "target", weapon})}
+            onTargetWeapon={handleTargetWeapon}
+            onClose={() => {
+                setFalloutOpen(false);
+                setFalloutBurst(null);
+            }}
         />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}
             lon={addingPin.lon}
             target={addingPin.kind === "target"}
+            weapon={addingPin.weapon}
             onSubmit={handleSubmitPin}
             onCancel={() => setAddingPin(null)}
         />}

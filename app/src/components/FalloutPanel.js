@@ -8,6 +8,7 @@ import {
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
+import {formatYield, WEAPON_GROUPS, weaponByKey} from "../map-shared/fallout/weapons.js";
 
 // A prototype of the fallout simulator (fallout-plan.md): one surface burst where the user clicked,
 // drawn as the dose rate at H+1 hour.  Nothing is saved.
@@ -25,7 +26,16 @@ export const DOSE_BANDS = [
     {rate: 0.1, color: [250, 240, 150]},
 ];
 
-const YIELDS = [1, 10, 100, 300, 1000].map((kt) => ({value: String(kt), label: kt >= 1000 ? `${kt / 1000} Mt` : `${kt} kt`}));
+// The weapons, grouped by country, then a yield of the user's own.
+const CUSTOM = "custom";
+export const WEAPON_CHOICES = [
+    ...WEAPON_GROUPS.map((g) => ({
+        group: g.name,
+        items: g.weapons.map((w) => ({value: w.key, label: `${w.name}, ${formatYield(w.yield_kt)}`})),
+    })),
+    {group: "Other", items: [{value: CUSTOM, label: "A yield of my own"}]},
+];
+const DEFAULT_WEAPON = "w87-0";
 const WINDS = [
     {value: "manual", label: "One wind at every height"},
     ...shots.shots.map((s) => ({value: s.name, label: `Winds aloft of ${s.name} (${s.date.slice(0, 10)})`})),
@@ -98,8 +108,17 @@ export function plumeBounds(grid, lon, lat) {
 }
 
 export default function FalloutPanel({map, lat, lon, onClose}) {
-    const [yieldKt, setYieldKt] = useState("100");
-    const [fission, setFission] = useState(50);
+    const [weaponKey, setWeaponKey] = useState(DEFAULT_WEAPON);
+    const [customYield, setCustomYield] = useState(100);
+    const [fission, setFission] = useState(weaponByKey(DEFAULT_WEAPON).fission_fraction * 100);
+    const weapon = weaponKey === CUSTOM ? null : weaponByKey(weaponKey);
+    const yieldKt = weapon ? weapon.yield_kt : Math.max(Number(customYield) || 0, 0.001);
+    const chooseWeapon = (key) => {
+        if (!key) return;
+        setWeaponKey(key);
+        // A weapon brings its own fission share; a yield of one's own keeps the last.
+        if (key !== CUSTOM) setFission(weaponByKey(key).fission_fraction * 100);
+    };
     const [wind, setWind] = useState("manual");
     const [direction, setDirection] = useState(270);
     const [speed, setSpeed] = useState(20);
@@ -113,7 +132,7 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
         setBusy(true);
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
-            const options = {yieldKt: Number(yieldKt), fissionFraction: fission / 100,
+            const options = {yieldKt, fissionFraction: fission / 100,
                 profile: windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0})};
             // On flat ground first: that is where the plume is, so the terrain under it can be read.
             let grid = simulate(options);
@@ -185,9 +204,17 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
         <div style={{color: "var(--muted)", marginBottom: "0.5rem"}}>
             Surface burst at {lat.toFixed(3)}, {lon.toFixed(3)}
         </div>
-        <Select label="Yield" size="xs" data={YIELDS} value={yieldKt} onChange={(v) => v && setYieldKt(v)}
-                allowDeselect={false}/>
-        <NumberInput label="Fission fraction (%)" size="xs" min={1} max={100} value={fission}
+        <Select label="Weapon" size="xs" data={WEAPON_CHOICES} value={weaponKey} onChange={chooseWeapon}
+                searchable allowDeselect={false} maxDropdownHeight={320}/>
+        {weapon && <div style={{color: "var(--muted)", fontSize: "0.75rem"}}>
+            {weapon.group}, {weapon.status}.{" "}
+            {weapon.yield_range_kt
+                ? `Estimates range from ${formatYield(weapon.yield_range_kt[0])} to ${formatYield(weapon.yield_range_kt[1])}.`
+                : "Yield as published."}
+        </div>}
+        {!weapon && <NumberInput label="Yield (kt)" size="xs" min={0.01} max={100000} value={customYield}
+                                 onChange={setCustomYield}/>}
+        <NumberInput label="Fission fraction (%), assumed" size="xs" min={1} max={100} value={fission}
                      onChange={(v) => setFission(Math.min(100, Math.max(1, Number(v) || 1)))}/>
         <Select label="Wind" size="xs" data={WINDS} value={wind} onChange={(v) => v && setWind(v)}
                 allowDeselect={false}/>

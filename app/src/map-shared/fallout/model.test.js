@@ -4,6 +4,7 @@ import {
     cloudHeights,
     contourAreas,
     depositionGrid,
+    hotlines,
     landingSpots,
     particleSizes,
     plumeBearing,
@@ -156,6 +157,15 @@ describe('a burst in a steady wind', () => {
         const landed = spots.reduce((a, s) => a + s.activity, 0);
         const total = grid.values.reduce((a, v) => a + v, 0) * (grid.cell / 1000) ** 2;
         expect(total / (SOURCE_NORMALIZATION * yieldKt * landed)).toBeCloseTo(1, 2);
+    });
+
+    test('measures how far downwind each contour reaches, and in which direction', () => {
+        const {spots} = run(steady(90, 10));
+        const grid = depositionGrid(spots, {yieldKt: 10, bounds: [-50000, -50000, 150000, 50000], cellSize: 250});
+        const [high, low] = hotlines(grid, [10, 1]);
+        expect(low.km).toBeGreaterThan(high.km);
+        expect(angleBetween(low.azimuth, 90)).toBeLessThan(3);
+        expect(hotlines(grid, [1e9])[0]).toEqual({km: 0, azimuth: null});
     });
 
     test('draws a smaller area at a higher dose rate', () => {

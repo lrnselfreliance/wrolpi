@@ -275,9 +275,9 @@ function cellShares(mean, sigma, start, cell, count) {
 
 // The dose rate at H+1 hour (R/hr, three feet above the ground) on a grid of square cells around
 // the spots: {x0, y0 (m, the south-west corner), cell (m), nx, ny, values (row by row, from the
-// south)}.
+// south)}.  `bounds` and `cellSize` give a closer look at part of it.
 export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalization = SOURCE_NORMALIZATION,
-    maxCells = 1200}) {
+    maxCells = 1200, bounds = null, cellSize = null}) {
     let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity, narrowest = Infinity;
     for (const s of spots) {
         west = Math.min(west, s.x - 3 * s.sigma);
@@ -286,8 +286,11 @@ export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalizati
         north = Math.max(north, s.y + 3 * s.sigma);
         narrowest = Math.min(narrowest, s.sigma);
     }
+    // A grid over `bounds` ([west, south, east, north], m from ground zero) with cells `cellSize`
+    // wide, when given: a close look at part of the fallout.
+    if (bounds) [west, south, east, north] = bounds;
     const span = Math.max(east - west, north - south);
-    const cell = Math.max(span / maxCells, Math.min(narrowest / 2, 250), 25);
+    const cell = cellSize || Math.max(span / maxCells, Math.min(narrowest / 2, 250), 25);
     const nx = Math.ceil((east - west) / cell);
     const ny = Math.ceil((north - south) / cell);
     const values = new Float64Array(nx * ny);
@@ -342,6 +345,26 @@ export function scaleToUtrdr(grid, doseRates, yieldKt, target) {
         if (groundedUtrdr(grid, doseRates, yieldKt, mid) < target) low = mid; else high = mid;
     }
     return Math.sqrt(low * high);
+}
+
+// How far (km) the furthest place where the dose rate is at least each of `doseRates` is from ground
+// zero, and in which direction (degrees clockwise from north): the hotline length and azimuth.
+export function hotlines(grid, doseRates, scale = 1) {
+    return doseRates.map((rate) => {
+        let far = -1, azimuth = null;
+        for (let j = 0; j < grid.ny; j++) {
+            for (let i = 0; i < grid.nx; i++) {
+                if (grid.values[j * grid.nx + i] * scale < rate) continue;
+                const x = grid.x0 + (i + 0.5) * grid.cell, y = grid.y0 + (j + 0.5) * grid.cell;
+                const d = Math.hypot(x, y);
+                if (d > far) {
+                    far = d;
+                    azimuth = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+                }
+            }
+        }
+        return far < 0 ? {km: 0, azimuth: null} : {km: far / 1000, azimuth};
+    });
 }
 
 // The direction (degrees clockwise from north) from ground zero to the middle of the activity

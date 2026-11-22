@@ -1,0 +1,90 @@
+{
+  "_sources": {
+    "contours": "DNAF-1: An Analytical Fallout Prediction Model and Code, DNA 6299F (1981), DTIC ADA130291, Table 3 (observed and predicted fallout pattern statistics) and Table 2 (test shot data).  Areas in km^2 inside each H+1 hour exposure-rate contour (R/hr), hotline length (km: the furthest distance from ground zero on the contour) and azimuth (degrees clockwise from north to that furthest point), as observed and as predicted by DNAF-1, DELFIC and WSEG-10.",
+    "shots": "Compilation of Local Fallout Data from Test Detonations 1945-1962 Extracted from DASA 1251, Volume I (DNA 1251-1-EX, 1979), DTIC ADA079309: shot data pages and wind tables (Buster-Jangle Sugar: Table 12, H-hour; Sunbeam Small Boy: Table 109, H+5 minutes; Sunbeam Johnie Boy: Table 108, H-hour)."
+  },
+  "_notes": [
+    "These are the bursts nearest the ground with well-measured close-in fallout: Sugar was a surface burst 3.5 ft up, Small Boy on a 10 ft tower, Johnie Boy 23 inches underground.  All three are within the fireball-on-the-ground case the map models.",
+    "Altitudes are feet above mean sea level, speeds statute miles per hour, directions the wind blows FROM.  Rows the tables leave blank are left out.",
+    "Fission yields: Sugar and Johnie Boy as DNAF-1 Table 2 gives them (all fission).  Small Boy's yield is classified in both sources ('low'); 1.65 kt is its later declassified yield, and it is taken to be all fission, as the other two are.",
+    "Small Boy's longitude is printed as 115 deg 55' 89.2\", which cannot be; it is read as 115 deg 56' 29.2\" (Frenchman Flat).",
+    "DNAF-1 gives no WSEG-10 prediction for Small Boy."
+  ],
+  "shots": [
+    {
+      "name": "Jangle Sugar",
+      "date": "1951-11-19T17:00Z",
+      "yield_kt": 1.2,
+      "fission_kt": 1.2,
+      "burst_height_ft": 3.5,
+      "placement": "surface",
+      "site_elevation_ft": 4215,
+      "lat": 37.13167,
+      "lon": -116.03861,
+      "cloud_top_ft_msl": 15000,
+      "cloud_bottom_ft_msl": 11000,
+      "wind": [
+        [4215, 190, 2], [6000, 170, 15], [8000, 180, 30], [10000, 200, 37], [12000, 200, 42],
+        [14000, 210, 46], [16000, 210, 51], [18000, 200, 72], [20000, 200, 62], [25000, 210, 71],
+        [30000, 210, 80], [35000, 210, 90]
+      ],
+      "contours": {
+        "rates": [500, 300, 100, 35],
+        "observed": {"area_km2": [0.117, 0.386, 1.44, 3.11], "hotline_km": [0.69, 1.50, 3.74, 5.06], "azimuth": [342, 346, 1, 6]},
+        "dnaf1": {"area_km2": [0.390, 0.821, 2.64, 6.99], "hotline_km": [1.64, 2.49, 4.97, 9.07], "azimuth": [15, 15, 15, 15]},
+        "delfic": {"area_km2": [0.144, 0.316, 2.24, 5.08], "hotline_km": [1.00, 1.23, 5.87, 7.68], "azimuth": [353, 354, 355, 355]},
+        "wseg10": {"area_km2": [null, null, 0.55, 5.45], "hotline_km": [null, null, 2.8, 10.2], "azimuth": [null, null, 10, 10]}
+      }
+    },
+    {
+      "name": "Small Boy",
+      "date": "1962-07-14T18:30Z",
+      "yield_kt": 1.65,
+      "fission_kt": 1.65,
+      "burst_height_ft": 10,
+      "placement": "tower",
+      "site_elevation_ft": 3078,
+      "lat": 36.80250,
+      "lon": -115.94144,
+      "cloud_top_ft_msl": 19000,
+      "cloud_bottom_ft_msl": null,
+      "wind": [
+        [3078, 135, 2.3], [4000, 300, 1.2], [5000, 310, 1.2], [6000, 330, 2.3], [7000, 280, 2.3],
+        [8000, 250, 6.9], [9000, 240, 13.8], [10000, 240, 18.4], [12000, 240, 9.2], [14000, 240, 9.2],
+        [16000, 240, 9.2], [18000, 280, 16.1], [20000, 280, 28.8]
+      ],
+      "contours": {
+        "rates": [1000, 500, 200, 100, 50],
+        "observed": {"area_km2": [0.216, 0.528, 0.942, 3.75, 9.03], "hotline_km": [1.00, 1.62, 2.22, 5.66, 8.10], "azimuth": [71, 73, 72, 72, 75]},
+        "dnaf1": {"area_km2": [0.302, 0.703, 1.75, 3.35, 6.45], "hotline_km": [0.92, 1.49, 2.62, 3.90, 5.69], "azimuth": [64, 64, 64, 64, 64]},
+        "delfic": {"area_km2": [0.047, 0.135, 0.564, 1.10, 4.38], "hotline_km": [0.25, 0.56, 1.69, 3.72, 6.47], "azimuth": [66, 80, 73, 74, 72]}
+      }
+    },
+    {
+      "name": "Johnie Boy",
+      "date": "1962-07-11T16:45Z",
+      "yield_kt": 0.5,
+      "fission_kt": 0.5,
+      "burst_height_ft": -1.9,
+      "placement": "subsurface",
+      "site_elevation_ft": 5153,
+      "lat": 37.12250,
+      "lon": -116.33304,
+      "cloud_top_ft_msl": 17000,
+      "cloud_bottom_ft_msl": 12500,
+      "wind": [
+        [5153, 195, 8.1], [6000, 170, 8.1], [7000, 160, 8.1], [8000, 160, 12.7], [9000, 160, 18.4],
+        [10000, 170, 17.3], [11000, 180, 13.8], [12000, 180, 17.3], [13000, 190, 20.0], [14000, 200, 24.2],
+        [15000, 200, 25.3], [16000, 200, 25.3], [17000, 200, 31.1], [18000, 200, 31.1], [19000, 210, 29.9],
+        [20000, 200, 26.5]
+      ],
+      "contours": {
+        "rates": [1000, 100, 50],
+        "observed": {"area_km2": [0.278, 0.539, 1.27], "hotline_km": [1.38, 2.73, 4.10], "azimuth": [359, 345, 343]},
+        "dnaf1": {"area_km2": [0.038, 1.00, 1.90], "hotline_km": [0.38, 2.18, 3.21], "azimuth": [351, 351, 351]},
+        "delfic": {"area_km2": [0.029, 0.77, 1.79], "hotline_km": [0.032, 2.58, 4.13], "azimuth": [0, 344, 343]},
+        "wseg10": {"area_km2": [null, 1.17, 4.57], "hotline_km": [null, 3.7, 8.9], "azimuth": [null, 344, 344]}
+      }
+    }
+  ]
+}

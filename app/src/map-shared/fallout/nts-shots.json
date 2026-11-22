@@ -1,0 +1,195 @@
+{
+  "_sources": {
+    "shots": "Compilation of Local Fallout Data from Test Detonations 1945-1962 Extracted from DASA 1251, Volume I - Continental U.S. Tests (DNA 1251-1-EX, 1979), DTIC ADA079309. Shot data pages and wind data tables, transcribed from the scan.",
+    "areas": "A Comparison of Hazard Prediction and Assessment Capability (HPAC) Software Dose-Rate Contour Plots to a Sample of Local Fallout Data From Test Detonations in the Continental United States, 1945-1962 (AFIT thesis, 2005), DTIC ADA438146. Tables 4, 7, 10, 13, 16, 19: contour areas in square miles, at H+1 hour, 3 ft above the ground, of the observed (DASA-EX) patterns and of HPAC 4.03 and 4.04's predictions; grounded unit time reference dose rate in (R/hr)(km^2)/kt."
+  },
+  "_notes": [
+    "Altitudes are feet above mean sea level, speeds are statute miles per hour, directions are degrees the wind blows FROM, as the tables give them.  'Calm' is written as speed 0.",
+    "An observed area is left out (null) where it is smaller than the area of a higher dose rate: a lower contour must contain a higher one, so the survey did not close it (George 0.008, Zucchini 0.008, Smoky 1 and 0.1).",
+    "observed_bearing_deg is read by eye off the off-site pattern (the direction from ground zero to the middle of the plume, out to about 60 miles), good to about 10 degrees; Johnie Boy's figure has no legible axis labels, so its bearing is good to about 20.",
+    "Each shot's wind table is the one nearest H-hour: George, Ess, Zucchini, Smoky, Johnie Boy at H-hour; Priscilla at H+1 hour (the first it gives)."
+  ],
+  "shots": [
+    {
+      "name": "George",
+      "observed_bearing_deg": 3,
+      "observed_bearing_figure": "Figure 62",
+      "operation": "Tumbler-Snapper",
+      "date": "1952-06-01T11:55Z",
+      "yield_kt": 15,
+      "burst_height_ft": 300,
+      "placement": "tower",
+      "site_elevation_ft": 4028,
+      "cloud_top_ft_msl": 37000,
+      "cloud_bottom_ft_msl": null,
+      "wind_table": "Table 20, H-hour",
+      "wind": [
+        [4028, 0, 0], [5000, 0, 0], [6000, 170, 20], [7000, 170, 21], [8000, 170, 20],
+        [9000, 160, 20], [10000, 160, 17], [12000, 180, 20], [14000, 180, 30], [15000, 170, 30],
+        [16000, 170, 33], [18000, 190, 35], [20000, 190, 51], [25000, 200, 48], [30000, 190, 41]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [2, 0.8, 0.2, 0.08, 0.02, 0.008],
+        "observed": [62.6, 246.7, 810.8, 1278.6, 5122.2, null],
+        "hpac_4_03": [266.3, 256.5, 1317.2, 2681.7, 2995.7, 2030.6],
+        "hpac_4_04": [120.2, 74.4, 353.1, 1269.5, 3497.5, 1546.8]
+      },
+      "grounded_utrdr": {"observed": 122.3, "hpac_4_03": 223.0, "hpac_4_04": 95.7}
+    },
+    {
+      "name": "Ess",
+      "observed_bearing_deg": 110,
+      "observed_bearing_figure": "Figure 135",
+      "operation": "Teapot",
+      "date": "1955-03-23T20:30Z",
+      "yield_kt": 1,
+      "burst_height_ft": -67,
+      "placement": "subsurface",
+      "site_elevation_ft": 4288,
+      "cloud_top_ft_msl": 12000,
+      "cloud_bottom_ft_msl": null,
+      "wind_table": "Table 39, H-hour",
+      "wind": [
+        [4288, 310, 12], [5000, 310, 14], [6000, 310, 17], [7000, 320, 17], [8000, 320, 18],
+        [9000, 330, 23], [10000, 340, 29], [11000, 350, 26], [12000, 360, 29], [13000, 340, 26],
+        [14000, 330, 29], [15000, 330, 36], [16000, 310, 39], [17000, 300, 40], [18000, 290, 41],
+        [19000, 290, 40], [20000, 290, 43], [21000, 290, 43], [22000, 290, 46], [23000, 290, 50],
+        [24000, 290, 55], [25000, 290, 54], [30000, 290, 66], [35000, 300, 59]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [2, 0.8, 0.2, 0.08, 0.02, 0.008],
+        "observed": [22.2, 52.9, 276.5, 382.8, 1548.7, 1557.6],
+        "hpac_4_03": [58.4, 58.2, 346.5, 606.6, 1794.7, 2038.5],
+        "hpac_4_04": [76.5, 48.7, 303.2, 485.3, 1341.5, 1335.5]
+      },
+      "grounded_utrdr": {"observed": 559.4, "hpac_4_03": 862.9, "hpac_4_04": 851.7}
+    },
+    {
+      "name": "Zucchini",
+      "observed_bearing_deg": 95,
+      "observed_bearing_figure": "Figure 160",
+      "operation": "Teapot",
+      "date": "1955-05-15T12:00Z",
+      "yield_kt": 28,
+      "burst_height_ft": 500,
+      "placement": "tower",
+      "site_elevation_ft": 4245,
+      "cloud_top_ft_msl": 40000,
+      "cloud_bottom_ft_msl": 25200,
+      "wind_table": "Table 46, H-hour",
+      "wind": [
+        [4245, 320, 7], [5000, 330, 14], [6000, 340, 13], [7000, 340, 8], [8000, 340, 7],
+        [9000, 330, 9], [10000, 310, 13], [11000, 300, 17], [12000, 310, 25], [13000, 310, 29],
+        [14000, 310, 35], [15000, 310, 40], [16000, 310, 45], [17000, 300, 48], [18000, 300, 49],
+        [19000, 290, 46], [20000, 290, 46], [21000, 290, 49], [22000, 280, 59], [23000, 270, 59],
+        [24000, 270, 63], [25000, 260, 69], [26000, 260, 74], [27000, 260, 77], [28000, 260, 82],
+        [29000, 270, 83], [30000, 270, 83], [31000, 270, 82], [32000, 260, 80], [33000, 260, 77],
+        [34000, 260, 75], [35000, 250, 74], [36000, 250, 74], [37000, 250, 76], [38000, 250, 79],
+        [39000, 260, 80], [40000, 260, 78], [41000, 260, 72], [42000, 260, 63], [43000, 260, 67],
+        [44000, 260, 41], [45000, 250, 39], [46000, 240, 41], [47000, 230, 46], [48000, 240, 45],
+        [49000, 250, 40], [50000, 250, 31]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [2, 0.8, 0.2, 0.08, 0.02, 0.008],
+        "observed": [38.3, 88.5, 925.5, 1284.0, 3667.7, null],
+        "hpac_4_03": [203.3, 493.7, 1572.7, 2483.9, 12022.9, 14416.9],
+        "hpac_4_04": [58.0, 66.2, 469.2, 559.6, 3627.1, 12535.8]
+      },
+      "grounded_utrdr": {"observed": 48.8, "hpac_4_03": 154.5, "hpac_4_04": 44.4}
+    },
+    {
+      "name": "Priscilla",
+      "observed_bearing_deg": 67,
+      "observed_bearing_figure": "Figure 179",
+      "operation": "Plumbbob",
+      "date": "1957-06-24T13:30Z",
+      "yield_kt": 37,
+      "burst_height_ft": 700,
+      "placement": "balloon",
+      "site_elevation_ft": 3076,
+      "cloud_top_ft_msl": 43000,
+      "cloud_bottom_ft_msl": 24000,
+      "wind_table": "Table 51, H+1 hour",
+      "wind": [
+        [3076, 0, 0], [4000, 0, 0], [5000, 220, 3], [6000, 220, 7], [7000, 220, 7],
+        [8000, 230, 9], [9000, 240, 9], [10000, 230, 9], [11000, 230, 7], [12000, 230, 8],
+        [13000, 210, 9], [14000, 210, 8], [15000, 220, 7], [16000, 240, 8], [17000, 260, 12],
+        [18000, 250, 13], [20000, 260, 9], [21000, 250, 6], [22000, 230, 5], [23000, 240, 5],
+        [24000, 250, 8], [25000, 250, 9], [26000, 250, 10], [27000, 250, 16], [28000, 250, 17],
+        [29000, 250, 20], [30000, 250, 20], [31000, 250, 18], [32000, 260, 16], [33000, 280, 12],
+        [34000, 260, 15], [35000, 240, 15], [36000, 240, 20], [37000, 240, 23], [38000, 240, 26],
+        [39000, 240, 32], [40000, 250, 41], [41000, 260, 46], [42000, 260, 49], [43000, 260, 51],
+        [44000, 250, 51], [45000, 250, 52], [46000, 260, 51], [47000, 260, 48], [48000, 260, 46],
+        [49000, 260, 45], [50000, 270, 40], [51000, 270, 29], [52000, 270, 29], [53000, 270, 29],
+        [54655, 270, 29]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [10, 0.2, 0.1, 0.02],
+        "observed": [76.1, 346.8, 587.0, 4210.4],
+        "hpac_4_03": [2.2, 243.1, 178.9, 1261.4],
+        "hpac_4_04": [3.6, 74.0, 35.1, 331.9]
+      },
+      "grounded_utrdr": {"observed": 168.1, "hpac_4_03": 19.6, "hpac_4_04": 10.5}
+    },
+    {
+      "name": "Smoky",
+      "observed_bearing_deg": 100,
+      "observed_bearing_figure": "Figure 207",
+      "operation": "Plumbbob",
+      "date": "1957-08-31T12:30Z",
+      "yield_kt": 44,
+      "burst_height_ft": 700,
+      "placement": "tower",
+      "site_elevation_ft": 4479,
+      "cloud_top_ft_msl": 38000,
+      "cloud_bottom_ft_msl": null,
+      "wind_table": "Table 61, H-hour",
+      "wind": [
+        [4479, 0, 0], [5000, 0, 0], [5179, 0, 0], [6000, 340, 6], [7000, 10, 7],
+        [8000, 10, 7], [9000, 10, 10], [10000, 360, 12], [11000, 360, 9], [12000, 360, 7],
+        [13000, 360, 7], [14000, 20, 7], [15000, 340, 9], [16000, 290, 13], [17000, 280, 18],
+        [18000, 290, 22], [19000, 290, 21], [20000, 280, 24], [21000, 280, 29], [22000, 280, 29],
+        [23000, 280, 30], [24000, 270, 35], [25000, 270, 36], [26000, 280, 36], [27000, 270, 33],
+        [28000, 270, 31], [29000, 280, 36], [30000, 280, 37], [31000, 280, 33], [32000, 280, 36],
+        [33000, 270, 38], [34000, 270, 37], [35000, 270, 37], [36000, 270, 40], [37000, 270, 44],
+        [38000, 270, 43], [39000, 270, 39], [40000, 270, 35], [41000, 270, 32], [42000, 270, 36],
+        [43000, 260, 38], [44000, 250, 35], [45000, 250, 38], [46000, 230, 45], [47000, 250, 40],
+        [48000, 260, 36], [49000, 250, 35], [50000, 240, 31]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [20, 10, 2, 1, 0.2, 0.1, 0.02],
+        "observed": [18.5, 77.0, 419.9, null, 2199.5, null, 4383.4],
+        "hpac_4_03": [4.3, 8.8, 65.2, 85.3, 504.0, 592.3, 4966.6],
+        "hpac_4_04": [4.8, 2.2, 15.7, 25.9, 127.4, 137.6, 1905.3]
+      },
+      "grounded_utrdr": {"observed": 163.1, "hpac_4_03": 38.2, "hpac_4_04": 14.8}
+    },
+    {
+      "name": "Johnie Boy",
+      "observed_bearing_deg": 15,
+      "observed_bearing_figure": "Figure 327",
+      "operation": "Sunbeam",
+      "date": "1962-07-11T16:45Z",
+      "yield_kt": 0.5,
+      "burst_height_ft": -2,
+      "placement": "subsurface",
+      "site_elevation_ft": 5153,
+      "cloud_top_ft_msl": 17000,
+      "cloud_bottom_ft_msl": 12500,
+      "wind_table": "Table 108, H-hour",
+      "wind": [
+        [5153, 195, 8.1], [6000, 170, 8.1], [7000, 160, 8.1], [8000, 160, 12.7], [9000, 160, 18.4],
+        [10000, 170, 17.3], [11000, 180, 13.8], [12000, 180, 17.3], [13000, 190, 20.0], [14000, 200, 24.2],
+        [15000, 200, 25.3], [16000, 200, 25.3], [17000, 200, 31.1], [18000, 200, 31.1], [19000, 210, 29.9],
+        [20000, 200, 26.5]
+      ],
+      "areas_sq_mi": {
+        "dose_rates": [10, 1, 0.5, 0.1, 0.05, 0.01],
+        "observed": [7.4, 25.9, 72.7, 175.2, 208.0, 641.6],
+        "hpac_4_03": [7.1, 29.8, 50.1, 432.9, 463.4, 2482.7],
+        "hpac_4_04": [13.3, 84.6, 47.1, 341.9, 500.7, 2671.3]
+      },
+      "grounded_utrdr": {"observed": 884.3, "hpac_4_03": 1121.7, "hpac_4_04": 1696.2}
+    }
+  ]
+}

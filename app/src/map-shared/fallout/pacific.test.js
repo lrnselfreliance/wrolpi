@@ -63,11 +63,12 @@ describe('Castle Bravo, 15 Mt, its winds measured only below its cloud', () => {
         expect(Math.abs(arrival(miles) / hours - 1)).toBeLessThan(0.5);
     });
 
-    // A known gap, kept in view: the winds above 57,000 ft, through which most of the activity fell,
-    // were not measured, and the model, holding the highest measured wind above it, brings the hot
-    // fallout down about three times closer than it was.  If this starts to fail, the gap has
-    // closed: update the fixture's caveat and these bounds.
-    test('the hot fallout reaches about a third as far as it did (winds above the cloud base unknown)', () => {
+    // A known gap, kept in view: the model brings Bravo's hot fallout down about three times closer
+    // than NRDL and RAND drew it.  It is not the unmeasured winds above 57,000 ft (the reanalysis
+    // winds there turn the plume right but do not lengthen it), nor the particle sizes; a plume a
+    // third as wide reaches about two thirds as far (see the fixture's caveat).  If this starts to fail, the gap has closed:
+    // update the caveat and these bounds.
+    test('the hot fallout reaches about a third as far as it was drawn (a known gap)', () => {
         const grid = depositionGrid(landed, {yieldKt: bravo.yield_kt, fissionFraction: 0.5});
         const rows = bravo.reach.rows.filter(([rate]) => rate >= 500 && rate <= 1000);
         const lines = hotlines(grid, rows.map(([rate]) => rate));

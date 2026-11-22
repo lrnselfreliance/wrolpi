@@ -551,7 +551,7 @@
    "cloud_top_ft_msl": 114000,
    "cloud_bottom_ft_msl": 55300,
    "source": "DNA1251-2 pp. 63-70 (Table 12, Figures 41-43); GLASSTONE; MOROZ",
-   "_caveat": "The wind table ends at 57,000 ft, at the base of a cloud reaching 114,000 ft: the winds which carried most of the activity were not measured, so the plume's direction and reach depend on what is assumed above.",
+   "_caveat": "The wind table ends at 57,000 ft, at the base of a cloud reaching 114,000 ft. Filling the winds above from the NCEP/NCAR Reanalysis 1 (1954) turns the plume to within about 10 degrees of the measured one, but does not lengthen its hot contours: the model's 1000 R/hr contour reaches about a third as far as NRDL's and RAND's, and it reads the island measurements about 2 times low. Smaller particles do not close it, and landing spots a third as wide reach only about two thirds as far. The contours are partly model-built over open ocean (Glasstone 9.105 notes a hot-spot reading of Rongelap's north).",
    "wind": {
     "H": [
      [

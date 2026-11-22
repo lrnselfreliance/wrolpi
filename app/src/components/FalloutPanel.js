@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Select} from "./ui";
-import {depositionGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
+import {depositionGrid, landedGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
@@ -55,6 +55,10 @@ const WINDS = [
 ];
 // The Job which fetches a field of winds.
 const WINDS_JOB = "fallout_winds";
+// The hours after the bursts the fallout can be watched landing in, and how long each is shown (ms)
+// when it plays.
+const LAST_HOUR = 48;
+const FRAME_MS = 700;
 // Rain this heavy in the hours ahead (mm) is worth a warning.
 const RAIN_WARNING_MM = 0.5;
 
@@ -169,7 +173,7 @@ function yielder() {
 }
 
 // The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) on one grid around the first:
-// {grid, origin, terrainStatus}.  `windsFor(burst, groundElevation)` gives the winds over a burst, as
+// {grid, spots (as combineBursts gives them, for the fallout hour by hour), origin, terrainStatus}.  `windsFor(burst, groundElevation)` gives the winds over a burst, as
 // landingSpots takes them ({profile} or {winds}), or `profileFor(groundElevation)` its profile.
 // `groundOf(burst)` is how high (m) its ground is until the terrain is read.  `onProgress(done,
 // total)` hears how far it has got, `onFlat(grid)` gets the fallout on flat ground while the terrain
@@ -200,31 +204,32 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
         const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
         const spots = combineBursts(origin, runs);
         // The hot fallout close to a small burst is not averaged away in a grid over them all.
-        return sharpenGrid(depositionGrid(spots, {yieldKt: 1, boundsFloor: floor}), spots);
+        const grid = sharpenGrid(depositionGrid(spots, {yieldKt: 1, boundsFloor: floor}), spots);
+        return {grid, spots};
     };
     // On flat ground first: that is where the plumes are, so the terrain under them can be read.
-    let grid = await run(null);
-    if (!grid) return null;
+    let ran = await run(null);
+    if (!ran) return null;
     let terrainStatus = "Flat ground (terrain is off).";
     if (useTerrain) {
-        onFlat(grid);
+        onFlat(ran.grid);
         let loaded = null;
         try {
-            loaded = await loadTerrainGrid(plumeBounds(grid, origin.lon, origin.lat), origin.lon, origin.lat);
+            loaded = await loadTerrainGrid(plumeBounds(ran.grid, origin.lon, origin.lat), origin.lon, origin.lat);
         } catch (e) {
             console.error("Could not read the terrain", e);
         }
         if (cancelled()) return null;
         if (loaded) {
-            grid = await run((b) => terrainAround(loaded.grid, b.lon, b.lat));
-            if (!grid) return null;
+            ran = await run((b) => terrainAround(loaded.grid, b.lon, b.lat));
+            if (!ran) return null;
             const covered = Math.round(loaded.coverage * 100);
             terrainStatus = `Follows the terrain (zoom ${loaded.zoom}${covered < 100 ? `, ${covered}% of the area` : ""}).`;
         } else {
             terrainStatus = "No terrain file covers this place: flat ground.";
         }
     }
-    return {grid, origin, terrainStatus};
+    return {grid: ran.grid, spots: ran.spots, origin, terrainStatus};
 }
 
 // A weapon to burst with: one of those offered, or a yield of one's own.  `value` and onChange's
@@ -307,6 +312,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
     const [progress, setProgress] = useState(null);
+    // The hour after the bursts shown, or 0 for all the fallout as at H+1; and whether the hours play.
+    const [after, setAfter] = useState(0);
+    const [playing, setPlaying] = useState(false);
+    // The fallout last calculated ({grid, spots, origin}), and its images by the hour (0: all of it).
+    const result = useRef(null);
+    const frames = useRef(new Map());
+    const [calculated, setCalculated] = useState(0);
     const {status} = useContext(StatusContext) || {};
     const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
@@ -373,6 +385,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         let cancelled = false;
         if (!bursts.length) {
             drawn.current = null;
+            result.current = null;
+            frames.current = new Map();
             erase();
             setTerrainStatus(null);
             return;
@@ -388,7 +402,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         const groundOf = useField ? (b) => forecast.points[nearestPoint(prepared, b.lat, b.lon)].elevation : () => 0;
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
-            const result = await simulateBursts(bursts, {
+            const ran = await simulateBursts(bursts, {
                 windsFor, groundOf, useTerrain, cancelled: () => cancelled,
                 onProgress: (done, total) => !cancelled && setProgress({done, total}),
                 // Something to look at while the terrain is read.
@@ -398,11 +412,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                     draw();
                 },
             });
-            if (cancelled || !result) return;
+            if (cancelled || !ran) return;
             setProgress(null);
-            drawn.current = {url: gridImage(result.grid, result.origin.lat), coordinates: gridCorners(result.grid, result.origin.lon, result.origin.lat)};
-            draw();
-            setTerrainStatus(result.terrainStatus);
+            result.current = ran;
+            frames.current = new Map([[0, {url: gridImage(ran.grid, ran.origin.lat), coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)}]]);
+            // The hour shown is drawn from it.
+            setCalculated((n) => n + 1);
+            setTerrainStatus(ran.terrainStatus);
             setBusy(false);
         }, 30);
         return () => {
@@ -411,6 +427,26 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour]);
+
+    // The hour shown: all the fallout, or what has landed by then, as strong as it is then.
+    useEffect(() => {
+        const ran = result.current;
+        if (!ran) return;
+        if (!frames.current.has(after)) {
+            const grid = landedGrid(ran.spots, ran.grid, after);
+            frames.current.set(after, {url: gridImage(grid, ran.origin.lat), coordinates: gridCorners(grid, ran.origin.lon, ran.origin.lat)});
+        }
+        drawn.current = frames.current.get(after);
+        draw();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [after, calculated]);
+
+    // Playing, the next hour is shown after this one; from the last, it starts over.
+    useEffect(() => {
+        if (!playing) return;
+        const timer = setTimeout(() => setAfter((h) => (h >= LAST_HOUR ? 1 : h + 1)), FRAME_MS);
+        return () => clearTimeout(timer);
+    }, [playing, after, calculated]);
 
     // The layer is of the map's style, which a change of style removes: it is put back when the
     // style has loaded.
@@ -494,11 +530,21 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                   onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
         <div style={{margin: "0.5rem 0"}}>
-            <div style={{fontWeight: 600}}>Dose rate, as at 1 hour after the bursts</div>
+            <div style={{fontWeight: 600}}>
+                {after ? `Dose rate ${after === 1 ? "1 hour" : `${after} hours`} after the bursts`
+                    : "Dose rate, as at 1 hour after the bursts"}
+            </div>
+            <Timeline after={after} onAfter={(h) => {
+                setPlaying(false);
+                setAfter(h);
+            }} playing={playing} onPlaying={(p) => {
+                setPlaying(p);
+                if (p && !after) setAfter(1);
+            }} startMs={wind === FORECAST && forecast ? Date.parse(forecast.hours[hour]) : null}/>
             <div style={muted}>
-                R/hr: roentgens an hour, about 10 mSv each. All the fallout is shown as if it were
-                already down 1 hour after the bursts. Downwind it arrives hours later, and has
-                weakened by then: about 10 times less 7 hours after the bursts.
+                R/hr: roentgens an hour, about 10 mSv each.{" "}
+                {after ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts."
+                    : "All the fallout is shown as if it were already down 1 hour after the bursts. Downwind it arrives hours later, and has weakened by then: about 10 times less 7 hours after the bursts."}
             </div>
             {DOSE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
                 <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem",
@@ -513,6 +559,27 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>
             <Button role="cancel" size="sm" onClick={onClose}>Close</Button>
+        </div>
+    </div>;
+}
+
+// Which hour after the bursts is shown, 0 for all the fallout as at H+1, and playing them in turn.
+// `startMs` is when the bursts are (the forecast hour), if known.
+export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
+    const muted = {color: "var(--muted)", fontSize: "0.75rem"};
+    const when = after && startMs !== null
+        ? `, ${new Date(startMs + after * 3600000).toLocaleString(undefined, {weekday: "short", hour: "numeric", minute: "2-digit"})}`
+        : "";
+    return <div style={{margin: "0.25rem 0"}}>
+        <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
+            <Button size="xs" onClick={() => onPlaying(!playing)} aria-label={playing ? "Pause" : "Play"}>
+                {playing ? "❚❚" : "▶"}
+            </Button>
+            <input type="range" min={0} max={LAST_HOUR} step={1} value={after} style={{flex: 1}}
+                   aria-label="Hours after the bursts" onChange={(e) => onAfter(Number(e.target.value))}/>
+        </div>
+        <div style={muted}>
+            {after ? `H+${after}${when}: the fallout landed by then` : "All the fallout, as at H+1. Play to watch it land."}
         </div>
     </div>;
 }

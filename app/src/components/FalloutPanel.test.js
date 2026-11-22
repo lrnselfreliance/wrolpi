@@ -92,3 +92,27 @@ describe('the fallout image', () => {
         expect(Math.abs(rows[50] - 49)).toBeLessThanOrEqual(1);
     });
 });
+
+describe('the fallout timeline', () => {
+    const {screen, fireEvent} = require('@testing-library/react');
+    const {renderWithProviders} = require('../test-utils');
+    const {Timeline} = require('./FalloutPanel');
+
+    test('says what it shows, and moves and plays the hours', () => {
+        const onAfter = jest.fn(), onPlaying = jest.fn();
+        const {unmount} = renderWithProviders(<Timeline after={0} onAfter={onAfter} playing={false}
+                                                        onPlaying={onPlaying} startMs={null}/>);
+        expect(screen.getByText(/All the fallout, as at H\+1/)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText('Hours after the bursts'), {target: {value: '6'}});
+        expect(onAfter).toHaveBeenCalledWith(6);
+        fireEvent.click(screen.getByLabelText('Play'));
+        expect(onPlaying).toHaveBeenCalledWith(true);
+
+        unmount();
+        renderWithProviders(<Timeline after={6} onAfter={onAfter} playing={true} onPlaying={onPlaying}
+                                      startMs={Date.parse('2026-11-22T00:00Z')}/>);
+        expect(screen.getByText(/^H\+6, .*: the fallout landed by then$/)).toBeTruthy();
+        fireEvent.click(screen.getByLabelText('Pause'));
+        expect(onPlaying).toHaveBeenLastCalledWith(false);
+    });
+});

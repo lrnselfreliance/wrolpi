@@ -2,8 +2,10 @@ import {airProperties, settlingSpeed} from './atmosphere.js';
 import {
     activityDown,
     contourAreas,
+    decayFromH1,
     depositionGrid,
     hotlines,
+    landedGrid,
     landingSpots,
     particleSizes,
     plumeBearing,
@@ -298,3 +300,40 @@ describe('the fallout measured after six Nevada tests', () => {
         expect(misses[5]).toBeLessThan(50);
     });
 });
+
+describe('fallout hour by hour', () => {
+    const spots = landingSpots({yieldKt: 10, profile: steady(90, 10)});
+    const all = depositionGrid(spots, {yieldKt: 10, boundsFloor: 0.1});
+    const sum = (grid) => grid.values.reduce((a, v) => a + v, 0);
+
+    test('decays as t^-1.2 from H+1', () => {
+        expect(decayFromH1(1)).toBe(1);
+        // The 7-10 rule: seven times later, about a tenth.
+        expect(decayFromH1(7)).toBeCloseTo(0.097, 3);
+    });
+
+    test('shows only what has landed, on the same cells, as strong as it is then', () => {
+        const early = landedGrid(spots, all, 1, {yieldKt: 10});
+        const late = landedGrid(spots, all, 48, {yieldKt: 10});
+        for (const grid of [early, late]) {
+            expect([grid.x0, grid.y0, grid.cell, grid.nx, grid.ny]).toEqual([all.x0, all.y0, all.cell, all.nx, all.ny]);
+        }
+        // By an hour, the fallout close in has landed, and not the far: less than all of it.
+        const landedSoon = spots.filter((s) => s.hours <= 1).reduce((a, s) => a + s.activity, 0);
+        const landed = spots.reduce((a, s) => a + s.activity, 0);
+        expect(landedSoon / landed).toBeGreaterThan(0.2);
+        expect(landedSoon / landed).toBeLessThan(0.95);
+        // The far end of the plume is still empty an hour in.
+        const far = (grid) => {
+            let v = 0;
+            for (let j = 0; j < grid.ny; j++) v += grid.values[j * grid.nx + grid.nx - 3];
+            return v;
+        };
+        expect(far(all)).toBeGreaterThan(0);
+        expect(far(early)).toBe(0);
+        // Two days in, everything that lands is down, at 48^-1.2 of its H+1 rate (sharpening only adds).
+        expect(sum(late)).toBeGreaterThanOrEqual(sum(all) * decayFromH1(48) * 0.999);
+        expect(sum(late)).toBeLessThan(sum(all) * decayFromH1(48) * 1.2);
+    });
+});
+

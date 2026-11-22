@@ -503,6 +503,35 @@ export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, norm
     return {...grid, values};
 }
 
+// How much stronger (or weaker) fallout is `hours` after a burst than at H+1: the Way-Wigner
+// t^-1.2 of fission products' decay [Glasstone and Dolan, 9.145], good from minutes to months.
+export function decayFromH1(hours) {
+    return Math.pow(hours, -1.2);
+}
+
+// The dose rate (R/hr) `hours` after the bursts on a grid like `like` (as depositionGrid gives it, of
+// `spots`): only the fallout which has landed by then, as strong as it is then.  Every hour's grid
+// has `like`'s cells, so it is drawn in the same place.
+export function landedGrid(spots, like, hours, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
+    const landed = spots.filter((s) => s.hours <= hours);
+    const options = {yieldKt, fissionFraction, normalization};
+    let grid = depositionGrid(landed, {
+        ...options, cellSize: like.cell,
+        bounds: [like.x0, like.y0, like.x0 + like.nx * like.cell, like.y0 + like.ny * like.cell],
+    });
+    // The same cells as `like`, though rounding may have made one more.
+    if (grid.nx !== like.nx || grid.ny !== like.ny) {
+        const values = new Float64Array(like.nx * like.ny);
+        for (let j = 0; j < like.ny; j++) {
+            for (let i = 0; i < like.nx; i++) values[j * like.nx + i] = grid.values[j * grid.nx + i] || 0;
+        }
+        grid = {...like, values};
+    }
+    grid = sharpenGrid(grid, landed, options);
+    const decay = decayFromH1(hours);
+    return {...grid, values: grid.values.map((v) => v * decay)};
+}
+
 // The area (square miles) where the dose rate is at least each of `doseRates`.
 export function contourAreas(grid, doseRates, scale = 1) {
     const cellSqMi = (grid.cell / 1000) ** 2 / SQ_KM_PER_SQ_MI;

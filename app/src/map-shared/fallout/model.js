@@ -23,7 +23,7 @@
 //             observed clouds, which SIMFIC uses too), DELFIC's standard particle size distribution,
 //             and the exposure rate of a kiloton of fission products spread over unit area.
 
-import {settlingSpeed} from './atmosphere.js';
+import {settlingSpeedAt} from './atmosphere.js';
 
 const FEET = 0.3048;
 const MPH = 0.44704;
@@ -183,7 +183,7 @@ function fall(diameter, top, bottom, profile, siteElevation) {
     const seconds = new Float64Array(steps + 1);
     for (let i = 1; i <= steps; i++) {
         const middle = bottom + (i - 0.5) * FALL_STEP;
-        const dt = FALL_STEP / settlingSpeed(diameter, siteElevation + middle);
+        const dt = FALL_STEP / settlingSpeedAt(diameter, siteElevation + middle);
         const [u, v] = windAt(profile, middle);
         east[i] = east[i - 1] + u * dt;
         north[i] = north[i - 1] + v * dt;

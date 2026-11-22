@@ -1389,6 +1389,16 @@ export default function MapViewer() {
         if (await updateMapTargetWeapon(target.id, weapon)) await loadPins();
     }, [loadPins]);
 
+    // One weapon for every target, kept for each.
+    const handleAllTargetsWeapon = useCallback(async (weapon) => {
+        const targets = pins.filter(p => p.kind === "target");
+        // A few at a time: each is a write of the pins config.
+        for (let i = 0; i < targets.length; i += 8) {
+            await Promise.all(targets.slice(i, i + 8).map(t => updateMapTargetWeapon(t.id, weapon)));
+        }
+        await loadPins();
+    }, [pins, loadPins]);
+
     if (error) {
         return <Panel>
             <Header as="h3">Map failed to load</Header>
@@ -1515,6 +1525,7 @@ export default function MapViewer() {
             burst={falloutBurst}
             onSaveBurst={(burst, weapon) => setAddingPin({lat: burst.lat, lon: burst.lon, kind: "target", weapon})}
             onTargetWeapon={handleTargetWeapon}
+            onAllTargetsWeapon={handleAllTargetsWeapon}
             onClose={() => {
                 setFalloutOpen(false);
                 setFalloutBurst(null);

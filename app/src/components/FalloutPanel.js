@@ -113,13 +113,36 @@ export function hourLabel(time, nearest) {
     return nearest ? `${label} (now)` : label;
 }
 
+// Let the page draw and answer the user when the model has had the thread for a while.  A message
+// channel, not a timer: a browser holds a hidden tab's timers back to one a second.
+const SLICE_MS = 40;
+function yielder() {
+    let since = performance.now();
+    return async () => {
+        if (performance.now() - since < SLICE_MS) return;
+        await new Promise((resolve) => {
+            if (typeof MessageChannel === "undefined") {
+                setTimeout(resolve, 0);
+                return;
+            }
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => resolve();
+            channel.port2.postMessage(null);
+        });
+        since = performance.now();
+    };
+}
+
 // The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) on one grid around the first:
-// {grid, origin, terrainStatus}.  `profileFor(groundElevation)` gives the winds over a burst.  Waits
-// between bursts so the page stays responsive; `cancelled()` stops it.
+// {grid, origin, terrainStatus}.  `profileFor(groundElevation)` gives the winds over a burst.
+// `onProgress(done, total)` hears how far it has got, `onFlat(grid)` gets the fallout on flat ground
+// while the terrain is read, and `cancelled()` stops it.
 export async function simulateBursts(bursts, {profileFor, forecastElevation = 0, useTerrain = true,
-    cancelled = () => false}) {
+    cancelled = () => false, onProgress = () => null, onFlat = () => null}) {
     const origin = bursts[0];
-    const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const pause = yielder();
+    const total = useTerrain ? bursts.length * 2 : bursts.length;
+    let done = 0;
     const run = async (terrainOf) => {
         const runs = [];
         for (const b of bursts) {
@@ -129,6 +152,7 @@ export async function simulateBursts(bursts, {profileFor, forecastElevation = 0,
                 yieldKt: b.yieldKt, profile: profileFor(ground), terrain, siteElevation: Math.max(ground, 0),
             });
             runs.push({burst: b, spots, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
+            onProgress(++done, total);
             await pause();
             if (cancelled()) return null;
         }
@@ -139,6 +163,7 @@ export async function simulateBursts(bursts, {profileFor, forecastElevation = 0,
     if (!grid) return null;
     let terrainStatus = "Flat ground (terrain is off).";
     if (useTerrain) {
+        onFlat(grid);
         let loaded = null;
         try {
             loaded = await loadTerrainGrid(plumeBounds(grid, origin.lon, origin.lat), origin.lon, origin.lat);
@@ -200,10 +225,29 @@ export function WeaponPicker({value, onChange, label}) {
     </div>;
 }
 
+// A target in the list: its name and weapon, and the weapon picker when the user asks to change it.
+function TargetRow({target, onWeapon}) {
+    const [changing, setChanging] = useState(false);
+    const chosen = targetWeapon(target);
+    const muted = {color: "var(--muted)", fontSize: "0.75rem"};
+    return <div style={{marginBottom: "0.375rem"}}>
+        <div><span aria-hidden>☢ </span><strong>{target.label}</strong></div>
+        <div style={muted}>
+            {chosen.weapon ? chosen.weapon.name : "A yield of my own"}, {formatYield(chosen.yieldKt)}{" "}
+            <a href="#" onClick={(e) => {
+                e.preventDefault();
+                setChanging(!changing);
+            }}>{changing ? "done" : "change"}</a>
+        </div>
+        {changing && <WeaponPicker value={target} onChange={onWeapon}/>}
+    </div>;
+}
+
 // The fallout view.  `targets` are the saved targets (pins of kind "target"); `burst` ({lat, lon}),
 // if given, is a burst the user is trying out, which `onSaveBurst(burst, weapon)` saves as a target.
 // `onTargetWeapon(target, weapon)` keeps a target's weapon.
-export default function FalloutPanel({map, targets = [], burst = null, onSaveBurst, onTargetWeapon, onClose}) {
+export default function FalloutPanel({map, targets = [], burst = null, onSaveBurst, onTargetWeapon,
+                                         onAllTargetsWeapon, onClose}) {
     const [burstWeapon, setBurstWeapon] = useState({weapon: DEFAULT_WEAPON});
     const [wind, setWind] = useState(FORECAST);
     const [direction, setDirection] = useState(270);
@@ -214,6 +258,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [busy, setBusy] = useState(false);
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
+    const [progress, setProgress] = useState(null);
+    const [allWeapon, setAllWeapon] = useState(null);
     const {status} = useContext(StatusContext) || {};
     const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
@@ -270,8 +316,16 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             const result = await simulateBursts(bursts, {
                 profileFor: (groundElevation) => windProfile({...winds, groundElevation}),
                 forecastElevation, useTerrain, cancelled: () => cancelled,
+                onProgress: (done, total) => !cancelled && setProgress({done, total}),
+                // Something to look at while the terrain is read.
+                onFlat: (grid) => {
+                    if (cancelled) return;
+                    drawn.current = {url: gridImage(grid), coordinates: gridCorners(grid, bursts[0].lon, bursts[0].lat)};
+                    draw();
+                },
             });
             if (cancelled || !result) return;
+            setProgress(null);
             drawn.current = {url: gridImage(result.grid), coordinates: gridCorners(result.grid, result.origin.lon, result.origin.lat)};
             draw();
             setTerrainStatus(result.terrainStatus);
@@ -320,7 +374,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     return <div style={{
         position: "absolute", left: "0.75rem", bottom: "2.5rem", zIndex: 1002, width: "20rem",
-        maxHeight: "calc(100% - 4rem)", overflowY: "auto",
+        maxHeight: "calc(100% - 7rem)", overflowY: "auto",
         background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)", padding: "0.75rem",
         fontSize: "0.8125rem",
     }}>
@@ -332,11 +386,16 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         {!targets.length && !burst && <div style={muted}>
             No targets yet: right-click the map and choose Add Target Here.
         </div>}
-        {targets.map((t) => <div key={t.id} style={{marginBottom: "0.5rem"}}>
-            <div><span aria-hidden>☢ </span><strong>{t.label}</strong>{" "}
-                <span style={muted}>{t.lat.toFixed(3)}, {t.lon.toFixed(3)}</span></div>
-            <WeaponPicker value={t} onChange={(weapon) => onTargetWeapon?.(t, weapon)}/>
-        </div>)}
+        {targets.length > 1 && <div style={{marginBottom: "0.5rem"}}>
+            <WeaponPicker label="Set every target's weapon" value={allWeapon || targets[0]}
+                          onChange={(weapon) => {
+                              setAllWeapon(weapon);
+                              onAllTargetsWeapon?.(weapon);
+                          }}/>
+        </div>}
+        <div style={{maxHeight: "14rem", overflowY: "auto", marginBottom: "0.5rem"}}>
+            {targets.map((t) => <TargetRow key={t.id} target={t} onWeapon={(weapon) => onTargetWeapon?.(t, weapon)}/>)}
+        </div>
         {burst && <div style={{marginBottom: "0.5rem"}}>
             <div><strong>Burst</strong>{" "}
                 <span style={muted}>{burst.lat.toFixed(3)}, {burst.lon.toFixed(3)}, not saved</span></div>
@@ -368,7 +427,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         <div style={{...muted, marginBottom: "0.5rem"}}>
             An estimate, not a forecast. Prototype: against fallout measured after test bursts it
             is within about 2 to 4 times, and tends to show more than was measured.
-            {busy && " Calculating…"}
+            {busy && (progress ? ` Calculating ${progress.done} of ${progress.total}…` : " Calculating…")}
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>
             <Button role="cancel" size="sm" onClick={onClose}>Close</Button>

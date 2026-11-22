@@ -54,3 +54,24 @@ export function settlingSpeed(diameter, altitude) {
     }
     return Math.sqrt(low * high) * viscosity / (density * diameter);
 }
+
+// Settling speeds by altitude, every SPEED_STEP meters, for each diameter asked for: a table read
+// many times (every fall of every burst), where solving the drag balance each time would cost most
+// of the model's time.
+const SPEED_STEP = 25;
+const SPEED_LOWEST = -3000;
+const SPEED_HIGHEST = 40000;
+const speedTables = new Map();
+
+// settlingSpeed, read from a table: linear between altitudes SPEED_STEP meters apart.
+export function settlingSpeedAt(diameter, altitude) {
+    let table = speedTables.get(diameter);
+    if (!table) {
+        table = new Float64Array(Math.ceil((SPEED_HIGHEST - SPEED_LOWEST) / SPEED_STEP) + 1);
+        for (let i = 0; i < table.length; i++) table[i] = settlingSpeed(diameter, SPEED_LOWEST + i * SPEED_STEP);
+        speedTables.set(diameter, table);
+    }
+    const f = Math.min(Math.max((altitude - SPEED_LOWEST) / SPEED_STEP, 0), table.length - 1.000001);
+    const i = Math.floor(f);
+    return table[i] + (f - i) * (table[i + 1] - table[i]);
+}

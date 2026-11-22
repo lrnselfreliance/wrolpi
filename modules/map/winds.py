@@ -33,8 +33,10 @@ logger = logger.getChild(__name__)
 OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 # The pressure levels (hPa) Open-Meteo forecasts, from near the ground up.
 PRESSURE_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150, 100, 70, 50, 30)
-# Long enough for fallout to come down; Open-Meteo's forecasts are hourly.
-FORECAST_DAYS = 2
+# Long enough for fallout to come down: the forecast starts at midnight UTC, and the 48 hours after a
+# burst this hour must be in it.  Open-Meteo counts up to a week of a place as one call, so the
+# third day costs nothing.
+FORECAST_DAYS = 3
 TIMEOUT = 60
 # How far around each target the field reaches (degrees): as far as fallout which shows is carried.
 MARGIN = 6

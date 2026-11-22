@@ -10,6 +10,7 @@ import {
     fieldWinds,
     forecastAge,
     forecastExpired,
+    forecastRunsOut,
     nearestHour,
     nearestPoint,
     prepareField,
@@ -661,6 +662,8 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
             fetched {age < 1 ? "within the hour" : `${Math.round(age)} hours ago`}. Fallout is carried by
             the wind where it is, as it changes hour by hour.
             {forecastExpired(forecast) && " It has run out: its last hour is used from then on."}
+            {!forecastExpired(forecast) && forecastRunsOut(forecast, hour) !== null && ` It ends at ${hourLabel(
+                forecast.hours[forecast.hours.length - 1], false)}, before all the fallout is down: its last hour's winds are held from then on.`}
         </div>
         {outside > 0 && <div style={{...muted, color: "var(--warning)"}}>
             {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside these winds: the nearest are

@@ -41,6 +41,17 @@ export function forecastExpired(field, when = new Date()) {
     return Date.parse(field.hours[field.hours.length - 1]) < when.getTime();
 }
 
+// The hours a burst's fallout comes down in.
+export const LANDING_HOURS = 48;
+
+// When the forecast runs out for a burst at hour `index` of `field`: the time (ms) of its last hour, if
+// that is before the burst's fallout is down (LANDING_HOURS after it), or null.  From then on the
+// last hour's winds are held.
+export function forecastRunsOut(field, index) {
+    const last = Date.parse(field.hours[field.hours.length - 1]);
+    return Date.parse(field.hours[index]) + LANDING_HOURS * 3600000 > last ? last : null;
+}
+
 // One point's winds in one hour, as east and north (m/s) at each altitude of the levels.
 function resample(winds, u, v, offset) {
     const sorted = [...winds].sort((a, b) => a[0] - b[0]);
@@ -75,17 +86,20 @@ export function prepareField(field) {
     for (let p = 0; p < nPoints; p++) {
         for (let h = 0; h < nHours; h++) resample(field.winds[p][h], u, v, (p * nHours + h) * LEVELS);
     }
-    // The points by where they are on the world's grid of the field's spacing.
+    // The points by where they are on the world's grid of the field's spacing: rows and columns
+    // count whole spacings from the equator and the prime meridian (the points are on multiples of
+    // the spacing, which divides 360 but need not divide 90 or 180), rows from the south pole's.
     const spacing = field.spacing;
     const columns = Math.round(360 / spacing);
-    const rows = Math.round(180 / spacing) + 1;
+    const rowOffset = Math.ceil(90 / spacing);
+    const rows = 2 * rowOffset + 1;
     const index = new Int32Array(columns * rows).fill(-1);
     field.points.forEach((point, p) => {
-        const row = Math.round((point.lat + 90) / spacing);
-        const column = ((Math.round((point.lon + 180) / spacing) % columns) + columns) % columns;
+        const row = Math.round(point.lat / spacing) + rowOffset;
+        const column = ((Math.round(point.lon / spacing) % columns) + columns) % columns;
         index[row * columns + column] = p;
     });
-    return {field, u, v, nHours, spacing, columns, rows, index, hoursMs: field.hours.map((t) => Date.parse(t))};
+    return {field, u, v, nHours, spacing, columns, rows, rowOffset, index, hoursMs: field.hours.map((t) => Date.parse(t))};
 }
 
 // The point of `prepared` at a grid row and column, or -1.
@@ -111,8 +125,8 @@ export function nearestPoint(prepared, lat, lon) {
 
 // Whether `prepared` has points around `lat`, `lon` (all four of the grid cell it is in).
 export function fieldCovers(prepared, lat, lon) {
-    const row = Math.floor((lat + 90) / prepared.spacing);
-    const column = Math.floor((lon + 180) / prepared.spacing);
+    const row = Math.floor(lat / prepared.spacing) + prepared.rowOffset;
+    const column = Math.floor(lon / prepared.spacing);
     return [[0, 0], [1, 0], [0, 1], [1, 1]].every(([r, c]) => pointAt(prepared, row + r, column + c) >= 0);
 }
 
@@ -120,7 +134,7 @@ export function fieldCovers(prepared, lat, lon) {
 // `groundElevation` m above sea level, at `startMs` (a time): {at(x, y, z, t)}, the wind (east, north;
 // m/s) x meters east and y north of ground zero, z meters above its ground, t seconds after the burst.
 export function fieldWinds(prepared, {lat0, lon0, groundElevation = 0, startMs}) {
-    const {u, v, nHours, spacing, hoursMs} = prepared;
+    const {u, v, nHours, spacing, rowOffset, hoursMs} = prepared;
     const perLon = METERS_PER_DEGREE * Math.cos(lat0 * Math.PI / 180);
     const hour0 = hoursMs[0];
     const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
@@ -129,7 +143,7 @@ export function fieldWinds(prepared, {lat0, lon0, groundElevation = 0, startMs})
         at(x, y, z, t) {
             const lat = lat0 + y / METERS_PER_DEGREE;
             const lon = lon0 + x / perLon;
-            const fr = (lat + 90) / spacing, fc = (lon + 180) / spacing;
+            const fr = lat / spacing + rowOffset, fc = lon / spacing;
             const row = Math.floor(fr), column = Math.floor(fc);
             const dr = fr - row, dc = fc - column;
             // The points around a place are looked up once for every grid cell a particle is in.

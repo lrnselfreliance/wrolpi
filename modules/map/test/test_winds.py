@@ -75,6 +75,8 @@ def test_forecast_url_asks_for_every_place_and_level():
     for level in winds.PRESSURE_LEVELS:
         assert f'geopotential_height_{level}hPa' in url
     assert 'wind_speed_unit=ms' in url
+    # The forecast starts at midnight UTC: a third day covers the 48 hours after a burst this hour.
+    assert f'forecast_days={winds.FORECAST_DAYS}' in url and winds.FORECAST_DAYS >= 3
 
 
 def test_parse_forecast():

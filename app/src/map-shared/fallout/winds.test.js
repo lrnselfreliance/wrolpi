@@ -4,6 +4,7 @@ import {
     fieldWinds,
     forecastAge,
     forecastExpired,
+    forecastRunsOut,
     nearestHour,
     nearestPoint,
     prepareField,
@@ -50,6 +51,15 @@ describe('a field of winds aloft', () => {
         expect(forecastExpired(f, new Date('2026-11-22T03:00Z'))).toBe(true);
     });
 
+    test('knows when it ends before a burst\'s fallout is down', () => {
+        const hours = Array.from({length: 72}, (_, h) => new Date(START + h * 3600000).toISOString());
+        const f = {hours};
+        // A burst at the first hour has its 48 hours; one at the 30th does not.
+        expect(forecastRunsOut(f, 0)).toBeNull();
+        expect(forecastRunsOut(f, 23)).toBeNull();
+        expect(forecastRunsOut(f, 30)).toBe(Date.parse(hours[71]));
+    });
+
     test('reads the wind as east and north; a west wind blows east', () => {
         const winds = fieldWinds(prepareField(field()), {lat0: 61, lon0: -149, startMs: START});
         const [east, north] = winds.at(0, 0, 1000, 0);
@@ -90,6 +100,22 @@ describe('a field of winds aloft', () => {
         expect(fieldCovers(prepared, 51.5, 179.5)).toBe(true);
         const winds = fieldWinds(prepared, {lat0: 51.5, lon0: 179.5, startMs: START});
         expect(winds.at(0, 0, 1000, 0)[0]).toBeCloseTo(15, 3);
+    });
+
+    test('reads a point\'s own wind there, and half of each between two, at spacings which do not divide 90', () => {
+        for (const spacing of [4, 8]) {
+            const lats = [32, 32 + spacing, 32 + 2 * spacing], lons = [-120, -120 + spacing, -120 + 2 * spacing];
+            const f = field((lat, lon) => [lat + (lon + 200) / 1000, 270], {lats, lons});
+            f.spacing = spacing;
+            const prepared = prepareField(f);
+            const at = (lat, lon) => fieldWinds(prepared, {lat0: lat, lon0: lon, startMs: START}).at(0, 0, 1000, 0)[0];
+            const own = (lat, lon) => lat + (lon + 200) / 1000;
+            expect(at(lats[1], lons[1])).toBeCloseTo(own(lats[1], lons[1]), 4);
+            expect(at(lats[1] + spacing / 2, lons[1])).toBeCloseTo((own(lats[1], lons[1]) + own(lats[2], lons[1])) / 2, 4);
+            expect(at(lats[1], lons[1] + spacing / 2)).toBeCloseTo((own(lats[1], lons[1]) + own(lats[1], lons[2])) / 2, 4);
+            expect(fieldCovers(prepared, lats[1] + 1, lons[1] + 1)).toBe(true);
+            expect(fieldCovers(prepared, lats[2] + 1, lons[1] + 1)).toBe(false);
+        }
     });
 
     test('adds up the rain near a place', () => {

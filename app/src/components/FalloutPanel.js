@@ -74,7 +74,8 @@ export function gridImage(grid) {
 // `lon`, `lat`.
 export function gridCorners(grid, lon, lat) {
     const toLon = (x) => lon + x / (METERS_PER_DEGREE * Math.cos(lat * Math.PI / 180));
-    const toLat = (y) => lat + y / METERS_PER_DEGREE;
+    // The map takes no latitude past the poles' edge of the Web Mercator world.
+    const toLat = (y) => Math.min(Math.max(lat + y / METERS_PER_DEGREE, -85), 85);
     const west = toLon(grid.x0), east = toLon(grid.x0 + grid.nx * grid.cell);
     const south = toLat(grid.y0), north = toLat(grid.y0 + grid.ny * grid.cell);
     return [[west, north], [east, north], [east, south], [west, south]];
@@ -156,7 +157,9 @@ export async function simulateBursts(bursts, {profileFor, forecastElevation = 0,
             await pause();
             if (cancelled()) return null;
         }
-        return depositionGrid(combineBursts(origin, runs), {yieldKt: 1});
+        // As far as the faintest band drawn: no further, where nothing would show.
+        const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
+        return depositionGrid(combineBursts(origin, runs), {yieldKt: 1, boundsFloor: floor});
     };
     // On flat ground first: that is where the plumes are, so the terrain under them can be read.
     let grid = await run(null);

@@ -348,11 +348,18 @@ function cellShares(mean, sigma, start, cell, count) {
 
 // The dose rate at H+1 hour (R/hr, three feet above the ground) on a grid of square cells around
 // the spots: {x0, y0 (m, the south-west corner), cell (m), nx, ny, values (row by row, from the
-// south)}.  `bounds` and `cellSize` give a closer look at part of it.
+// south)}.  `bounds` and `cellSize` give a closer look at part of it; `boundsFloor` keeps the grid to
+// where the dose rate can reach it.
 export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalization = SOURCE_NORMALIZATION,
-    maxCells = 1200, bounds = null, cellSize = null}) {
+    maxCells = 1200, bounds = null, cellSize = null, boundsFloor = 0}) {
     let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity, narrowest = Infinity;
-    for (const s of spots) {
+    // The grid covers the spots which can raise the dose rate to `boundsFloor` (R/hr) by themselves:
+    // the faintest are carried thousands of km, and would stretch the grid past where anything is
+    // drawn (or past the poles).  Spots outside it are left out.
+    const peak = (s) => s.activity * normalization * yieldKt * fissionFraction / (2 * Math.PI * (s.sigma / 1000) ** 2);
+    const counted = boundsFloor > 0 && spots.some((s) => peak(s) >= boundsFloor)
+        ? spots.filter((s) => peak(s) >= boundsFloor) : spots;
+    for (const s of counted) {
         west = Math.min(west, s.x - 3 * s.sigma);
         east = Math.max(east, s.x + 3 * s.sigma);
         south = Math.min(south, s.y - 3 * s.sigma);

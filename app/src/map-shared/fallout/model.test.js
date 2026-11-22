@@ -197,6 +197,16 @@ describe('a burst in a steady wind', () => {
         expect(low).toBeGreaterThan(high);
     });
 
+    test('covers only where the dose rate can reach a floor, when given one', () => {
+        const {spots} = run(steady(90, 30));
+        const all = depositionGrid(spots, {yieldKt: 10});
+        const kept = depositionGrid(spots, {yieldKt: 10, boundsFloor: 0.01});
+        expect(kept.nx * kept.cell).toBeLessThan(all.nx * all.cell);
+        // What shows (0.1 R/hr and up) is all inside the smaller grid.
+        const [shown, shownAll] = [contourAreas(kept, [0.1])[0], contourAreas(all, [0.1])[0]];
+        expect(Math.abs(shown / shownAll - 1)).toBeLessThan(0.02);
+    });
+
     test('of a megaton, draws a 1000 R/hr contour near ground zero', () => {
         const spots = landingSpots({yieldKt: 1000, profile: steady(90, 6.7)});
         const grid = depositionGrid(spots, {yieldKt: 1000, bounds: [-30000, -30000, 120000, 30000], cellSize: 250});

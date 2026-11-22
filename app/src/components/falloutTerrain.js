@@ -69,7 +69,9 @@ function sample(tiles, n, lon, lat) {
 export async function loadTerrainGrid(bounds, lon, lat) {
     const files = await openTerrainFiles();
     if (!files.length) return null;
-    const [west, south, east, north] = bounds;
+    // Web Mercator tiles end at 85 degrees.
+    const [west, east] = [bounds[0], bounds[2]];
+    const [south, north] = [Math.max(bounds[1], -85), Math.min(bounds[3], 85)];
     const covering = files.filter(({header: h}) =>
         h.minLon < east && h.maxLon > west && h.minLat < north && h.maxLat > south);
     if (!covering.length) return null;

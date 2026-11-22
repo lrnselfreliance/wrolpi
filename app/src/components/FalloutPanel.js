@@ -208,8 +208,9 @@ export default function FalloutPanel({map, lat, lon, onClose}) {
             </div>)}
         </div>
         <div style={{color: "var(--muted)", fontSize: "0.75rem", marginBottom: "0.5rem"}}>
-            An estimate, not a forecast. Prototype: dose rates near ground zero are too low (no
-            stem or early fallout yet).{busy && " Calculating…"}
+            An estimate, not a forecast. Prototype: how much activity lands is uncertain by about
+            a factor of two, and below 10 kt the dose near ground zero is likely too low.
+            {busy && " Calculating…"}
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>
             <Button role="cancel" size="sm" onClick={onClose}>Close</Button>

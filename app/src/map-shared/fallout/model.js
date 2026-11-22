@@ -2,7 +2,10 @@
 // Shared by the app's map viewer and the standalone viewer: no imports from the app, no
 // dependencies.
 //
-// The stabilized cloud is a cylinder of activity, Gaussian in height and across.  The activity is
+// The stabilized cloud is a cap, a skirt below it and a stem down to the ground, each holding its
+// own share of the activity [Philippe]: the cap Gaussian in height, the skirt and stem even.  The
+// cap is as wide as the stabilized cloud; the stem starts as narrow as the early fireball at the
+// ground and widens up to the cap [DNAF-1].  The activity is
 // carried on particles of every size; each size falls at its own speed through winds which change
 // with height, so the large ones land near ground zero and the small ones far downwind, wherever
 // the winds they fell through took them.  Each (size, starting height) lands as a Gaussian spot,
@@ -16,6 +19,10 @@
 //             ADA083515: the cloud's activity is Gaussian, and the cloud is 4 sigma tall and across.
 //   [HPAC]    A Comparison of HPAC Dose-Rate Contour Plots to ... Local Fallout Data ..., AFIT
 //             (2005), DTIC ADA438146: the theoretical source normalization constant.
+//   [Philippe] Philippe et al., Reconstruction of fallout deposition from U.S. atmospheric nuclear
+//             tests conducted in New Mexico and Nevada (arXiv 2307.11040): the shares of the
+//             activity in the cap, skirt and stem, and their heights.  Glasstone and Dolan (1977,
+//             9.61) give about 90% in the head of a land surface burst, the rest in the stem.
 
 import {settlingSpeed} from './atmosphere.js';
 
@@ -43,6 +50,12 @@ const SMALLEST_DIAMETER = 1e-6;
 const LARGEST_DIAMETER = 4e-3;
 const SIZE_BINS = 48;
 const HEIGHT_BINS = 24;
+const SKIRT_BINS = 8;
+const STEM_BINS = 8;
+
+// The shares of the activity in the cap, the skirt (from half the height of the cap's base up to it)
+// and the stem (from the ground up to the skirt), for a surface or tower burst [Philippe].
+export const CLOUD_PARTS = {cap: 0.775, skirt: 0.15, stem: 0.075};
 // How finely a fall is integrated, in meters of height.
 const FALL_STEP = 50;
 
@@ -85,7 +98,9 @@ export function uniformProfile(profile, top) {
 }
 
 // The stabilized cloud of a `yieldKt` burst: cap base and top heights above the ground [DNAF-1, (3)
-// and (4)], and radius [DNAF-1, (5)], in meters.
+// and (4)], its radius [DNAF-1, (5)], and the radius of the early cloud (the fireball, as it starts
+// to rise) [DNAF-1, (2)], in meters.  (The early radius's exponent is read off a smudged scan as
+// 0.33: the cube root by which fireball sizes scale.)
 export function stabilizedCloud(yieldKt) {
     const w = yieldKt;
     const base = w <= 4.07 ? 2228 * Math.pow(w, 0.3463) : 2661 * Math.pow(w, 0.2198);
@@ -95,7 +110,17 @@ export function stabilizedCloud(yieldKt) {
     else top = 6474 * Math.pow(w, 0.1650);
     const ln = Math.log(w);
     const radius = Math.exp(6.7553 + 0.32055 * ln + 0.01137478 * ln * ln);
-    return {base, top, radius};
+    const earlyRadius = 108 * Math.pow(w, 0.33);
+    return {base, top, radius, earlyRadius, yieldKt: w};
+}
+
+// How wide (sigma, m) the stem is at the ground [DNAF-1, (23)]: as the early cloud for a small
+// burst, whose fallout starts before the cloud has gone far, and wider for a large one, whose
+// earliest fallout has fallen a long way.
+export function stemSigma(yieldKt, earlyRadius) {
+    if (yieldKt <= 10) return earlyRadius;
+    if (yieldKt >= 1000) return 2.5 * earlyRadius;
+    return earlyRadius * (1 + 3 * Math.log10(yieldKt)) / 4;
 }
 
 // The error function (Abramowitz and Stegun 7.1.26; error under 1.5e-7).
@@ -164,6 +189,38 @@ function landing(path, start, bottom, ground) {
     return [east[start] - east[0], north[start] - north[0], seconds[start] - seconds[0]];
 }
 
+// The heights the activity starts falling from, once the cloud has stabilized: [{z (m above the
+// ground), weight (share of the activity), sigma (m, how wide it is there)}].  `cloud` is as
+// stabilizedCloud gives it; `parts` are the shares of the cap, skirt and stem (CLOUD_PARTS).
+export function cloudHeights(cloud, parts = CLOUD_PARTS) {
+    const heights = [];
+    // The cap is Gaussian in height between its base and top, which are 2 sigma either side of its
+    // center [WSEG-10]; it is half its radius wide [DNAF-1, (26)].
+    const center = (cloud.base + cloud.top) / 2;
+    const sigmaHeight = Math.max((cloud.top - cloud.base) / 4, 1);
+    const capSigma = cloud.radius / 2;
+    const cap = [];
+    for (let j = 0; j < HEIGHT_BINS; j++) {
+        const z = cloud.base + (j + 0.5) / HEIGHT_BINS * (cloud.top - cloud.base);
+        cap.push({z, weight: Math.exp(-0.5 * ((z - center) / sigmaHeight) ** 2), sigma: capSigma});
+    }
+    const capTotal = cap.reduce((a, h) => a + h.weight, 0);
+    for (const h of cap) heights.push({...h, weight: parts.cap * h.weight / capTotal});
+    // Below the cap, the stem widens from the early cloud at the ground to the cap at its base
+    // [DNAF-1, (25)].
+    const groundSigma = Math.min(stemSigma(cloud.yieldKt ?? 1, cloud.earlyRadius ?? capSigma), capSigma);
+    const widthAt = (z) => groundSigma + (capSigma - groundSigma) * z / cloud.base;
+    const even = (low, high, bins, share) => {
+        for (let j = 0; j < bins; j++) {
+            const z = low + (j + 0.5) / bins * (high - low);
+            heights.push({z, weight: share / bins, sigma: widthAt(z)});
+        }
+    };
+    if (parts.skirt) even(cloud.base / 2, cloud.base, SKIRT_BINS, parts.skirt);
+    if (parts.stem) even(0, cloud.base / 2, STEM_BINS, parts.stem);
+    return heights;
+}
+
 // The spots where the activity lands: [{x, y (m east and north of ground zero), sigma (m),
 // activity (share of the burst's activity), hours (in the air)}].
 //
@@ -176,35 +233,24 @@ function landing(path, start, bottom, ground) {
 // where it first meets the ground: early on a ridge in its way, late in a valley.  Without it the
 // ground is flat.
 export function landingSpots({cloud, profile, siteElevation = 0, diffusivity = 1000, maxHours = 48,
-                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null}) {
+                                 volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, parts = CLOUD_PARTS}) {
     const bottom = terrain ? Math.min(0, Math.floor(terrain.lowest / FALL_STEP) * FALL_STEP) : 0;
     const ground = terrain ? terrain.ground : () => 0;
-    // The activity is Gaussian in height between the cap's base and top, which are 2 sigma either
-    // side of its center [WSEG-10]; the horizontal sigma is half the radius.
-    const center = (cloud.base + cloud.top) / 2;
-    const sigmaHeight = Math.max((cloud.top - cloud.base) / 4, 1);
-    const sigmaCloud = cloud.radius / 2;
-    const heights = [];
-    let total = 0;
-    for (let j = 0; j < HEIGHT_BINS; j++) {
-        const z = cloud.base + (j + 0.5) / HEIGHT_BINS * (cloud.top - cloud.base);
-        const weight = Math.exp(-0.5 * ((z - center) / sigmaHeight) ** 2);
-        heights.push({z, weight});
-        total += weight;
-    }
+    // Where the activity starts falling from: {z, weight (share of the activity), sigma}.
+    const heights = cloudHeights(cloud, parts);
     const spots = [];
     for (const {diameter, activity} of particleSizes(volumeShare)) {
         if (activity <= 0) continue;
         const path = fall(diameter, cloud.top, bottom, profile, siteElevation);
-        for (const {z, weight} of heights) {
+        for (const {z, weight, sigma} of heights) {
             const start = Math.min(Math.round((z - bottom) / FALL_STEP), path.seconds.length - 1);
             const [x, y, seconds] = landing(path, start, bottom, ground);
             if (seconds > maxHours * 3600) continue;
             spots.push({
                 x,
                 y,
-                sigma: Math.sqrt(sigmaCloud ** 2 + 2 * diffusivity * seconds),
-                activity: activity * weight / total,
+                sigma: Math.sqrt(sigma ** 2 + 2 * diffusivity * seconds),
+                activity: activity * weight,
                 hours: seconds / 3600,
             });
         }

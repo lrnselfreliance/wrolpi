@@ -1,5 +1,7 @@
 import {airProperties, settlingSpeed} from './atmosphere.js';
 import {
+    CLOUD_PARTS,
+    cloudHeights,
     contourAreas,
     depositionGrid,
     landingSpots,
@@ -85,6 +87,38 @@ describe('the cloud and its particles', () => {
         expect(total).toBeGreaterThan(0.95);
         expect(mean * 1e6).toBeGreaterThan(229 * 0.9);
         expect(mean * 1e6).toBeLessThan(229 * 1.1);
+    });
+});
+
+describe('the cloud\'s cap, skirt and stem', () => {
+    const cloud = stabilizedCloud(100);
+    const heights = cloudHeights(cloud);
+    const share = (test) => heights.filter((h) => test(h.z)).reduce((a, h) => a + h.weight, 0);
+
+    test('hold all of the activity, in the shares of a surface burst', () => {
+        expect(share(() => true)).toBeCloseTo(1, 10);
+        expect(share((z) => z >= cloud.base)).toBeCloseTo(CLOUD_PARTS.cap, 10);
+        expect(share((z) => z >= cloud.base / 2 && z < cloud.base)).toBeCloseTo(CLOUD_PARTS.skirt, 10);
+        expect(share((z) => z < cloud.base / 2)).toBeCloseTo(CLOUD_PARTS.stem, 10);
+        // About 90% in the head, the rest in the stem (Glasstone and Dolan 9.61).
+        expect(CLOUD_PARTS.cap + CLOUD_PARTS.skirt).toBeGreaterThan(0.85);
+    });
+
+    test('narrow from the cap down to the early fireball at the ground', () => {
+        const lowest = heights.reduce((a, h) => (h.z < a.z ? h : a));
+        const cap = heights.find((h) => h.z > cloud.base);
+        expect(cap.sigma).toBeCloseTo(cloud.radius / 2, 6);
+        expect(lowest.sigma).toBeLessThan(cap.sigma / 2);
+        expect(lowest.sigma).toBeGreaterThan(cloud.earlyRadius);
+    });
+
+    test('put more fallout near ground zero than the cap alone', () => {
+        const profile = steady(90, 6.7);
+        const near = (parts) => {
+            const grid = depositionGrid(landingSpots({cloud, profile, parts}), {yieldKt: 100});
+            return contourAreas(grid, [300])[0];
+        };
+        expect(near(CLOUD_PARTS)).toBeGreaterThan(1.2 * near({cap: 1, skirt: 0, stem: 0}));
     });
 });
 

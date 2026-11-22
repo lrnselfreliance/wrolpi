@@ -56,7 +56,7 @@ export function shotCloud(shot, observed = false) {
 
 // Run the model on a shot.  options: uniform (one wind, the mean over the cloud), surface (one wind,
 // the one at the ground: what a person would read off a weather report), observedCloud,
-// diffusivity, volumeShare, terrain (an elevation grid, as decodeGrid gives it: particles land on
+// diffusivity, volumeShare, parts (the cap/skirt/stem shares; {cap: 1} is the cap alone), terrain (an elevation grid, as decodeGrid gives it: particles land on
 // the ground under them, not on a plane at the height of ground zero).
 export function runShot(shot, options = {}) {
     const cloud = shotCloud(shot, options.observedCloud);
@@ -68,6 +68,7 @@ export function runShot(shot, options = {}) {
         siteElevation: shot.site_elevation_ft * FEET,
         diffusivity: options.diffusivity,
         volumeShare: options.volumeShare,
+        parts: options.parts,
         terrain: options.terrain ? terrainAround(options.terrain, shot.lon, shot.lat) : null,
     });
     const grid = depositionGrid(spots, {yieldKt: shot.yield_kt});

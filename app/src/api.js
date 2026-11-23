@@ -1712,6 +1712,18 @@ export async function mapUnsubscribe(region) {
     }
 }
 
+// Which months of the fallout climatology are kept: {version, months, missing, published}, or null.
+export async function getFalloutClimatology() {
+    const response = await apiGet(`${API_URI}/map/fallout/climatology`);
+    return response.ok ? await response.json() : null;
+}
+
+// One month of the fallout climatology, as kept (gzip bytes), or null.
+export async function getFalloutClimatologyMonth(month) {
+    const response = await apiGet(`${API_URI}/map/fallout/climatology/${month}`);
+    return response.ok ? await response.arrayBuffer() : null;
+}
+
 // The field of forecast winds aloft fetched most recently (the fallout simulator), or null.
 export async function getLatestFalloutWinds() {
     const response = await apiGet(`${API_URI}/map/fallout/winds/latest`);

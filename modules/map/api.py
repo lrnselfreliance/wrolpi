@@ -5,7 +5,7 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import export, export_job, lib, quads, schema, search, winds
+from modules.map import climatology, export, export_job, lib, quads, schema, search, winds
 from modules.map.pins import get_map_pins_config
 from modules.map.sheet import legend_as_sent
 from wrolpi import flags
@@ -339,6 +339,21 @@ async def get_export_pdf(_: Request, export_id: str):
     except EXPORT_ERRORS as e:
         return _export_error(e)
     return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')
+
+
+@map_bp.get('/fallout/climatology')
+@openapi.description('Which months of the fallout climatology (30 past days of winds each) are kept')
+def get_fallout_climatology(_: Request):
+    return json_response(climatology.status(), HTTPStatus.OK)
+
+
+@map_bp.get('/fallout/climatology/<month:int>')
+@openapi.description('One month of the fallout climatology, as kept (gzip)')
+async def get_fallout_climatology_month(_: Request, month: int):
+    path = climatology.month_path(month)
+    if not path:
+        return response.json({'error': f'Month {month} of the climatology is not kept'}, HTTPStatus.NOT_FOUND)
+    return await response.file(path, mime_type='application/octet-stream')
 
 
 @map_bp.get('/fallout/winds/latest')

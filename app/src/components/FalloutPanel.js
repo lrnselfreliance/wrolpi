@@ -17,7 +17,8 @@ import {
     rainNear,
 } from "../map-shared/fallout/winds.js";
 import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
-import {fetchFalloutWinds, getJobs, getLatestFalloutWinds} from "../api";
+import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, getJobs, getLatestFalloutWinds} from "../api";
+import {burstBounds, dayCounter, dayField, gunzip, parseClimatology} from "../map-shared/fallout/climatology.js";
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
@@ -74,6 +75,24 @@ const WINDS = [
     {value: "manual", label: "One wind at every height"},
     ...shots.shots.map((s) => ({value: s.name, label: `Sample: winds over Nevada, ${s.date.slice(0, 10)}`})),
 ];
+// Winds of past days: the climatology, the share of a month's days fallout reached each place.
+const CLIMATE = "climate";
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+    "November", "December"];
+// The shares of days drawn, from the most; the last is "any of the days".
+export const CLIMATE_BANDS = [
+    {rate: 0.5, color: DOSE_BANDS[0].color, label: "half the days or more"},
+    {rate: 0.25, color: DOSE_BANDS[1].color, label: "a quarter of the days or more"},
+    {rate: 0.1, color: DOSE_BANDS[2].color, label: "a tenth of the days or more"},
+    {rate: 1e-6, color: DOSE_BANDS[4].color, label: "any of the days"},
+];
+// The dose rates (R/hr at H+1) a day may be counted at.
+const CLIMATE_RATES = [1000, 100, 10, 1].map((r) => ({value: String(r), label: `${r}+ R/hr at H+1`}));
+// The cells days are counted on are at least this wide (m), and each is shown as the average of
+// itself and its neighbors this many cells around.
+const CLIMATE_CELL = 4000;
+const CLIMATE_SMOOTH = 1;
+
 // The Job which fetches a field of winds.
 const WINDS_JOB = "fallout_winds";
 // The hours after the bursts the fallout can be watched landing in, and how long each is shown (ms)
@@ -253,6 +272,28 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
     return {grid: ran.grid, spots: ran.spots, origin, terrainStatus};
 }
 
+// The fallout of `bursts` in each day of `clim` (as parseClimatology gives it): on what share of the
+// days each place had `rate` R/hr at H+1 or more, as a grid ({x0, y0, cell, nx, ny, values (0..1),
+// days}) around the first burst, smoothed; and that burst ({grid, origin}).  On flat ground at sea
+// level: the days' winds are read by height above the sea.
+export async function simulateClimate(bursts, clim, {rate = 1, cancelled = () => false, onProgress = () => null} = {}) {
+    const bounds = burstBounds(bursts);
+    let counter = null;
+    for (let k = 0; k < clim.days; k++) {
+        const prepared = prepareField(dayField(clim, k, bounds));
+        const startMs = Date.parse(prepared.field.hours[0]);
+        const ran = await simulateBursts(bursts, {
+            windsFor: (b, groundElevation) => ({winds: fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation, startMs})}),
+            useTerrain: false, cancelled,
+            onProgress: (done, total) => onProgress(k * total + done, clim.days * total),
+        });
+        if (!ran || cancelled()) return null;
+        if (!counter) counter = dayCounter(rate, Math.max(CLIMATE_CELL, ran.grid.cell));
+        counter.add(ran.grid);
+    }
+    return counter ? {grid: counter.grid(CLIMATE_SMOOTH), origin: bursts[0]} : null;
+}
+
 // A weapon to burst with: one of those offered, or a yield of one's own.  `value` and onChange's
 // argument are {weapon, yield_kt?, fission_fraction?}, as a target keeps them.
 export function WeaponPicker({value, onChange, label}) {
@@ -321,6 +362,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                                          onAllTargetsWeapon, onClose}) {
     const [burstWeapon, setBurstWeapon] = useState({weapon: DEFAULT_WEAPON});
     const [wind, setWind] = useState(FORECAST);
+    // The climatology: which months are kept, the month and dose rate shown, and the months read.
+    const [climateStatus, setClimateStatus] = useState(null);
+    const [climateMonth, setClimateMonth] = useState(new Date().getMonth() + 1);
+    const [climateRate, setClimateRate] = useState("1");
+    const climates = useRef(new Map());
+    const [forecastChecked, setForecastChecked] = useState(false);
+    const chosenForUs = useRef(false);
     const [direction, setDirection] = useState(270);
     const [speed, setSpeed] = useState(20);
     // The field of forecast winds over the targets fetched most recently.
@@ -355,7 +403,9 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     // The forecast fetched most recently.
     useEffect(() => {
         let cancelled = false;
+        getFalloutClimatology().then((s) => !cancelled && setClimateStatus(s));
         getLatestFalloutWinds().then((latest) => {
+            if (!cancelled) setForecastChecked(true);
             if (cancelled || !latest) return;
             setForecast(latest);
             setHour(nearestHour(latest.hours));
@@ -414,6 +464,40 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             return;
         }
         setBusy(true);
+        if (wind === CLIMATE) {
+            // The bursts in each of the month's past days, counted.
+            const timer = setTimeout(async () => {
+                let clim = climates.current.get(climateMonth);
+                if (!clim) {
+                    const zipped = await getFalloutClimatologyMonth(climateMonth);
+                    if (cancelled) return;
+                    if (!zipped) {
+                        setBusy(false);
+                        return;
+                    }
+                    clim = parseClimatology(await gunzip(zipped));
+                    climates.current.set(climateMonth, clim);
+                }
+                const ran = await simulateClimate(bursts, clim, {
+                    rate: Number(climateRate), cancelled: () => cancelled,
+                    onProgress: (done, total) => !cancelled && setProgress({done, total}),
+                });
+                if (cancelled || !ran) return;
+                setProgress(null);
+                result.current = null;
+                frames.current = new Map();
+                drawn.current = ran.grid ? {url: gridImage(ran.grid, ran.origin.lat, CLIMATE_BANDS),
+                    coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)} : null;
+                if (drawn.current) draw();
+                else erase();
+                setTerrainStatus("Flat ground: the past days' winds are read by height above the sea.");
+                setBusy(false);
+            }, 30);
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
+            };
+        }
         const profile = windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0});
         const startMs = useField ? Date.parse(forecast.hours[hour]) : 0;
         // Each burst is carried by the winds where it is, from the hour chosen.
@@ -448,7 +532,18 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             clearTimeout(timer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour]);
+    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour, climateMonth, climateRate]);
+
+    // With no forecast to go on (none fetched, or run out), the past days' winds, if they are kept.
+    const climateKept = !!climateStatus?.months?.includes(climateMonth);
+    useEffect(() => {
+        if (chosenForUs.current || !forecastChecked || !climateKept || wind !== FORECAST) return;
+        if (!forecast || forecastExpired(forecast)) {
+            chosenForUs.current = true;
+            setWind(CLIMATE);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [forecastChecked, climateKept, forecast]);
 
     // The hour shown: all the fallout, or what has landed by then, as strong as it is then; or the
     // total dose of someone outdoors by then (by two weeks, at the start).
@@ -543,8 +638,23 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 Save as target
             </Button>
         </div>}
-        <Select label="Wind" size="xs" data={WINDS} value={wind} onChange={(v) => v && setWind(v)}
+        <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
+                data={climateStatus?.months?.length
+                    ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
+                    : WINDS}
                 allowDeselect={false} comboboxProps={DROPDOWN}/>
+        {wind === CLIMATE && <div style={{display: "flex", gap: "0.5rem"}}>
+            <Select label="Month" size="xs" value={String(climateMonth)} allowDeselect={false} comboboxProps={DROPDOWN}
+                    data={MONTHS.map((name, k) => ({value: String(k + 1), label: name,
+                        disabled: !climateStatus?.months?.includes(k + 1)}))}
+                    onChange={(v) => v && setClimateMonth(Number(v))}/>
+            <Select label="Count days with" size="xs" value={climateRate} data={CLIMATE_RATES}
+                    allowDeselect={false} comboboxProps={DROPDOWN} onChange={(v) => v && setClimateRate(v)}/>
+        </div>}
+        {wind === CLIMATE && !climateKept && <div style={{...muted, color: "var(--warning)"}}>
+            {MONTHS[climateMonth - 1]}'s past winds are not on this WROLPi yet: they are fetched once, while
+            there is the Internet.
+        </div>}
         {wind === FORECAST && <ForecastControls
             forecast={forecast} prepared={prepared} bursts={bursts} hour={hour} onHour={setHour} online={online}
             fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
@@ -553,10 +663,22 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
         </div>}
-        <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}} checked={useTerrain}
-                  onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>
+        {wind !== CLIMATE && <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}}
+                                       checked={useTerrain} onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>}
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
-        <div style={{margin: "0.5rem 0"}}>
+        {wind === CLIMATE ? <div style={{margin: "0.5rem 0"}}>
+            <div style={{fontWeight: 600}}>Typical {MONTHS[climateMonth - 1]}: not today's winds</div>
+            <div style={muted}>
+                On how many of 30 past {MONTHS[climateMonth - 1]} days (one from each year, 1991 to 2020) the
+                fallout of these bursts reached {climateRate} R/hr or more at H+1. Real winds vary from day to day:
+                a place outside the bands can still be reached.
+            </div>
+            {CLIMATE_BANDS.map((b) => <div key={b.rate} style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
+                <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem", flexShrink: 0,
+                    background: `rgb(${b.color.join(",")})`, opacity: 0.8}}/>
+                {b.label}
+            </div>)}
+        </div> : <div style={{margin: "0.5rem 0"}}>
             <Select label="Show" size="xs" data={SHOW} value={show} onChange={(v) => v && setShow(v)}
                     allowDeselect={false} comboboxProps={DROPDOWN}/>
             <div style={{fontWeight: 600, marginTop: "0.25rem"}}>{legendHeading(show, after)}</div>
@@ -574,7 +696,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                     background: `rgb(${b.color.join(",")})`, opacity: 0.8}}/>
                 {show === TOTAL ? `${b.rate}+ R: ${b.meaning}` : `${b.rate}+ R/hr`}
             </div>)}
-        </div>
+        </div>}
         <div style={{...muted, marginBottom: "0.5rem"}}>
             An estimate, not a forecast. Prototype: on six Nevada test bursts it showed about 4
             times the areas measured (from 2 to 8 times), more than was measured on every one.

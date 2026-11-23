@@ -145,3 +145,52 @@ describe('the total dose view', () => {
         expect(screen.getByText(/The first two weeks/)).toBeTruthy();
     });
 });
+
+describe('the fallout of past days', () => {
+    const {simulateClimate, CLIMATE_BANDS} = require('./FalloutPanel');
+    const {parseClimatology} = require('../map-shared/fallout/climatology.js');
+
+    // Days on a coarse grid (lat 90..-90 every 30, lon 0..330 every 30), each one wind [east, north].
+    function climate(days) {
+        const header = {version: 1, levels_hpa: [1000, 500], lat: [90, -30, 7], lon: [0, 30, 12],
+            days: days.map((_, k) => `200${k}-05-01`)};
+        const head = new TextEncoder().encode(JSON.stringify(header));
+        const size = 2 * 7 * 12;
+        const bytes = new Uint8Array(10 + head.length + 2 * size + days.length * 2 * size);
+        bytes.set([87, 70, 67, 76], 0);
+        const view = new DataView(bytes.buffer);
+        view.setUint16(4, 1, true);
+        view.setUint32(6, head.length, true);
+        bytes.set(head, 10);
+        let at = 10 + head.length;
+        for (let c = 0; c < size; c++) view.setInt16(at + 2 * c, c < size / 2 ? 100 : 5500, true);
+        at += 2 * size;
+        for (const [e, n] of days) {
+            for (let c = 0; c < size; c++) view.setInt8(at + c, e);
+            for (let c = 0; c < size; c++) view.setInt8(at + size + c, n);
+            at += 2 * size;
+        }
+        return parseClimatology(bytes);
+    }
+
+    test('counts the days each place was reached, for all the bursts at once', async () => {
+        const bursts = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}, {lat: 31, lon: -118, yieldKt: 10, fissionFraction: 1}];
+        const heard = [];
+        const ran = await simulateClimate(bursts, climate([[10, 0], [10, 0], [0, 10]]),
+            {rate: 1, onProgress: (done, total) => heard.push([done, total])});
+        expect(ran.origin).toBe(bursts[0]);
+        expect(ran.grid.days).toBe(3);
+        const most = ran.grid.values.reduce((a, v) => Math.max(a, v), 0);
+        expect(most).toBeGreaterThan(0.3);
+        expect(most).toBeLessThanOrEqual(1);
+        expect(heard[heard.length - 1]).toEqual([6, 6]);
+        // The bands go from most days to any.
+        expect(CLIMATE_BANDS.map((b) => b.rate)).toEqual([...CLIMATE_BANDS.map((b) => b.rate)].sort((a, b) => b - a));
+    });
+
+    test('stops when cancelled', async () => {
+        const bursts = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}];
+        expect(await simulateClimate(bursts, climate([[10, 0], [0, 10]]), {cancelled: () => true})).toBeNull();
+    });
+});
+

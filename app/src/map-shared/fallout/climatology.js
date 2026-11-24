@@ -7,8 +7,14 @@
 // (JSON), the heights of the levels (int16 LE, [level][lat][lon], m), then each day's u and v (int8,
 // [level][lat][lon], m/s).
 
+import {depositionGrid, landingSpots, sharpenGrid} from './model.js';
+import {combineBursts} from './targets.js';
+import {fieldWinds, prepareField} from './winds.js';
+
 // How far around the bursts a day's winds are read (degrees).
 export const CLIMATE_MARGIN = 12;
+// A day's grid reaches as far as this dose rate (R/hr at H+1): the faintest band the map draws.
+const DAY_FLOOR = 0.1;
 
 // The bytes of a gzip file, unzipped (in a browser).
 export async function gunzip(buffer) {
@@ -41,7 +47,7 @@ export function parseClimatology(bytes) {
         u: new Int8Array(bytes.buffer, bytes.byteOffset + start + k * 2 * size, size),
         v: new Int8Array(bytes.buffer, bytes.byteOffset + start + k * 2 * size + size, size),
     });
-    return {header, levels, nlat, nlon, heights, day, days};
+    return {bytes, header, levels, nlat, nlon, heights, day, days};
 }
 
 // The latitude and longitude of grid row `j` and column `i` (longitude from -180 to 180).
@@ -84,21 +90,79 @@ export function burstBounds(bursts) {
     return [Math.min(...lats), Math.min(...lons), Math.max(...lats), Math.max(...lons)];
 }
 
+// The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) in day `k` of `clim`, on flat
+// ground at sea level: a grid around the first burst, as depositionGrid gives it.  `onBurst()` hears
+// each burst done, and is awaited (to let the page draw); null once `stopped()`.
+export async function climateDay(clim, k, bursts, {onBurst = () => null, stopped = () => false} = {}) {
+    const prepared = prepareField(dayField(clim, k, burstBounds(bursts)));
+    const startMs = Date.parse(prepared.field.hours[0]);
+    const runs = [];
+    for (const b of bursts) {
+        const winds = fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation: 0, startMs});
+        const spots = landingSpots({yieldKt: b.yieldKt, winds, siteElevation: 0})
+            .filter((s) => Number.isFinite(s.x) && Number.isFinite(s.y) && s.sigma > 0);
+        runs.push({burst: b, spots, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
+        await onBurst();
+        if (stopped()) return null;
+    }
+    const spots = combineBursts(bursts[0], runs);
+    return sharpenGrid(depositionGrid(spots, {yieldKt: 1, boundsFloor: DAY_FLOOR}), spots);
+}
+
+// The cells of `grid` at or above `rate`: {x0, y0, cell, nx, indexes}, small enough to pass from a
+// worker.
+export function reachedCells(grid, rate) {
+    const indexes = [];
+    for (let c = 0; c < grid.values.length; c++) if (grid.values[c] >= rate) indexes.push(c);
+    return {x0: grid.x0, y0: grid.y0, cell: grid.cell, nx: grid.nx, indexes: Int32Array.from(indexes)};
+}
+
+// How many bursts a worker does between the progress it reports.
+const PROGRESS_EVERY = 8;
+
+// Answer climatePool.js's messages to a worker, `scope` (its self): 'start' gives it the month's
+// unzipped bytes, the bursts and the rate; each 'day' (`k`) it calculates, saying how many bursts
+// it has done ('progress'), then the cells reached ('day'), or why it could not ('error').
+export function serveClimateDays(scope) {
+    let clim = null, bursts = null, rate = 1;
+    scope.onmessage = async ({data}) => {
+        if (data.type === 'start') {
+            clim = parseClimatology(new Uint8Array(data.bytes));
+            bursts = data.bursts;
+            rate = data.rate;
+            return;
+        }
+        if (data.type !== 'day') return;
+        const {k} = data;
+        try {
+            let done = 0;
+            const grid = await climateDay(clim, k, bursts, {
+                onBurst: () => {
+                    if (++done % PROGRESS_EVERY === 0) scope.postMessage({type: 'progress', k, done});
+                },
+            });
+            const reached = reachedCells(grid, rate);
+            scope.postMessage({type: 'day', k, done, reached}, [reached.indexes.buffer]);
+        } catch (e) {
+            scope.postMessage({type: 'error', k, message: String(e?.stack || e)});
+        }
+    };
+}
+
 // How many days reached each place: a counter of days' grids (as depositionGrid gives them, all
 // around the same origin), at or above `rate`, on cells `cell` meters wide.
 export function dayCounter(rate, cell) {
     const counts = new Map();
     let days = 0;
     return {
-        add(grid) {
+        // A day: its grid, or the cells of it reached (as reachedCells gives them).
+        add(day) {
             days++;
+            const {x0, y0, cell: size, nx, indexes} = day.indexes ? day : reachedCells(day, rate);
             const seen = new Set();
-            for (let j = 0; j < grid.ny; j++) {
-                for (let i = 0; i < grid.nx; i++) {
-                    if (!(grid.values[j * grid.nx + i] >= rate)) continue;
-                    const x = grid.x0 + (i + 0.5) * grid.cell, y = grid.y0 + (j + 0.5) * grid.cell;
-                    seen.add(`${Math.floor(x / cell)},${Math.floor(y / cell)}`);
-                }
+            for (const c of indexes) {
+                const x = x0 + (c % nx + 0.5) * size, y = y0 + (Math.floor(c / nx) + 0.5) * size;
+                seen.add(`${Math.floor(x / cell)},${Math.floor(y / cell)}`);
             }
             for (const key of seen) counts.set(key, (counts.get(key) || 0) + 1);
         },

@@ -192,6 +192,79 @@ describe('the fallout of past days', () => {
         const bursts = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}];
         expect(await simulateClimate(bursts, climate([[10, 0], [0, 10]]), {cancelled: () => true})).toBeNull();
     });
+
+    // A worker serving the days (as climate.worker.js does) here, as a browser would on another
+    // thread: messages arrive later.
+    const {serveClimateDays} = require('../map-shared/fallout/climatology.js');
+    const made = [];
+    function worker({fail = false} = {}) {
+        const scope = {postMessage: (data) => setTimeout(() => !w.terminated && w.onmessage?.({data}), 0)};
+        serveClimateDays(scope);
+        const w = {
+            terminated: false, onmessage: null, onerror: null, given: [],
+            postMessage(data) {
+                if (data.type === 'day') w.given.push(data.k);
+                const copy = data.type === 'start' ? {...data, bytes: new Uint8Array(data.bytes)} : data;
+                setTimeout(() => {
+                    if (w.terminated) return;
+                    if (fail && data.type === 'day') w.onerror?.({message: 'No such script'});
+                    else scope.onmessage({data: copy});
+                }, 0);
+            },
+            terminate() {
+                w.terminated = true;
+            },
+        };
+        made.push(w);
+        return w;
+    }
+
+    const BURSTS = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}, {lat: 31, lon: -118, yieldKt: 10, fissionFraction: 1}];
+    const DAYS = [[10, 0], [10, 0], [0, 10], [-8, 4], [3, -9]];
+
+    test('spreads the days over workers, and counts them as the page does', async () => {
+        made.length = 0;
+        const clim = climate(DAYS);
+        const here = await simulateClimate(BURSTS, clim, {rate: 1});
+        const heard = [];
+        const spread = await simulateClimate(BURSTS, clim, {rate: 1, workers: 2, makeWorker: () => worker(),
+            onProgress: (done, total) => heard.push([done, total])});
+        expect(made).toHaveLength(2);
+        // Every day given once, to one worker or the other, and both given some.
+        expect(made.flatMap((w) => w.given).sort()).toEqual([0, 1, 2, 3, 4]);
+        expect(made.every((w) => w.given.length > 0)).toBe(true);
+        expect(made.every((w) => w.terminated)).toBe(true);
+        expect(heard[heard.length - 1]).toEqual([10, 10]);
+        expect(spread.grid.days).toBe(5);
+        expect(spread.grid.cell).toBe(here.grid.cell);
+        expect(Array.from(spread.grid.values)).toEqual(Array.from(here.grid.values));
+    });
+
+    test('stops its workers at once when cancelled', async () => {
+        made.length = 0;
+        const controller = new AbortController();
+        const running = simulateClimate(BURSTS, climate(DAYS), {rate: 1, workers: 3, makeWorker: () => worker(),
+            signal: controller.signal});
+        controller.abort();
+        expect(await running).toBeNull();
+        expect(made).toHaveLength(3);
+        expect(made.every((w) => w.terminated)).toBe(true);
+    });
+
+    test('calculates on the page when its workers fail', async () => {
+        made.length = 0;
+        const error = jest.spyOn(console, 'error').mockImplementation(() => null);
+        const clim = climate(DAYS);
+        const here = await simulateClimate(BURSTS, clim, {rate: 1});
+        const ran = await simulateClimate(BURSTS, clim, {rate: 1, workers: 2, makeWorker: () => worker({fail: true})});
+        expect(error).toHaveBeenCalled();
+        error.mockRestore();
+        expect(made.every((w) => w.terminated)).toBe(true);
+        expect(Array.from(ran.grid.values)).toEqual(Array.from(here.grid.values));
+        // And where there are none to be had.
+        const none = await simulateClimate(BURSTS, clim, {rate: 1, workers: 2, makeWorker: () => null});
+        expect(Array.from(none.grid.values)).toEqual(Array.from(here.grid.values));
+    });
 });
 
 
@@ -205,6 +278,15 @@ describe('the fallout panel\'s progress', () => {
         const bar = screen.getByRole('progressbar');
         expect(bar.getAttribute('aria-valuenow')).toBe('25');
         expect(screen.getByText('Calculating 1,170 of 4,680')).toBeTruthy();
+        unmount();
+    });
+
+    test('has a button which cancels the calculation', () => {
+        const {fireEvent} = require('@testing-library/react');
+        const onCancel = jest.fn();
+        const {unmount} = renderWithProviders(<FalloutProgress busy={true} progress={{done: 1, total: 2}} onCancel={onCancel}/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+        expect(onCancel).toHaveBeenCalledTimes(1);
         unmount();
     });
 

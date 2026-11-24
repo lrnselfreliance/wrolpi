@@ -18,7 +18,9 @@ import {
 } from "../map-shared/fallout/winds.js";
 import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
 import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, getJobs, getLatestFalloutWinds} from "../api";
-import {burstBounds, dayCounter, dayField, gunzip, parseClimatology} from "../map-shared/fallout/climatology.js";
+import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
+import {runClimateDays, workerCount} from "../map-shared/fallout/climatePool.js";
+import {makeClimateWorker} from "../map-shared/fallout/climateWorker.js";
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
@@ -275,23 +277,43 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
 // The fallout of `bursts` in each day of `clim` (as parseClimatology gives it): on what share of the
 // days each place had `rate` R/hr at H+1 or more, as a grid ({x0, y0, cell, nx, ny, values (0..1),
 // days}) around the first burst, smoothed; and that burst ({grid, origin}).  On flat ground at sea
-// level: the days' winds are read by height above the sea.
-export async function simulateClimate(bursts, clim, {rate = 1, cancelled = () => false, onProgress = () => null} = {}) {
-    const bounds = burstBounds(bursts);
-    let counter = null;
-    for (let k = 0; k < clim.days; k++) {
-        const prepared = prepareField(dayField(clim, k, bounds));
-        const startMs = Date.parse(prepared.field.hours[0]);
-        const ran = await simulateBursts(bursts, {
-            windsFor: (b, groundElevation) => ({winds: fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation, startMs})}),
-            useTerrain: false, cancelled,
-            onProgress: (done, total) => onProgress(k * total + done, clim.days * total),
-        });
-        if (!ran || cancelled()) return null;
-        if (!counter) counter = dayCounter(rate, Math.max(CLIMATE_CELL, ran.grid.cell));
-        counter.add(ran.grid);
+// level: the days' winds are read by height above the sea.  The days are spread over `workers`
+// workers (on the page, without them, or if they fail); null once `signal` (an AbortSignal) is
+// aborted or `cancelled()`.
+export async function simulateClimate(bursts, clim, {rate = 1, workers = 0, signal = null, cancelled = () => false,
+    onProgress = () => null, makeWorker = makeClimateWorker} = {}) {
+    const stopped = () => cancelled() || !!signal?.aborted;
+    if (stopped()) return null;
+    let days = null;
+    if (workers > 0) {
+        try {
+            days = await runClimateDays({clim, bursts, rate, count: workers, makeWorker, signal, onProgress});
+            if (!days) return null;
+        } catch (e) {
+            console.error("Fallout: the workers failed; calculating on the page", e);
+            days = null;
+        }
     }
-    return counter ? {grid: counter.grid(CLIMATE_SMOOTH), origin: bursts[0]} : null;
+    if (!days) {
+        days = [];
+        const pause = yielder();
+        let done = 0;
+        const total = clim.days * bursts.length;
+        const onBurst = async () => {
+            onProgress(++done, total);
+            await pause();
+        };
+        for (let k = 0; k < clim.days; k++) {
+            const grid = await climateDay(clim, k, bursts, {stopped, onBurst});
+            if (!grid || stopped()) return null;
+            days.push(reachedCells(grid, rate));
+        }
+    }
+    if (stopped()) return null;
+    // Counted on cells as wide as the coarsest day's: a finer count would leave holes between its cells.
+    const counter = dayCounter(rate, Math.max(CLIMATE_CELL, ...days.map((d) => d.cell)));
+    for (const day of days) counter.add(day);
+    return {grid: counter.grid(CLIMATE_SMOOTH), origin: bursts[0]};
 }
 
 // A weapon to burst with: one of those offered, or a yield of one's own.  `value` and onChange's
@@ -381,6 +403,11 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
     const [progress, setProgress] = useState(null);
+    // The calculation running (an AbortController), whether the user stopped it, and a count which
+    // starts it again.
+    const running = useRef(null);
+    const [stopped, setStopped] = useState(false);
+    const [again, setAgain] = useState(0);
     // The hour after the bursts shown, or 0 for all the fallout as at H+1; and whether the hours play.
     const [after, setAfter] = useState(0);
     const [show, setShow] = useState(RATE);
@@ -465,6 +492,9 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             setProgress(null);
             return;
         }
+        const controller = new AbortController();
+        running.current = controller;
+        setStopped(false);
         setBusy(true);
         setProgress(null);
         if (wind === CLIMATE) {
@@ -482,8 +512,10 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                     clim = parseClimatology(await gunzip(zipped));
                     climates.current.set(climateMonth, clim);
                 }
+                if (cancelled || controller.signal.aborted) return;
                 const ran = await simulateClimate(bursts, clim, {
-                    rate: Number(climateRate), cancelled: () => cancelled,
+                    rate: Number(climateRate), workers: workerCount(typeof navigator === "undefined" ? {} : navigator),
+                    signal: controller.signal, cancelled: () => cancelled,
                     onProgress: (done, total) => !cancelled && setProgress({done, total}),
                 });
                 if (cancelled || !ran) return;
@@ -498,6 +530,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             }, 30);
             return () => {
                 cancelled = true;
+                controller.abort();
                 clearTimeout(timer);
             };
         }
@@ -512,7 +545,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
             const ran = await simulateBursts(bursts, {
-                windsFor, groundOf, useTerrain, cancelled: () => cancelled,
+                windsFor, groundOf, useTerrain, cancelled: () => cancelled || controller.signal.aborted,
                 onProgress: (done, total) => !cancelled && setProgress({done, total}),
                 // Something to look at while the terrain is read.
                 onFlat: (grid) => {
@@ -532,10 +565,19 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         }, 30);
         return () => {
             cancelled = true;
+            controller.abort();
             clearTimeout(timer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour, climateMonth, climateRate]);
+    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour, climateMonth, climateRate, again]);
+
+    // Stop the calculation running (and its workers); what was drawn before stays.
+    function cancel() {
+        running.current?.abort();
+        setBusy(false);
+        setProgress(null);
+        setStopped(true);
+    }
 
     // With no forecast to go on (none fetched, or run out), the past days' winds, if they are kept.
     const climateKept = !!climateStatus?.months?.includes(climateMonth);
@@ -618,7 +660,11 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             {targets.length === 1 ? "1 target" : `${targets.length} targets`}
             {burst ? ", and a burst not saved" : ""}; surface bursts.
         </div>
-        <FalloutProgress busy={busy} progress={progress}/>
+        <FalloutProgress busy={busy} progress={progress} onCancel={cancel}/>
+        {stopped && !busy && <div style={{...muted, display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
+            Calculation cancelled.
+            <Button size="xs" onClick={() => setAgain((n) => n + 1)}>Calculate</Button>
+        </div>}
         {!targets.length && !burst && <div style={muted}>
             No targets yet: right-click the map and choose Add Target Here.
         </div>}
@@ -712,14 +758,18 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
 }
 
 // How far the calculation has got, while it runs: a bar filled as far as the bursts are done
-// (`progress`: {done, total}), or moving without a count until there is one.
-export function FalloutProgress({busy, progress}) {
+// (`progress`: {done, total}), or moving without a count until there is one; and a button which
+// stops it (`onCancel`).
+export function FalloutProgress({busy, progress, onCancel}) {
     if (!busy) return null;
-    return <div style={{marginBottom: "0.5rem"}}>
-        {progress && progress.total > 0
-            ? <Progress percent={100 * progress.done / progress.total}
-                        label={`Calculating ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}`}/>
-            : <Progress indeterminate showPercent={false} label="Calculating…"/>}
+    return <div style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
+        <div style={{flex: 1, minWidth: 0}}>
+            {progress && progress.total > 0
+                ? <Progress percent={100 * progress.done / progress.total}
+                            label={`Calculating ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}`}/>
+                : <Progress indeterminate showPercent={false} label="Calculating…"/>}
+        </div>
+        {onCancel && <Button size="xs" role="cancel" onClick={onCancel}>Cancel</Button>}
     </div>;
 }
 

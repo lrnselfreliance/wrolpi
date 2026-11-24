@@ -78,7 +78,10 @@
     },
     "transformIgnorePatterns": [
       "node_modules/(?!(react-hotkeys-hook|three|@mapbox/vector-tile|@mapbox/point-geometry|pbf)/)"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^(.*)/climateWorker(\\.js)?$": "$1/climateWorker.stub.js"
+    }
   },
   "overrides": {
     "@babel/code-frame": "7.29.0",

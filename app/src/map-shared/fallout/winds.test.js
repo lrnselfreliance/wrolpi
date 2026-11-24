@@ -236,3 +236,48 @@ describe('rain', () => {
     });
 });
 
+
+describe('a field of one hour (a past day\'s)', () => {
+    // Winds which change from place to place, but not from hour to hour.
+    const wind = (lat, lon) => [10 + (lat - 60) * 5 + (lon + 150) * 3, 250];
+    const hours = field(wind);
+    const oneHour = {...hours, hours: [HOURS[0]], winds: hours.winds.map((w) => [w[0]]), rain: hours.rain.map(() => [0])};
+
+    test('holds its winds through the hours, as read from a field of the same winds every hour', () => {
+        const held = fieldWinds(prepareField(oneHour), {lat0: 61, lon0: -149, startMs: START});
+        const each = fieldWinds(prepareField(hours), {lat0: 61, lon0: -149, startMs: START});
+        expect(held.held).toBe(true);
+        expect(each.held).toBeUndefined();
+        for (const [x, y, z] of [[0, 0, 0], [20000, -30000, 5000], [-45000, 50000, 15000], [10000, 10000, 30000]]) {
+            const [e1, n1] = held.at(x, y, z, 3600);
+            const [e2, n2] = each.at(x, y, z, 3600);
+            expect(e1).toBeCloseTo(e2, 6);
+            expect(n1).toBeCloseTo(n2, 6);
+        }
+        // Far past the field: the wind of its nearest point.
+        const [e, n] = held.at(0, 900000, 5000, 0);
+        const [speed] = wind(62, -149);
+        expect(Math.hypot(e, n)).toBeCloseTo(speed, 6);
+    });
+
+    test('carries a burst\'s fallout where the full model does, with the paths kept', () => {
+        const winds = fieldWinds(prepareField(oneHour), {lat0: 60.5, lon0: -149.5, startMs: START});
+        for (const yieldKt of [15, 250, 1000]) {
+            const held = landingSpots({yieldKt, winds});
+            const full = landingSpots({yieldKt, winds: {...winds, held: false}});
+            expect(held.length).toBe(full.length);
+            const sum = (spots) => spots.reduce((a, s) => a + s.activity, 0);
+            expect(sum(held)).toBeCloseTo(sum(full), 10);
+            const [hx, hy] = middle(held), [fx, fy] = middle(full);
+            const reach = Math.hypot(fx, fy);
+            expect(reach).toBeGreaterThan(50);
+            expect(Math.hypot(hx - fx, hy - fy) / reach).toBeLessThan(0.01);
+            // Spot by spot: the winds over ground zero carry the rising cloud (which drifts about
+            // 10 km) much as the winds where it is.
+            const apart = Math.max(...held.map((s, i) => Math.hypot(s.x - full[i].x, s.y - full[i].y)));
+            expect(apart).toBeLessThan(4000);
+        }
+        // Kept: a second burst of the same yield gives the same spots.
+        expect(landingSpots({yieldKt: 250, winds})).toEqual(landingSpots({yieldKt: 250, winds}));
+    });
+});

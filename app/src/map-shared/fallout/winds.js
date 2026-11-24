@@ -158,6 +158,8 @@ export function fieldWinds(prepared, {lat0, lon0, groundElevation = 0, startMs})
     const hour0 = hoursMs[0];
     const corners = [[0, 0], [1, 0], [0, 1], [1, 1]];
     let lastCell = null, cellPoints = null;
+    // One hour (a past day's): the winds hold through the hours, and are read without them.
+    if (nHours === 1) return {held: true, at: heldAt(prepared, lat0, lon0, perLon, groundElevation)};
     return {
         at(x, y, z, t) {
             const lat = lat0 + y / METERS_PER_DEGREE;
@@ -201,6 +203,60 @@ export function fieldWinds(prepared, {lat0, lon0, groundElevation = 0, startMs})
         // no rain at all.
         ...(prepared.rains ? {rainAt: (x, y, t) => rainAt(prepared, lat0 + y / METERS_PER_DEGREE, lon0 + x / perLon,
             Math.min(Math.max((startMs + t * 1000 - hour0) / 3600000, 0), nHours - 1))} : {}),
+    };
+}
+
+// The point of `prepared` nearest the middle of a grid cell outside it, kept: particles carried far
+// past the field enter many such cells.
+function nearestOfCell(prepared, row, column) {
+    if (!prepared.nearestOfCell) prepared.nearestOfCell = new Map();
+    const cell = row * 100000 + column;
+    let p = prepared.nearestOfCell.get(cell);
+    if (p === undefined) {
+        p = nearestPoint(prepared, (row - prepared.rowOffset + 0.5) * prepared.spacing, (column + 0.5) * prepared.spacing);
+        prepared.nearestOfCell.set(cell, p);
+    }
+    return p;
+}
+
+// fieldWinds' at(x, y, z) of a field of one hour.
+function heldAt(prepared, lat0, lon0, perLon, groundElevation) {
+    const {u, v, spacing, rowOffset} = prepared;
+    let lastCell = null, p00 = -1, p10 = -1, p01 = -1, p11 = -1, lone = false;
+    return (x, y, z) => {
+        const lat = lat0 + y / METERS_PER_DEGREE;
+        const lon = lon0 + x / perLon;
+        const fr = lat / spacing + rowOffset, fc = lon / spacing;
+        const row = Math.floor(fr), column = Math.floor(fc);
+        const dr = fr - row, dc = fc - column;
+        const cell = row * 100000 + column;
+        if (cell !== lastCell) {
+            lastCell = cell;
+            p00 = pointAt(prepared, row, column);
+            p10 = pointAt(prepared, row + 1, column);
+            p01 = pointAt(prepared, row, column + 1);
+            p11 = pointAt(prepared, row + 1, column + 1);
+            lone = p00 < 0 && p10 < 0 && p01 < 0 && p11 < 0;
+            if (lone) p00 = nearestOfCell(prepared, row, column);
+        }
+        const fl = Math.min(Math.max((groundElevation + z - LOWEST_LEVEL) / LEVEL_STEP, 0), LEVELS - 1.000001);
+        const l0 = Math.floor(fl), dl = fl - l0;
+        let east = 0, north = 0, weight = 0;
+        const add = (p, w) => {
+            if (p < 0 || w <= 0) return;
+            const b = p * LEVELS + l0;
+            east += w * (u[b] + dl * (u[b + 1] - u[b]));
+            north += w * (v[b] + dl * (v[b + 1] - v[b]));
+            weight += w;
+        };
+        if (lone) add(p00, 1);
+        else {
+            add(p00, (1 - dr) * (1 - dc));
+            add(p10, dr * (1 - dc));
+            add(p01, (1 - dr) * dc);
+            add(p11, dr * dc);
+        }
+        return weight > 0 ? [east / weight, north / weight] : [0, 0];
     };
 }
 

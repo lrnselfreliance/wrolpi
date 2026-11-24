@@ -393,6 +393,9 @@ export function landedSigma(sigma0, highest, speed) {
 export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation = 0, maxHours = 48,
                                  volumeShare = VOLUME_ACTIVITY_SHARE, terrain = null, stabilized = null,
                                  winds = null}) {
+    if (winds && winds.held && !winds.rainAt && !terrain && !stabilized) {
+        return heldLandingSpots({yieldKt, burstHeight, siteElevation, maxHours, volumeShare, winds});
+    }
     if (winds) profile = CALM;
     const cloud = risingCloud(yieldKt, Math.max(burstHeight, 0), stabilized);
     const down = activityDown(yieldKt, burstHeight);
@@ -439,6 +442,133 @@ export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation =
                 put(x, y, r.seconds + fallSeconds, 1);
             }
         }
+    }
+    return spots;
+}
+
+// The parcels of a burst on flat ground, without the wind: how each rises with the cloud and then
+// falls, which the wind does not change (it only carries them).  [{diameter, activity, radius,
+// landed, highest, highestAt, seconds, rise: [middle height, seconds, ...] of each step while the
+// cloud rises, fall: the same of each step of the fall, with `lands`, the part of the last step
+// before it meets the ground}].  The same for every burst of a yield, so kept.
+const PARCELS = new Map();
+const MOST_KEPT = 64;
+
+function heldParcels(yieldKt, burstHeight, siteElevation, volumeShare) {
+    const key = `${yieldKt},${burstHeight},${siteElevation},${volumeShare}`;
+    if (PARCELS.has(key)) return PARCELS.get(key);
+    const cloud = risingCloud(yieldKt, Math.max(burstHeight, 0));
+    const down = activityDown(yieldKt, burstHeight);
+    const bottom = -2000;
+    const top = Math.max(cloud.top, cloud.initialTop) + 500;
+    const parcels = [];
+    for (const {diameter, activity} of particleSizes(volumeShare)) {
+        if (activity <= 0) continue;
+        const path = fall(diameter, top, bottom, CALM, siteElevation);
+        const first = rise(cloud, path, cloud.initialBase, CALM, bottom, null);
+        for (let j = 0; j < SUBDIVISIONS; j++) {
+            const start = cloud.initialBase + (j + 0.5) / SUBDIVISIONS * (cloud.initialTop - cloud.initialBase);
+            // As rise, on flat ground, with the middle of each step kept.
+            let z = start, t = cloud.start, highest = z, highestAt = t, landed = false;
+            const steps = [];
+            while (t < cloud.stop) {
+                const dt = Math.min(Math.max(0.02 * t, 0.2), 5, cloud.stop - t);
+                const w1 = updraft(cloud, z, t) - speedOn(path, z, bottom);
+                const zMid = z + w1 * dt / 2;
+                const w2 = updraft(cloud, zMid, t + dt / 2) - speedOn(path, zMid, bottom);
+                steps.push(zMid, dt);
+                z += w2 * dt;
+                t += dt;
+                if (z > highest) {
+                    highest = z;
+                    highestAt = t;
+                }
+                if (z <= 0) {
+                    landed = true;
+                    break;
+                }
+            }
+            let radius;
+            if (!landed && z >= cloud.base) radius = cloud.radius;
+            else {
+                const f = (z - first.height) / Math.max(cloud.base - first.height, 1);
+                radius = cloud.initialRadius + Math.min(Math.max(f, 0), 1) * (cloud.radius - cloud.initialRadius);
+            }
+            // As landingThrough, on flat ground.
+            const falls = [];
+            let lands = 1;
+            if (!landed) {
+                let height = z, above = z;
+                while (height > bottom) {
+                    const speed = settlingSpeedAt(diameter, siteElevation + height);
+                    const step = Math.min(FIELD_STEP, Math.max(speed * FIELD_SECONDS, FALL_STEP), height - bottom);
+                    const middle = height - step / 2;
+                    falls.push(middle, step / settlingSpeedAt(diameter, siteElevation + middle));
+                    const nextAbove = height - step;
+                    if (nextAbove <= 0) {
+                        lands = above > 0 ? above / (above - nextAbove) : 0;
+                        break;
+                    }
+                    height -= step;
+                    above = nextAbove;
+                }
+            }
+            parcels.push({diameter, activity: activity * down / SUBDIVISIONS, radius, landed, highest, highestAt,
+                seconds: t, rise: Float64Array.from(steps), fall: Float64Array.from(falls), lands});
+        }
+    }
+    if (PARCELS.size >= MOST_KEPT) PARCELS.clear();
+    PARCELS.set(key, parcels);
+    return parcels;
+}
+
+// landingSpots, on flat ground, in winds which hold through the hours (`winds.held`: one hour of a
+// past day), with no rain.  While the cloud rises the parcels are carried by the winds over ground
+// zero (they go a few km at most); then each falls through the winds where it is.
+function heldLandingSpots({yieldKt, burstHeight, siteElevation, maxHours, volumeShare, winds}) {
+    const parcels = heldParcels(yieldKt, burstHeight, siteElevation, volumeShare);
+    const maxSeconds = maxHours * 3600;
+    // The winds over ground zero, every FALL_STEP m from 2 km below it.
+    const column = new Map();
+    const over = (z) => {
+        const level = Math.floor((z + 2000) / FALL_STEP);
+        let wind = column.get(level);
+        if (!wind) {
+            wind = winds.at(0, 0, level * FALL_STEP - 2000 + FALL_STEP / 2, 0);
+            column.set(level, wind);
+        }
+        return wind;
+    };
+    const spots = [];
+    for (const p of parcels) {
+        let x = 0, y = 0;
+        for (let i = 0; i < p.rise.length; i += 2) {
+            const [u, v] = over(p.rise[i]);
+            x += u * p.rise[i + 1];
+            y += v * p.rise[i + 1];
+        }
+        let t = p.seconds, at = [x, y];
+        if (!p.landed) {
+            at = null;
+            for (let i = 0; i < p.fall.length; i += 2) {
+                const dt = p.fall[i + 1];
+                const [u, v] = winds.at(x, y, p.fall[i], t + dt / 2);
+                if (i + 2 >= p.fall.length) {
+                    at = [x + p.lands * u * dt, y + p.lands * v * dt];
+                    t += p.lands * dt;
+                    break;
+                }
+                x += u * dt;
+                y += v * dt;
+                t += dt;
+                if (t > maxSeconds) break;
+            }
+        }
+        if (!at || t > maxSeconds) continue;
+        const falling = Math.max(t - p.highestAt, 1);
+        const sigma = landedSigma(p.radius / 2, p.highest, Math.max(p.highest, 1) / falling);
+        spots.push({x: at[0], y: at[1], sigma, diameter: p.diameter, highest: p.highest, activity: p.activity,
+            hours: t / 3600});
     }
     return spots;
 }

@@ -465,7 +465,8 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         }
         setBusy(true);
         if (wind === CLIMATE) {
-            // The bursts in each of the month's past days, counted.
+            // The bursts in each of the month's past days, counted.  Said at once: not the forecast's terrain while counting.
+            setTerrainStatus("Flat ground: the past days' winds are read by height above the sea.");
             const timer = setTimeout(async () => {
                 let clim = climates.current.get(climateMonth);
                 if (!clim) {
@@ -490,7 +491,6 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                     coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)} : null;
                 if (drawn.current) draw();
                 else erase();
-                setTerrainStatus("Flat ground: the past days' winds are read by height above the sea.");
                 setBusy(false);
             }, 30);
             return () => {

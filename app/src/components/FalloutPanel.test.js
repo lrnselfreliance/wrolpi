@@ -19,8 +19,9 @@ function worker({fail = false} = {}) {
     const scope = {postMessage: (data) => setTimeout(() => !w.terminated && w.onmessage?.({data}), 0)};
     serveFallout(scope);
     const w = {
-        terminated: false, onmessage: null, onerror: null, given: [],
+        terminated: false, onmessage: null, onerror: null, given: [], kind: null,
         postMessage(data) {
+            if (data.type === 'start') w.kind = data.kind;
             if (data.type === 'task') w.given.push(data.k);
             const copied = copy(data);
             setTimeout(() => {
@@ -131,8 +132,13 @@ describe('the fallout of several bursts', () => {
             const heard = [];
             const spread = await simulateBursts(MANY, {winds: w, useTerrain: false, workers: 3, makeWorker: () => worker(),
                 onProgress: (done, total) => heard.push([done, total])});
-            expect(made).toHaveLength(3);
-            expect(made.flatMap((x) => x.given).sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+            // The bursts by three workers, then the grid's parts by three more.
+            const burstWorkers = made.filter((x) => x.kind === 'bursts');
+            const gridWorkers = made.filter((x) => x.kind === 'grid');
+            expect(burstWorkers).toHaveLength(3);
+            expect(gridWorkers).toHaveLength(3);
+            expect(burstWorkers.flatMap((x) => x.given).sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+            expect(gridWorkers.flatMap((x) => x.given).length).toBeGreaterThan(3);
             expect(made.every((x) => x.given.length > 0 && x.terminated)).toBe(true);
             expect(heard[heard.length - 1]).toEqual([7, 7]);
             expect(same(spread, here)).toBe(true);
@@ -157,7 +163,7 @@ describe('the fallout of several bursts', () => {
             expect(same(here, flat)).toBe(false);
             expect(same(spread, here)).toBe(true);
             // A pass on flat ground, then another over the terrain, each by its own workers.
-            expect(made).toHaveLength(4);
+            expect(made.map((x) => x.kind)).toEqual(['bursts', 'bursts', 'grid', 'grid', 'bursts', 'bursts', 'grid', 'grid']);
             expect(heard[heard.length - 1]).toEqual([14, 14]);
         } finally {
             loadTerrainGrid.mockImplementation(async () => null);

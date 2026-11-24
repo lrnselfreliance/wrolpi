@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
-import {depositionGrid, doseGrid, landedGrid, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
+import {doseGrid, landedGrid, profileFromTable} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {loadTerrainGrid} from "./falloutTerrain";
 import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
@@ -18,7 +18,7 @@ import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, ge
 import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
 import {runPool, workerCount} from "../map-shared/fallout/pool.js";
 import {makeFalloutWorker} from "../map-shared/fallout/falloutWorker.js";
-import {burstSpots, burstWinds} from "../map-shared/fallout/work.js";
+import {burstSpots, burstsFrame, burstWinds, gridPart, gridParts, joinParts} from "../map-shared/fallout/work.js";
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
@@ -253,6 +253,33 @@ export async function simulateBursts(bursts, {winds, useTerrain = true, workers 
         }
         return found;
     };
+    // The grid of the bursts' `spots`, its parts made by the workers (or here): null once stopped.
+    const gridOf = async (spots) => {
+        const frame = burstsFrame(spots, DOSE_BANDS[DOSE_BANDS.length - 1].rate);
+        const parts = gridParts(spots);
+        let made;
+        if (workers > 0) {
+            try {
+                made = await runPool({
+                    tasks: parts.length, total: parts.length, count: workers, makeWorker, signal,
+                    start: {kind: 'grid', frame}, payload: (k) => ({spots: parts[k]}),
+                });
+                if (!made) return null;
+            } catch (e) {
+                console.error("Fallout: the workers failed; calculating on the page", e);
+            }
+        }
+        if (!made) {
+            const pause = yielder();
+            made = [];
+            for (const part of parts) {
+                made.push(gridPart(frame, part));
+                await pause();
+                if (stopped()) return null;
+            }
+        }
+        return joinParts(frame, made);
+    };
     const run = async (terrain) => {
         if (stopped()) return null;
         let found = await spread(terrain);
@@ -264,11 +291,9 @@ export async function simulateBursts(bursts, {winds, useTerrain = true, workers 
             fissionFraction: b.fissionFraction}));
         const offMap = bursts.filter((b, i) => found[i].offMap);
         if (offMap.length) console.warn(`Fallout: some spots of ${offMap.length} bursts were not on the map`, offMap);
-        // As far as the faintest band drawn: no further, where nothing would show.
-        const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
         const spots = combineBursts(origin, runs);
-        // The hot fallout close to a small burst is not averaged away in a grid over them all.
-        const grid = sharpenGrid(depositionGrid(spots, {yieldKt: 1, boundsFloor: floor}), spots);
+        const grid = await gridOf(spots);
+        if (!grid || stopped()) return null;
         return {grid, spots};
     };
     // On flat ground first: that is where the plumes are, so the terrain under them can be read.
@@ -446,10 +471,10 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
 
-    const bursts = [
+    const bursts = useMemo(() => [
         ...targets.map((t) => ({lat: t.lat, lon: t.lon, ...targetWeapon(t)})),
         ...(burst ? [{lat: burst.lat, lon: burst.lon, ...targetWeapon(burstWeapon)}] : []),
-    ];
+    ], [targets, burst, burstWeapon]);
     // What the fallout depends on, as one value an effect can watch.
     const burstsKey = JSON.stringify(bursts.map((b) => [b.lat, b.lon, b.yieldKt, b.fissionFraction]));
 
@@ -842,6 +867,11 @@ export function Timeline({show = RATE, after, onAfter, playing, onPlaying, start
 function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fetching, fetchPercent, fetchError,
                               onFetch}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
+    // Not again while the panel shows its progress.
+    const outside = useMemo(() => prepared ? bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length : 0,
+        [prepared, bursts]);
+    const rainy = useMemo(() => prepared ? bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length : 0,
+        [prepared, bursts, hour]);
     const fetchButton = <div>
         <Button size="xs" onClick={onFetch} disabled={!online || fetching} style={{marginTop: "0.25rem"}}>
             {fetching ? `Fetching… ${Math.round(fetchPercent)}%` : forecast ? "Fetch again" : "Fetch winds aloft"}
@@ -860,8 +890,7 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
     const nearest = nearestHour(forecast.hours);
     const hours = forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
     const age = forecastAge(forecast);
-    const outside = bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length;
-    const rainy = bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length;
+
     const points = forecast.points.length;
     return <div>
         <Select label="Hour of the bursts" size="xs" data={hours} value={String(hour)}

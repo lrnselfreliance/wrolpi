@@ -596,11 +596,9 @@ function cellShares(mean, sigma, start, cell, count) {
     return [first, shares];
 }
 
-// The dose rate at H+1 hour (R/hr, three feet above the ground) on a grid of square cells around
-// the spots: {x0, y0 (m, the south-west corner), cell (m), nx, ny, values (row by row, from the
-// south)}.  `bounds` and `cellSize` give a closer look at part of it; `boundsFloor` keeps the grid to
-// where the dose rate can reach it.
-export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalization = SOURCE_NORMALIZATION,
+// The cells of a grid around `spots`, as depositionGrid would make it (with the same options): {x0,
+// y0 (m, the south-west corner), cell (m), nx, ny}.
+export function gridFrame(spots, {yieldKt, fissionFraction = 1, normalization = SOURCE_NORMALIZATION,
     maxCells = 1200, bounds = null, cellSize = null, boundsFloor = 0}) {
     let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity, narrowest = Infinity;
     // The grid covers the spots which can raise the dose rate to `boundsFloor` (R/hr) by themselves:
@@ -621,8 +619,17 @@ export function depositionGrid(spots, {yieldKt, fissionFraction = 1, normalizati
     if (bounds) [west, south, east, north] = bounds;
     const span = Math.max(east - west, north - south);
     const cell = cellSize || Math.max(span / maxCells, Math.min(narrowest / 2, 250), 25);
-    const nx = Math.ceil((east - west) / cell);
-    const ny = Math.ceil((north - south) / cell);
+    return {x0: west, y0: south, cell, nx: Math.ceil((east - west) / cell), ny: Math.ceil((north - south) / cell)};
+}
+
+// The dose rate at H+1 hour (R/hr, three feet above the ground) on a grid of square cells around
+// the spots: {x0, y0 (m, the south-west corner), cell (m), nx, ny, values (row by row, from the
+// south)}.  `bounds` and `cellSize` give a closer look at part of it; `boundsFloor` keeps the grid to
+// where the dose rate can reach it; `frame` (as gridFrame gives it) gives its cells.
+export function depositionGrid(spots, options) {
+    const {yieldKt, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = options;
+    const frame = options.frame || gridFrame(spots, options);
+    const {x0: west, y0: south, cell, nx, ny} = frame;
     const values = new Float64Array(nx * ny);
     const cellKm2 = (cell / 1000) ** 2;
     const perShare = normalization * yieldKt * fissionFraction / cellKm2;
@@ -652,7 +659,16 @@ const MOST_SPLITS = 32;
 // `run`, as combineBursts gives them; all one run without it) are also put on a fine grid, and each
 // cell gains the most any part of it is above the cell's average, by the burst which raises it most.
 // The cell's average, which sums the bursts, is kept beneath.
-export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
+export function sharpenGrid(grid, spots, options = {}) {
+    const extra = sharpening(grid, spots, options);
+    if (!extra) return grid;
+    const values = Float64Array.from(grid.values, (v, k) => v + extra[k]);
+    return {...grid, values};
+}
+
+// What sharpenGrid adds to each cell of a grid with the cells of `grid` (as gridFrame gives them),
+// or null where it adds nothing: the most any burst of `spots` raises it.
+export function sharpening(grid, spots, {yieldKt = 1, fissionFraction = 1, normalization = SOURCE_NORMALIZATION} = {}) {
     const coarse = grid.cell;
     const runs = new Map();
     for (const s of spots) {
@@ -661,8 +677,8 @@ export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, norm
         if (!runs.has(run)) runs.set(run, []);
         runs.get(run).push(s);
     }
-    if (!runs.size) return grid;
-    const extra = new Float64Array(grid.values.length);
+    if (!runs.size) return null;
+    const extra = new Float64Array(grid.nx * grid.ny);
     for (const narrow of runs.values()) {
         const narrowest = Math.min(...narrow.map((s) => s.sigma));
         const splits = Math.min(Math.ceil(coarse / Math.max(Math.min(narrowest / 2, FINE_CELL), 25)), MOST_SPLITS);
@@ -703,8 +719,7 @@ export function sharpenGrid(grid, spots, {yieldKt = 1, fissionFraction = 1, norm
             }
         }
     }
-    const values = Float64Array.from(grid.values, (v, k) => v + extra[k]);
-    return {...grid, values};
+    return extra;
 }
 
 // How much stronger (or weaker) fallout is `hours` after a burst than at H+1: the Way-Wigner

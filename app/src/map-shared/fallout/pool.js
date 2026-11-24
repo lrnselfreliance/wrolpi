@@ -17,12 +17,12 @@ export function workerCount({hardwareConcurrency, deviceMemory} = {}) {
 }
 
 // `tasks` tasks (0..tasks-1) done by `count` workers from `makeWorker()`, each given `start` (a
-// message: what every task needs), then a task, and when it is done the next not yet given: the
-// results, in the order of the tasks, or null if `signal` (an AbortSignal) is aborted, which stops
-// the workers at once.  A task's worker says how much of it is done ('progress'), then its result
+// message: what every task needs), then a task (with what `payload(k)` gives, if it needs more),
+// and when it is done the next not yet given: the results, in the order of the tasks, or null if
+// `signal` (an AbortSignal) is aborted, which stops the workers at once.  A task's worker says how much of it is done ('progress'), then its result
 // ('done'); `onProgress(done, total)` hears how much of all of them is done, of `total`.  Rejects if
 // a worker fails (or cannot be made).  The workers answer as work.js's serveFallout does.
-export function runPool({tasks, start, total, count, makeWorker, signal, onProgress = () => null}) {
+export function runPool({tasks, start, payload = () => null, total, count, makeWorker, signal, onProgress = () => null}) {
     return new Promise((resolve, reject) => {
         const workers = [];
         const results = new Array(tasks).fill(null);
@@ -45,7 +45,9 @@ export function runPool({tasks, start, total, count, makeWorker, signal, onProgr
         };
         const progress = () => onProgress(doneOf.reduce((a, n) => a + n, 0), total);
         const give = (worker) => {
-            if (next < tasks) worker.postMessage({type: 'task', k: next++});
+            if (next >= tasks) return;
+            const k = next++;
+            worker.postMessage({type: 'task', k, ...payload(k)});
         };
         const heard = (worker, data) => {
             if (over) return;

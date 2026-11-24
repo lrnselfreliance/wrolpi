@@ -128,11 +128,19 @@ function pointAt(prepared, row, column) {
     return prepared.index[row * prepared.columns + c];
 }
 
+// The degrees of longitude from `lon` east to `to`, -180 to 180, however far round the world either
+// is (a particle may be carried round it).
+function lonGap(to, lon) {
+    let gap = (to - lon + 540) % 360;
+    if (gap < 0) gap += 360;
+    return gap - 180;
+}
+
 // The point of `prepared` nearest `lat`, `lon`.
 export function nearestPoint(prepared, lat, lon) {
     let best = 0, gap = Infinity;
     prepared.field.points.forEach((point, p) => {
-        const dLon = ((point.lon - lon + 540) % 360) - 180;
+        const dLon = lonGap(point.lon, lon);
         const g = (point.lat - lat) ** 2 + (dLon * Math.cos(lat * Math.PI / 180)) ** 2;
         if (g < gap) {
             best = p;
@@ -140,6 +148,64 @@ export function nearestPoint(prepared, lat, lon) {
         }
     });
     return best;
+}
+
+// The point of `prepared` nearest `lat`, `lon`, in its grid cell `row`, `column`: as nearestPoint
+// finds it, but looking only through the points which can be nearest somewhere in the cell (kept for
+// each cell).  Particles carried past the field enter many cells, and looking through all the points
+// for each was most of the time a burst took.
+export function nearestAround(prepared, row, column, lat, lon) {
+    if (!prepared.nearCandidates) prepared.nearCandidates = new Map();
+    const key = row * 100000 + column;
+    let near = prepared.nearCandidates.get(key);
+    if (!near) {
+        near = candidatesOf(prepared, row, column);
+        prepared.nearCandidates.set(key, near);
+    }
+    const points = prepared.field.points;
+    let best = near[0], gap = Infinity;
+    // As nearestPoint reckons it, in the same order: the same point, even where two are as near.
+    for (const p of near) {
+        const point = points[p];
+        const dLon = lonGap(point.lon, lon);
+        const g = (point.lat - lat) ** 2 + (dLon * Math.cos(lat * Math.PI / 180)) ** 2;
+        if (g < gap) {
+            best = p;
+            gap = g;
+        }
+    }
+    return best;
+}
+
+// The points of `prepared` (in order) which can be the nearest somewhere in grid cell `row`,
+// `column`: those which, at their nearest to the cell, are as near as the point nearest at its
+// farthest.
+function candidatesOf(prepared, row, column) {
+    const {spacing, rowOffset} = prepared;
+    const south = (row - rowOffset) * spacing, north = south + spacing;
+    const middle = (column + 0.5) * spacing, halfWidth = spacing / 2;
+    // How much a degree of longitude counts in the cell, at least and at most (by |cos(lat)|).
+    const scale = (degrees) => Math.abs(Math.cos(degrees * Math.PI / 180));
+    const crosses = (period, offset) => Math.floor((south - offset) / period) !== Math.floor((north - offset) / period);
+    const least = crosses(180, 90) ? 0 : Math.min(scale(south), scale(north));
+    const most = crosses(180, 0) ? 1 : Math.max(scale(south), scale(north));
+    const points = prepared.field.points;
+    const nearest = new Float64Array(points.length), farthest = new Float64Array(points.length);
+    let bound = Infinity;
+    points.forEach((point, p) => {
+        const dLat0 = Math.max(0, south - point.lat, point.lat - north);
+        const dLat1 = Math.max(Math.abs(point.lat - south), Math.abs(point.lat - north));
+        const d = Math.abs(lonGap(point.lon, middle));
+        const dLon0 = Math.max(0, d - halfWidth), dLon1 = Math.min(180, d + halfWidth);
+        nearest[p] = dLat0 ** 2 + (dLon0 * least) ** 2;
+        farthest[p] = dLat1 ** 2 + (dLon1 * most) ** 2;
+        bound = Math.min(bound, farthest[p]);
+    });
+    // A little past the bound: rounding is not to leave out a point which is as near.
+    const limit = bound * (1 + 1e-9) + 1e-12;
+    const near = [];
+    for (let p = 0; p < points.length; p++) if (nearest[p] <= limit) near.push(p);
+    return Int32Array.from(near);
 }
 
 // Whether `prepared` has points around `lat`, `lon` (all four of the grid cell it is in).
@@ -172,7 +238,7 @@ export function fieldWinds(prepared, {lat0, lon0, groundElevation = 0, startMs})
             if (cell !== lastCell) {
                 lastCell = cell;
                 cellPoints = corners.map(([r, c]) => pointAt(prepared, row + r, column + c));
-                if (cellPoints.every((p) => p < 0)) cellPoints = [nearestPoint(prepared, lat, lon), -1, -1, -1];
+                if (cellPoints.every((p) => p < 0)) cellPoints = [nearestAround(prepared, row, column, lat, lon), -1, -1, -1];
             }
             const fh = Math.min(Math.max((startMs + t * 1000 - hour0) / 3600000, 0), nHours - 1);
             const h0 = Math.min(Math.floor(fh), nHours - 2 < 0 ? 0 : nHours - 2), dh = nHours > 1 ? fh - h0 : 0;
@@ -280,7 +346,7 @@ function rainAt(prepared, lat, lon, fh) {
         }
     }
     if (best < 0) {
-        best = nearestPoint(prepared, lat, lon);
+        best = nearestAround(prepared, row, column, lat, lon);
         mm = rain[best * nHours + h0] * (1 - dh) + rain[best * nHours + h1] * dh;
         weight = 1;
     }

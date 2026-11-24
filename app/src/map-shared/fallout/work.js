@@ -3,7 +3,7 @@
 import {climateDay, parseClimatology, reachedCells} from './climatology.js';
 import {depositionGrid, gridFrame, landingSpots, sharpening} from './model.js';
 import {terrainAround} from './terrain.js';
-import {fieldWinds, nearestPoint, prepareField} from './winds.js';
+import {fieldWinds, nearestPoint} from './winds.js';
 
 // The winds over bursts, from `winds`: {prepared (a field, as prepareField gives it), startMs}, each
 // burst carried by the winds where it is from that time; or {profile}, one profile over them all.
@@ -15,6 +15,16 @@ export function burstWinds({prepared = null, startMs = 0, profile = null}) {
         windsFor: (b, groundElevation) => ({winds: fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation, startMs})}),
         groundOf: (b) => prepared.field.points[nearestPoint(prepared, b.lat, b.lon)].elevation,
     };
+}
+
+// `prepared` (a field, as prepareField gives it) as a worker is sent it: its arrays and points, not
+// the forecast as fetched (copying its nested lists to each worker was slow), nor what was kept from
+// reading it.
+export function portablePrepared(prepared) {
+    if (!prepared) return null;
+    // eslint-disable-next-line no-unused-vars
+    const {field, nearestOfCell, nearCandidates, ...arrays} = prepared;
+    return {...arrays, field: {hours: field.hours, points: field.points.map(({lat, lon, elevation}) => ({lat, lon, elevation}))}};
 }
 
 // Where the fallout of `burst` lands, in `windsFor` (as burstWinds gives them), over `terrain` (an
@@ -82,8 +92,8 @@ export function joinParts(frame, parts) {
 const PROGRESS_EVERY = 8;
 
 // The tasks of a worker, from what pool.js starts it with, `start`: `kind` 'days' (a past day each:
-// `bytes`, the month unzipped; `bursts`; `rate`), 'bursts' (a burst each: `bursts`; `field` (a
-// forecast) and `startMs`, or `profile`; `terrain`, or null), or 'grid' (a part of the bursts' grid
+// `bytes`, the month unzipped; `bursts`; `rate`), 'bursts' (a burst each: `bursts`; `prepared` (a
+// forecast, as portablePrepared gives it) and `startMs`, or `profile`; `terrain`, or null), or 'grid' (a part of the bursts' grid
 // each, on `frame`; the task gives its `spots`).  (task, progress(done)) => {result, transfer (what
 // of it to transfer), done}.
 function tasksOf(start) {
@@ -107,8 +117,8 @@ function tasksOf(start) {
             return {result: part, transfer: [part.values.buffer, ...(part.extra ? [part.extra.buffer] : [])], done: 1};
         };
     }
-    const {bursts, field, startMs, profile, terrain} = start;
-    const winds = burstWinds({prepared: field ? prepareField(field) : null, startMs, profile});
+    const {bursts, prepared, startMs, profile, terrain} = start;
+    const winds = burstWinds({prepared, startMs, profile});
     return async ({k}) => ({result: burstSpots(bursts[k], {...winds, terrain}), transfer: [], done: 1});
 }
 

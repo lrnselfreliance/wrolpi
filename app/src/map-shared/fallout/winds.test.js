@@ -5,6 +5,7 @@ import {
     forecastAge,
     forecastExpired,
     forecastRunsOut,
+    nearestAround,
     nearestHour,
     nearestPoint,
     prepareField,
@@ -92,6 +93,40 @@ describe('a field of winds aloft', () => {
         expect(prepared.field.points[nearestPoint(prepared, 61.2, -147.6)]).toMatchObject({lat: 61, lon: -148});
         const winds = fieldWinds(prepared, {lat0: 61, lon0: -140, startMs: START});
         expect(winds.at(0, 0, 1000, 0)[0]).toBeCloseTo(30, 3);
+        // The points which can be nearest in each cell outside it are found once, and kept.
+        expect(prepared.nearCandidates.size).toBe(1);
+        expect(winds.at(0, 0, 3000, 600)[0]).toBeCloseTo(30, 3);
+        expect(prepared.nearCandidates.size).toBe(1);
+    });
+
+    test('finds the nearest point anywhere as quickly as it may, and the same one', () => {
+        // Points 3 degrees apart, some missing, near the antimeridian and the pole.
+        const points = [];
+        for (let lat = 63; lat <= 87; lat += 3) {
+            for (const lon of [168, 171, 174, 177, 180, -177, -174, -171]) {
+                if ((lat * 7 + lon) % 5 !== 0) points.push({lat, lon: lon === 180 ? -180 : lon, elevation: 0});
+            }
+        }
+        const prepared = prepareField({spacing: 3, points, hours: HOURS,
+            winds: points.map(() => HOURS.map(() => [[10, 10, 270]])), rain: points.map(() => HOURS.map(() => 0))});
+        let seed = 7;
+        const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        for (let i = 0; i < 5000; i++) {
+            // Some carried round the world, more than once.
+            const lat = 40 + 50 * random(), lon = 140 + 80 * random() - (random() < 0.5 ? 360 : 0) + 360 * Math.floor(7 * random() - 3);
+            const row = Math.floor(lat / 3) + prepared.rowOffset, column = Math.floor(lon / 3);
+            expect(nearestAround(prepared, row, column, lat, lon)).toBe(nearestPoint(prepared, lat, lon));
+        }
+        // Each cell's points looked through are kept, and are fewer than all of them.
+        const kept = [...prepared.nearCandidates.values()];
+        expect(Math.max(...kept.map((near) => near.length))).toBeLessThan(points.length);
+    });
+
+    test('outside it, rains as its nearest point does', () => {
+        const prepared = prepareField(field(() => [10, 270], {rain: 4}));
+        const winds = fieldWinds(prepared, {lat0: 61, lon0: -140, startMs: START});
+        expect(winds.rainAt(0, 0, 0)[0]).toBeCloseTo(4, 6);
+        expect(prepared.nearCandidates.size).toBe(1);
     });
 
     test('wraps at the antimeridian', () => {

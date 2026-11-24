@@ -21,7 +21,10 @@ function worker({fail = false} = {}) {
     const w = {
         terminated: false, onmessage: null, onerror: null, given: [], kind: null,
         postMessage(data) {
-            if (data.type === 'start') w.kind = data.kind;
+            if (data.type === 'start') {
+                w.kind = data.kind;
+                w.start = data;
+            }
             if (data.type === 'task') w.given.push(data.k);
             const copied = copy(data);
             setTimeout(() => {
@@ -143,6 +146,30 @@ describe('the fallout of several bursts', () => {
             expect(heard[heard.length - 1]).toEqual([7, 7]);
             expect(same(spread, here)).toBe(true);
             expect(JSON.stringify(spread.spots) === JSON.stringify(here.spots)).toBe(true);
+            // Given the forecast's arrays, not the forecast as fetched.
+            if (w.prepared) {
+                const {prepared} = burstWorkers[0].start;
+                expect(prepared.u).toBeInstanceOf(Float32Array);
+                expect(prepared.field.winds).toBeUndefined();
+                expect(prepared.field.points).toHaveLength(16);
+            }
+        }
+    });
+
+    test('shows its progress every so often, and when all is done', () => {
+        const {everySoOften} = require('./FalloutPanel');
+        jest.useFakeTimers();
+        try {
+            const heard = [];
+            const report = everySoOften((done, total) => heard.push(done));
+            for (let done = 1; done <= 10; done++) {
+                report(done, 10);
+                jest.advanceTimersByTime(30);
+            }
+            // The first, one in every four after it (30 ms apart), and the last.
+            expect(heard).toEqual([1, 5, 9, 10]);
+        } finally {
+            jest.useRealTimers();
         }
     });
 

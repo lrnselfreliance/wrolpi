@@ -18,7 +18,7 @@ import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, ge
 import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
 import {runPool, workerCount} from "../map-shared/fallout/pool.js";
 import {makeFalloutWorker} from "../map-shared/fallout/falloutWorker.js";
-import {burstSpots, burstsFrame, burstWinds, gridPart, gridParts, joinParts} from "../map-shared/fallout/work.js";
+import {burstSpots, burstsFrame, burstWinds, gridPart, gridParts, joinParts, portablePrepared} from "../map-shared/fallout/work.js";
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
@@ -192,6 +192,20 @@ export function hourLabel(time, nearest) {
     return nearest ? `${label} (now)` : label;
 }
 
+// How often the progress is shown, at most (ms): each time redraws the panel.
+const PROGRESS_MS = 100;
+
+// `report(done, total)`, called at most every PROGRESS_MS, but always when all is done.
+export function everySoOften(report) {
+    let last = -Infinity;
+    return (done, total) => {
+        const now = Date.now();
+        if (done < total && now - last < PROGRESS_MS) return;
+        last = now;
+        report(done, total);
+    };
+}
+
 // Let the page draw and answer the user when the model has had the thread for a while.  A message
 // channel, not a timer: a browser holds a hidden tab's timers back to one a second.
 const SLICE_MS = 40;
@@ -233,7 +247,7 @@ export async function simulateBursts(bursts, {winds, useTerrain = true, workers 
         try {
             return await runPool({
                 tasks: bursts.length, total, count: workers, makeWorker, signal,
-                start: {kind: 'bursts', bursts: plain, field: winds.prepared?.field || null,
+                start: {kind: 'bursts', bursts: plain, prepared: portablePrepared(winds.prepared),
                     startMs: winds.startMs || 0, profile: winds.profile || null, terrain},
                 onProgress: (done) => onProgress(before + done, total),
             });
@@ -567,7 +581,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 const ran = await simulateClimate(bursts, clim, {
                     rate: Number(climateRate), workers: workerCount(typeof navigator === "undefined" ? {} : navigator),
                     signal: controller.signal, cancelled: () => cancelled,
-                    onProgress: (done, total) => !cancelled && setProgress({done, total}),
+                    onProgress: everySoOften((done, total) => !cancelled && setProgress({done, total})),
                 });
                 if (cancelled || !ran) return;
                 setProgress(null);
@@ -594,7 +608,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             const ran = await simulateBursts(bursts, {
                 winds, useTerrain, workers: workerCount(typeof navigator === "undefined" ? {} : navigator),
                 signal: controller.signal, cancelled: () => cancelled,
-                onProgress: (done, total) => !cancelled && setProgress({done, total}),
+                onProgress: everySoOften((done, total) => !cancelled && setProgress({done, total})),
                 // Something to look at while the terrain is read.
                 onFlat: (grid) => {
                     if (cancelled) return;

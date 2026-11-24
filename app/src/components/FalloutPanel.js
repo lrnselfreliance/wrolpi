@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
-import {Button, Checkbox, NumberInput, Select} from "./ui";
+import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
 import {depositionGrid, doseGrid, landedGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {terrainAround} from "../map-shared/fallout/terrain.js";
@@ -461,9 +461,12 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             frames.current = new Map();
             erase();
             setTerrainStatus(null);
+            setBusy(false);
+            setProgress(null);
             return;
         }
         setBusy(true);
+        setProgress(null);
         if (wind === CLIMATE) {
             // The bursts in each of the month's past days, counted.  Said at once: not the forecast's terrain while counting.
             setTerrainStatus("Flat ground: the past days' winds are read by height above the sea.");
@@ -615,6 +618,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             {targets.length === 1 ? "1 target" : `${targets.length} targets`}
             {burst ? ", and a burst not saved" : ""}; surface bursts.
         </div>
+        <FalloutProgress busy={busy} progress={progress}/>
         {!targets.length && !burst && <div style={muted}>
             No targets yet: right-click the map and choose Add Target Here.
         </div>}
@@ -700,11 +704,22 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         <div style={{...muted, marginBottom: "0.5rem"}}>
             An estimate, not a forecast. Prototype: on six Nevada test bursts it showed about 4
             times the areas measured (from 2 to 8 times), more than was measured on every one.
-            {busy && (progress ? ` Calculating ${progress.done} of ${progress.total}…` : " Calculating…")}
         </div>
         <div style={{display: "flex", justifyContent: "flex-end"}}>
             <Button role="cancel" size="sm" onClick={onClose}>Close</Button>
         </div>
+    </div>;
+}
+
+// How far the calculation has got, while it runs: a bar filled as far as the bursts are done
+// (`progress`: {done, total}), or moving without a count until there is one.
+export function FalloutProgress({busy, progress}) {
+    if (!busy) return null;
+    return <div style={{marginBottom: "0.5rem"}}>
+        {progress && progress.total > 0
+            ? <Progress percent={100 * progress.done / progress.total}
+                        label={`Calculating ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}`}/>
+            : <Progress indeterminate showPercent={false} label="Calculating…"/>}
     </div>;
 }
 

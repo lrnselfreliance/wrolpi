@@ -194,3 +194,26 @@ describe('the fallout of past days', () => {
     });
 });
 
+
+describe('the fallout panel\'s progress', () => {
+    const {screen} = require('@testing-library/react');
+    const {renderWithProviders} = require('../test-utils');
+    const {FalloutProgress} = require('./FalloutPanel');
+
+    test('is a bar filled as far as the bursts are calculated', () => {
+        const {unmount} = renderWithProviders(<FalloutProgress busy={true} progress={{done: 1170, total: 4680}}/>);
+        const bar = screen.getByRole('progressbar');
+        expect(bar.getAttribute('aria-valuenow')).toBe('25');
+        expect(screen.getByText('Calculating 1,170 of 4,680')).toBeTruthy();
+        unmount();
+    });
+
+    test('moves without a count until there is one, and is gone when done', () => {
+        const {rerender, unmount} = renderWithProviders(<FalloutProgress busy={true} progress={null}/>);
+        expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBeNull();
+        expect(screen.getByText('Calculating…')).toBeTruthy();
+        rerender(<FalloutProgress busy={false} progress={null}/>);
+        expect(screen.queryByRole('progressbar')).toBeNull();
+        unmount();
+    });
+});

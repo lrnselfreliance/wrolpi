@@ -448,11 +448,14 @@ export function landingSpots({yieldKt, burstHeight = 0, profile, siteElevation =
 
 // The parcels of a burst on flat ground, without the wind: how each rises with the cloud and then
 // falls, which the wind does not change (it only carries them).  [{diameter, activity, radius,
-// landed, highest, highestAt, seconds, rise: [middle height, seconds, ...] of each step while the
-// cloud rises, fall: the same of each step of the fall, with `lands`, the part of the last step
-// before it meets the ground}].  The same for every burst of a yield, so kept.
+// landed, highest, highestAt, seconds, riseLevels, riseSeconds: of each step while the cloud rises,
+// fall: [middle height, seconds, ...] of each step of the fall, with `lands`, the part of the last step
+// before it meets the ground}].  The rise is kept as the level of the winds over ground zero each step
+// is in (every FALL_STEP m from 2 km below it) and its seconds.  The same for every burst of a yield,
+// so kept.
 const PARCELS = new Map();
 const MOST_KEPT = 64;
+const COLUMN_BOTTOM = -2000;
 
 function heldParcels(yieldKt, burstHeight, siteElevation, volumeShare) {
     const key = `${yieldKt},${burstHeight},${siteElevation},${volumeShare}`;
@@ -470,13 +473,19 @@ function heldParcels(yieldKt, burstHeight, siteElevation, volumeShare) {
             const start = cloud.initialBase + (j + 0.5) / SUBDIVISIONS * (cloud.initialTop - cloud.initialBase);
             // As rise, on flat ground, with the middle of each step kept.
             let z = start, t = cloud.start, highest = z, highestAt = t, landed = false;
-            const steps = [];
+            const levels = [], seconds = [];
             while (t < cloud.stop) {
                 const dt = Math.min(Math.max(0.02 * t, 0.2), 5, cloud.stop - t);
                 const w1 = updraft(cloud, z, t) - speedOn(path, z, bottom);
                 const zMid = z + w1 * dt / 2;
                 const w2 = updraft(cloud, zMid, t + dt / 2) - speedOn(path, zMid, bottom);
-                steps.push(zMid, dt);
+                // Steps one after another in the same level are one.
+                const level = Math.max(Math.floor((zMid - COLUMN_BOTTOM) / FALL_STEP), 0);
+                if (levels[levels.length - 1] === level) seconds[seconds.length - 1] += dt;
+                else {
+                    levels.push(level);
+                    seconds.push(dt);
+                }
                 z += w2 * dt;
                 t += dt;
                 if (z > highest) {
@@ -514,7 +523,8 @@ function heldParcels(yieldKt, burstHeight, siteElevation, volumeShare) {
                 }
             }
             parcels.push({diameter, activity: activity * down / SUBDIVISIONS, radius, landed, highest, highestAt,
-                seconds: t, rise: Float64Array.from(steps), fall: Float64Array.from(falls), lands});
+                seconds: t, riseLevels: Int32Array.from(levels), riseSeconds: Float64Array.from(seconds),
+                fall: Float64Array.from(falls), lands});
         }
     }
     if (PARCELS.size >= MOST_KEPT) PARCELS.clear();
@@ -528,24 +538,22 @@ function heldParcels(yieldKt, burstHeight, siteElevation, volumeShare) {
 function heldLandingSpots({yieldKt, burstHeight, siteElevation, maxHours, volumeShare, winds}) {
     const parcels = heldParcels(yieldKt, burstHeight, siteElevation, volumeShare);
     const maxSeconds = maxHours * 3600;
-    // The winds over ground zero, every FALL_STEP m from 2 km below it.
-    const column = new Map();
-    const over = (z) => {
-        const level = Math.floor((z + 2000) / FALL_STEP);
-        let wind = column.get(level);
-        if (!wind) {
-            wind = winds.at(0, 0, level * FALL_STEP - 2000 + FALL_STEP / 2, 0);
-            column.set(level, wind);
-        }
-        return wind;
-    };
+    // The winds over ground zero, in the middle of each level, read as the parcels reach them.
+    let size = 0;
+    for (const p of parcels) for (const l of p.riseLevels) size = Math.max(size, l + 1);
+    const east = new Float64Array(size), north = new Float64Array(size), read = new Uint8Array(size);
     const spots = [];
     for (const p of parcels) {
         let x = 0, y = 0;
-        for (let i = 0; i < p.rise.length; i += 2) {
-            const [u, v] = over(p.rise[i]);
-            x += u * p.rise[i + 1];
-            y += v * p.rise[i + 1];
+        const {riseLevels, riseSeconds} = p;
+        for (let i = 0; i < riseLevels.length; i++) {
+            const l = riseLevels[i];
+            if (!read[l]) {
+                [east[l], north[l]] = winds.at(0, 0, COLUMN_BOTTOM + (l + 0.5) * FALL_STEP, 0);
+                read[l] = 1;
+            }
+            x += east[l] * riseSeconds[i];
+            y += north[l] * riseSeconds[i];
         }
         let t = p.seconds, at = [x, y];
         if (!p.landed) {

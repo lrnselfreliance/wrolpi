@@ -80,7 +80,7 @@
       "node_modules/(?!(react-hotkeys-hook|three|@mapbox/vector-tile|@mapbox/point-geometry|pbf)/)"
     ],
     "moduleNameMapper": {
-      "^(.*)/climateWorker(\\.js)?$": "$1/climateWorker.stub.js"
+      "^(.*)/falloutWorker(\\.js)?$": "$1/falloutWorker.stub.js"
     }
   },
   "overrides": {

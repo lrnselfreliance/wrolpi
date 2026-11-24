@@ -1,26 +1,24 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
-import {depositionGrid, doseGrid, landedGrid, landingSpots, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
+import {depositionGrid, doseGrid, landedGrid, profileFromTable, sharpenGrid} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
-import {terrainAround} from "../map-shared/fallout/terrain.js";
 import {loadTerrainGrid} from "./falloutTerrain";
 import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
 import {
     fieldCovers,
-    fieldWinds,
     forecastAge,
     forecastExpired,
     forecastRunsOut,
     nearestHour,
-    nearestPoint,
     prepareField,
     rainNear,
 } from "../map-shared/fallout/winds.js";
 import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
 import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, getJobs, getLatestFalloutWinds} from "../api";
 import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
-import {runClimateDays, workerCount} from "../map-shared/fallout/climatePool.js";
-import {makeClimateWorker} from "../map-shared/fallout/climateWorker.js";
+import {runPool, workerCount} from "../map-shared/fallout/pool.js";
+import {makeFalloutWorker} from "../map-shared/fallout/falloutWorker.js";
+import {burstSpots, burstWinds} from "../map-shared/fallout/work.js";
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
@@ -215,32 +213,56 @@ function yielder() {
 }
 
 // The fallout of `bursts` ([{lat, lon, yieldKt, fissionFraction}]) on one grid around the first:
-// {grid, spots (as combineBursts gives them, for the fallout hour by hour), origin, terrainStatus}.  `windsFor(burst, groundElevation)` gives the winds over a burst, as
-// landingSpots takes them ({profile} or {winds}), or `profileFor(groundElevation)` its profile.
-// `groundOf(burst)` is how high (m) its ground is until the terrain is read.  `onProgress(done,
-// total)` hears how far it has got, `onFlat(grid)` gets the fallout on flat ground while the terrain
-// is read, and `cancelled()` stops it.
-export async function simulateBursts(bursts, {windsFor = null, profileFor = null, groundOf = () => 0,
-    useTerrain = true, cancelled = () => false, onProgress = () => null, onFlat = () => null}) {
+// {grid, spots (as combineBursts gives them, for the fallout hour by hour), origin, terrainStatus}.
+// `winds` are the winds over them, as burstWinds takes them.  The bursts are spread over `workers`
+// workers (on the page, without them, or if they fail).  `onProgress(done, total)` hears how far it
+// has got, `onFlat(grid)` gets the fallout on flat ground while the terrain is read, and it stops
+// (null) once `signal` (an AbortSignal) is aborted or `cancelled()`.
+export async function simulateBursts(bursts, {winds, useTerrain = true, workers = 0, signal = null,
+    cancelled = () => false, onProgress = () => null, onFlat = () => null, makeWorker = makeFalloutWorker}) {
+    const stopped = () => cancelled() || !!signal?.aborted;
     const origin = bursts[0];
-    const pause = yielder();
+    const {windsFor, groundOf} = burstWinds(winds);
     const total = useTerrain ? bursts.length * 2 : bursts.length;
-    let done = 0;
-    const run = async (terrainOf) => {
-        const runs = [], offMap = [];
-        for (const b of bursts) {
-            const terrain = terrainOf ? terrainOf(b) : null;
-            const ground = terrain ? terrain.elevation : groundOf(b);
-            const winds = windsFor ? windsFor(b, ground) : {profile: profileFor(ground)};
-            const spots = landingSpots({yieldKt: b.yieldKt, ...winds, terrain, siteElevation: Math.max(ground, 0)});
-            // A spot not on the map (from ground with no number under it) would break the whole grid.
-            const finite = spots.filter((s) => Number.isFinite(s.x) && Number.isFinite(s.y) && s.sigma > 0);
-            if (finite.length < spots.length) offMap.push(b);
-            runs.push({burst: b, spots: finite, yieldKt: b.yieldKt, fissionFraction: b.fissionFraction});
-            onProgress(++done, total);
-            await pause();
-            if (cancelled()) return null;
+    // The bursts before this pass's, of the progress.
+    let before = 0;
+    const plain = bursts.map(({lat, lon, yieldKt, fissionFraction}) => ({lat, lon, yieldKt, fissionFraction}));
+    // The bursts' spots, by the workers: null once stopped, undefined if they cannot.
+    const spread = async (terrain) => {
+        if (workers <= 0) return undefined;
+        try {
+            return await runPool({
+                tasks: bursts.length, total, count: workers, makeWorker, signal,
+                start: {kind: 'bursts', bursts: plain, field: winds.prepared?.field || null,
+                    startMs: winds.startMs || 0, profile: winds.profile || null, terrain},
+                onProgress: (done) => onProgress(before + done, total),
+            });
+        } catch (e) {
+            console.error("Fallout: the workers failed; calculating on the page", e);
+            return undefined;
         }
+    };
+    const here = async (terrain) => {
+        const pause = yielder();
+        const found = [];
+        for (const b of bursts) {
+            found.push(burstSpots(b, {windsFor, groundOf, terrain}));
+            onProgress(before + found.length, total);
+            await pause();
+            if (stopped()) return null;
+        }
+        return found;
+    };
+    const run = async (terrain) => {
+        if (stopped()) return null;
+        let found = await spread(terrain);
+        if (found === null) return null;
+        if (!found) found = await here(terrain);
+        if (!found || stopped()) return null;
+        before += bursts.length;
+        const runs = bursts.map((b, i) => ({burst: b, spots: found[i].spots, yieldKt: b.yieldKt,
+            fissionFraction: b.fissionFraction}));
+        const offMap = bursts.filter((b, i) => found[i].offMap);
         if (offMap.length) console.warn(`Fallout: some spots of ${offMap.length} bursts were not on the map`, offMap);
         // As far as the faintest band drawn: no further, where nothing would show.
         const floor = DOSE_BANDS[DOSE_BANDS.length - 1].rate;
@@ -261,9 +283,9 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
         } catch (e) {
             console.error("Could not read the terrain", e);
         }
-        if (cancelled()) return null;
+        if (stopped()) return null;
         if (loaded) {
-            ran = await run((b) => terrainAround(loaded.grid, b.lon, b.lat));
+            ran = await run(loaded.grid);
             if (!ran) return null;
             const covered = Math.round(loaded.coverage * 100);
             terrainStatus = `Follows the terrain (zoom ${loaded.zoom}${covered < 100 ? `, ${covered}% of the area` : ""}).`;
@@ -281,13 +303,17 @@ export async function simulateBursts(bursts, {windsFor = null, profileFor = null
 // workers (on the page, without them, or if they fail); null once `signal` (an AbortSignal) is
 // aborted or `cancelled()`.
 export async function simulateClimate(bursts, clim, {rate = 1, workers = 0, signal = null, cancelled = () => false,
-    onProgress = () => null, makeWorker = makeClimateWorker} = {}) {
+    onProgress = () => null, makeWorker = makeFalloutWorker} = {}) {
     const stopped = () => cancelled() || !!signal?.aborted;
     if (stopped()) return null;
     let days = null;
     if (workers > 0) {
         try {
-            days = await runClimateDays({clim, bursts, rate, count: workers, makeWorker, signal, onProgress});
+            const plain = bursts.map(({lat, lon, yieldKt, fissionFraction}) => ({lat, lon, yieldKt, fissionFraction}));
+            days = await runPool({
+                tasks: clim.days, total: clim.days * bursts.length, count: workers, makeWorker, signal, onProgress,
+                start: {kind: 'days', bytes: clim.bytes, bursts: plain, rate},
+            });
             if (!days) return null;
         } catch (e) {
             console.error("Fallout: the workers failed; calculating on the page", e);
@@ -534,18 +560,15 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 clearTimeout(timer);
             };
         }
-        const profile = windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0});
-        const startMs = useField ? Date.parse(forecast.hours[hour]) : 0;
-        // Each burst is carried by the winds where it is, from the hour chosen.
-        const windsFor = useField
-            ? (b, groundElevation) => ({winds: fieldWinds(prepared, {lat0: b.lat, lon0: b.lon, groundElevation, startMs})})
-            : () => ({profile});
-        // Until the terrain is read, ground zero is as high as the forecast's ground near it.
-        const groundOf = useField ? (b) => forecast.points[nearestPoint(prepared, b.lat, b.lon)].elevation : () => 0;
+        // Each burst is carried by the winds where it is, from the hour chosen; or by one profile.
+        const winds = useField
+            ? {prepared, startMs: Date.parse(forecast.hours[hour])}
+            : {profile: windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0})};
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
             const ran = await simulateBursts(bursts, {
-                windsFor, groundOf, useTerrain, cancelled: () => cancelled || controller.signal.aborted,
+                winds, useTerrain, workers: workerCount(typeof navigator === "undefined" ? {} : navigator),
+                signal: controller.signal, cancelled: () => cancelled,
                 onProgress: (done, total) => !cancelled && setProgress({done, total}),
                 // Something to look at while the terrain is read.
                 onFlat: (grid) => {

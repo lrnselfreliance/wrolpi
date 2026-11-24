@@ -1,4 +1,41 @@
 import {WEAPON_CHOICES} from './FalloutPanel';
+import {serveFallout} from '../map-shared/fallout/work.js';
+import {loadTerrainGrid} from './falloutTerrain';
+
+// No terrain files under Jest, until a test gives a grid.
+jest.mock('./falloutTerrain', () => ({loadTerrainGrid: jest.fn(async () => null)}));
+
+// Fallout workers serving their tasks (as fallout.worker.js does) here, as a browser's would on
+// another thread: messages arrive later, copied.  `made` are those made since it was emptied.
+const made = [];
+const copy = (v) => {
+    if (v instanceof ArrayBuffer) return v.slice(0);
+    if (ArrayBuffer.isView(v)) return v.slice();
+    if (Array.isArray(v)) return v.map(copy);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, copy(x)]));
+    return v;
+};
+function worker({fail = false} = {}) {
+    const scope = {postMessage: (data) => setTimeout(() => !w.terminated && w.onmessage?.({data}), 0)};
+    serveFallout(scope);
+    const w = {
+        terminated: false, onmessage: null, onerror: null, given: [],
+        postMessage(data) {
+            if (data.type === 'task') w.given.push(data.k);
+            const copied = copy(data);
+            setTimeout(() => {
+                if (w.terminated) return;
+                if (fail && data.type === 'task') w.onerror?.({message: 'No such script'});
+                else scope.onmessage({data: copied});
+            }, 0);
+        },
+        terminate() {
+            w.terminated = true;
+        },
+    };
+    made.push(w);
+    return w;
+}
 
 describe('the fallout panel\'s weapons', () => {
     test('are grouped by country, then a yield of one\'s own', () => {
@@ -39,26 +76,39 @@ describe('the fallout panel\'s winds', () => {
 
 describe('the fallout of several bursts', () => {
     const {simulateBursts} = require('./FalloutPanel');
-    const profileFor = () => [[0, 10, 0]];
+    const {prepareField} = require('../map-shared/fallout/winds.js');
+    const winds = {profile: [[0, 10, 0]]};
     const bursts = [
         {lat: 40, lon: -105, yieldKt: 10, fissionFraction: 0.5},
         {lat: 40.5, lon: -104, yieldKt: 100, fissionFraction: 0.5},
     ];
 
-    test('carries each burst by its own winds, from its own ground', async () => {
-        const asked = [];
-        const windsFor = (b, ground) => {
-            asked.push([b.lat, ground]);
-            return {profile: [[0, 10, 0]]};
+    // A forecast over 39-42 N, 106-103 W, every degree, whose wind turns from the west to the
+    // south-west over the hours, on ground rising to the east.
+    const HOURS = ['2026-11-22T00:00Z', '2026-11-22T01:00Z', '2026-11-22T02:00Z'];
+    function forecast() {
+        const points = [];
+        for (const lat of [39, 40, 41, 42]) for (const lon of [-106, -105, -104, -103]) points.push({lat, lon, elevation: 1500 + (lon + 106) * 100});
+        return {
+            source: 'Open-Meteo', fetched_at: '2026-11-22T00:30:00+00:00', spacing: 1, points, hours: HOURS,
+            winds: points.map(() => HOURS.map((_, h) => [[10, 12, 270 - 20 * h], [20000, 30, 260 - 20 * h]])),
+            rain: points.map(() => HOURS.map(() => 0)),
         };
-        const result = await simulateBursts(bursts, {windsFor, groundOf: (b) => b.lat * 10, useTerrain: false});
-        expect(asked).toEqual([[40, 400], [40.5, 405]]);
-        expect(result.grid.values.some((v) => v > 0)).toBe(true);
+    }
+    const fieldWinds = () => ({prepared: prepareField(forecast()), startMs: Date.parse(HOURS[0])});
+
+    test('carries each burst by the winds where it is, from the ground there', async () => {
+        const ran = await simulateBursts(bursts, {winds: fieldWinds(), useTerrain: false});
+        expect(ran.grid.values.some((v) => v > 0)).toBe(true);
+        // Not as one wind would carry them.
+        const one = await simulateBursts(bursts, {winds, useTerrain: false});
+        expect(ran.grid.values.length === one.grid.values.length
+            && ran.grid.values.every((v, i) => v === one.grid.values[i])).toBe(false);
     });
 
     test('is drawn on one grid around the first burst', async () => {
-        const one = await simulateBursts(bursts.slice(0, 1), {profileFor, useTerrain: false});
-        const both = await simulateBursts(bursts, {profileFor, useTerrain: false});
+        const one = await simulateBursts(bursts.slice(0, 1), {winds, useTerrain: false});
+        const both = await simulateBursts(bursts, {winds, useTerrain: false});
         expect(both.origin).toBe(bursts[0]);
         const sum = (g) => g.values.reduce((a, v) => a + v, 0) * g.cell ** 2;
         expect(sum(both.grid)).toBeGreaterThan(sum(one.grid) * 5);
@@ -66,7 +116,76 @@ describe('the fallout of several bursts', () => {
     });
 
     test('stops when it is no longer wanted', async () => {
-        expect(await simulateBursts(bursts, {profileFor, useTerrain: false, cancelled: () => true})).toBeNull();
+        expect(await simulateBursts(bursts, {winds, useTerrain: false, cancelled: () => true})).toBeNull();
+    });
+
+    const MANY = Array.from({length: 7}, (_, i) => ({lat: 40 + 0.2 * i, lon: -105 + 0.3 * i, yieldKt: 5 * (i + 1), fissionFraction: 0.5}));
+    // Whether two results have the same grid (said quickly: Jest's diff of such arrays takes minutes).
+    const same = (a, b) => a.grid.cell === b.grid.cell && a.grid.values.length === b.grid.values.length
+        && a.grid.values.every((v, i) => v === b.grid.values[i]);
+
+    test('spreads the bursts over workers, as the page calculates them', async () => {
+        for (const w of [winds, fieldWinds()]) {
+            made.length = 0;
+            const here = await simulateBursts(MANY, {winds: w, useTerrain: false});
+            const heard = [];
+            const spread = await simulateBursts(MANY, {winds: w, useTerrain: false, workers: 3, makeWorker: () => worker(),
+                onProgress: (done, total) => heard.push([done, total])});
+            expect(made).toHaveLength(3);
+            expect(made.flatMap((x) => x.given).sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+            expect(made.every((x) => x.given.length > 0 && x.terminated)).toBe(true);
+            expect(heard[heard.length - 1]).toEqual([7, 7]);
+            expect(same(spread, here)).toBe(true);
+            expect(JSON.stringify(spread.spots) === JSON.stringify(here.spots)).toBe(true);
+        }
+    });
+
+    test('gives its workers the terrain, when it is read', async () => {
+        // Ground rising to the north-east of the bursts.
+        const nx = 81, ny = 81, step = 0.05;
+        const grid = {west: -107, south: 38, step, nx, ny, values: new Float32Array(nx * ny)};
+        for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) grid.values[j * nx + i] = 1500 + 40 * (i + j);
+        loadTerrainGrid.mockImplementation(async () => ({grid, zoom: 9, coverage: 1}));
+        try {
+            const flat = await simulateBursts(MANY, {winds: fieldWinds(), useTerrain: false});
+            const here = await simulateBursts(MANY, {winds: fieldWinds(), useTerrain: true});
+            made.length = 0;
+            const heard = [];
+            const spread = await simulateBursts(MANY, {winds: fieldWinds(), useTerrain: true, workers: 2,
+                makeWorker: () => worker(), onProgress: (done, total) => heard.push([done, total])});
+            expect(here.terrainStatus).toMatch(/Follows the terrain/);
+            expect(same(here, flat)).toBe(false);
+            expect(same(spread, here)).toBe(true);
+            // A pass on flat ground, then another over the terrain, each by its own workers.
+            expect(made).toHaveLength(4);
+            expect(heard[heard.length - 1]).toEqual([14, 14]);
+        } finally {
+            loadTerrainGrid.mockImplementation(async () => null);
+        }
+    });
+
+    test('stops its workers at once when cancelled', async () => {
+        made.length = 0;
+        const controller = new AbortController();
+        const running = simulateBursts(MANY, {winds, useTerrain: false, workers: 3, makeWorker: () => worker(),
+            signal: controller.signal});
+        controller.abort();
+        expect(await running).toBeNull();
+        expect(made).toHaveLength(3);
+        expect(made.every((x) => x.terminated)).toBe(true);
+    });
+
+    test('calculates on the page when its workers fail, or there are none', async () => {
+        made.length = 0;
+        const error = jest.spyOn(console, 'error').mockImplementation(() => null);
+        const here = await simulateBursts(MANY, {winds, useTerrain: false});
+        const ran = await simulateBursts(MANY, {winds, useTerrain: false, workers: 2, makeWorker: () => worker({fail: true})});
+        expect(error).toHaveBeenCalled();
+        error.mockRestore();
+        expect(made.every((x) => x.terminated)).toBe(true);
+        expect(same(ran, here)).toBe(true);
+        const none = await simulateBursts(MANY, {winds, useTerrain: false, workers: 2, makeWorker: () => null});
+        expect(same(none, here)).toBe(true);
     });
 });
 
@@ -192,32 +311,6 @@ describe('the fallout of past days', () => {
         const bursts = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}];
         expect(await simulateClimate(bursts, climate([[10, 0], [0, 10]]), {cancelled: () => true})).toBeNull();
     });
-
-    // A worker serving the days (as climate.worker.js does) here, as a browser would on another
-    // thread: messages arrive later.
-    const {serveClimateDays} = require('../map-shared/fallout/climatology.js');
-    const made = [];
-    function worker({fail = false} = {}) {
-        const scope = {postMessage: (data) => setTimeout(() => !w.terminated && w.onmessage?.({data}), 0)};
-        serveClimateDays(scope);
-        const w = {
-            terminated: false, onmessage: null, onerror: null, given: [],
-            postMessage(data) {
-                if (data.type === 'day') w.given.push(data.k);
-                const copy = data.type === 'start' ? {...data, bytes: new Uint8Array(data.bytes)} : data;
-                setTimeout(() => {
-                    if (w.terminated) return;
-                    if (fail && data.type === 'day') w.onerror?.({message: 'No such script'});
-                    else scope.onmessage({data: copy});
-                }, 0);
-            },
-            terminate() {
-                w.terminated = true;
-            },
-        };
-        made.push(w);
-        return w;
-    }
 
     const BURSTS = [{lat: 30, lon: -120, yieldKt: 10, fissionFraction: 1}, {lat: 31, lon: -118, yieldKt: 10, fissionFraction: 1}];
     const DAYS = [[10, 0], [10, 0], [0, 10], [-8, 4], [3, -9]];

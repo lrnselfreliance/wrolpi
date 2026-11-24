@@ -117,38 +117,6 @@ export function reachedCells(grid, rate) {
     return {x0: grid.x0, y0: grid.y0, cell: grid.cell, nx: grid.nx, indexes: Int32Array.from(indexes)};
 }
 
-// How many bursts a worker does between the progress it reports.
-const PROGRESS_EVERY = 8;
-
-// Answer climatePool.js's messages to a worker, `scope` (its self): 'start' gives it the month's
-// unzipped bytes, the bursts and the rate; each 'day' (`k`) it calculates, saying how many bursts
-// it has done ('progress'), then the cells reached ('day'), or why it could not ('error').
-export function serveClimateDays(scope) {
-    let clim = null, bursts = null, rate = 1;
-    scope.onmessage = async ({data}) => {
-        if (data.type === 'start') {
-            clim = parseClimatology(new Uint8Array(data.bytes));
-            bursts = data.bursts;
-            rate = data.rate;
-            return;
-        }
-        if (data.type !== 'day') return;
-        const {k} = data;
-        try {
-            let done = 0;
-            const grid = await climateDay(clim, k, bursts, {
-                onBurst: () => {
-                    if (++done % PROGRESS_EVERY === 0) scope.postMessage({type: 'progress', k, done});
-                },
-            });
-            const reached = reachedCells(grid, rate);
-            scope.postMessage({type: 'day', k, done, reached}, [reached.indexes.buffer]);
-        } catch (e) {
-            scope.postMessage({type: 'error', k, message: String(e?.stack || e)});
-        }
-    };
-}
-
 // How many days reached each place: a counter of days' grids (as depositionGrid gives them, all
 // around the same origin), at or above `rate`, on cells `cell` meters wide.
 export function dayCounter(rate, cell) {

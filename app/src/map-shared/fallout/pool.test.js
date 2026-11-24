@@ -1,4 +1,4 @@
-import {MOST_WORKERS, workerCount} from './climatePool.js';
+import {MOST_WORKERS, workerCount} from './pool.js';
 
 describe('how many fallout workers run', () => {
     test('one for each core but one, left for the page', () => {

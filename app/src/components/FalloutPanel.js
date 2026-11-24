@@ -867,7 +867,14 @@ export function Timeline({show = RATE, after, onAfter, playing, onPlaying, start
 function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fetching, fetchPercent, fetchError,
                               onFetch}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
-    // Not again while the panel shows its progress.
+    // Not again while the panel shows its progress: the hours' labels are slow to write.
+    // Written again at half past each hour, when the hour nearest now moves on.
+    const nowHour = Math.round(Date.now() / 3600000);
+    const hours = useMemo(() => {
+        if (!forecast) return [];
+        const nearest = nearestHour(forecast.hours, new Date(nowHour * 3600000));
+        return forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
+    }, [forecast, nowHour]);
     const outside = useMemo(() => prepared ? bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length : 0,
         [prepared, bursts]);
     const rainy = useMemo(() => prepared ? bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length : 0,
@@ -887,8 +894,6 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
             {fetchButton}
         </div>;
     }
-    const nearest = nearestHour(forecast.hours);
-    const hours = forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
     const age = forecastAge(forecast);
 
     const points = forecast.points.length;

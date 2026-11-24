@@ -1,3 +1,4 @@
+import asyncio
 import gzip
 import hashlib
 from http import HTTPStatus
@@ -6,6 +7,7 @@ from unittest import mock
 import pytest
 
 from modules.map import climatology
+from wrolpi import flags
 
 
 class FakeResponse:
@@ -94,3 +96,23 @@ async def test_climatology_api(async_client, test_directory, published):
     assert response.json['months'] == [1, 2]
     request, response = await async_client.get('/api/map/fallout/climatology/2')
     assert response.status_code == HTTPStatus.OK and response.body == data[2]
+
+
+@pytest.mark.asyncio
+async def test_worker_waits_for_internet_and_drive(test_directory, published, flags_lock):
+    """Started before the Internet and the drive are known (as on startup), the worker waits for them and then
+    fetches, rather than giving up until its next hourly check."""
+    flags.have_internet.clear()
+    flags.media_mounted.clear()
+    fetch = mock.AsyncMock(return_value=[1, 2])
+    with mock.patch('modules.map.climatology.fetch_missing', fetch), \
+            mock.patch('modules.map.climatology.wrol_mode_enabled', return_value=False):
+        worker = asyncio.create_task(climatology.climatology_worker())
+        await asyncio.sleep(0.3)
+        assert not worker.done() and not fetch.called
+        flags.have_internet.set()
+        await asyncio.sleep(0.3)
+        assert not worker.done() and not fetch.called
+        flags.media_mounted.set()
+        await asyncio.wait_for(worker, timeout=5)
+    fetch.assert_awaited_once()

@@ -119,9 +119,16 @@ async def fetch_missing() -> List[int]:
 
 @perpetual_signal(sleep=CHECK_SECONDS)
 async def climatology_worker():
-    """Fetch the months not yet kept, while there is the Internet (not in WROL Mode)."""
-    if not flags.have_internet.is_set() or not flags.media_mounted.is_set() or wrol_mode_enabled():
+    """Fetch the months not yet kept, once there is the Internet and the drive (not in WROL Mode).
+
+    Waits for the flags, rather than returning, so a new WROLPi fetches as soon as it is online, not an hour
+    after startup."""
+    if not any(MONTHS.values()):
         return
-    if not any(MONTHS.values()) or not [m for m in MONTHS if not month_path(m)]:
+    async with flags.have_internet.wait_for():
+        pass
+    async with flags.media_mounted.wait_for():
+        pass
+    if wrol_mode_enabled() or not [m for m in MONTHS if MONTHS[m] and not month_path(m)]:
         return
     await fetch_missing()

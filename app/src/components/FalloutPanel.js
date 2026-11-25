@@ -871,10 +871,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 {show === TOTAL ? `${b.rate}+ R: ${b.meaning}` : `${b.rate}+ R/hr`}
             </div>)}
         </div>}
-        <div style={{...muted, marginBottom: "0.5rem"}}>
-            An estimate, not a forecast. Prototype: on six Nevada test bursts it showed about 4
-            times the areas measured (from 2 to 8 times), more than was measured on every one.
-        </div>
+        <div style={{...muted, marginBottom: "0.5rem"}}>An estimate, not a forecast.</div>
         <div style={{display: "flex", justifyContent: "space-between"}}>
             <Button role="cancel" size="sm" onClick={() => {
                 setPlaying(false);

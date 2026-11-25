@@ -56,12 +56,31 @@ def month_name(month: int) -> str:
     return f'month-{month:02d}.bin.gz'
 
 
+# The kept files found to be what is expected: path -> (size, mtime) when hashed.
+_checked = dict()
+
+
 def month_path(month: int) -> Optional[Path]:
-    """The kept file of `month`, or None."""
-    if month not in MONTHS:
+    """The kept file of `month`, or None if there is none, or it is not the file expected (it is then
+    fetched again).  A file is hashed again only after it changes."""
+    expected = MONTHS.get(month)
+    if not expected:
         return None
     path = climatology_directory() / month_name(month)
-    return path if path.is_file() else None
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    if _checked.get(path) == (stat.st_size, stat.st_mtime_ns):
+        return path
+    with path.open('rb') as fh:
+        actual = hashlib.file_digest(fh, 'sha256').hexdigest()
+    if actual != expected:
+        _checked.pop(path, None)
+        logger.warning(f'{path} is not the climatology expected (sha256 {actual}); it will be fetched again')
+        return None
+    _checked[path] = (stat.st_size, stat.st_mtime_ns)
+    return path
 
 
 def months_kept() -> List[int]:

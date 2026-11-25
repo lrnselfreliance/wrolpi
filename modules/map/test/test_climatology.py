@@ -116,3 +116,21 @@ async def test_worker_waits_for_internet_and_drive(test_directory, published, fl
         flags.media_mounted.set()
         await asyncio.wait_for(worker, timeout=5)
     fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_month_kept_must_be_what_is_expected(test_directory, published):
+    """A kept month that is changed, or replaced, is not listed or served, and is fetched again."""
+    data, bodies = published
+    get, asked = fake_get(bodies)
+    with mock.patch('modules.map.climatology.aiohttp_get', get), mock.patch('modules.map.climatology.asyncio.sleep'):
+        await climatology.fetch_missing()
+        path = climatology.month_path(1)
+        assert path
+
+        path.write_bytes(gzip.compress(b'WFCL another month'))
+        assert climatology.month_path(1) is None
+        assert climatology.months_kept() == [2]
+
+        assert await climatology.fetch_missing() == [1]
+        assert climatology.month_path(1).read_bytes() == data[1]

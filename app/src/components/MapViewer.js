@@ -1,4 +1,4 @@
-import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useSearchParams} from "react-router";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -13,8 +13,7 @@ import {
     getMapFiles,
     getMapPins,
     searchMap,
-    setAllTargetsWeapon,
-    updateMapTargetWeapon,
+    saveMapTargets,
     setMapDefaultLocation,
 } from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -54,7 +53,7 @@ import {
 } from "./mapOverlays";
 import {addMissingOverlayIcon, loadOverlayStyles, OVERLAY_ICONS_SPRITE_ID} from "./mapOverlayStyle";
 import MapQuadPicker, {QUAD_LAYER_PREFIX} from "./MapQuadPicker";
-import FalloutPanel, {WeaponPicker} from "./FalloutPanel";
+import FalloutPanel, {targetsUnsaved, WeaponPicker, withSavedTargets, withWeapon} from "./FalloutPanel";
 import {DEFAULT_WEAPON} from "../map-shared/fallout/targets.js";
 import {contourInterval, contourThresholds, DEFAULT_TERRAIN_MAX_ZOOM, terrainMaxZoom} from "../map-shared/terrain.js";
 import {quadAt} from "./mapQuads";
@@ -514,6 +513,11 @@ function LayerControl({
 
 const PIN_COLORS = ["red", "blue", "green", "yellow", "orange", "purple"];
 
+// A button in a marker's popup (which is HTML), calling `onclick`.
+const popupButton = (onclick, text, color) => `<button onclick="${onclick}" `
+    + `style="margin-top:4px;margin-right:4px;padding:2px 8px;cursor:pointer;color:${color};`
+    + `border:1px solid ${color};background:none;border-radius:3px;">${text}</button>`;
+
 function AddPinDialog({lat, lon, target = false, weapon: initialWeapon = null, onSubmit, onCancel}) {
     const [label, setLabel] = useState("");
     const [color, setColor] = useState("red");
@@ -530,7 +534,7 @@ function AddPinDialog({lat, lon, target = false, weapon: initialWeapon = null, o
     }}>
         <div style={{fontWeight: 600, marginBottom: "0.5rem"}}>{target ? "Add Target" : "Add Pin"}</div>
         {target && <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>
-            A likely detonation site, shown in nuclear mode.
+            A likely detonation site, tried out until you save the targets.
         </div>}
         <div style={{fontSize: '0.75rem', color: "var(--muted)", marginBottom: "0.5rem"}}>{lat.toFixed(4)}, {lon.toFixed(4)}</div>
         <TextInput
@@ -544,7 +548,7 @@ function AddPinDialog({lat, lon, target = false, weapon: initialWeapon = null, o
         {target && <div style={{marginBottom: "0.5rem"}}>
             <WeaponPicker label="Weapon" value={weapon} onChange={setWeapon}/>
         </div>}
-        <div style={{display: "flex", gap: "0.375rem", marginBottom: "0.75rem"}}>
+        {!target && <div style={{display: "flex", gap: "0.375rem", marginBottom: "0.75rem"}}>
             {PIN_COLORS.map(c =>
                 <div
                     key={c}
@@ -555,7 +559,7 @@ function AddPinDialog({lat, lon, target = false, weapon: initialWeapon = null, o
                     }}
                 />
             )}
-        </div>
+        </div>}
         <div style={{display: "flex", gap: "0.5rem", justifyContent: "flex-end"}}>
             <Button role='cancel' size='sm' onClick={onCancel}>Cancel</Button>
             <Button
@@ -741,11 +745,17 @@ export default function MapViewer() {
     const [nuclear, setNuclear] = useState(false);
     const nuclearRef = useRef(false);
     const nuclearButtonRef = useRef(null);
-    // The fallout view (nuclear mode): open or not, and a burst the user is trying out ({lat, lon}).
+    // The fallout view (nuclear mode): open or not.
     const [falloutOpen, setFalloutOpen] = useState(false);
-    const [falloutBurst, setFalloutBurst] = useState(null);
     const [pins, setPins] = useState([]);
     const markersRef = useRef([]);
+    // Nuclear mode's targets, those simulated ({key, id (if saved), lat, lon, label, weapon, ...}):
+    // tried out, and the saved ones once loaded.  `loadedIds` are the ids the saved targets had when
+    // they were loaded (null until then): saving replaces them, so it is refused until they are.
+    const [targets, setTargets] = useState([]);
+    const [loadedIds, setLoadedIds] = useState(null);
+    const nextTargetKey = useRef(1);
+    const targetMarkersRef = useRef([]);
     const pinsVisibleRef = useRef(true);
     // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
     // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
@@ -1253,7 +1263,7 @@ export default function MapViewer() {
     // Show the pins the toggle and the mode allow: pins while pins are shown, and targets only in
     // nuclear mode too.
     const showPins = useCallback(() => {
-        for (const m of markersRef.current) {
+        for (const m of [...markersRef.current, ...targetMarkersRef.current]) {
             const shown = pinsVisibleRef.current && (!m.wrolpiTarget || nuclearRef.current);
             m.getElement().style.display = shown ? "" : "none";
         }
@@ -1271,47 +1281,97 @@ export default function MapViewer() {
         if (!data?.pins) return;
         setPins(data.pins);
 
-        data.pins.forEach((pin) => {
-            const target = pin.kind === "target";
+        // Targets are drawn from those simulated (nuclear mode), not from those saved.
+        data.pins.filter((pin) => pin.kind !== "target").forEach((pin) => {
             const el = document.createElement("div");
             el.style.cursor = "pointer";
-            if (target) {
-                el.textContent = "☢";
-                el.style.cssText += "width:26px;height:26px;border-radius:50%;background:#ffd43b;color:#000;"
-                    + "border:2px solid #000;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;"
-                    + "align-items:center;justify-content:center;font-size:18px;line-height:1;";
-            } else {
-                el.style.width = "24px";
-                el.style.height = "24px";
-                el.style.borderRadius = "50% 50% 50% 0";
-                el.style.background = pin.color || "red";
-                el.style.border = "2px solid white";
-                el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.4)";
-                el.style.transform = "rotate(-45deg)";
-            }
-
-            const button = (onclick, text, color) => `<button onclick="${onclick}" `
-                + `style="margin-top:4px;margin-right:4px;padding:2px 8px;cursor:pointer;color:${color};`
-                + `border:1px solid ${color};background:none;border-radius:3px;">${text}</button>`;
+            el.style.width = "24px";
+            el.style.height = "24px";
+            el.style.borderRadius = "50% 50% 50% 0";
+            el.style.background = pin.color || "red";
+            el.style.border = "2px solid white";
+            el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.4)";
+            el.style.transform = "rotate(-45deg)";
             const popup = new maplibregl.Popup({offset: 15}).setHTML(
                 `<div style="font-size:13px">` +
-                `<strong>${escapeHtml(pin.label || (target ? "Target" : "Pin"))}</strong><br/>` +
-                (target ? `<small>Target</small><br/>` : "") +
+                `<strong>${escapeHtml(pin.label || "Pin")}</strong><br/>` +
                 `<small>${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}</small><br/>` +
-                (target ? button("window.__showFallout()", "Show fallout", "#333") : "") +
-                button(`window.__deleteMapPin(${pin.id})`, "Delete", "red") +
+                popupButton(`window.__deleteMapPin(${pin.id})`, "Delete", "red") +
                 `</div>`
             );
-
             const marker = new maplibregl.Marker({element: el})
                 .setLngLat([pin.lon, pin.lat])
                 .setPopup(popup)
                 .addTo(map);
-            marker.wrolpiTarget = target;
             markersRef.current.push(marker);
         });
         showPins();
     }, [showPins]);
+
+    // The targets simulated, on the map in nuclear mode.
+    useEffect(() => {
+        const map = mapRef.current;
+        for (const m of targetMarkersRef.current) m.remove();
+        targetMarkersRef.current = [];
+        if (!mapReady || !map || !nuclear) return;
+        for (const t of targets) {
+            const el = document.createElement("div");
+            el.textContent = "☢";
+            el.style.cssText = "cursor:pointer;width:26px;height:26px;border-radius:50%;background:#ffd43b;"
+                + "color:#000;border:2px solid #000;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;"
+                + "align-items:center;justify-content:center;font-size:18px;line-height:1;"
+                + (t.id ? "" : "border-style:dashed;");
+            const popup = new maplibregl.Popup({offset: 15}).setHTML(
+                `<div style="font-size:13px">` +
+                `<strong>${escapeHtml(t.label || "Target")}</strong><br/>` +
+                `<small>${t.id ? "Target" : "Target, not saved"}</small><br/>` +
+                `<small>${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</small><br/>` +
+                popupButton(`window.__removeTarget('${t.key}')`, "Remove", "red") +
+                `</div>`
+            );
+            const marker = new maplibregl.Marker({element: el}).setLngLat([t.lon, t.lat]).setPopup(popup).addTo(map);
+            marker.wrolpiTarget = true;
+            targetMarkersRef.current.push(marker);
+        }
+        showPins();
+    }, [mapReady, nuclear, targets, showPins]);
+
+    // The saved targets, and whether the targets simulated differ from them.
+    const savedTargets = useMemo(() => pins.filter((p) => p.kind === "target"), [pins]);
+    const unsaved = useMemo(() => targetsUnsaved(targets, savedTargets, loadedIds !== null),
+        [targets, savedTargets, loadedIds]);
+
+    // The saved targets join those being tried out.
+    const handleLoadTargets = useCallback(() => {
+        setTargets((tried) => withSavedTargets(savedTargets, tried));
+        setLoadedIds(savedTargets.map((t) => t.id));
+    }, [savedTargets]);
+
+    // The targets simulated, saved in place of the saved ones.
+    const handleSaveTargets = useCallback(async () => {
+        const plain = targets.map(({key, ...t}) => t);
+        const saved = await saveMapTargets(plain, loadedIds || []);
+        if (!saved) return;
+        await loadPins();
+        setTargets(withSavedTargets(saved, []));
+        setLoadedIds(saved.map((t) => t.id));
+    }, [targets, loadedIds, loadPins]);
+
+    const handleRemoveTarget = useCallback((target) => {
+        setTargets((list) => list.filter((t) => t.key !== target.key));
+    }, []);
+
+    useEffect(() => {
+        window.__removeTarget = (key) => setTargets((list) => list.filter((t) => t.key !== key));
+        return () => { delete window.__removeTarget; };
+    }, []);
+
+    const handleTargetWeapon = useCallback((target, weapon) => {
+        setTargets((list) => list.map((t) => t.key === target.key ? withWeapon(t, weapon) : t));
+    }, []);
+    const handleAllTargetsWeapon = useCallback((weapon) => {
+        setTargets((list) => list.map((t) => withWeapon(t, weapon)));
+    }, []);
 
     // Nuclear mode on or off: the button says so, targets are shown or hidden, and leaving it closes
     // the fallout simulation.
@@ -1325,13 +1385,7 @@ export default function MapViewer() {
         showPins();
         // Nuclear mode opens the fallout panel on its targets step; leaving it closes the panel.
         setFalloutOpen(nuclear);
-        if (!nuclear) setFalloutBurst(null);
     }, [nuclear, showPins]);
-
-    useEffect(() => {
-        window.__showFallout = () => setFalloutOpen(true);
-        return () => { delete window.__showFallout; };
-    }, []);
 
     // Global callback for popup delete buttons.
     useEffect(() => {
@@ -1359,13 +1413,6 @@ export default function MapViewer() {
         navigate(solarCalculatorPath(contextMenu.lat, contextMenu.lon));
     }, [contextMenu, navigate]);
 
-    const handleFallout = useCallback(() => {
-        if (!contextMenu) return;
-        setContextMenu(null);
-        setFalloutBurst({lat: contextMenu.lat, lon: contextMenu.lon});
-        setFalloutOpen(true);
-    }, [contextMenu]);
-
     const handleSetDefaultLocation = useCallback(async () => {
         const map = mapRef.current;
         if (!map) return;
@@ -1380,20 +1427,15 @@ export default function MapViewer() {
         if (!addingPin) return;
         const {lat, lon, kind} = addingPin;
         setAddingPin(null);  // Prevent double-submit.
-        const added = await addMapPin(lat, lon, label, color, kind, weapon);
-        // A burst saved as a target is one of the targets now.
-        if (added && falloutBurst && falloutBurst.lat === lat && falloutBurst.lon === lon) setFalloutBurst(null);
+        // A target is tried out until the targets are saved.
+        if (kind === "target") {
+            const key = `new-${nextTargetKey.current++}`;
+            setTargets((list) => [...list, {key, lat, lon, label, ...weapon}]);
+            return;
+        }
+        await addMapPin(lat, lon, label, color, kind, weapon);
         await loadPins();
-    }, [addingPin, loadPins, falloutBurst]);
-
-    const handleTargetWeapon = useCallback(async (target, weapon) => {
-        if (await updateMapTargetWeapon(target.id, weapon)) await loadPins();
-    }, [loadPins]);
-
-    // One weapon for every target, kept for each in one change.
-    const handleAllTargetsWeapon = useCallback(async (weapon) => {
-        if (await setAllTargetsWeapon(weapon)) await loadPins();
-    }, [loadPins]);
+    }, [addingPin, loadPins]);
 
     if (error) {
         return <Panel>
@@ -1481,14 +1523,6 @@ export default function MapViewer() {
             >
                 Calculate Solar Performance
             </div>
-            {nuclear && <div
-                style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
-                onMouseLeave={e => e.target.style.background = "transparent"}
-                onClick={handleFallout}
-            >
-                Simulate Fallout Here
-            </div>}
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
                 onMouseEnter={e => e.target.style.background = "#f0f0f0"}
@@ -1517,15 +1551,16 @@ export default function MapViewer() {
         />}
         {mapReady && nuclear && falloutOpen && <FalloutPanel
             map={mapRef.current}
-            targets={pins.filter(p => p.kind === "target")}
-            burst={falloutBurst}
-            onSaveBurst={(burst, weapon) => setAddingPin({lat: burst.lat, lon: burst.lon, kind: "target", weapon})}
+            targets={targets}
+            savedCount={savedTargets.length}
+            loaded={loadedIds !== null}
+            unsaved={unsaved}
+            onLoad={handleLoadTargets}
+            onSave={handleSaveTargets}
+            onRemoveTarget={handleRemoveTarget}
             onTargetWeapon={handleTargetWeapon}
             onAllTargetsWeapon={handleAllTargetsWeapon}
-            onClose={() => {
-                setFalloutOpen(false);
-                setFalloutBurst(null);
-            }}
+            onClose={() => setFalloutOpen(false)}
         />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}

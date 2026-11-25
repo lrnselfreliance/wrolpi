@@ -6,7 +6,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import climatology, export, export_job, lib, quads, schema, search, winds
-from modules.map.pins import get_map_pins_config
+from modules.map.pins import TargetsChanged, get_map_pins_config
 from modules.map.sheet import legend_as_sent
 from wrolpi import flags
 from wrolpi.api_utils import json_response
@@ -107,15 +107,17 @@ async def add_pin(_: Request, body: schema.MapPinRequest):
     return json_response(dict(pin=pin), HTTPStatus.CREATED)
 
 
-@map_bp.put('/pins/targets/weapon')
-@openapi.description('Give every target one weapon')
-@validate(schema.MapTargetsWeaponRequest)
-async def put_targets_weapon(_: Request, body: schema.MapTargetsWeaponRequest):
+@map_bp.put('/pins/targets')
+@openapi.description('Save the targets: the ones given replace the saved ones, which must be those loaded')
+@validate(schema.MapTargetsRequest)
+async def put_targets(_: Request, body: schema.MapTargetsRequest):
     try:
-        count = get_map_pins_config().set_targets_weapon(body.weapon, body.yield_kt, body.fission_fraction)
+        targets = get_map_pins_config().replace_targets(body.targets, body.loaded_ids)
+    except TargetsChanged as e:
+        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
     except ValueError as e:
         return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
-    return json_response(dict(targets=count), HTTPStatus.OK)
+    return json_response(dict(targets=targets), HTTPStatus.OK)
 
 
 @map_bp.delete('/pins/<pin_id:int>')

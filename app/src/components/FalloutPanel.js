@@ -12,7 +12,7 @@ import {
     prepareField,
     rainNear,
 } from "../map-shared/fallout/winds.js";
-import {combineBursts, CUSTOM_WEAPON, DEFAULT_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
+import {combineBursts, CUSTOM_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
 import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, getJobs, getLatestFalloutWinds} from "../api";
 import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
 import {runPool, workerCount} from "../map-shared/fallout/pool.js";
@@ -22,7 +22,7 @@ import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
 // The map's fallout view (nuclear mode), in steps: the targets (and how their fallout is carried),
-// then the fallout of every saved target at once, and of a burst the user is trying out: hour by
+// then the fallout of all the targets at once, saved or only tried out: hour by
 // hour as it lands and weakens, or the total dose of the first two weeks.
 
 const SOURCE = "fallout-dose";
@@ -426,33 +426,62 @@ export function WeaponPicker({value, onChange, label}) {
     </div>;
 }
 
-// A target in the list: its name and weapon, and the weapon picker when the user asks to change it.
-function TargetRow({target, onWeapon}) {
+// The targets simulated once the saved targets (`saved`, pins) are loaded: those, then the ones
+// being tried out (`tried`) which are not saved.
+export function withSavedTargets(saved, tried) {
+    return [...saved.map((t) => ({...t, key: `saved-${t.id}`})), ...tried.filter((t) => !t.id)];
+}
+
+// Whether the targets simulated differ from the saved ones (`saved`), which were loaded or not.
+export function targetsUnsaved(targets, saved, loaded) {
+    if (!loaded) return targets.length > 0;
+    const plain = (list) => JSON.stringify(list.map((t) => [t.id, t.lat, t.lon, t.label, t.weapon, t.yield_kt,
+        t.fission_fraction]));
+    return plain(targets) !== plain(saved);
+}
+
+// A target with `weapon` ({weapon, yield_kt?, fission_fraction?}) in place of its old one.
+export function withWeapon(target, weapon) {
+    const {weapon: _weapon, yield_kt: _yield, fission_fraction: _fission, ...rest} = target;
+    return {...rest, ...weapon};
+}
+
+// A button which reads as a link, for small actions beside a target.
+const LINK = {background: "none", border: "none", padding: 0, color: "var(--link, #4183c4)", cursor: "pointer",
+    font: "inherit"};
+
+// A target in the list: its name and weapon (and whether it is saved), the weapon picker when the
+// user asks to change it, and taking it out of the list.
+function TargetRow({target, onWeapon, onRemove}) {
     const [changing, setChanging] = useState(false);
     const chosen = targetWeapon(target);
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     return <div style={{marginBottom: "0.375rem"}}>
-        <div><span aria-hidden>☢ </span><strong>{target.label}</strong></div>
+        <div><span aria-hidden>☢ </span><strong>{target.label}</strong>
+            {!target.id && <span style={muted}> (not saved)</span>}</div>
         <div style={muted}>
             {chosen.weapon ? chosen.weapon.name : "A yield of my own"},{" "}
             {formatYieldAndFission(chosen.yieldKt, chosen.fissionFraction)}{" "}
-            <a href="#" onClick={(e) => {
-                e.preventDefault();
-                setChanging(!changing);
-            }}>{changing ? "done" : "change"}</a>
+            <button type="button" style={LINK} onClick={() => setChanging(!changing)}>
+                {changing ? "done" : "change"}
+            </button>
+            {" · "}
+            <button type="button" style={LINK} onClick={onRemove} aria-label={`Remove ${target.label}`}>remove</button>
         </div>
         {changing && <WeaponPicker value={target} onChange={onWeapon}/>}
     </div>;
 }
 
-// The fallout view.  `targets` are the saved targets (pins of kind "target"); `burst` ({lat, lon}),
-// if given, is a burst the user is trying out, which `onSaveBurst(burst, weapon)` saves as a target.
+// The fallout view.  `targets` are those simulated ({key, id (if saved), lat, lon, label, weapon,
+// yield_kt?, fission_fraction?}): tried out, and the saved ones once the user loads them
+// (`onLoad`; there are `savedCount`, and `loaded` says whether they were).  `onSave` saves them in
+// place of the saved ones, which is refused until those are loaded; `unsaved` says whether the list
+// differs from what is saved.
 // `onTargetWeapon(target, weapon)` keeps a target's weapon.
-export default function FalloutPanel({map, targets = [], burst = null, onSaveBurst, onTargetWeapon,
-                                         onAllTargetsWeapon, onClose}) {
-    // A burst to try out goes straight to its fallout; otherwise the targets come first.
-    const [step, setStep] = useState(burst ? VIEW : TARGETS);
-    const [burstWeapon, setBurstWeapon] = useState({weapon: DEFAULT_WEAPON});
+export default function FalloutPanel({map, targets = [], savedCount = 0, loaded = false, unsaved = false, onLoad,
+                                         onSave, onRemoveTarget, onTargetWeapon, onAllTargetsWeapon, onClose}) {
+    const [step, setStep] = useState(TARGETS);
+    const [saving, setSaving] = useState(false);
     const [wind, setWind] = useState(FORECAST);
     // The climatology: which months are kept, the month and dose rate shown, and the months read.
     const [climateStatus, setClimateStatus] = useState(null);
@@ -493,15 +522,11 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
 
     const bursts = useMemo(() => [
         ...targets.map((t) => ({lat: t.lat, lon: t.lon, ...targetWeapon(t)})),
-        ...(burst ? [{lat: burst.lat, lon: burst.lon, ...targetWeapon(burstWeapon)}] : []),
-    ], [targets, burst, burstWeapon]);
+    ], [targets]);
     // What the fallout depends on, as one value an effect can watch.
     const burstsKey = JSON.stringify(bursts.map((b) => [b.lat, b.lon, b.yieldKt, b.fissionFraction]));
 
-    // A new burst to try out is shown at once; with nothing to burst, the targets are needed first.
-    useEffect(() => {
-        if (burst) setStep(VIEW);
-    }, [burst]);
+    // With nothing to burst, the targets are needed first.
     useEffect(() => {
         if (!bursts.length) setStep(TARGETS);
     }, [bursts.length]);
@@ -740,8 +765,17 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)", padding: "0.75rem",
         fontSize: "0.8125rem",
     };
-    const targetCount = (targets.length === 1 ? "1 target" : `${targets.length} targets`)
-        + (burst ? ", and a burst not saved" : "");
+    const targetCount = targets.length === 1 ? "1 target" : `${targets.length} targets`;
+    // Saving replaces the saved targets, so they must be among these first.
+    const mustLoad = savedCount > 0 && !loaded;
+    const save = async () => {
+        setSaving(true);
+        try {
+            await onSave?.();
+        } finally {
+            setSaving(false);
+        }
+    };
     // How the fallout is carried, in a few words.
     const carried = wind === CLIMATE ? `past ${MONTHS[climateMonth - 1]} days' winds`
         : useField ? `forecast winds, ${hourLabel(forecast.hours[hour], false)}`
@@ -753,10 +787,15 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         <FalloutSteps step={step}/>
         <div style={{fontWeight: 600}}>Step 2 of 4: Choose the targets</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
-            Right-click the map and choose Add Target Here. Each target keeps its weapon.
+            Right-click the map and choose Add Target Here. Targets you add are tried out, not saved, until
+            you save the targets.
         </div>
+        {mustLoad && <Button size="xs" style={{marginBottom: "0.5rem"}} onClick={onLoad}>
+            Load Saved Targets ({savedCount})
+        </Button>}
         <div style={{marginBottom: "0.25rem"}}>
             <strong>{bursts.length ? targetCount : "No targets yet"}</strong>; surface bursts.
+            {unsaved && <span style={muted}> Not saved.</span>}
         </div>
         {targets.length > 1 && <div style={{marginBottom: "0.5rem"}}>
             {/* Empty until chosen, and always applied: the targets may have any weapons now. */}
@@ -768,16 +807,17 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                     })}/>
         </div>}
         <div style={{maxHeight: "14rem", overflowY: "auto", marginBottom: "0.5rem"}}>
-            {targets.map((t) => <TargetRow key={t.id} target={t} onWeapon={(weapon) => onTargetWeapon?.(t, weapon)}/>)}
+            {targets.map((t) => <TargetRow key={t.key} target={t} onRemove={() => onRemoveTarget?.(t)}
+                                           onWeapon={(weapon) => onTargetWeapon?.(t, weapon)}/>)}
         </div>
-        {burst && <div style={{marginBottom: "0.5rem"}}>
-            <div><strong>Burst</strong>{" "}
-                <span style={muted}>{burst.lat.toFixed(3)}, {burst.lon.toFixed(3)}, not saved</span></div>
-            <WeaponPicker value={burstWeapon} onChange={setBurstWeapon}/>
-            <Button size="xs" style={{marginTop: "0.25rem"}} onClick={() => onSaveBurst?.(burst, burstWeapon)}>
-                Save as target
+        <div style={{marginBottom: "0.75rem"}}>
+            <Button size="xs" onClick={save} disabled={mustLoad || saving || (!loaded && !targets.length)}>
+                {saving ? "Saving…" : "Save Targets"}
             </Button>
-        </div>}
+            {mustLoad && <div style={muted}>
+                Saving replaces the saved targets: load them first, to keep them.
+            </div>}
+        </div>
         <div style={{display: "flex", justifyContent: "space-between"}}>
             {close}
             <Button role="primary" size="sm" disabled={!bursts.length} onClick={() => setStep(WIND)}>

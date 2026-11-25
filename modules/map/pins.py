@@ -8,6 +8,10 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 logger = logger.getChild(__name__)
 
 
+class TargetsChanged(ValueError):
+    """The saved targets are not the ones the user started from."""
+
+
 # What a pin marks: a place, or a likely detonation site (a target, shown in the map's nuclear mode).
 PIN_KINDS = ('pin', 'target')
 
@@ -94,24 +98,44 @@ class MapPinsConfig(ConfigFile):
         save_map_pins_config.activate_switch()
         return True
 
-    def set_targets_weapon(self, weapon: str, yield_kt: float = None, fission_fraction: float = None) -> int:
-        """Give every target `weapon` in one change of the config (one change per target, made at once,
-        would each write the whole list and undo the others).  Returns how many targets there are."""
-        weapon_fields = check_weapon(weapon, yield_kt, fission_fraction)
-        if not weapon_fields.get('weapon'):
-            raise ValueError('A weapon is named by its key')
+    def replace_targets(self, targets: List[dict], loaded_ids: List[int]) -> List[dict]:
+        """Make `targets` the saved targets, in one change of the config; plain pins are left be.
+
+        Each target is {lat, lon, label, weapon?, yield_kt?, fission_fraction?, id?}: a target with
+        the id of a saved target keeps that target's id and date, the others are new.  `loaded_ids`
+        are the ids of the saved targets the user started from: if the saved targets are not those
+        (they were not loaded, or have changed since), nothing is saved, so none are lost unseen.
+        Returns the saved targets."""
         pins = self.pins
-        count = 0
-        for pin in pins:
-            if pin.get('kind') != 'target':
-                continue
-            for key in ('weapon', 'yield_kt', 'fission_fraction'):
-                pin.pop(key, None)
+        saved = {p['id']: p for p in pins if p.get('kind') == 'target'}
+        if set(saved) != set(loaded_ids):
+            raise TargetsChanged('The saved targets are not the ones loaded: load them again, then save')
+        next_id = self._next_pin_id()
+        kept = []
+        for target in targets:
+            label = str(target.get('label') or '').strip()
+            if not label:
+                raise ValueError('Every target has a name')
+            lat, lon = target.get('lat'), target.get('lon')
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)) \
+                    or not -90 <= lat <= 90 or not -180 <= lon <= 180:
+                raise ValueError(f'{label} is not at a latitude and longitude')
+            weapon_fields = check_weapon(target.get('weapon'), target.get('yield_kt'), target.get('fission_fraction'))
+            old = saved.get(target.get('id'))
+            if old:
+                pin_id, created, color = old['id'], old.get('created'), old.get('color', 'red')
+            else:
+                pin_id, created, color = next_id, str(now().date()), 'red'
+                next_id += 1
+            pin = dict(id=pin_id, lat=round(lat, 6), lon=round(lon, 6), label=label, color=color, created=created,
+                       kind='target')
             pin.update(weapon_fields)
-            count += 1
-        self.pins = pins
+            kept.append(pin)
+        if len({p['id'] for p in kept}) != len(kept):
+            raise ValueError('A saved target is given more than once')
+        self.pins = [p for p in pins if p.get('kind') != 'target'] + kept
         save_map_pins_config.activate_switch()
-        return count
+        return kept
 
     def update_pin(self, pin_id: int, label: str = None, color: str = None, weapon: str = None,
                    yield_kt: float = None, fission_fraction: float = None) -> bool:

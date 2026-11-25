@@ -1733,24 +1733,16 @@ export async function getLatestFalloutWinds() {
     return null;
 }
 
-// Give every target one weapon ({weapon, yield_kt, fission_fraction}), in one change.
-export async function setAllTargetsWeapon(weapon) {
-    const response = await apiPut(`${API_URI}/map/pins/targets/weapon`, weapon);
+// Save `targets` ([{lat, lon, label, weapon, yield_kt?, fission_fraction?, id?}]) in place of the
+// saved targets, which are those of `loadedIds` (refused if they are not): the saved targets, or null.
+export async function saveMapTargets(targets, loadedIds) {
+    const response = await apiPut(`${API_URI}/map/pins/targets`, {targets, loaded_ids: loadedIds});
     if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not save the targets\' weapon');
+        const message = await getErrorMessage(response, 'Could not save the targets');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+        return null;
     }
-    return response.ok;
-}
-
-// Change a target's weapon ({weapon, yield_kt, fission_fraction}).
-export async function updateMapTargetWeapon(pinId, weapon) {
-    const response = await apiPut(`${API_URI}/map/pins/${pinId}`, weapon);
-    if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not save the target\'s weapon');
-        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
-    }
-    return response.ok;
+    return (await response.json()).targets;
 }
 
 // Start the Job which fetches the field of forecast winds aloft over `places` ([[lat, lon]], the

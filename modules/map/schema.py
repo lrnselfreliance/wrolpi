@@ -46,9 +46,8 @@ class MapFalloutWindsRequest:
 
 
 @dataclass
-class MapTargetsWeaponRequest:
-    # The key of a weapon the simulator offers (or "custom"), the yield (kt) of a custom one, and the
-    # share of the yield from fission.
-    weapon: str
-    yield_kt: Optional[float | int] = None
-    fission_fraction: Optional[float | int] = None
+class MapTargetsRequest:
+    # The targets to save ([{lat, lon, label, weapon?, yield_kt?, fission_fraction?, id?}]), and the ids
+    # of the saved targets they were started from.
+    targets: list
+    loaded_ids: list

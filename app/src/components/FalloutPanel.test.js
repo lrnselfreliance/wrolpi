@@ -315,6 +315,35 @@ describe('the total dose view', () => {
     });
 });
 
+describe('the targets simulated', () => {
+    const {withSavedTargets, targetsUnsaved, withWeapon} = require('./FalloutPanel');
+    const saved = [{id: 1, label: 'A', lat: 1, lon: 1, kind: 'target', weapon: 'yars'},
+        {id: 2, label: 'B', lat: 2, lon: 2, kind: 'target', weapon: 'custom', yield_kt: 20, fission_fraction: 1}];
+    const tried = {key: 'new-1', label: 'C', lat: 3, lon: 3, weapon: 'w88'};
+
+    test('are the saved ones once loaded, then those tried out', () => {
+        const loaded = withSavedTargets(saved, [tried]);
+        expect(loaded.map((t) => t.key)).toEqual(['saved-1', 'saved-2', 'new-1']);
+        // Loading again keeps the tried ones once, and the saved ones as saved.
+        expect(withSavedTargets(saved, loaded).map((t) => t.key)).toEqual(['saved-1', 'saved-2', 'new-1']);
+    });
+
+    test('are unsaved when they differ from the saved ones', () => {
+        expect(targetsUnsaved([], saved, false)).toBe(false);
+        expect(targetsUnsaved([tried], saved, false)).toBe(true);
+        const loaded = withSavedTargets(saved, []);
+        expect(targetsUnsaved(loaded, saved, true)).toBe(false);
+        expect(targetsUnsaved(loaded.slice(1), saved, true)).toBe(true);
+        expect(targetsUnsaved([withWeapon(loaded[0], {weapon: 'w88'}), loaded[1]], saved, true)).toBe(true);
+        expect(targetsUnsaved([...loaded, tried], saved, true)).toBe(true);
+    });
+
+    test('take a new weapon in place of the old', () => {
+        expect(withWeapon(saved[1], {weapon: 'w88', fission_fraction: 0.5})).toEqual(
+            {id: 2, label: 'B', lat: 2, lon: 2, kind: 'target', weapon: 'w88', fission_fraction: 0.5});
+    });
+});
+
 describe('the fallout panel\'s steps', () => {
     const {screen, fireEvent, waitFor, act, cleanup} = require('@testing-library/react');
     const {renderWithProviders} = require('../test-utils');
@@ -344,7 +373,7 @@ describe('the fallout panel\'s steps', () => {
         };
         return map;
     }
-    const target = {id: 1, label: 'Somewhere', lat: 40, lon: -100, weapon: 'w88'};
+    const target = {key: 'saved-1', id: 1, label: 'Somewhere', lat: 40, lon: -100, weapon: 'w88'};
     let getContext, toDataURL;
     beforeEach(() => {
         loadTerrainGrid.mockClear();
@@ -422,11 +451,40 @@ describe('the fallout panel\'s steps', () => {
         expect(loadTerrainGrid).toHaveBeenCalledTimes(1);
     }, 60000);
 
-    test('go straight to the fallout of a burst being tried out', () => {
-        renderWithProviders(<FalloutPanel map={fakeMap()} targets={[]} burst={{lat: 40, lon: -100}}
-                                          onClose={() => null}/>);
-        expect(screen.getByText('Step 4 of 4: The fallout')).toBeTruthy();
-        expect(screen.getByRole('list', {name: 'Steps'}).textContent).toMatch(/✓ Nuclear.*✓ Targets.*✓ Wind.*4\. Fallout/);
+    test('load the saved targets before saving over them', () => {
+        const onLoad = jest.fn(), onSave = jest.fn();
+        const tried = {key: 'new-1', label: 'Tried', lat: 41, lon: -101, weapon: 'w88'};
+        const {rerender} = renderWithProviders(<FalloutPanel map={fakeMap()} targets={[tried]} savedCount={156}
+                                                             unsaved onLoad={onLoad} onSave={onSave}/>);
+        // Only the target being tried out is simulated until the saved ones are loaded.
+        expect(screen.getByText('1 target')).toBeTruthy();
+        expect(screen.getByText('(not saved)')).toBeTruthy();
+        expect(screen.getByText('Not saved.')).toBeTruthy();
+        const save = screen.getByRole('button', {name: 'Save Targets'});
+        expect(save.disabled).toBe(true);
+        expect(screen.getByText(/Saving replaces the saved targets: load them first/)).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', {name: 'Load Saved Targets (156)'}));
+        expect(onLoad).toHaveBeenCalledTimes(1);
+
+        rerender(<FalloutPanel map={fakeMap()} targets={[target, tried]} savedCount={156} loaded unsaved
+                               onLoad={onLoad} onSave={onSave}/>);
+        expect(screen.queryByRole('button', {name: /Load Saved Targets/})).toBeNull();
+        expect(screen.queryByText(/load them first/)).toBeNull();
+        fireEvent.click(screen.getByRole('button', {name: 'Save Targets'}));
+        expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    test('save targets when none are saved, and take one out of the list', () => {
+        const onRemoveTarget = jest.fn();
+        const tried = {key: 'new-1', label: 'Tried', lat: 41, lon: -101, weapon: 'w88'};
+        const {rerender} = renderWithProviders(<FalloutPanel map={fakeMap()} targets={[]} savedCount={0}/>);
+        expect(screen.queryByRole('button', {name: /Load Saved Targets/})).toBeNull();
+        expect(screen.getByRole('button', {name: 'Save Targets'}).disabled).toBe(true);
+        rerender(<FalloutPanel map={fakeMap()} targets={[tried]} savedCount={0} unsaved
+                               onRemoveTarget={onRemoveTarget}/>);
+        expect(screen.getByRole('button', {name: 'Save Targets'}).disabled).toBe(false);
+        fireEvent.click(screen.getByRole('button', {name: 'Remove Tried'}));
+        expect(onRemoveTarget).toHaveBeenCalledWith(tried);
     });
 });
 

@@ -6,7 +6,8 @@ import pytest
 
 from modules.map import winds
 from wrolpi import flags
-from wrolpi.jobs import COMPLETE, FAILED, wait_for_job
+from wrolpi.conftest import make_test_ctx
+from wrolpi.downloader import Download, DownloadFrequency
 
 
 @pytest.fixture(autouse=True)
@@ -140,16 +141,32 @@ async def test_fetch_wind_field(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_fetch_wind_field_keeps_a_few(test_directory):
+async def test_fetch_wind_field_keeps_the_newest(test_directory):
+    """Only the newest field is kept: a simulation is of bursts now."""
+    assert winds.KEPT_FIELDS == 1
     with mock.patch('modules.map.winds.request_forecast', fake_service([])), \
             mock.patch('modules.map.winds.now') as fake_now:
         from datetime import datetime, timezone
-        for minute in range(winds.KEPT_FIELDS + 2):
+        for minute in range(3):
             fake_now.return_value = datetime(2026, 11, 22, 0, minute, tzinfo=timezone.utc)
             await winds.fetch_wind_field([(10, 10)])
     kept = sorted(winds.winds_directory().glob('field-*.json'))
-    assert len(kept) == winds.KEPT_FIELDS
-    assert winds.latest_field()['fetched_at'].startswith(f'2026-11-22T00:0{winds.KEPT_FIELDS + 1}')
+    assert len(kept) == 1
+    assert winds.latest_field()['fetched_at'].startswith('2026-11-22T00:02')
+
+
+@pytest.mark.asyncio
+async def test_fetch_wind_field_cancelled(test_directory):
+    """Cancelled between requests, nothing is kept, and the field before stays."""
+    with mock.patch('modules.map.winds.request_forecast', fake_service([])):
+        before = await winds.fetch_wind_field([(10, 10)])
+    asked = []
+    with mock.patch('modules.map.winds.request_forecast', fake_service(asked)), \
+            mock.patch('modules.map.winds.BATCH', 1):
+        with pytest.raises(winds.WindsError, match='Cancelled'):
+            await winds.fetch_wind_field([(61, -149)], cancelled=lambda: bool(asked))
+    assert len(asked) == 1
+    assert winds.latest_field() == before
 
 
 @pytest.mark.asyncio
@@ -201,55 +218,83 @@ async def test_fetch_wind_field_slows_down(test_directory):
 
 
 @pytest.mark.asyncio
-async def test_winds_api(async_client, test_directory, flags_lock):
-    """The field is fetched by a Job on request, kept, and given back without fetching again."""
+async def test_latest_winds_api(async_client, test_directory):
     request, response = await async_client.get('/api/map/fallout/winds/latest')
     assert response.status_code == HTTPStatus.OK
     assert response.json['winds'] is None
-
-    flags.have_internet.set()
-    try:
-        with mock.patch('modules.map.winds.request_forecast', fake_service([])):
-            request, response = await async_client.post('/api/map/fallout/winds',
-                                                        content=json.dumps({'places': [[61.2, -149.3], [61, -150]]}))
-            assert response.status_code == HTTPStatus.ACCEPTED
-            assert response.json['spacing'] == 1 and response.json['seconds'] == 0
-            job = await wait_for_job(response.json['job_id'], timeout=10)
-    finally:
-        flags.have_internet.clear()
-    assert job['status'] == COMPLETE and job['progress'] == 100
-    assert job['result']['spacing'] == 1
-
+    with mock.patch('modules.map.winds.request_forecast', fake_service([])):
+        await winds.fetch_wind_field([(61.2, -149.3)])
     request, response = await async_client.get('/api/map/fallout/winds/latest')
     assert response.json['winds']['points'][0]['elevation'] == 100.0
 
 
 @pytest.mark.asyncio
-async def test_winds_api_errors(async_client, test_directory, flags_lock):
-    flags.have_internet.clear()
-    request, response = await async_client.post('/api/map/fallout/winds', content=json.dumps({'places': [[61, -149]]}))
-    assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-    assert 'Internet' in response.json['error']
+async def test_weather_subscription(async_client, test_session, test_directory, test_nuclear_config):
+    """Subscribing makes one daily Download of the weather, due now; unsubscribing deletes it."""
+    request, response = await async_client.get('/api/map/weather')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == dict(enabled=False, download=None, targets=0, spacing=None, points=None, seconds=None,
+                                 field=None)
 
-    flags.have_internet.set()
-    try:
-        request, response = await async_client.post('/api/map/fallout/winds',
-                                                    content=json.dumps({'places': [['north', 1]]}))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+    test_nuclear_config.replace_targets([{'lat': 61.2, 'lon': -149.3, 'label': 'A'}], loaded_ids=[])
+    request, response = await async_client.put('/api/map/weather', content=json.dumps({'enabled': True}))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['enabled'] is True and response.json['targets'] == 1
+    assert response.json['spacing'] == 1 and response.json['points'] > 0
+    download, = test_session.query(Download).all()
+    assert (download.url, download.downloader, download.frequency, download.status) == \
+           (winds.WEATHER_URL, 'open_meteo', DownloadFrequency.daily, 'new')
+    # Subscribing again changes nothing.
+    request, response = await async_client.put('/api/map/weather', content=json.dumps({'enabled': True}))
+    assert test_session.query(Download).count() == 1
 
-        async def broken(url):
-            raise winds.WindsError('The forecast service answered HTTP 500')
+    # Downloaded now, though not due.
+    download.status = 'complete'
+    test_session.commit()
+    request, response = await async_client.post('/api/map/weather/download')
+    assert response.status_code == HTTPStatus.OK
+    test_session.expire_all()
+    assert test_session.query(Download).one().status == 'new'
 
-        # Too spread out for a field.
-        with mock.patch('modules.map.winds.MAX_POINTS', 5):
-            places = [[0, lon] for lon in range(-180, 180, 30)]
-            request, response = await async_client.post('/api/map/fallout/winds', content=json.dumps({'places': places}))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+    request, response = await async_client.put('/api/map/weather', content=json.dumps({'enabled': False}))
+    assert response.json['enabled'] is False
+    assert test_session.query(Download).count() == 0
+    request, response = await async_client.post('/api/map/weather/download')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
-        with mock.patch('modules.map.winds.request_forecast', broken):
-            request, response = await async_client.post('/api/map/fallout/winds',
-                                                        content=json.dumps({'places': [[61, -149]]}))
-            job = await wait_for_job(response.json['job_id'], timeout=10)
-        assert job['status'] == FAILED and 'HTTP 500' in job['error']
-    finally:
-        flags.have_internet.clear()
+
+@pytest.mark.asyncio
+async def test_weather_downloader(test_session, test_directory, test_nuclear_config):
+    """The downloader fetches a field around the saved targets, telling how far it has got."""
+    downloader = winds.weather_downloader
+    # No targets: nothing to download, and nothing wrong.
+    prepared = downloader.prepare_download(test_session, None)
+    assert prepared.places == []
+    executed = await downloader.execute_download(prepared, make_test_ctx())
+    assert downloader.finalize_download(test_session, None, executed).success is True
+    assert winds.latest_field() is None
+
+    test_nuclear_config.replace_targets([{'lat': 61.2, 'lon': -149.3, 'label': 'A'},
+                                         {'lat': 40.6, 'lon': -75.4, 'label': 'B'}], loaded_ids=[])
+    prepared = downloader.prepare_download(test_session, None)
+    assert prepared.places == [(61.2, -149.3), (40.6, -75.4)]
+    heard, cleared = [], []
+    with mock.patch('modules.map.winds.request_forecast', fake_service([])), mock.patch('modules.map.winds.BATCH', 50):
+        executed = await downloader.execute_download(prepared, make_test_ctx(
+            report_progress=heard.append, clear_progress=lambda: cleared.append(True)))
+    result = downloader.finalize_download(test_session, None, executed)
+    assert result.success is True and result.location == '/map/manage'
+    assert heard[-1] == dict(percent=100) and cleared == [True]
+    summary = winds.field_summary()
+    assert summary['points'] == executed.points == len(winds.latest_field()['points'])
+    assert summary['first_hour'] < summary['last_hour'] and summary['size'] > 0
+
+    async def broken(url):
+        raise winds.WindsError('The forecast service answered HTTP 500')
+
+    with mock.patch('modules.map.winds.request_forecast', broken):
+        executed = await downloader.execute_download(prepared, make_test_ctx())
+    result = downloader.finalize_download(test_session, None, executed)
+    assert result.success is False and 'HTTP 500' in result.error
+    # The field before stays.
+    assert winds.field_summary() == summary

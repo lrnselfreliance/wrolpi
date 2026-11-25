@@ -6,11 +6,18 @@ import {loadTerrainGrid} from './falloutTerrain';
 jest.mock('./falloutTerrain', () => ({loadTerrainGrid: jest.fn(async () => null)}));
 // No forecast (unless a test gives one), past days or fetches under Jest.
 let mockLatestWinds = null;
+let mockWeather = {enabled: true, download: {status: 'complete'}, targets: 1, spacing: 1, points: 160, seconds: 61,
+    field: null};
+const mockWeatherSet = [];
 jest.mock('../api', () => ({
-    fetchFalloutWinds: async () => null,
     getFalloutClimatology: async () => null,
     getFalloutClimatologyMonth: async () => null,
-    getJobs: async () => [],
+    getWeather: async () => mockWeather,
+    setWeatherSubscription: (enabled) => {
+        mockWeatherSet.push(enabled);
+        return Promise.resolve({...mockWeather, enabled});
+    },
+    downloadWeatherNow: async () => mockWeather,
     getLatestFalloutWinds: async () => mockLatestWinds,
 }));
 
@@ -316,6 +323,19 @@ describe('the total dose view', () => {
     });
 });
 
+describe('the forecast\'s warning', () => {
+    const {forecastShortText} = require('./FalloutPanel');
+    const hourMs = Math.floor(Date.now() / 3600000) * 3600000;
+    const of = (from, count) => ({hours: Array.from({length: count}, (_, h) => new Date(hourMs + (from + h) * 3600000).toISOString())});
+
+    test('says when it has run out, or ends before the fallout is down, and else nothing', () => {
+        expect(forecastShortText(null, 0)).toBeNull();
+        expect(forecastShortText(of(-30, 10), 9)).toMatch(/has run out/);
+        expect(forecastShortText(of(-1, 30), 1)).toMatch(/ends at .*, before all the fallout is down/);
+        expect(forecastShortText(of(-1, 96), 1)).toBeNull();
+    });
+});
+
 describe('the targets simulated', () => {
     const {withSavedTargets, targetsUnsaved, withWeapon} = require('./FalloutPanel');
     const saved = [{id: 1, label: 'A', lat: 1, lon: 1, kind: 'target', weapon: 'yars'},
@@ -479,6 +499,53 @@ describe('the fallout panel\'s steps', () => {
             mockLatestWinds = forecastOf(24);
             renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
             expect(await windShown()).toBe('One wind at every height');
+        } finally {
+            mockLatestWinds = null;
+        }
+    });
+
+    test('ask to download the forecast on the wind step, when it is not', async () => {
+        const before = mockWeather;
+        mockWeather = {...before, enabled: false, download: null};
+        try {
+            renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+            fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+            await act(async () => new Promise((r) => setTimeout(r, 20)));
+            mockWeatherSet.length = 0;
+            fireEvent.click(screen.getByRole('button', {name: 'Download the forecast every day'}));
+            await act(async () => new Promise((r) => setTimeout(r, 20)));
+            expect(mockWeatherSet).toEqual([true]);
+            expect(screen.queryByRole('button', {name: 'Download the forecast every day'})).toBeNull();
+        } finally {
+            mockWeather = before;
+        }
+        cleanup();
+        // Subscribed: nothing asked.
+        renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+        await act(async () => new Promise((r) => setTimeout(r, 20)));
+        expect(screen.queryByRole('button', {name: 'Download the forecast every day'})).toBeNull();
+    });
+
+    test('warn when the forecast chosen runs out before the fallout is down', async () => {
+        Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => null);
+        const hourMs = Math.floor(Date.now() / 3600000) * 3600000;
+        const hours = Array.from({length: 24}, (_, h) => new Date(hourMs - (100 - h) * 3600000).toISOString());
+        mockLatestWinds = {source: 'Open-Meteo', fetched_at: new Date(hourMs - 100 * 3600000).toISOString(), spacing: 3,
+            points: [{lat: 40, lon: -100, elevation: 0}], hours,
+            winds: [hours.map(() => [[10, 10, 270], [20000, 20, 270]])], rain: [hours.map(() => 0)]};
+        try {
+            renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+            fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+            await act(async () => new Promise((r) => setTimeout(r, 20)));
+            // Too old: one wind is chosen for the user.
+            expect(screen.getByRole('textbox', {name: 'Wind'}).value).toBe('One wind at every height');
+            await act(async () => new Promise((r) => setTimeout(r, 50)));
+            fireEvent.click(screen.getByRole('textbox', {name: 'Wind'}));
+            fireEvent.click([...document.querySelectorAll('[role=option]')].find((o) => o.textContent === 'Forecast winds aloft'));
+            expect(screen.getByText(/This forecast has run out: its last hour's winds are held/)).toBeTruthy();
+            fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
+            expect(screen.getByText(/This forecast has run out/)).toBeTruthy();
         } finally {
             mockLatestWinds = null;
         }

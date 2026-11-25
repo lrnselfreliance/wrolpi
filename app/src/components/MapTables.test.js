@@ -29,6 +29,9 @@ jest.mock('../api', () => ({
     fetchMapSubscriptions: jest.fn(),
     getMapPins: jest.fn(),
     getMapTargets: jest.fn(),
+    getWeather: jest.fn(),
+    setWeatherSubscription: jest.fn(),
+    downloadWeatherNow: jest.fn(),
     deleteMapTarget: jest.fn(),
     setMapFileVisible: jest.fn(),
     rebuildMapSearchIndex: jest.fn(),
@@ -40,6 +43,7 @@ const pending = () => new Promise(() => {
 });
 const NO_PINS = /No pins\. Right-click/;
 const NO_RESULTS = /^No results$/;
+const WEATHER_OFF = {enabled: false, download: null, targets: 3, spacing: 1, points: 160, seconds: 61, field: null};
 
 // The pins page renders one table per breakpoint through `Media`, so the real media provider is
 // needed; the queries below tolerate either variant being in the tree.
@@ -63,6 +67,7 @@ beforeEach(() => {
     api.getMapPins.mockResolvedValue({pins: []});
     api.getMapTargets.mockResolvedValue([]);
     api.deleteMapTarget.mockResolvedValue(true);
+    api.getWeather.mockResolvedValue(WEATHER_OFF);
 });
 
 describe('the Pins tab', () => {
@@ -291,5 +296,67 @@ describe('the Manage tab files table', () => {
             fireEvent.click(toggle);
         });
         expect(api.setMapFileVisible).toHaveBeenCalledWith('satellite.pmtiles', true);
+    });
+});
+
+describe('the Manage tab\'s weather', () => {
+    const hour = 3600000;
+    const field = (fromHours, toHours) => ({
+        fetched_at: new Date().toISOString(), spacing: 1, points: 160, size: 5 * 1024 * 1024,
+        first_hour: new Date(Date.now() + fromHours * hour).toISOString(),
+        last_hour: new Date(Date.now() + toHours * hour).toISOString(),
+    });
+
+    test('is turned on with its toggle, and says what it downloads', async () => {
+        api.setWeatherSubscription.mockResolvedValue({...WEATHER_OFF, enabled: true,
+            download: {status: 'new', next_download: null, last_successful_download: null}});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText('Weather')).toBeInTheDocument();
+        expect(screen.getByText(/Around 3 targets: 160 places every 1°, which takes about 2 minutes/)).toBeInTheDocument();
+        expect(screen.getByText('No forecast has been downloaded.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Download now'})).toBeNull();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', {name: /Download the weather forecast from Open-Meteo/}));
+        });
+        expect(api.setWeatherSubscription).toHaveBeenCalledWith(true);
+        expect(screen.getByText('Downloading the forecast…')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Download now'})).toBeDisabled();
+    });
+
+    test('shows the forecast kept, and whether it is recent enough for bursts now', async () => {
+        const done = {status: 'complete', last_successful_download: new Date().toISOString(),
+            next_download: new Date(Date.now() + 24 * hour).toISOString()};
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, enabled: true, download: done, field: field(-5, 90)});
+        api.downloadWeatherNow.mockResolvedValue({...WEATHER_OFF, enabled: true, download: {...done, status: 'new'}});
+        const {unmount} = renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/Forecast kept: .* 160 places every 1°, 5.0 MB/)).toBeInTheDocument();
+        expect(screen.getByText(/It has the winds for bursts now/)).toBeInTheDocument();
+        expect(screen.getByText(/Last downloaded .*\. Next /)).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', {name: 'Download now'}));
+        });
+        expect(api.downloadWeatherNow).toHaveBeenCalled();
+        unmount();
+
+        // Ending a day from now: too old for bursts now.
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, enabled: true,
+            download: {status: 'failed', error: 'The forecast service answered HTTP 500'}, field: field(-60, 24)});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/It is too old for bursts now/)).toBeInTheDocument();
+        expect(screen.getByText(/The last download failed: The forecast service answered HTTP 500/)).toBeInTheDocument();
+    });
+
+    test('says when there are no targets to download around', async () => {
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, targets: 0, spacing: null, points: null});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/No nuclear targets are saved/)).toBeInTheDocument();
     });
 });

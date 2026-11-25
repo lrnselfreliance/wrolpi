@@ -9,7 +9,6 @@ from modules.map import climatology, export, export_job, lib, quads, schema, sea
 from modules.map.nuclear import TargetsChanged, get_map_nuclear_config
 from modules.map.pins import get_map_pins_config
 from modules.map.sheet import legend_as_sent
-from wrolpi import flags
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
 from wrolpi.events import Events
@@ -370,24 +369,27 @@ def get_latest_fallout_winds(_: Request):
     return json_response(dict(winds=winds.latest_field()), HTTPStatus.OK)
 
 
-@map_bp.post('/fallout/winds')
-@openapi.description('Start a Job which fetches the field of forecast winds aloft over places (the targets)')
-@validate(schema.MapFalloutWindsRequest)
-async def post_fallout_winds(_: Request, body: schema.MapFalloutWindsRequest):
-    if not flags.have_internet.is_set():
-        return response.json({'error': 'WROLPi has no Internet, so it cannot fetch a forecast'},
-                             HTTPStatus.SERVICE_UNAVAILABLE)
-    try:
-        places = [(float(lat), float(lon)) for lat, lon in body.places]
-    except (TypeError, ValueError):
-        return response.json({'error': 'places are [lat, lon]'}, HTTPStatus.BAD_REQUEST)
-    try:
-        spacing, points = winds.field_points(places)
-    except winds.WindsError as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
-    # A minute for every batch but the first: the forecast service allows so many a minute.
-    job_id = winds.fallout_winds_job.enqueue(description=f'Fallout: fetch the winds aloft at {len(points)} points',
-                                             places=[list(p) for p in places])
-    return json_response(dict(job_id=job_id, points=len(points), spacing=spacing,
-                              seconds=winds.BATCH_SECONDS * ((len(points) - 1) // winds.BATCH)),
-                         HTTPStatus.ACCEPTED)
+@map_bp.get('/weather')
+@openapi.description('The weather subscription: whether it is on, its download, and the forecast kept')
+def get_weather(request: Request):
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)
+
+
+@map_bp.put('/weather')
+@openapi.description('Subscribe to the weather (a forecast around the nuclear targets, every day), or not')
+@validate(schema.MapWeatherRequest)
+@wrol_mode_check
+async def put_weather(request: Request, body: schema.MapWeatherRequest):
+    with request.ctx.db.write() as session:
+        winds.set_weather_subscription(session, bool(body.enabled))
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)
+
+
+@map_bp.post('/weather/download')
+@openapi.description('Download the weather now, rather than when it is next due')
+@wrol_mode_check
+async def post_weather_download(request: Request):
+    with request.ctx.db.write() as session:
+        if not winds.download_weather_now(session):
+            return response.json({'error': 'The weather is not subscribed to'}, HTTPStatus.BAD_REQUEST)
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)

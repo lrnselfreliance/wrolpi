@@ -6,15 +6,6 @@ import pytest
 from modules.map import nuclear
 
 
-@pytest.fixture
-def test_nuclear_config(test_directory, async_client, monkeypatch):
-    (test_directory / 'config').mkdir(exist_ok=True)
-    config = nuclear.MapNuclearConfig()
-    config.initialize()
-    monkeypatch.setattr(nuclear, 'TEST_MAP_NUCLEAR_CONFIG', config)
-    yield config
-
-
 def saved(config, *targets):
     """`targets` ({lat, lon, label, ...}) saved in place of none."""
     return config.replace_targets(list(targets), loaded_ids=[t['id'] for t in config.targets])

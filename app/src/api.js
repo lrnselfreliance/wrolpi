@@ -1763,16 +1763,34 @@ export async function saveMapTargets(targets, loadedIds) {
     return (await response.json()).targets;
 }
 
-// Start the Job which fetches the field of forecast winds aloft over `places` ([[lat, lon]], the
-// targets; the fallout simulator): {job_id, points, spacing, seconds (about how long it takes)}, or
-// null when it cannot be.
-export async function fetchFalloutWinds(places) {
-    const response = await apiPost(`${API_URI}/map/fallout/winds`, {places});
+// The weather subscription (a forecast around the nuclear targets, downloaded every day): {enabled,
+// download, targets, spacing, points, seconds, field}, or undefined when it could not be fetched.
+export async function getWeather() {
+    const response = await apiGet(`${API_URI}/map/weather`);
     if (response.ok) {
         return await response.json();
     }
-    const message = await getErrorMessage(response, 'Could not fetch the winds aloft');
-    toast({type: 'error', title: 'Fallout', description: message, time: 5000});
+}
+
+// Subscribe to the weather, or not: the subscription as it is then, or null.
+export async function setWeatherSubscription(enabled) {
+    const response = await apiPut(`${API_URI}/map/weather`, {enabled});
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not change the weather download');
+    toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    return null;
+}
+
+// Download the weather now, rather than when it is next due: the subscription as it is then, or null.
+export async function downloadWeatherNow() {
+    const response = await apiPost(`${API_URI}/map/weather/download`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not download the weather');
+    toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     return null;
 }
 

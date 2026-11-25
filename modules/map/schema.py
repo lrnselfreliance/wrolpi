@@ -30,9 +30,9 @@ class MapPinUpdateRequest:
 
 
 @dataclass
-class MapFalloutWindsRequest:
-    # The places ([lat, lon]) the field of winds is to cover: the targets.
-    places: list
+class MapWeatherRequest:
+    # Whether the weather (a forecast around the nuclear targets) is downloaded every day.
+    enabled: bool
 
 
 @dataclass

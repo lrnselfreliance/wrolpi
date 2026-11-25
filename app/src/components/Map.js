@@ -21,6 +21,7 @@ import {SortableTable} from "./SortableTable";
 import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
 import MapViewer from "./MapViewer";
+import {WeatherSection} from "./MapWeather";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import {solarCalculatorPath} from "./calculators/solar";
 import maplibregl from "maplibre-gl";
@@ -502,6 +503,10 @@ function ManageMap() {
                    target='_blank'>maps.protomaps.com/builds</a>
             </p>
         </InfoMessage>
+
+        <Divider/>
+
+        <WeatherSection/>
 
         <HandPointMessage>
             <p>You can also view the map at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>

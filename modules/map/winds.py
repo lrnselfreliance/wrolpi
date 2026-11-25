@@ -6,9 +6,11 @@ the wind at every height, hour by hour, at points on a grid over the region arou
 carries each particle by the wind where it is, at the height it is, at the hour it is there.
 
 Open-Meteo (https://open-meteo.com) forecasts the wind at nineteen pressure levels, from about 100 m
-up to about 24 km, free and without an API key, for many places in one request.  A field is fetched
-only when the user asks for one (it needs the Internet), and is kept so the simulator can use it
-offline.  Its points are on whole degrees, so the forecast service is never told where a target is.
+up to about 24 km, free and without an API key, for many places in one request.  When the user
+subscribes (the map's Manage tab), a field around the saved nuclear targets is downloaded every day,
+as a recurring Download, and kept so the simulator can use it offline.  Only the newest is kept:
+a simulation is of bursts now.  Its points are on whole degrees, so the forecast service is never
+told where a target is.
 
 The free service allows 600 calls a minute and 10,000 a day, a place costing about one call for
 every ten variables asked of it (here sixty).  So a field is kept to MAX_POINTS points, by spacing
@@ -17,16 +19,21 @@ a whole country takes a few minutes.
 """
 import asyncio
 import json
+from dataclasses import dataclass
 import time
 import math
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
 
+from sqlalchemy.orm import Session
+
 from modules.map.lib import get_map_directory
+from modules.map.nuclear import get_map_nuclear_config
 from wrolpi.common import aiohttp_get, logger
 from wrolpi.dates import now
-from wrolpi.jobs import get_current_job, register_job
+from wrolpi.downloader import Download, DownloadContext, Downloader, DownloadFrequency, DownloadResult, \
+    download_manager, save_downloads_config
 
 logger = logger.getChild(__name__)
 
@@ -34,9 +41,9 @@ OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 # The pressure levels (hPa) Open-Meteo forecasts, from near the ground up.
 PRESSURE_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150, 100, 70, 50, 30)
 # Long enough for fallout to come down: the forecast starts at midnight UTC, and the 48 hours after a
-# burst this hour must be in it.  Open-Meteo counts up to a week of a place as one call, so the
-# third day costs nothing.
-FORECAST_DAYS = 3
+# burst this hour must be in it until the next day's download.  Open-Meteo counts up to a week of a
+# place as one call, so the extra days cost nothing.
+FORECAST_DAYS = 4
 # The pressure levels whose relative humidity is asked for: where a rain cloud may be, up to the tops of
 # thunderstorms (about 200 hPa).
 HUMIDITY_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200)
@@ -56,8 +63,9 @@ SPACINGS = (1, 2, 3, 4, 5, 6, 8, 10)
 # a minute are allowed), and how long (s) from one request to the next.
 BATCH = 80
 BATCH_SECONDS = 61
-# Fields kept on disk; the newest is the one used.
-KEPT_FIELDS = 3
+# Fields kept on disk: only the newest, which is the one used.  It is replaced only once a newer one
+# has been downloaded.
+KEPT_FIELDS = 1
 
 
 class WindsError(Exception):
@@ -198,7 +206,7 @@ async def request_batch(url: str) -> list:
             raise WindsError(f'Could not reach the forecast service: {e}') from e
 
 
-async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None) -> dict:
+async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None, cancelled=None) -> dict:
     """Fetch the field over `places` ([(lat, lon)]), keep it, and return it:
 
     {source, fetched_at, spacing (degrees), points: [{lat, lon, elevation}], hours: [time (UTC,
@@ -206,7 +214,8 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
     direction FROM (degrees)], ...]]], rain: [for each point: [mm in each hour]], clouds: [for each
     point: [for each hour: [bottom, top] (m above sea level) or None]]}
 
-    `progress(done, total)`, if given, hears how many points have been fetched."""
+    `progress(done, total)`, if given, hears how many points have been fetched; once `cancelled()`, if
+    given, is true, it stops (WindsError) and keeps nothing."""
     spacing, points = field_points(places)
     forecasts = []
     last = None
@@ -214,6 +223,8 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
         batch = points[start:start + BATCH]
         if last is not None:
             await asyncio.sleep(max(BATCH_SECONDS - (time.monotonic() - last), 0))
+        if cancelled and cancelled():
+            raise WindsError('Cancelled')
         last = time.monotonic()
         answered = await request_batch(forecast_url(batch))
         if len(answered) != len(batch):
@@ -254,16 +265,135 @@ async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None)
     return field
 
 
-@register_job('fallout_winds')
-async def fallout_winds_job(places: list) -> dict:
-    """Fetch and keep the field of winds over `places` ([[lat, lon]]) as a Job."""
-    job = get_current_job()
-    spacing, points = field_points([tuple(p) for p in places])
-    job.log(f'Fetching the winds aloft at {len(points)} points every {spacing} degrees')
+def field_summary() -> Optional[dict]:
+    """What the newest field is, without its winds: {fetched_at, spacing, points, first_hour, last_hour,
+    size (bytes)}, or None."""
+    for path in sorted(winds_directory().glob('field-*.json'), reverse=True):
+        stat = path.stat()
+        key = (str(path), stat.st_mtime, stat.st_size)
+        if _summary_cache.get('key') != key:
+            try:
+                field = json.loads(path.read_text())
+            except Exception as e:
+                logger.warning(f'Could not read the winds kept in {path}', exc_info=e)
+                continue
+            _summary_cache.update(key=key, summary=dict(
+                fetched_at=field['fetched_at'], spacing=field['spacing'], points=len(field['points']),
+                first_hour=field['hours'][0], last_hour=field['hours'][-1], size=stat.st_size))
+        return _summary_cache['summary']
+    return None
 
-    def progress(done, total):
-        job.set_progress(100 * done / total)
-        job.log(f'Fetched {done} of {total} points')
 
-    field = await fetch_wind_field([tuple(p) for p in places], progress)
-    return dict(spacing=field['spacing'], points=len(field['points']), fetched_at=field['fetched_at'])
+_summary_cache = dict()
+
+# The weather subscription: one recurring Download of a field around the saved targets.
+WEATHER_URL = OPEN_METEO_URL
+WEATHER_DOWNLOADER = 'open_meteo'
+
+
+def target_places() -> List[Tuple[float, float]]:
+    """The places a field is downloaded around: the saved nuclear targets."""
+    return [(t['lat'], t['lon']) for t in get_map_nuclear_config().targets]
+
+
+def get_weather_download(session: Session) -> Optional[Download]:
+    return session.query(Download).filter_by(url=WEATHER_URL, downloader=WEATHER_DOWNLOADER).one_or_none()
+
+
+def set_weather_subscription(session: Session, enabled: bool):
+    """Subscribe to the weather (a Download every day, the first now), or not (no Download)."""
+    download = get_weather_download(session)
+    if enabled and not download:
+        download = download_manager.get_or_create_download(session, WEATHER_URL, reset_attempts=True,
+                                                           override_skip=True)
+        download.downloader = WEATHER_DOWNLOADER
+        download.frequency = DownloadFrequency.daily
+        download.location = '/map/manage'
+        download.settings = {}
+        download.renew(reset_attempts=True)
+    elif not enabled and download:
+        session.delete(download)
+    else:
+        return
+    session.commit()
+    save_downloads_config.activate_switch()
+
+
+def download_weather_now(session: Session) -> bool:
+    """Download the weather now (it is subscribed to), rather than when it is next due."""
+    download = get_weather_download(session)
+    if not download:
+        return False
+    download.renew(reset_attempts=True)
+    session.commit()
+    return True
+
+
+def weather_status(session: Session) -> dict:
+    """The weather subscription: whether it is on, its Download, the targets it is around, and the
+    field kept."""
+    download = get_weather_download(session)
+    places = target_places()
+    spacing = points = None
+    if places:
+        try:
+            spacing, field = field_points(places)
+            points = len(field)
+        except WindsError:
+            pass
+    return dict(
+        enabled=download is not None,
+        download=dict(download.__json__(), error=download.error) if download else None,
+        targets=len(places),
+        spacing=spacing,
+        points=points,
+        # About how long a download takes (s): the forecast service allows so many places a minute.
+        seconds=BATCH_SECONDS * ((points - 1) // BATCH) if points else None,
+        field=field_summary(),
+    )
+
+
+@dataclass
+class PreparedWeather:
+    places: List[Tuple[float, float]]
+
+
+@dataclass
+class ExecutedWeather:
+    points: int = 0
+    error: Optional[str] = None
+
+
+class WeatherDownloader(Downloader):
+    """Downloads the field of forecast winds aloft around the saved nuclear targets."""
+
+    name = WEATHER_DOWNLOADER
+    pretty_name = 'Open-Meteo weather'
+    listable = False
+
+    def prepare_download(self, session: Session, download: Download) -> PreparedWeather:
+        return PreparedWeather(places=target_places())
+
+    async def execute_download(self, prepared: PreparedWeather, ctx: DownloadContext,
+                               download: Download = None) -> ExecutedWeather:
+        # No targets: nothing to download around, and nothing wrong.
+        if not prepared.places:
+            return ExecutedWeather()
+        try:
+            field = await fetch_wind_field(
+                prepared.places,
+                progress=lambda done, total: ctx.report_progress(dict(percent=100 * done / total)),
+                cancelled=ctx.is_cancelled)
+        except WindsError as e:
+            return ExecutedWeather(error=str(e))
+        finally:
+            ctx.clear_progress()
+        return ExecutedWeather(points=len(field['points']))
+
+    def finalize_download(self, session: Session, download: Download, executed: ExecutedWeather) -> DownloadResult:
+        if executed.error:
+            return DownloadResult(success=False, error=executed.error)
+        return DownloadResult(success=True, location='/map/manage')
+
+
+weather_downloader = WeatherDownloader()

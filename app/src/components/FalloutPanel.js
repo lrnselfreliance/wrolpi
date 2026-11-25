@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
 import {decayFromH1, doseGrid, landedGrid, profileFromTable} from "../map-shared/fallout/model.js";
 import {loadTerrainGrid} from "./falloutTerrain";
@@ -14,13 +14,12 @@ import {
     rainNear,
 } from "../map-shared/fallout/winds.js";
 import {combineBursts, CUSTOM_WEAPON, targetWeapon} from "../map-shared/fallout/targets.js";
-import {fetchFalloutWinds, getFalloutClimatology, getFalloutClimatologyMonth, getJobs, getLatestFalloutWinds} from "../api";
+import {getFalloutClimatology, getFalloutClimatologyMonth, getLatestFalloutWinds} from "../api";
 import {climateDay, dayCounter, gunzip, parseClimatology, reachedCells} from "../map-shared/fallout/climatology.js";
 import {runPool, workerCount} from "../map-shared/fallout/pool.js";
 import {makeFalloutWorker} from "../map-shared/fallout/falloutWorker.js";
 import {burstSpots, burstsFrame, burstWinds, gridPart, gridParts, joinParts, portablePrepared} from "../map-shared/fallout/work.js";
-import {isJobFinished, useJob} from "./VideoEditMenu";
-import {StatusContext} from "../contexts/contexts";
+import {downloadTime, useWeather} from "./MapWeather";
 
 // The map's fallout view (nuclear mode), in steps: the targets (and how their fallout is carried),
 // then the fallout of all the targets at once, saved or only tried out: hour by
@@ -93,8 +92,6 @@ const CLIMATE_RATES = [1000, 100, 10, 1].map((r) => ({value: String(r), label: `
 const CLIMATE_CELL = 4000;
 const CLIMATE_SMOOTH = 1;
 
-// The Job which fetches a field of winds.
-const WINDS_JOB = "fallout_winds";
 // The hours after the bursts the fallout can be watched in: landing in the first hours, then
 // weakening over days and weeks.  And how long each is shown (ms) when they play.
 export const HOURS = [1, 2, 3, 6, 12, 24, 48, 72, 120, 168, 336];
@@ -494,12 +491,11 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
     const chosenForUs = useRef(false);
     const [direction, setDirection] = useState(270);
     const [speed, setSpeed] = useState(20);
-    // The field of forecast winds over the targets fetched most recently.
+    // The field of forecast winds around the targets downloaded most recently, and the weather
+    // subscription which downloads it.
     const [forecast, setForecast] = useState(null);
     const [hour, setHour] = useState(0);
-    // The Job fetching a field of winds, and how it is going.
-    const [fetchJob, setFetchJob] = useState(null);
-    const [fetchError, setFetchError] = useState(null);
+    const {weather, downloading: weatherDownloading, setEnabled: setWeatherEnabled} = useWeather();
     const [busy, setBusy] = useState(false);
     const [useTerrain, setUseTerrain] = useState(true);
     const [terrainStatus, setTerrainStatus] = useState(null);
@@ -517,8 +513,6 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
     const result = useRef(null);
     const frames = useRef(new Map());
     const [calculated, setCalculated] = useState(0);
-    const {status} = useContext(StatusContext) || {};
-    const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
     const calculatedFor = useRef(null);
 
@@ -548,43 +542,25 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
         };
     }, []);
 
-    // A fetch started before the panel was opened is followed too.
+    // A forecast downloaded while the panel is open is used: its winds, from the hour nearest now.
+    const downloadedAt = weather?.field?.fetched_at;
     useEffect(() => {
-        getJobs().then((jobs) => {
-            const running = jobs.filter((j) => j.name === WINDS_JOB && !isJobFinished(j)).pop();
-            if (running) setFetchJob(running.id);
+        if (!downloadedAt || !forecastChecked || downloadedAt === forecast?.fetched_at) return;
+        let cancelled = false;
+        getLatestFalloutWinds().then((latest) => {
+            if (cancelled || !latest) return;
+            setForecast(latest);
+            setHour(nearestHour(latest.hours));
+            if (forecastCoversFallout(latest)) setWind(FORECAST);
         }).catch(() => null);
-    }, []);
-
-    const {job: fetchProgress} = useJob(fetchJob, async (job) => {
-        setFetchJob(null);
-        if (job.status !== "complete") {
-            setFetchError(job.error || `The fetch was ${job.status}.`);
-            return;
-        }
-        const latest = await getLatestFalloutWinds();
-        if (!latest) return;
-        setForecast(latest);
-        setHour(nearestHour(latest.hours));
-        setWind(FORECAST);
-    }, () => {
-        setFetchJob(null);
-        setFetchError("The fetch was lost: WROLPi restarted.");
-    });
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [downloadedAt, forecastChecked]);
 
     const prepared = useMemo(() => forecast ? prepareField(forecast) : null, [forecast]);
     const useField = wind === FORECAST && !!prepared;
-
-    const fetchForecast = async () => {
-        // Over the bursts, or the middle of the map when there are none.
-        const places = bursts.length ? bursts.map((b) => [b.lat, b.lon]) : (() => {
-            const c = map.getCenter();
-            return [[c.lat, c.lng]];
-        })();
-        setFetchError(null);
-        const started = await fetchFalloutWinds(places);
-        if (started) setFetchJob(started.job_id);
-    };
 
     useEffect(() => {
         let cancelled = false;
@@ -831,6 +807,7 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
         <FalloutSteps step={step}/>
         <div style={{fontWeight: 600}}>Step 3 of 4: The wind</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>The wind carries the fallout from the targets.</div>
+        <WeatherNote weather={weather} downloading={weatherDownloading} onEnable={() => setWeatherEnabled(true)}/>
         <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
                 data={climateStatus?.months?.length
                     ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
@@ -849,9 +826,7 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
             there is the Internet.
         </div>}
         {wind === FORECAST && <ForecastControls
-            forecast={forecast} hour={hour} onHour={setHour} online={online}
-            fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
-            onFetch={fetchForecast}/>}
+            forecast={forecast} hour={hour} onHour={setHour}/>}
         {(wind === MANUAL || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
@@ -875,6 +850,9 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
             <Button size="xs" onClick={() => setAgain((n) => n + 1)}>Calculate</Button>
         </div>}
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
+        {useField && forecastShortText(forecast, hour) && <div style={{...muted, color: "var(--warning)"}}>
+            {forecastShortText(forecast, hour)}
+        </div>}
         {wind === FORECAST && prepared && <ForecastWarnings prepared={prepared} bursts={bursts} hour={hour}/>}
         {wind === CLIMATE ? <div style={{margin: "0.5rem 0"}}>
             <div style={{fontWeight: 600}}>Typical {MONTHS[climateMonth - 1]}: not today's winds</div>
@@ -1008,8 +986,24 @@ export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
     </div>;
 }
 
-// The forecast winds aloft: which hour, how old, where they reach, and fetching a new field.
-function ForecastControls({forecast, hour, onHour, online, fetching, fetchPercent, fetchError, onFetch}) {
+// Whether the forecast's winds run out before the fallout of bursts at `hour` is down: a warning
+// saying so, or null.
+export function forecastShortText(forecast, hour) {
+    if (!forecast) return null;
+    if (forecastExpired(forecast)) {
+        return "This forecast has run out: its last hour's winds are held for the whole simulation. "
+            + "Download a new one on the map's Manage tab, or use one wind at every height.";
+    }
+    if (forecastRunsOut(forecast, hour) !== null) {
+        return `This forecast ends at ${hourLabel(forecast.hours[forecast.hours.length - 1], false)}, before `
+            + "all the fallout is down: its last hour's winds are held from then on.";
+    }
+    return null;
+}
+
+// The forecast winds aloft: which hour, how old, where they reach, and whether they last until the
+// fallout is down.
+function ForecastControls({forecast, hour, onHour}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     // Not again while the panel shows its progress: the hours' labels are slow to write.
     // Written again at half past each hour, when the hour nearest now moves on.
@@ -1019,38 +1013,46 @@ function ForecastControls({forecast, hour, onHour, online, fetching, fetchPercen
         const nearest = nearestHour(forecast.hours, new Date(nowHour * 3600000));
         return forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
     }, [forecast, nowHour]);
-    const fetchButton = <div>
-        <Button size="xs" onClick={onFetch} disabled={!online || fetching} style={{marginTop: "0.25rem"}}>
-            {fetching ? `Fetching… ${Math.round(fetchPercent)}%` : forecast ? "Fetch again" : "Fetch winds aloft"}
-        </Button>
-        {/* The forecast service allows so many places a minute. */}
-        {fetching && <div style={muted}>About a minute for every 90 places of the forecast.</div>}
-        {fetchError && <div style={{...muted, color: "var(--warning)"}}>{fetchError}</div>}
-    </div>;
     if (!forecast) {
-        return <div style={muted}>
-            No forecast has been fetched
-            {online ? "; until one is, this wind is used at every height:" : ", and WROLPi has no Internet to fetch one. This wind is used at every height:"}
-            {fetchButton}
-        </div>;
+        return <div style={muted}>No forecast has been downloaded; until one is, this wind is used at every
+            height:</div>;
     }
     const age = forecastAge(forecast);
-
     const points = forecast.points.length;
+    const short = forecastShortText(forecast, hour);
     return <div>
         <Select label="Hour of the bursts" size="xs" data={hours} value={String(hour)}
                 onChange={(v) => v !== null && onHour(Number(v))} allowDeselect={false}
                 maxDropdownHeight={240} comboboxProps={DROPDOWN}/>
         <div style={muted}>
             {forecast.source}, {points === 1 ? "1 place" : `${points} places`} {forecast.spacing}° apart,
-            fetched {age < 1 ? "within the hour" : `${Math.round(age)} hours ago`}. Fallout is carried by
+            downloaded {age < 1 ? "within the hour" : `${Math.round(age)} hours ago`}. Fallout is carried by
             the wind where it is, as it changes hour by hour.
-            {forecastExpired(forecast) && " It has run out: its last hour is used from then on."}
-            {!forecastExpired(forecast) && forecastRunsOut(forecast, hour) !== null && ` It ends at ${hourLabel(
-                forecast.hours[forecast.hours.length - 1], false)}, before all the fallout is down: its last hour's winds are held from then on.`}
         </div>
-        {fetchButton}
+        {short && <div style={{...muted, color: "var(--warning)"}}>{short}</div>}
     </div>;
+}
+
+// The weather subscription, on the wind step: asking the user to turn it on, and saying when it is
+// downloading.
+function WeatherNote({weather, downloading, onEnable}) {
+    const muted = {color: "var(--muted)", fontSize: "0.75rem"};
+    if (!weather) return null;
+    if (!weather.enabled) {
+        return <div style={{marginBottom: "0.5rem"}}>
+            <div style={muted}>
+                For fallout carried by the real winds aloft, download the weather forecast every day: the winds
+                around the saved targets, from Open-Meteo, while there is the Internet.
+            </div>
+            <Button size="xs" style={{marginTop: "0.25rem"}} onClick={onEnable}>Download the forecast every day</Button>
+        </div>;
+    }
+    if (downloading) {
+        return <div style={{...muted, marginBottom: "0.5rem"}}>
+            Downloading the forecast, which takes {downloadTime(weather.seconds)}. It is used once it is down.
+        </div>;
+    }
+    return null;
 }
 
 // What the user should know of the forecast, beside its fallout: bursts outside its winds, and rain.
@@ -1063,7 +1065,7 @@ function ForecastWarnings({prepared, bursts, hour}) {
     return <>
         {outside > 0 && <div style={warning}>
             {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside the forecast's winds: the nearest
-            are used. Fetch again (Back, to the wind) to cover {outside === 1 ? "it" : "them"}.
+            are used. The forecast is downloaded around the saved targets: save {outside === 1 ? "it" : "them"} to cover {outside === 1 ? "it" : "them"} the next time.
         </div>}
         {rainy > 0 && <div style={warning}>
             Rain is forecast near {rainy === 1 ? "1 burst" : `${rainy} bursts`} in the 6 hours from then.

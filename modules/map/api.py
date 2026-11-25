@@ -5,7 +5,8 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import export, export_job, lib, quads, schema, search
+from modules.map import climatology, export, export_job, lib, quads, schema, search, winds
+from modules.map.nuclear import TargetsChanged, get_map_nuclear_config
 from modules.map.pins import get_map_pins_config
 from modules.map.sheet import legend_as_sent
 from wrolpi.api_utils import json_response
@@ -117,6 +118,33 @@ async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
     if get_map_pins_config().update_pin(pin_id, body.label, body.color):
         return response.empty(HTTPStatus.NO_CONTENT)
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/nuclear/targets')
+@openapi.description('Get the saved nuclear targets')
+def get_targets(_: Request):
+    return json_response(dict(targets=get_map_nuclear_config().targets), HTTPStatus.OK)
+
+
+@map_bp.put('/nuclear/targets')
+@openapi.description('Save the nuclear targets: the ones given replace the saved ones, which must be those loaded')
+@validate(schema.MapTargetsRequest)
+async def put_targets(_: Request, body: schema.MapTargetsRequest):
+    try:
+        targets = get_map_nuclear_config().replace_targets(body.targets, body.loaded_ids)
+    except TargetsChanged as e:
+        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    return json_response(dict(targets=targets), HTTPStatus.OK)
+
+
+@map_bp.delete('/nuclear/targets/<target_id:int>')
+@openapi.description('Delete a saved nuclear target by ID')
+async def delete_target(_: Request, target_id: int):
+    if get_map_nuclear_config().delete_target(target_id):
+        return response.empty(HTTPStatus.NO_CONTENT)
+    return response.json({'error': 'Target not found'}, HTTPStatus.NOT_FOUND)
 
 
 @map_bp.get('/search')
@@ -318,3 +346,50 @@ async def get_export_pdf(_: Request, export_id: str):
     except EXPORT_ERRORS as e:
         return _export_error(e)
     return await response.file(pdf, mime_type='application/pdf', filename='map.pdf')
+
+
+@map_bp.get('/fallout/climatology')
+@openapi.description('Which months of the fallout climatology (30 past days of winds each) are kept')
+def get_fallout_climatology(_: Request):
+    return json_response(climatology.status(), HTTPStatus.OK)
+
+
+@map_bp.get('/fallout/climatology/<month:int>')
+@openapi.description('One month of the fallout climatology, as kept (gzip)')
+async def get_fallout_climatology_month(_: Request, month: int):
+    path = climatology.month_path(month)
+    if not path:
+        return response.json({'error': f'Month {month} of the climatology is not kept'}, HTTPStatus.NOT_FOUND)
+    return await response.file(path, mime_type='application/octet-stream')
+
+
+@map_bp.get('/fallout/winds/latest')
+@openapi.description('The field of forecast winds aloft fetched most recently')
+def get_latest_fallout_winds(_: Request):
+    return json_response(dict(winds=winds.latest_field()), HTTPStatus.OK)
+
+
+@map_bp.get('/weather')
+@openapi.description('The weather subscription: whether it is on, its download, and the forecast kept')
+def get_weather(request: Request):
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)
+
+
+@map_bp.put('/weather')
+@openapi.description('Subscribe to the weather (a forecast around the nuclear targets, every day), or not')
+@validate(schema.MapWeatherRequest)
+@wrol_mode_check
+async def put_weather(request: Request, body: schema.MapWeatherRequest):
+    with request.ctx.db.write() as session:
+        winds.set_weather_subscription(session, bool(body.enabled))
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)
+
+
+@map_bp.post('/weather/download')
+@openapi.description('Download the weather now, rather than when it is next due')
+@wrol_mode_check
+async def post_weather_download(request: Request):
+    with request.ctx.db.write() as session:
+        if not winds.download_weather_now(session):
+            return response.json({'error': 'The weather is not subscribed to'}, HTTPStatus.BAD_REQUEST)
+    return json_response(winds.weather_status(request.ctx.session), HTTPStatus.OK)

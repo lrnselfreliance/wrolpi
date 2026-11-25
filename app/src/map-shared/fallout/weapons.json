@@ -1,0 +1,117 @@
+{
+  "_about": "Nuclear weapons which are deployed or in active stockpiles (as of the 2025-2026 sources below), for the fallout simulator.  No retired or historical weapons.  Every yield is quoted from its source.",
+  "_rules": [
+    "yield_kt is the most recent source's single figure; where the sources give only a range, or disagree, it is the top of it (the case with the most fallout).  yield_range_kt is the range the sources give.",
+    "Variable-yield weapons have one entry for each setting a source gives.",
+    "No public source gives the fission share of any warhead.  fission_fraction is assumed, as Glasstone and Dolan (1977, 9.94) plan for: 0.5 for a two-stage thermonuclear weapon (most derive at least half their yield from fission), 1.0 for a fission or boosted-fission weapon, and for the W76-2, which the source says uses only its fission primary.",
+    "Weapons whose yield no source gives are left out (see _omitted)."
+  ],
+  "sources": {
+    "SIPRI26": "SIPRI Yearbook 2026, chapter 8, World nuclear forces, Tables 8A.2-8A.10 (data as of January 2026). https://www.sipri.org/sites/default/files/YB26%2008%20World%20Nuclear%20Forces.pdf",
+    "US26": "H. M. Kristensen, M. Korda et al., United States nuclear weapons, 2026, Bulletin of the Atomic Scientists 82(2):119-150, doi:10.1080/00963402.2026.2633029.",
+    "RU26": "Kristensen, Korda et al., Russian nuclear weapons, 2026, Bulletin of the Atomic Scientists 82(3):221-254, Table 1. https://thebulletin.org/wp-content/uploads/2026/05/rbul_a_2659527_t0001-full.pdf",
+    "CN26": "Kristensen, Korda et al., Chinese nuclear weapons, 2026, Bulletin of the Atomic Scientists (July 2026), Table 1. https://thebulletin.org/wp-content/uploads/2026/07/rbul_a_2691662_t0001.pdf",
+    "CN24": "Chinese nuclear weapons, 2024, Bulletin of the Atomic Scientists, Table 1. https://thebulletin.org/wp-content/uploads/2024/01/rbul_a_2295206_t0001_withnotes.pdf",
+    "IN26": "Indian nuclear weapons, 2026, Bulletin of the Atomic Scientists 82(5):373-392, Table 1. https://thebulletin.org/wp-content/uploads/2026/09/rbul_a_2718785_t0001_full.pdf",
+    "PK25": "Pakistan nuclear weapons, 2025, Bulletin of the Atomic Scientists 81(5):386-408, Table 1. https://thebulletin.org/wp-content/uploads/2025/09/rbul_a_2543685_t0001-full.png",
+    "NK24": "North Korean nuclear weapons, 2024, Bulletin of the Atomic Scientists (July 2024). https://thebulletin.org/premium/2024-07/north-korean-nuclear-weapons-2024/",
+    "FAS16": "Federation of American Scientists, B61-12 earth penetration (2016). https://fas.org/blogs/security/2016/01/b61-12_earth-penetration",
+    "FEMA": "FEMA, Planning Guidance for Response to a Nuclear Detonation (third edition, 2022): planning scenarios of improvised nuclear devices of 0.1 to 10 kt detonated at ground level."
+  },
+  "groups": [
+    {
+      "name": "United States",
+      "weapons": [
+        {"key": "w78", "name": "W78 (Minuteman III)", "yield_kt": 335, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "1-3 x W78 x 335 kt"},
+        {"key": "w87-0", "name": "W87-0 (Minuteman III)", "yield_kt": 300, "fission_fraction": 0.5, "status": "deployed", "source": "US26", "quote": "a 300-kiloton W87/Mk21"},
+        {"key": "w76-1", "name": "W76-1 (Trident II D5)", "yield_kt": 90, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "1-8 x W76-1 x 90 kt"},
+        {"key": "w76-2", "name": "W76-2 low-yield (Trident II D5)", "yield_kt": 8, "fission_fraction": 1.0, "status": "deployed", "source": "US26", "quote": "only uses the warhead fission primary to produce a yield of about 8 kilotons"},
+        {"key": "w88", "name": "W88 (Trident II D5)", "yield_kt": 455, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "1-8 x W88 x 455 kt"},
+        {"key": "w80-1-low", "name": "W80-1 cruise missile", "yield_kt": 5, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "AGM-86B ALCMs x 5-150 kt"},
+        {"key": "w80-1-high", "name": "W80-1 cruise missile", "yield_kt": 150, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "AGM-86B ALCMs x 5-150 kt"},
+        {"key": "b61-11", "name": "B61-11 earth-penetrating bomb", "yield_kt": 400, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "Up to 16 x B61-11 x 400 kt"},
+        {"key": "b61-12-0.3", "name": "B61-12 bomb", "yield_kt": 0.3, "fission_fraction": 0.5, "status": "deployed", "source": "FAS16", "quote": "four selectable explosive yields: 0.3 kilotons (kt), 1.5 kt, 10 kt and 50 kt"},
+        {"key": "b61-12-1.5", "name": "B61-12 bomb", "yield_kt": 1.5, "fission_fraction": 0.5, "status": "deployed", "source": "FAS16", "quote": "four selectable explosive yields: 0.3 kilotons (kt), 1.5 kt, 10 kt and 50 kt"},
+        {"key": "b61-12-10", "name": "B61-12 bomb", "yield_kt": 10, "fission_fraction": 0.5, "status": "deployed", "source": "FAS16", "quote": "four selectable explosive yields: 0.3 kilotons (kt), 1.5 kt, 10 kt and 50 kt"},
+        {"key": "b61-12-50", "name": "B61-12 bomb", "yield_kt": 50, "fission_fraction": 0.5, "status": "deployed", "source": "US26", "quote": "maximum yield of approximately 50 kilotons and several lower-yield options"},
+        {"key": "b61-13", "name": "B61-13 bomb", "yield_kt": 360, "fission_fraction": 0.5, "status": "in production", "source": "US26", "quote": "will have a maximum yield close to the B61-7's 360 kilotons"},
+        {"key": "b83-1", "name": "B83-1 bomb", "yield_kt": 1200, "fission_fraction": 0.5, "status": "stockpile (being retired)", "source": "US26", "quote": "explosive yield of up to 1.2 megaton"}
+      ]
+    },
+    {
+      "name": "Russia",
+      "weapons": [
+        {"key": "rs-20v", "name": "RS-20V Voevoda (SS-18) ICBM", "yield_kt": 800, "yield_range_kt": [500, 800], "fission_fraction": 0.5, "status": "deployed", "source": "RU26", "quote": "10 x 500-800 (MIRV)"},
+        {"key": "topol-m", "name": "Topol-M (SS-27 Mod 1) ICBM", "yield_kt": 800, "fission_fraction": 0.5, "status": "deployed", "source": "RU26", "quote": "1 x 800"},
+        {"key": "yars", "name": "RS-24 Yars (SS-27 Mod 2) ICBM", "yield_kt": 250, "yield_range_kt": [100, 250], "fission_fraction": 0.5, "status": "deployed", "source": "RU26, SIPRI26", "quote": "RU26: 3 x 100? (MIRV); SIPRI26: 1-3 x 250 kt"},
+        {"key": "sarmat", "name": "RS-28 Sarmat (SS-29) ICBM", "yield_kt": 500, "fission_fraction": 0.5, "status": "being deployed", "source": "RU26", "quote": "10 x 500? (MIRV)"},
+        {"key": "sineva", "name": "Sineva (SS-N-23) submarine missile", "yield_kt": 100, "fission_fraction": 0.5, "status": "deployed", "source": "RU26", "quote": "4 x 100 (MIRV)"},
+        {"key": "bulava", "name": "Bulava (SS-N-32) submarine missile", "yield_kt": 100, "fission_fraction": 0.5, "status": "deployed", "source": "RU26", "quote": "6 x 100 (MIRV)"},
+        {"key": "ru-alcm", "name": "Kh-55 / Kh-102 cruise missile", "yield_kt": 200, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "Up to 14 x 200 kt ALCMs, bombs"},
+        {"key": "oreshnik", "name": "Oreshnik intermediate-range missile", "yield_kt": 250, "fission_fraction": 0.5, "status": "deployed", "source": "RU26", "quote": "6 x 250"},
+        {"key": "iskander-m", "name": "Iskander-M short-range missile", "yield_kt": 100, "yield_range_kt": [10, 100], "fission_fraction": 0.5, "status": "stockpile", "source": "RU26", "quote": "1 x 10-100"},
+        {"key": "9m729", "name": "9M729 (SSC-8) cruise missile", "yield_kt": 100, "yield_range_kt": [10, 100], "fission_fraction": 0.5, "status": "stockpile", "source": "RU26", "quote": "1 x 10-100"},
+        {"key": "redut", "name": "Redut coastal missile", "yield_kt": 350, "fission_fraction": 0.5, "status": "stockpile", "source": "RU26", "quote": "1 x 350"}
+      ]
+    },
+    {
+      "name": "China",
+      "_note": "CN26 gives 425 kt for most warheads (updated from Zhang 2025); the 2024 table gave 200-300 kt for the same warheads.",
+      "weapons": [
+        {"key": "df-5a", "name": "DF-5A ICBM", "yield_kt": 4500, "yield_range_kt": [4000, 5000], "fission_fraction": 0.5, "status": "deployed", "source": "CN26, CN24", "quote": "CN26: 1 x 4.5 MT; CN24: 1 x 4,000-5,000"},
+        {"key": "df-5b", "name": "DF-5B ICBM", "yield_kt": 425, "yield_range_kt": [200, 425], "fission_fraction": 0.5, "status": "deployed", "source": "CN26, CN24", "quote": "CN26: Up to 5 x 425"},
+        {"key": "df-41", "name": "DF-41 ICBM", "yield_kt": 425, "yield_range_kt": [200, 425], "fission_fraction": 0.5, "status": "deployed", "source": "CN26, CN24", "quote": "CN26: Up to 3 x 425"},
+        {"key": "df-31", "name": "DF-31A / DF-31AG ICBM", "yield_kt": 425, "yield_range_kt": [200, 425], "fission_fraction": 0.5, "status": "deployed", "source": "CN26, CN24", "quote": "CN26: 1 x 425"},
+        {"key": "df-26", "name": "DF-26 intermediate-range missile", "yield_kt": 425, "yield_range_kt": [200, 425], "fission_fraction": 0.5, "status": "deployed", "source": "CN26, CN24", "quote": "CN26: 1 x 425; CN24: 1 x 200-300"},
+        {"key": "jl-3", "name": "JL-3 submarine missile", "yield_kt": 425, "fission_fraction": 0.5, "status": "deployed", "source": "CN26", "quote": "1 x 425"}
+      ]
+    },
+    {
+      "name": "United Kingdom",
+      "weapons": [
+        {"key": "holbrook", "name": "Holbrook (Trident II D5)", "yield_kt": 100, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "1-8 x 100 kt"}
+      ]
+    },
+    {
+      "name": "France",
+      "_note": "SIPRI26: the TNA's yield is only bounded (less than 300 kt; MBDA calls it 'medium energy'), and it is thought to follow the TNO design, 150 kt. The old TN 81's 300 kt is not this warhead's.",
+      "weapons": [
+        {"key": "tno", "name": "TNO / TNO-2 (M51 submarine missile)", "yield_kt": 150, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "4-6 x 150 kt TNO"},
+        {"key": "tna", "name": "TNA (ASMPA-R cruise missile)", "yield_kt": 150, "fission_fraction": 0.5, "status": "deployed", "source": "SIPRI26", "quote": "ASMPA-R/1 x [<300 kt]"}
+      ]
+    },
+    {
+      "name": "India",
+      "_note": "IN26: the yields of India's nuclear warheads are not known, perhaps up to 40 kt.",
+      "weapons": [
+        {"key": "in-12", "name": "Bomb, Prithvi-II or K-15 (12 kt)", "yield_kt": 12, "fission_fraction": 1.0, "status": "deployed", "source": "IN26", "quote": "1 x 12 kt"},
+        {"key": "agni", "name": "Agni missiles", "yield_kt": 40, "yield_range_kt": [10, 40], "fission_fraction": 1.0, "status": "deployed", "source": "IN26", "quote": "1 x 10-40 kt"}
+      ]
+    },
+    {
+      "name": "Pakistan",
+      "_note": "PK25: yields are based on the range measured in the 1998 nuclear tests.",
+      "weapons": [
+        {"key": "pk-short", "name": "Bomb or short-range missile", "yield_kt": 12, "yield_range_kt": [5, 12], "fission_fraction": 1.0, "status": "stockpile", "source": "PK25", "quote": "1 x 5-12 kt"},
+        {"key": "pk-medium", "name": "Shaheen-II / Ghauri missile", "yield_kt": 40, "yield_range_kt": [10, 40], "fission_fraction": 1.0, "status": "stockpile", "source": "PK25", "quote": "1 x 10-40 kt"}
+      ]
+    },
+    {
+      "name": "North Korea",
+      "weapons": [
+        {"key": "kp-fission", "name": "Fission warhead", "yield_kt": 20, "yield_range_kt": [10, 20], "fission_fraction": 1.0, "status": "deployed", "source": "NK24", "quote": "single-stage fission weapons with yields possibly between 10 and 20 kilotons"}
+      ]
+    },
+    {
+      "name": "Improvised nuclear device",
+      "weapons": [
+        {"key": "ind-1", "name": "Improvised device", "yield_kt": 1, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"},
+        {"key": "ind-10", "name": "Improvised device", "yield_kt": 10, "fission_fraction": 1.0, "status": "planning scenario", "source": "FEMA", "quote": "improvised nuclear devices of 0.1 to 10 kt detonated at ground level"}
+      ]
+    }
+  ],
+  "_omitted": [
+    "Avangard (Russia), Poseidon (Russia, not deployed), S-300/S-400 and 53T6 interceptors (Russia, air and missile defense), DF-5C, DF-61 and H-6N bombs (China), Israel's arsenal, North Korea's thermonuclear warhead: no source gives a yield.",
+    "W87-1, W93, SLCM-N (United States): not deployed, and no yield is given."
+  ]
+}

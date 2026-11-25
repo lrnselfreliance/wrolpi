@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -15,13 +16,28 @@ class MapFileVisibleRequest:
 
 @dataclass
 class MapPinRequest:
-    lat: float
-    lon: float
+    # A browser sends a whole number of degrees as an integer.
+    lat: float | int
+    lon: float | int
     label: str
     color: str = "red"
 
 
 @dataclass
 class MapPinUpdateRequest:
-    label: str = None
-    color: str = None
+    label: Optional[str] = None
+    color: Optional[str] = None
+
+
+@dataclass
+class MapWeatherRequest:
+    # Whether the weather (a forecast around the nuclear targets) is downloaded every day.
+    enabled: bool
+
+
+@dataclass
+class MapTargetsRequest:
+    # The targets to save ([{lat, lon, label, weapon?, yield_kt?, fission_fraction?, id?}]), and the ids
+    # of the saved targets they were started from.
+    targets: list
+    loaded_ids: list

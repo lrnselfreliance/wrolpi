@@ -1,0 +1,15 @@
+{
+  "_source": "FM 3-11.3, Multiservice Tactics, Techniques, and Procedures for Chemical, Biological, Radiological, and Nuclear Contamination Avoidance (2006), Appendix G. Approved for public release; distribution is unlimited.",
+  "_how": "Read by eye from the nomograms (Figures G-21 and G-22), to about 5%. Figure G-22's scales are logarithmic; their pixel rows (on the 1103 x 1400 image) were fitted as row = a - b log10(value / c), which reproduces the appendix's two worked examples (50 kt at 9 km/h: 22 km; 100 kt at 16 knots: 30 nautical miles) to 2%.",
+  "cloud": {
+    "_what": "Figure G-21, Radioactive Cloud and Stem Parameters, stabilized at H+10 minutes: [yield kt, cloud top km, cloud bottom km, cloud radius km], above the burst.",
+    "rows": [[1, 3.8, 2.05, 1.0], [10, 8.3, 5.0, 2.6], [50, 12.8, 8.4, 5.6], [100, 14.3, 9.3, 6.9], [300, 17.0, 11.0, 11.0], [1000, 21.8, 13.5, 19.0], [10000, 33.0, 19.3, 46.0]]
+  },
+  "zone1": {
+    "_what": "Figure G-22, Determination of Zone I, Downwind Distance: a straight line from the effective downwind speed (left) to the yield (right) crosses the distance (middle). Zone I: where someone outdoors may get 125 cGy or more within 4 hours of the fallout arriving. Surface burst, all fission.",
+    "wind_kmh": {"x": 148, "a": 604, "b": 188, "c": 100},
+    "yield_kt": {"x": 940, "a": 538, "b": 195, "c": 100},
+    "distance_km": {"x": 522, "a": 577, "b": 194, "c": 100},
+    "examples": [[50, 9, 22], [100, 29.6, 55.6]]
+  }
+}

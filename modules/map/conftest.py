@@ -58,3 +58,14 @@ def map_export_root(tmp_path, monkeypatch) -> Path:
     root = tmp_path / 'map-export'
     monkeypatch.setattr(export_job, 'EXPORT_ROOT', root)
     return root
+
+
+@pytest.fixture
+def test_nuclear_config(test_directory, monkeypatch):
+    """The map's nuclear targets, kept in the test's media directory."""
+    from modules.map import nuclear
+    (test_directory / 'config').mkdir(exist_ok=True)
+    config = nuclear.MapNuclearConfig()
+    config.initialize()
+    monkeypatch.setattr(nuclear, 'TEST_MAP_NUCLEAR_CONFIG', config)
+    yield config

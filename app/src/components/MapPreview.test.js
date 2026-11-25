@@ -102,6 +102,7 @@ const CATALOG = [
 
 jest.mock('../api', () => ({
     ...jest.requireActual('../api'),
+    getWeather: async () => ({enabled: false, download: null, targets: 0, field: null}),
     getMapFiles: jest.fn(),
     fetchMapSubscriptions: jest.fn(),
     getMapPins: jest.fn(),

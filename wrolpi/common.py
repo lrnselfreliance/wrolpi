@@ -499,6 +499,7 @@ SYNCED_CONFIG_FILE_NAMES = frozenset({
     'domains.yaml',
     'download_manager.yaml',
     'inventory/catalog.yaml',
+    'map_nuclear.yaml',
     'map_pins.yaml',
     'maps.yaml',
     'playlists.yaml',
@@ -1512,6 +1513,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if map_pins_config := get_map_pins_config():
         all_configs[map_pins_config.file_name] = map_pins_config
 
+    from modules.map.nuclear import get_map_nuclear_config
+    if map_nuclear_config := get_map_nuclear_config():
+        all_configs[map_nuclear_config.file_name] = map_nuclear_config
+
     from modules.map.config import get_maps_config
     if maps_config := get_maps_config():
         all_configs[maps_config.file_name] = maps_config
@@ -1699,6 +1704,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import map pins config: {e}')
         results['map_pins'] = False
+
+    # The map's nuclear targets (YAML-only, no DB)
+    try:
+        from modules.map.nuclear import get_map_nuclear_config
+        await asyncio.to_thread(get_map_nuclear_config().import_config)
+        results['map_nuclear'] = True
+        logger.debug('map nuclear config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import map nuclear config: {e}')
+        results['map_nuclear'] = False
 
     # Maps (YAML-only, no DB)
     try:

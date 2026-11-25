@@ -1712,6 +1712,88 @@ export async function mapUnsubscribe(region) {
     }
 }
 
+// Which months of the fallout climatology are kept: {version, months, missing, published}, or null.
+export async function getFalloutClimatology() {
+    const response = await apiGet(`${API_URI}/map/fallout/climatology`);
+    return response.ok ? await response.json() : null;
+}
+
+// One month of the fallout climatology, as kept (gzip bytes), or null.
+export async function getFalloutClimatologyMonth(month) {
+    const response = await apiGet(`${API_URI}/map/fallout/climatology/${month}`);
+    return response.ok ? await response.arrayBuffer() : null;
+}
+
+// The field of forecast winds aloft fetched most recently (the fallout simulator), or null.
+export async function getLatestFalloutWinds() {
+    const response = await apiGet(`${API_URI}/map/fallout/winds/latest`);
+    if (response.ok) {
+        return (await response.json()).winds;
+    }
+    return null;
+}
+
+// The saved nuclear targets ([{id, lat, lon, label, created, weapon, yield_kt?, fission_fraction?}]), or
+// undefined when they could not be fetched.
+export async function getMapTargets() {
+    const response = await apiGet(`${API_URI}/map/nuclear/targets`);
+    if (response.ok) {
+        return (await response.json()).targets;
+    }
+}
+
+export async function deleteMapTarget(targetId) {
+    const response = await apiDelete(`${API_URI}/map/nuclear/targets/${targetId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not delete the target');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+    return response.ok;
+}
+
+// Save `targets` ([{lat, lon, label, weapon, yield_kt?, fission_fraction?, id?}]) in place of the
+// saved targets, which are those of `loadedIds` (refused if they are not): the saved targets, or null.
+export async function saveMapTargets(targets, loadedIds) {
+    const response = await apiPut(`${API_URI}/map/nuclear/targets`, {targets, loaded_ids: loadedIds});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not save the targets');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+        return null;
+    }
+    return (await response.json()).targets;
+}
+
+// The weather subscription (a forecast around the nuclear targets, downloaded every day): {enabled,
+// download, targets, spacing, points, seconds, field}, or undefined when it could not be fetched.
+export async function getWeather() {
+    const response = await apiGet(`${API_URI}/map/weather`);
+    if (response.ok) {
+        return await response.json();
+    }
+}
+
+// Subscribe to the weather, or not: the subscription as it is then, or null.
+export async function setWeatherSubscription(enabled) {
+    const response = await apiPut(`${API_URI}/map/weather`, {enabled});
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not change the weather download');
+    toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    return null;
+}
+
+// Download the weather now, rather than when it is next due: the subscription as it is then, or null.
+export async function downloadWeatherNow() {
+    const response = await apiPost(`${API_URI}/map/weather/download`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not download the weather');
+    toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    return null;
+}
+
 export async function getMapPins() {
     const response = await apiGet(`${API_URI}/map/pins`);
     if (response.ok) {

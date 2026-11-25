@@ -28,6 +28,11 @@ jest.mock('../api', () => ({
     getMapFiles: jest.fn(),
     fetchMapSubscriptions: jest.fn(),
     getMapPins: jest.fn(),
+    getMapTargets: jest.fn(),
+    getWeather: jest.fn(),
+    setWeatherSubscription: jest.fn(),
+    downloadWeatherNow: jest.fn(),
+    deleteMapTarget: jest.fn(),
     setMapFileVisible: jest.fn(),
     rebuildMapSearchIndex: jest.fn(),
 }));
@@ -38,6 +43,7 @@ const pending = () => new Promise(() => {
 });
 const NO_PINS = /No pins\. Right-click/;
 const NO_RESULTS = /^No results$/;
+const WEATHER_OFF = {enabled: false, download: null, targets: 3, spacing: 1, points: 160, seconds: 61, field: null};
 
 // The pins page renders one table per breakpoint through `Media`, so the real media provider is
 // needed; the queries below tolerate either variant being in the tree.
@@ -59,6 +65,9 @@ beforeEach(() => {
     api.getMapFiles.mockResolvedValue({files: []});
     api.fetchMapSubscriptions.mockResolvedValue({catalog: [], subscriptions: []});
     api.getMapPins.mockResolvedValue({pins: []});
+    api.getMapTargets.mockResolvedValue([]);
+    api.deleteMapTarget.mockResolvedValue(true);
+    api.getWeather.mockResolvedValue(WEATHER_OFF);
 });
 
 describe('the Pins tab', () => {
@@ -103,6 +112,61 @@ describe('the Pins tab', () => {
         fireEvent.click(screen.getAllByRole('button', {name: 'Solar estimate for Camp'})[0]);
         expect(window.location.pathname).toBe('/more/calculators');
         expect(window.location.search).toBe('?calc=solar&lat=40.1235&lon=-111.2');
+    });
+});
+
+describe('the Pins tab\'s nuclear targets', () => {
+    const {within} = require('@testing-library/react');
+    const targets = [
+        {id: 1, lat: 40.1, lon: -111.2, label: 'Base', created: '2026-11-24', weapon: 'w88', fission_fraction: 0.5},
+        {id: 2, lat: 41, lon: -112, label: 'Depot', created: '2026-11-24', weapon: 'custom', yield_kt: 20,
+            fission_fraction: 1},
+    ];
+
+    test('are listed in their own table, apart from the pins', async () => {
+        api.getMapPins.mockResolvedValue({pins: [{id: 1, lat: 40.1, lon: -111.2, label: 'Camp', color: '#f00'}]});
+        api.getMapTargets.mockResolvedValue(targets);
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        const tables = screen.getAllByRole('table');
+        expect(tables).toHaveLength(2);
+        const [pinsTable, table] = tables;
+        expect(within(pinsTable).queryByText('Base')).toBeNull();
+        expect(within(pinsTable).getByText('Camp')).toBeTruthy();
+        expect(within(table).queryByText('Camp')).toBeNull();
+        expect(within(table).getByText('Base')).toBeTruthy();
+        expect(within(table).getByText(/W88.*455 kt, half fission/)).toBeTruthy();
+        expect(within(table).getByText(/A yield of my own, 20 kt/)).toBeTruthy();
+    });
+
+    test('says when there are none, and when they could not be fetched', async () => {
+        const {unmount} = renderAt('/map/pins');
+        await act(async () => {
+        });
+        expect(screen.getAllByText(/No targets\. Turn on nuclear mode/).length).toBeGreaterThan(0);
+        unmount();
+        api.getMapTargets.mockResolvedValue(undefined);
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        expect(screen.getByText('Could not fetch the nuclear targets')).toBeTruthy();
+        expect(screen.queryAllByText(/No targets\./)).toHaveLength(0);
+    });
+
+    test('delete one, and are fetched again', async () => {
+        api.getMapTargets.mockResolvedValueOnce(targets).mockResolvedValueOnce(targets.slice(1));
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        fireEvent.click(screen.getAllByRole('button', {name: 'Delete Base'})[0]);
+        // The delete is confirmed first.
+        await act(async () => {
+            fireEvent.click(await screen.findByRole('button', {name: 'Delete'}));
+        });
+        expect(api.deleteMapTarget).toHaveBeenCalledWith(1);
+        expect(api.getMapTargets).toHaveBeenCalledTimes(2);
+        expect(screen.queryAllByText('Base')).toHaveLength(0);
     });
 });
 
@@ -232,5 +296,67 @@ describe('the Manage tab files table', () => {
             fireEvent.click(toggle);
         });
         expect(api.setMapFileVisible).toHaveBeenCalledWith('satellite.pmtiles', true);
+    });
+});
+
+describe('the Manage tab\'s weather', () => {
+    const hour = 3600000;
+    const field = (fromHours, toHours) => ({
+        fetched_at: new Date().toISOString(), spacing: 1, points: 160, size: 5 * 1024 * 1024,
+        first_hour: new Date(Date.now() + fromHours * hour).toISOString(),
+        last_hour: new Date(Date.now() + toHours * hour).toISOString(),
+    });
+
+    test('is turned on with its toggle, and says what it downloads', async () => {
+        api.setWeatherSubscription.mockResolvedValue({...WEATHER_OFF, enabled: true,
+            download: {status: 'new', next_download: null, last_successful_download: null}});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText('Weather')).toBeInTheDocument();
+        expect(screen.getByText(/Around 3 targets: 160 places every 1°, which takes about 2 minutes/)).toBeInTheDocument();
+        expect(screen.getByText('No forecast has been downloaded.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Download now'})).toBeNull();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', {name: /Download the weather forecast from Open-Meteo/}));
+        });
+        expect(api.setWeatherSubscription).toHaveBeenCalledWith(true);
+        expect(screen.getByText('Downloading the forecast…')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Download now'})).toBeDisabled();
+    });
+
+    test('shows the forecast kept, and whether it is recent enough for bursts now', async () => {
+        const done = {status: 'complete', last_successful_download: new Date().toISOString(),
+            next_download: new Date(Date.now() + 24 * hour).toISOString()};
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, enabled: true, download: done, field: field(-5, 90)});
+        api.downloadWeatherNow.mockResolvedValue({...WEATHER_OFF, enabled: true, download: {...done, status: 'new'}});
+        const {unmount} = renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/Forecast kept: .* 160 places every 1°, 5.0 MB/)).toBeInTheDocument();
+        expect(screen.getByText(/It has the winds for bursts now/)).toBeInTheDocument();
+        expect(screen.getByText(/Last downloaded .*\. Next /)).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', {name: 'Download now'}));
+        });
+        expect(api.downloadWeatherNow).toHaveBeenCalled();
+        unmount();
+
+        // Ending a day from now: too old for bursts now.
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, enabled: true,
+            download: {status: 'failed', error: 'The forecast service answered HTTP 500'}, field: field(-60, 24)});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/It is too old for bursts now/)).toBeInTheDocument();
+        expect(screen.getByText(/The last download failed: The forecast service answered HTTP 500/)).toBeInTheDocument();
+    });
+
+    test('says when there are no targets to download around', async () => {
+        api.getWeather.mockResolvedValue({...WEATHER_OFF, targets: 0, spacing: null, points: null});
+        renderAt('/map/manage');
+        await act(async () => {
+        });
+        expect(screen.getByText(/No nuclear targets are saved/)).toBeInTheDocument();
     });
 });

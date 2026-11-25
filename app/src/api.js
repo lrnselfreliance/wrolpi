@@ -1733,10 +1733,28 @@ export async function getLatestFalloutWinds() {
     return null;
 }
 
+// The saved nuclear targets ([{id, lat, lon, label, created, weapon, yield_kt?, fission_fraction?}]), or
+// undefined when they could not be fetched.
+export async function getMapTargets() {
+    const response = await apiGet(`${API_URI}/map/nuclear/targets`);
+    if (response.ok) {
+        return (await response.json()).targets;
+    }
+}
+
+export async function deleteMapTarget(targetId) {
+    const response = await apiDelete(`${API_URI}/map/nuclear/targets/${targetId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not delete the target');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+    return response.ok;
+}
+
 // Save `targets` ([{lat, lon, label, weapon, yield_kt?, fission_fraction?, id?}]) in place of the
 // saved targets, which are those of `loadedIds` (refused if they are not): the saved targets, or null.
 export async function saveMapTargets(targets, loadedIds) {
-    const response = await apiPut(`${API_URI}/map/pins/targets`, {targets, loaded_ids: loadedIds});
+    const response = await apiPut(`${API_URI}/map/nuclear/targets`, {targets, loaded_ids: loadedIds});
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Could not save the targets');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
@@ -1765,10 +1783,8 @@ export async function getMapPins() {
     }
 }
 
-// `kind` is "pin", or "target": a likely detonation site, shown in the map's nuclear mode.  A target
-// may have `weapon` ({weapon, yield_kt, fission_fraction}).
-export async function addMapPin(lat, lon, label, color, kind = "pin", weapon = null) {
-    const body = {lat, lon, label, color, kind, ...(weapon || {})};
+export async function addMapPin(lat, lon, label, color) {
+    const body = {lat, lon, label, color};
     const response = await apiPost(`${API_URI}/map/pins`, body);
     if (response.ok) {
         return await response.json();

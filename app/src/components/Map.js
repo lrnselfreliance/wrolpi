@@ -11,9 +11,11 @@ import {
 } from "./Common";
 import {Route, Routes, useNavigate} from "react-router";
 import {
-    deleteMapFile, deleteMapPin, fetchMapSubscriptions, getMapFiles, getMapPins,
+    deleteMapFile, deleteMapPin, deleteMapTarget, fetchMapSubscriptions, getMapFiles, getMapPins, getMapTargets,
     mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, setMapFileVisible, updateMapPin
 } from "../api";
+import {targetWeapon} from "../map-shared/fallout/targets.js";
+import {formatYieldAndFission} from "../map-shared/fallout/weapons.js";
 import {Button, Divider, Group, Header, Icon, Modal, Table, TextInput, Toggle} from "./ui";
 import {SortableTable} from "./SortableTable";
 import {Media, StatusContext} from "../contexts/contexts";
@@ -743,6 +745,103 @@ function MapPins() {
                 emptyRow={emptyRow}
             />
         </Media>
+        <MapTargets filter={lowerFilter}/>
+    </>;
+}
+
+// The saved nuclear targets (map_nuclear.yaml), apart from the pins: what each is and where, and
+// deleting one.  `filter` (lower case) matches a name or coordinates.
+export function MapTargets({filter = ''}) {
+    // null = pending, undefined = fetch failed, [] = no targets.
+    const [targets, setTargets] = useState(null);
+    const navigate = useNavigate();
+    const gen = useRef(0);
+
+    const fetchTargets = async () => {
+        const mine = ++gen.current;
+        const saved = await getMapTargets();
+        if (mine === gen.current) setTargets(saved);
+    };
+
+    useEffect(() => {
+        fetchTargets();
+    }, []);
+
+    const handleDelete = async (targetId) => {
+        await deleteMapTarget(targetId);
+        await fetchTargets();
+    };
+
+    const weaponOf = (target) => {
+        const chosen = targetWeapon(target);
+        return `${chosen.weapon ? chosen.weapon.name : 'A yield of my own'}, `
+            + formatYieldAndFission(chosen.yieldKt, chosen.fissionFraction);
+    };
+    const place = (target) => {
+        const to = `/map?lat=${target.lat}&lon=${target.lon}&z=10`;
+        return <a href={to} onClick={(e) => {
+            e.preventDefault();
+            navigate(to);
+        }}>{target.lat.toFixed(4)}, {target.lon.toFixed(4)}</a>;
+    };
+    const deleteButton = (target) => <APIButton
+        size='xs'
+        role='danger'
+        icon='trash'
+        aria-label={`Delete ${target.label}`}
+        confirmContent='Delete this target?'
+        confirmButton='Delete'
+        onClick={() => handleDelete(target.id)}
+    />;
+
+    const fullHeaders = [
+        {key: 'label', text: 'Target', sortBy: i => i.label.toLowerCase()},
+        {key: 'weapon', text: 'Weapon', sortBy: i => targetWeapon(i).yieldKt},
+        {key: 'coords', text: 'Coordinates', sortBy: i => i.lat},
+        {key: 'created', text: 'Created', sortBy: i => i.created},
+        {key: 'actions', text: '', sortBy: null},
+    ];
+    const fullRowFunc = (target) => <Table.Row key={target.id}>
+        <Table.Cell><span aria-hidden>☢ </span>{target.label}</Table.Cell>
+        <Table.Cell>{weaponOf(target)}</Table.Cell>
+        <Table.Cell>{place(target)}</Table.Cell>
+        <Table.Cell>{target.created}</Table.Cell>
+        <Table.Cell>{deleteButton(target)}</Table.Cell>
+    </Table.Row>;
+
+    const mobileHeaders = [
+        {key: 'label', text: 'Target', sortBy: i => i.label.toLowerCase()},
+        {key: 'actions', text: '', sortBy: null},
+    ];
+    const mobileRowFunc = (target) => <Table.Row key={target.id}>
+        <Table.Cell>
+            <span aria-hidden>☢ </span>{target.label}
+            <div style={{fontSize: '0.6875rem', color: 'var(--muted)'}}>{weaponOf(target)}</div>
+            <div style={{fontSize: '0.6875rem'}}>{place(target)}</div>
+        </Table.Cell>
+        <Table.Cell>{deleteButton(target)}</Table.Cell>
+    </Table.Row>;
+
+    const emptyRow = <Table.Row>
+        <Table.Cell colSpan={5}>No targets. Turn on nuclear mode (☢) on the map to add and save some.</Table.Cell>
+    </Table.Row>;
+
+    const shown = filter && targets
+        ? targets.filter(t => (t.label || '').toLowerCase().includes(filter) ||
+            `${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}`.includes(filter))
+        : targets;
+    return <>
+        <Header as='h3'>Nuclear Targets</Header>
+        {targets === undefined ? <ErrorMessage>Could not fetch the nuclear targets</ErrorMessage> : <>
+            <Media at='mobile'>
+                <SortableTable tableHeaders={mobileHeaders} data={shown} rowFunc={mobileRowFunc} rowKey='id'
+                               defaultSortColumn='label' emptyRow={emptyRow}/>
+            </Media>
+            <Media greaterThanOrEqual='tablet'>
+                <SortableTable tableHeaders={fullHeaders} data={shown} rowFunc={fullRowFunc} rowKey='id'
+                               defaultSortColumn='label' emptyRow={emptyRow}/>
+            </Media>
+        </>}
     </>;
 }
 

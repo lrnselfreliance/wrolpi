@@ -28,6 +28,8 @@ jest.mock('../api', () => ({
     getMapFiles: jest.fn(),
     fetchMapSubscriptions: jest.fn(),
     getMapPins: jest.fn(),
+    getMapTargets: jest.fn(),
+    deleteMapTarget: jest.fn(),
     setMapFileVisible: jest.fn(),
     rebuildMapSearchIndex: jest.fn(),
 }));
@@ -59,6 +61,8 @@ beforeEach(() => {
     api.getMapFiles.mockResolvedValue({files: []});
     api.fetchMapSubscriptions.mockResolvedValue({catalog: [], subscriptions: []});
     api.getMapPins.mockResolvedValue({pins: []});
+    api.getMapTargets.mockResolvedValue([]);
+    api.deleteMapTarget.mockResolvedValue(true);
 });
 
 describe('the Pins tab', () => {
@@ -103,6 +107,61 @@ describe('the Pins tab', () => {
         fireEvent.click(screen.getAllByRole('button', {name: 'Solar estimate for Camp'})[0]);
         expect(window.location.pathname).toBe('/more/calculators');
         expect(window.location.search).toBe('?calc=solar&lat=40.1235&lon=-111.2');
+    });
+});
+
+describe('the Pins tab\'s nuclear targets', () => {
+    const {within} = require('@testing-library/react');
+    const targets = [
+        {id: 1, lat: 40.1, lon: -111.2, label: 'Base', created: '2026-11-24', weapon: 'w88', fission_fraction: 0.5},
+        {id: 2, lat: 41, lon: -112, label: 'Depot', created: '2026-11-24', weapon: 'custom', yield_kt: 20,
+            fission_fraction: 1},
+    ];
+
+    test('are listed in their own table, apart from the pins', async () => {
+        api.getMapPins.mockResolvedValue({pins: [{id: 1, lat: 40.1, lon: -111.2, label: 'Camp', color: '#f00'}]});
+        api.getMapTargets.mockResolvedValue(targets);
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        const tables = screen.getAllByRole('table');
+        expect(tables).toHaveLength(2);
+        const [pinsTable, table] = tables;
+        expect(within(pinsTable).queryByText('Base')).toBeNull();
+        expect(within(pinsTable).getByText('Camp')).toBeTruthy();
+        expect(within(table).queryByText('Camp')).toBeNull();
+        expect(within(table).getByText('Base')).toBeTruthy();
+        expect(within(table).getByText(/W88.*455 kt, half fission/)).toBeTruthy();
+        expect(within(table).getByText(/A yield of my own, 20 kt/)).toBeTruthy();
+    });
+
+    test('says when there are none, and when they could not be fetched', async () => {
+        const {unmount} = renderAt('/map/pins');
+        await act(async () => {
+        });
+        expect(screen.getAllByText(/No targets\. Turn on nuclear mode/).length).toBeGreaterThan(0);
+        unmount();
+        api.getMapTargets.mockResolvedValue(undefined);
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        expect(screen.getByText('Could not fetch the nuclear targets')).toBeTruthy();
+        expect(screen.queryAllByText(/No targets\./)).toHaveLength(0);
+    });
+
+    test('delete one, and are fetched again', async () => {
+        api.getMapTargets.mockResolvedValueOnce(targets).mockResolvedValueOnce(targets.slice(1));
+        renderAt('/map/pins');
+        await act(async () => {
+        });
+        fireEvent.click(screen.getAllByRole('button', {name: 'Delete Base'})[0]);
+        // The delete is confirmed first.
+        await act(async () => {
+            fireEvent.click(await screen.findByRole('button', {name: 'Delete'}));
+        });
+        expect(api.deleteMapTarget).toHaveBeenCalledWith(1);
+        expect(api.getMapTargets).toHaveBeenCalledTimes(2);
+        expect(screen.queryAllByText('Base')).toHaveLength(0);
     });
 });
 

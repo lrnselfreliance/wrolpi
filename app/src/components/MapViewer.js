@@ -12,6 +12,7 @@ import {
     getMapQuadName,
     getMapFiles,
     getMapPins,
+    getMapTargets,
     searchMap,
     saveMapTargets,
     setMapDefaultLocation,
@@ -747,7 +748,8 @@ export default function MapViewer() {
     const nuclearButtonRef = useRef(null);
     // The fallout view (nuclear mode): open or not.
     const [falloutOpen, setFalloutOpen] = useState(false);
-    const [pins, setPins] = useState([]);
+    // The saved nuclear targets (map_nuclear.yaml).
+    const [savedTargets, setSavedTargets] = useState([]);
     const markersRef = useRef([]);
     // Nuclear mode's targets, those simulated ({key, id (if saved), lat, lon, label, weapon, ...}):
     // tried out, and the saved ones once loaded.  `loadedIds` are the ids the saved targets had when
@@ -1279,10 +1281,8 @@ export default function MapViewer() {
 
         const data = await getMapPins();
         if (!data?.pins) return;
-        setPins(data.pins);
 
-        // Targets are drawn from those simulated (nuclear mode), not from those saved.
-        data.pins.filter((pin) => pin.kind !== "target").forEach((pin) => {
+        data.pins.forEach((pin) => {
             const el = document.createElement("div");
             el.style.cursor = "pointer";
             el.style.width = "24px";
@@ -1336,8 +1336,7 @@ export default function MapViewer() {
         showPins();
     }, [mapReady, nuclear, targets, showPins]);
 
-    // The saved targets, and whether the targets simulated differ from them.
-    const savedTargets = useMemo(() => pins.filter((p) => p.kind === "target"), [pins]);
+    // Whether the targets simulated differ from the saved ones.
     const unsaved = useMemo(() => targetsUnsaved(targets, savedTargets, loadedIds !== null),
         [targets, savedTargets, loadedIds]);
 
@@ -1352,10 +1351,10 @@ export default function MapViewer() {
         const plain = targets.map(({key, ...t}) => t);
         const saved = await saveMapTargets(plain, loadedIds || []);
         if (!saved) return;
-        await loadPins();
+        setSavedTargets(saved);
         setTargets(withSavedTargets(saved, []));
         setLoadedIds(saved.map((t) => t.id));
-    }, [targets, loadedIds, loadPins]);
+    }, [targets, loadedIds]);
 
     const handleRemoveTarget = useCallback((target) => {
         setTargets((list) => list.filter((t) => t.key !== target.key));
@@ -1396,6 +1395,16 @@ export default function MapViewer() {
         return () => { delete window.__deleteMapPin; };
     }, [loadPins]);
 
+    // The saved targets, when nuclear mode is first used.
+    useEffect(() => {
+        if (!nuclear) return;
+        let cancelled = false;
+        getMapTargets().then((saved) => !cancelled && saved && setSavedTargets(saved));
+        return () => {
+            cancelled = true;
+        };
+    }, [nuclear]);
+
     // Load pins when map is ready.
     useEffect(() => {
         if (mapReady) loadPins();
@@ -1433,7 +1442,7 @@ export default function MapViewer() {
             setTargets((list) => [...list, {key, lat, lon, label, ...weapon}]);
             return;
         }
-        await addMapPin(lat, lon, label, color, kind, weapon);
+        await addMapPin(lat, lon, label, color);
         await loadPins();
     }, [addingPin, loadPins]);
 

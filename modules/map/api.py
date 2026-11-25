@@ -6,7 +6,8 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import climatology, export, export_job, lib, quads, schema, search, winds
-from modules.map.pins import TargetsChanged, get_map_pins_config
+from modules.map.nuclear import TargetsChanged, get_map_nuclear_config
+from modules.map.pins import get_map_pins_config
 from modules.map.sheet import legend_as_sent
 from wrolpi import flags
 from wrolpi.api_utils import json_response
@@ -99,25 +100,8 @@ def get_pins(_: Request):
 @openapi.description('Add a map pin')
 @validate(schema.MapPinRequest)
 async def add_pin(_: Request, body: schema.MapPinRequest):
-    try:
-        pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color, body.kind,
-                                            body.weapon, body.yield_kt, body.fission_fraction)
-    except ValueError as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color)
     return json_response(dict(pin=pin), HTTPStatus.CREATED)
-
-
-@map_bp.put('/pins/targets')
-@openapi.description('Save the targets: the ones given replace the saved ones, which must be those loaded')
-@validate(schema.MapTargetsRequest)
-async def put_targets(_: Request, body: schema.MapTargetsRequest):
-    try:
-        targets = get_map_pins_config().replace_targets(body.targets, body.loaded_ids)
-    except TargetsChanged as e:
-        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
-    except ValueError as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
-    return json_response(dict(targets=targets), HTTPStatus.OK)
 
 
 @map_bp.delete('/pins/<pin_id:int>')
@@ -132,14 +116,36 @@ async def delete_pin(_: Request, pin_id: int):
 @openapi.description('Update a map pin by ID')
 @validate(schema.MapPinUpdateRequest)
 async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
-    try:
-        updated = get_map_pins_config().update_pin(pin_id, body.label, body.color, body.weapon, body.yield_kt,
-                                                   body.fission_fraction)
-    except ValueError as e:
-        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
-    if updated:
+    if get_map_pins_config().update_pin(pin_id, body.label, body.color):
         return response.empty(HTTPStatus.NO_CONTENT)
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/nuclear/targets')
+@openapi.description('Get the saved nuclear targets')
+def get_targets(_: Request):
+    return json_response(dict(targets=get_map_nuclear_config().targets), HTTPStatus.OK)
+
+
+@map_bp.put('/nuclear/targets')
+@openapi.description('Save the nuclear targets: the ones given replace the saved ones, which must be those loaded')
+@validate(schema.MapTargetsRequest)
+async def put_targets(_: Request, body: schema.MapTargetsRequest):
+    try:
+        targets = get_map_nuclear_config().replace_targets(body.targets, body.loaded_ids)
+    except TargetsChanged as e:
+        return response.json({'error': str(e)}, HTTPStatus.CONFLICT)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+    return json_response(dict(targets=targets), HTTPStatus.OK)
+
+
+@map_bp.delete('/nuclear/targets/<target_id:int>')
+@openapi.description('Delete a saved nuclear target by ID')
+async def delete_target(_: Request, target_id: int):
+    if get_map_nuclear_config().delete_target(target_id):
+        return response.empty(HTTPStatus.NO_CONTENT)
+    return response.json({'error': 'Target not found'}, HTTPStatus.NOT_FOUND)
 
 
 @map_bp.get('/search')

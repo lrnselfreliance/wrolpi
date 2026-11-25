@@ -1,7 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
 import {decayFromH1, doseGrid, landedGrid, profileFromTable} from "../map-shared/fallout/model.js";
-import shots from "../map-shared/fallout/nts-shots.json";
 import {loadTerrainGrid} from "./falloutTerrain";
 import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
 import {
@@ -72,7 +71,6 @@ const FORECAST = "forecast";
 const WINDS = [
     {value: FORECAST, label: "Forecast winds aloft"},
     {value: "manual", label: "One wind at every height"},
-    ...shots.shots.map((s) => ({value: s.name, label: `Sample: winds over Nevada, ${s.date.slice(0, 10)}`})),
 ];
 // Winds of past days: the climatology, the share of a month's days fallout reached each place.
 const CLIMATE = "climate";
@@ -168,12 +166,9 @@ export function frameOf(ran, show, after) {
 }
 
 // The wind profile the model takes, for a wind not of the forecast: one wind at every height (also
-// while there is no forecast), or a sample.
-export function windProfile({wind, direction, speed}) {
-    const rows = wind === "manual" || wind === FORECAST
-        ? [[0, direction, speed]]
-        : shots.shots.find((s) => s.name === wind).wind.map(([z, d, s], _, all) => [z - all[0][0], d, s]);
-    return profileFromTable(rows, 0);
+// while there is no forecast).
+export function windProfile({direction, speed}) {
+    return profileFromTable([[0, direction, speed]], 0);
 }
 
 // The area ([west, south, east, north], degrees) where the grid reaches the lowest band, with a margin.
@@ -634,7 +629,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         // Each burst is carried by the winds where it is, from the hour chosen; or by one profile.
         const winds = useField
             ? {prepared, startMs: Date.parse(forecast.hours[hour])}
-            : {profile: windProfile({wind, direction: Number(direction) || 0, speed: Number(speed) || 0})};
+            : {profile: windProfile({direction: Number(direction) || 0, speed: Number(speed) || 0})};
         // Let the panel paint "Calculating" before the model takes the thread.
         const timer = setTimeout(async () => {
             const ran = await simulateBursts(bursts, {
@@ -749,8 +744,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     // How the fallout is carried, in a few words.
     const carried = wind === CLIMATE ? `past ${MONTHS[climateMonth - 1]} days' winds`
         : useField ? `forecast winds, ${hourLabel(forecast.hours[hour], false)}`
-            : wind === "manual" || wind === FORECAST ? `one wind from ${Number(direction) || 0}° at ${Number(speed) || 0} mph`
-                : WINDS.find((w) => w.value === wind)?.label || wind;
+            : `one wind from ${Number(direction) || 0}° at ${Number(speed) || 0} mph`;
     const ground = wind === CLIMATE ? "" : useTerrain ? "; the terrain" : "; flat ground";
     const close = <Button role="cancel" size="sm" onClick={onClose}>Close</Button>;
 

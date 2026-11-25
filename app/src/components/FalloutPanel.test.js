@@ -75,7 +75,7 @@ describe('the fallout panel\'s winds', () => {
     const {windProfile, hourLabel} = require('./FalloutPanel');
 
     test('fall back to one wind at every height until there is a forecast', () => {
-        const profile = windProfile({wind: 'forecast', direction: 270, speed: 10});
+        const profile = windProfile({direction: 270, speed: 10});
         expect(profile).toHaveLength(1);
         expect(profile[0][1]).toBeGreaterThan(0);
     });
@@ -370,6 +370,11 @@ describe('the fallout panel\'s steps', () => {
         expect(screen.getByRole('button', {name: 'Next: the fallout'}).disabled).toBe(true);
         // The winds and terrain wait under Options, with what is used said beside it.
         expect(screen.getByText('Options').closest('details').open).toBe(false);
+        // The winds a user can choose: the forecast or one wind of their own; no test shots' winds.
+        Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => null);
+        fireEvent.click(screen.getByRole('textbox', {name: 'Wind'}));
+        const winds = (await screen.findAllByRole('option')).map((o) => o.textContent);
+        expect(winds).toEqual(['Forecast winds aloft', 'One wind at every height']);
         await act(async () => new Promise((r) => setTimeout(r, 60)));
         expect(map.added).toBe(0);
     });

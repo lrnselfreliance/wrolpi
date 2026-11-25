@@ -6,6 +6,7 @@ import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/f
 import {
     fieldCovers,
     forecastAge,
+    forecastCoversFallout,
     forecastExpired,
     forecastRunsOut,
     nearestHour,
@@ -69,9 +70,10 @@ export const WEAPON_CHOICES = [
 // The panel floats over the map (z-index 1002); its dropdowns open above it.
 const DROPDOWN = {zIndex: 1100};
 const FORECAST = "forecast";
+const MANUAL = "manual";
 const WINDS = [
     {value: FORECAST, label: "Forecast winds aloft"},
-    {value: "manual", label: "One wind at every height"},
+    {value: MANUAL, label: "One wind at every height"},
 ];
 // Winds of past days: the climatology, the share of a month's days fallout reached each place.
 const CLIMATE = "climate";
@@ -540,7 +542,7 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
             if (cancelled || !latest) return;
             setForecast(latest);
             setHour(nearestHour(latest.hours));
-        });
+        }).catch(() => !cancelled && setForecastChecked(true));
         return () => {
             cancelled = true;
         };
@@ -695,16 +697,15 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
         setStopped(true);
     }
 
-    // With no forecast to go on (none fetched, or run out), the past days' winds, if they are kept.
+    // The forecast's winds when it has them for bursts now, until all their fallout is down; otherwise
+    // one wind at every height.  Chosen once: then the wind is the user's to choose.
     const climateKept = !!climateStatus?.months?.includes(climateMonth);
     useEffect(() => {
-        if (chosenForUs.current || !forecastChecked || !climateKept || wind !== FORECAST) return;
-        if (!forecast || forecastExpired(forecast)) {
-            chosenForUs.current = true;
-            setWind(CLIMATE);
-        }
+        if (chosenForUs.current || !forecastChecked) return;
+        chosenForUs.current = true;
+        if (!forecastCoversFallout(forecast)) setWind(MANUAL);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [forecastChecked, climateKept, forecast]);
+    }, [forecastChecked]);
 
     // What is shown: the fallout landed by the hour, as strong as it is then; or the total dose of
     // someone outdoors in the first two weeks.
@@ -851,7 +852,7 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
             forecast={forecast} hour={hour} onHour={setHour} online={online}
             fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
             onFetch={fetchForecast}/>}
-        {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
+        {(wind === MANUAL || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
             <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
             <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
         </div>}

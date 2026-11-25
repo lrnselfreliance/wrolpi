@@ -3,6 +3,7 @@ import {
     fieldCovers,
     fieldWinds,
     forecastAge,
+    forecastCoversFallout,
     forecastExpired,
     forecastRunsOut,
     nearestAround,
@@ -314,5 +315,26 @@ describe('a field of one hour (a past day\'s)', () => {
         }
         // Kept: a second burst of the same yield gives the same spots.
         expect(landingSpots({yieldKt: 250, winds})).toEqual(landingSpots({yieldKt: 250, winds}));
+    });
+});
+
+describe('a forecast covering the fallout', () => {
+    // 60 hours from START.
+    const long = {hours: Array.from({length: 60}, (_, h) => new Date(START + h * 3600000).toISOString())};
+    const at = (hours) => new Date(START + hours * 3600000);
+
+    test('has the winds from now until all the fallout is down', () => {
+        expect(forecastCoversFallout(long, at(0))).toBe(true);
+        expect(forecastCoversFallout(long, at(11.4))).toBe(true);
+        // Its last hour (59) is before the fallout of bursts at 12 is down (48 hours after).
+        expect(forecastCoversFallout(long, at(12))).toBe(false);
+    });
+
+    test('has an hour near now', () => {
+        expect(forecastCoversFallout(long, at(-2))).toBe(false);
+        expect(forecastCoversFallout(long, at(70))).toBe(false);
+        expect(forecastCoversFallout({hours: HOURS}, at(0))).toBe(false);
+        expect(forecastCoversFallout(null)).toBe(false);
+        expect(forecastCoversFallout({hours: []})).toBe(false);
     });
 });

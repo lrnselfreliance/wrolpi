@@ -4,13 +4,14 @@ import {loadTerrainGrid} from './falloutTerrain';
 
 // No terrain files under Jest, until a test gives a grid.
 jest.mock('./falloutTerrain', () => ({loadTerrainGrid: jest.fn(async () => null)}));
-// No forecast, past days or fetches under Jest.
+// No forecast (unless a test gives one), past days or fetches under Jest.
+let mockLatestWinds = null;
 jest.mock('../api', () => ({
     fetchFalloutWinds: async () => null,
     getFalloutClimatology: async () => null,
     getFalloutClimatologyMonth: async () => null,
     getJobs: async () => [],
-    getLatestFalloutWinds: async () => null,
+    getLatestFalloutWinds: async () => mockLatestWinds,
 }));
 
 // Fallout workers serving their tasks (as fallout.worker.js does) here, as a browser's would on
@@ -450,6 +451,38 @@ describe('the fallout panel\'s steps', () => {
         expect(screen.queryByText(/Calculating/)).toBeNull();
         expect(loadTerrainGrid).toHaveBeenCalledTimes(1);
     }, 60000);
+
+    test('default to the forecast when it has the winds until the fallout is down, else one wind', async () => {
+        Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => null);
+        const windShown = async () => {
+            fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+            await act(async () => new Promise((r) => setTimeout(r, 20)));
+            return screen.getByRole('textbox', {name: 'Wind'}).value;
+        };
+        // No forecast.
+        renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+        expect(await windShown()).toBe('One wind at every height');
+        cleanup();
+
+        // A forecast from the hour before now, for 3 days: it has the winds.
+        const hourMs = Math.floor(Date.now() / 3600000) * 3600000;
+        const hours = (count) => Array.from({length: count}, (_, h) => new Date(hourMs + (h - 1) * 3600000).toISOString());
+        const forecastOf = (count) => ({source: 'Open-Meteo', fetched_at: new Date(hourMs).toISOString(), spacing: 3,
+            points: [{lat: 40, lon: -100, elevation: 0}], hours: hours(count),
+            winds: [hours(count).map(() => [[10, 10, 270], [20000, 20, 270]])], rain: [hours(count).map(() => 0)]});
+        mockLatestWinds = forecastOf(72);
+        try {
+            renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+            expect(await windShown()).toBe('Forecast winds aloft');
+            cleanup();
+            // One ending a day from now does not: the fallout is still coming down then.
+            mockLatestWinds = forecastOf(24);
+            renderWithProviders(<FalloutPanel map={fakeMap()} targets={[target]}/>);
+            expect(await windShown()).toBe('One wind at every height');
+        } finally {
+            mockLatestWinds = null;
+        }
+    });
 
     test('load the saved targets before saving over them', () => {
         const onLoad = jest.fn(), onSave = jest.fn();

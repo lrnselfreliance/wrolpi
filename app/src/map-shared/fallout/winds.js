@@ -52,6 +52,16 @@ export function forecastRunsOut(field, index) {
     return Date.parse(field.hours[index]) + LANDING_HOURS * 3600000 > last ? last : null;
 }
 
+// Whether `field` has the winds for fallout from bursts at `when`: an hour within one of then, and
+// the winds until all the fallout is down (LANDING_HOURS after).  After that the fallout on the ground
+// only weakens, which takes no winds.
+export function forecastCoversFallout(field, when = new Date()) {
+    if (!field?.hours?.length) return false;
+    const index = nearestHour(field.hours, when);
+    if (Math.abs(Date.parse(field.hours[index]) - when.getTime()) > 3600000) return false;
+    return forecastRunsOut(field, index) === null;
+}
+
 // One point's winds in one hour, as east and north (m/s) at each altitude of the levels.
 function resample(winds, u, v, offset) {
     const sorted = [...winds].sort((a, b) => a[0] - b[0]);

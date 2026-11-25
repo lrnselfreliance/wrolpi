@@ -52,9 +52,10 @@ const RATE = "rate";
 const TOTAL = "total";
 // The total dose is over the first two weeks, when fallout does most of its harm.
 const TWO_WEEKS = 336;
-// The steps of the panel: the targets (and how the fallout is carried), then what is shown.  The
-// first step is the nuclear button, which opens the panel.
+// The steps of the panel: the targets, the wind which carries their fallout, then what is shown.
+// The first step is the nuclear button, which opens the panel.
 const TARGETS = "targets";
+const WIND = "wind";
 const VIEW = "view";
 
 // The weapons, grouped by country, then a yield of the user's own.
@@ -750,7 +751,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
 
     if (step === TARGETS) return <div style={panelStyle}>
         <FalloutSteps step={step}/>
-        <div style={{fontWeight: 600}}>Step 2 of 3: Choose the targets</div>
+        <div style={{fontWeight: 600}}>Step 2 of 4: Choose the targets</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
             Right-click the map and choose Add Target Here. Each target keeps its weapon.
         </div>
@@ -777,49 +778,55 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 Save as target
             </Button>
         </div>}
-        <details style={{marginBottom: "0.5rem"}}>
-            <summary style={{cursor: "pointer"}}>
-                Options <span style={muted}>({carried}{ground})</span>
-            </summary>
-            <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
-                    data={climateStatus?.months?.length
-                        ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
-                        : WINDS}
-                    allowDeselect={false} comboboxProps={DROPDOWN}/>
-            {wind === CLIMATE && <div style={{display: "flex", gap: "0.5rem"}}>
-                <Select label="Month" size="xs" value={String(climateMonth)} allowDeselect={false} comboboxProps={DROPDOWN}
-                        data={MONTHS.map((name, k) => ({value: String(k + 1), label: name,
-                            disabled: !climateStatus?.months?.includes(k + 1)}))}
-                        onChange={(v) => v && setClimateMonth(Number(v))}/>
-                <Select label="Count days with" size="xs" value={climateRate} data={CLIMATE_RATES}
-                        allowDeselect={false} comboboxProps={DROPDOWN} onChange={(v) => v && setClimateRate(v)}/>
-            </div>}
-            {wind === CLIMATE && !climateKept && <div style={{...muted, color: "var(--warning)"}}>
-                {MONTHS[climateMonth - 1]}'s past winds are not on this WROLPi yet: they are fetched once, while
-                there is the Internet.
-            </div>}
-            {wind === FORECAST && <ForecastControls
-                forecast={forecast} hour={hour} onHour={setHour} online={online}
-                fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
-                onFetch={fetchForecast}/>}
-            {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
-                <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
-                <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
-            </div>}
-            {wind !== CLIMATE && <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}}
-                                           checked={useTerrain} onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>}
-        </details>
         <div style={{display: "flex", justifyContent: "space-between"}}>
             {close}
-            <Button role="primary" size="sm" disabled={!bursts.length} onClick={() => setStep(VIEW)}>
-                Next: the fallout
+            <Button role="primary" size="sm" disabled={!bursts.length} onClick={() => setStep(WIND)}>
+                Next: the wind
             </Button>
+        </div>
+    </div>;
+
+    if (step === WIND) return <div style={panelStyle}>
+        <FalloutSteps step={step}/>
+        <div style={{fontWeight: 600}}>Step 3 of 4: The wind</div>
+        <div style={{...muted, marginBottom: "0.5rem"}}>The wind carries the fallout from the targets.</div>
+        <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
+                data={climateStatus?.months?.length
+                    ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
+                    : WINDS}
+                allowDeselect={false} comboboxProps={DROPDOWN}/>
+        {wind === CLIMATE && <div style={{display: "flex", gap: "0.5rem"}}>
+            <Select label="Month" size="xs" value={String(climateMonth)} allowDeselect={false} comboboxProps={DROPDOWN}
+                    data={MONTHS.map((name, k) => ({value: String(k + 1), label: name,
+                        disabled: !climateStatus?.months?.includes(k + 1)}))}
+                    onChange={(v) => v && setClimateMonth(Number(v))}/>
+            <Select label="Count days with" size="xs" value={climateRate} data={CLIMATE_RATES}
+                    allowDeselect={false} comboboxProps={DROPDOWN} onChange={(v) => v && setClimateRate(v)}/>
+        </div>}
+        {wind === CLIMATE && !climateKept && <div style={{...muted, color: "var(--warning)"}}>
+            {MONTHS[climateMonth - 1]}'s past winds are not on this WROLPi yet: they are fetched once, while
+            there is the Internet.
+        </div>}
+        {wind === FORECAST && <ForecastControls
+            forecast={forecast} hour={hour} onHour={setHour} online={online}
+            fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
+            onFetch={fetchForecast}/>}
+        {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
+            <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
+            <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
+        </div>}
+        {wind !== CLIMATE && <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}}
+                                       checked={useTerrain} onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>}
+        <div style={{display: "flex", justifyContent: "space-between", marginTop: "0.75rem"}}>
+            <Button role="cancel" size="sm" onClick={() => setStep(TARGETS)}>Back</Button>
+            {close}
+            <Button role="primary" size="sm" onClick={() => setStep(VIEW)}>Next: the fallout</Button>
         </div>
     </div>;
 
     return <div style={panelStyle}>
         <FalloutSteps step={step}/>
-        <div style={{fontWeight: 600}}>Step 3 of 3: The fallout</div>
+        <div style={{fontWeight: 600}}>Step 4 of 4: The fallout</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>{targetCount}; {carried}{ground}.</div>
         <FalloutProgress busy={busy} progress={progress} onCancel={cancel}/>
         {stopped && !busy && <div style={{...muted, display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
@@ -871,7 +878,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         <div style={{display: "flex", justifyContent: "space-between"}}>
             <Button role="cancel" size="sm" onClick={() => {
                 setPlaying(false);
-                setStep(TARGETS);
+                setStep(WIND);
             }}>Back</Button>
             {close}
         </div>
@@ -879,9 +886,9 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
 }
 
 // Where the user is in the panel's steps: the nuclear button (done once the panel is open), the
-// targets, and the fallout.
+// targets, the wind, and the fallout.
 export function FalloutSteps({step}) {
-    const names = [["Nuclear", null], ["Targets", TARGETS], ["Fallout", VIEW]];
+    const names = [["Nuclear", null], ["Targets", TARGETS], ["Wind", WIND], ["Fallout", VIEW]];
     const at = names.findIndex(([, s]) => s === step);
     return <ol aria-label="Steps" style={{display: "flex", gap: "0.75rem", listStyle: "none", padding: 0,
         margin: "0 0 0.5rem 0", fontSize: "0.75rem"}}>
@@ -1018,7 +1025,7 @@ function ForecastWarnings({prepared, bursts, hour}) {
     return <>
         {outside > 0 && <div style={warning}>
             {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside the forecast's winds: the nearest
-            are used. Fetch again (Back, then Options) to cover {outside === 1 ? "it" : "them"}.
+            are used. Fetch again (Back, to the wind) to cover {outside === 1 ? "it" : "them"}.
         </div>}
         {rainy > 0 && <div style={warning}>
             Rain is forecast near {rainy === 1 ? "1 burst" : `${rainy} bursts`} in the 6 hours from then.

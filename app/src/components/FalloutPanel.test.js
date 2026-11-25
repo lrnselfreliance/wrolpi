@@ -364,17 +364,12 @@ describe('the fallout panel\'s steps', () => {
     test('ask for targets first, and calculate nothing until there are some', async () => {
         const map = fakeMap();
         renderWithProviders(<FalloutPanel map={map} targets={[]} onClose={() => null}/>);
-        expect(screen.getByText('Step 2 of 3: Choose the targets')).toBeTruthy();
+        expect(screen.getByText('Step 2 of 4: Choose the targets')).toBeTruthy();
         expect(screen.getByText('No targets yet')).toBeTruthy();
         expect(screen.getByText(/right-click the map and choose Add Target Here/i)).toBeTruthy();
-        expect(screen.getByRole('button', {name: 'Next: the fallout'}).disabled).toBe(true);
-        // The winds and terrain wait under Options, with what is used said beside it.
-        expect(screen.getByText('Options').closest('details').open).toBe(false);
-        // The winds a user can choose: the forecast or one wind of their own; no test shots' winds.
-        Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => null);
-        fireEvent.click(screen.getByRole('textbox', {name: 'Wind'}));
-        const winds = (await screen.findAllByRole('option')).map((o) => o.textContent);
-        expect(winds).toEqual(['Forecast winds aloft', 'One wind at every height']);
+        expect(screen.getByRole('button', {name: 'Next: the wind'}).disabled).toBe(true);
+        // The wind is a step of its own.
+        expect(screen.queryByRole('textbox', {name: 'Wind'})).toBeNull();
         await act(async () => new Promise((r) => setTimeout(r, 60)));
         expect(map.added).toBe(0);
     });
@@ -386,8 +381,21 @@ describe('the fallout panel\'s steps', () => {
         await act(async () => new Promise((r) => setTimeout(r, 60)));
         expect(map.added).toBe(0);
 
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+        expect(screen.getByText('Step 3 of 4: The wind')).toBeTruthy();
+        // Its fields are all shown; the winds a user can choose are the forecast or one wind of their
+        // own, and no test shots' winds.
+        expect(screen.getByRole('checkbox', {name: 'Follow the terrain'})).toBeTruthy();
+        expect(screen.getByRole('textbox', {name: 'Speed (mph)'})).toBeTruthy();
+        Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => null);
+        fireEvent.click(screen.getByRole('textbox', {name: 'Wind'}));
+        const winds = (await screen.findAllByRole('option')).map((o) => o.textContent);
+        expect(winds).toEqual(['Forecast winds aloft', 'One wind at every height']);
+        await act(async () => new Promise((r) => setTimeout(r, 60)));
+        expect(map.added).toBe(0);
+
         fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
-        expect(screen.getByText('Step 3 of 3: The fallout')).toBeTruthy();
+        expect(screen.getByText('Step 4 of 4: The fallout')).toBeTruthy();
         expect(screen.getByRole('button', {name: 'Hour by hour'}).getAttribute('aria-pressed')).toBe('true');
         expect(screen.getByText('Dose rate 1 hour after the bursts')).toBeTruthy();
         await waitFor(() => expect(loadTerrainGrid).toHaveBeenCalledTimes(1), {timeout: 20000});
@@ -401,10 +409,13 @@ describe('the fallout panel\'s steps', () => {
         expect(screen.getByText('Total dose outdoors in the first two weeks')).toBeTruthy();
         expect(screen.queryByLabelText('Time after the bursts')).toBeNull();
 
-        // Back to the targets clears the map; on again, with nothing changed, it is not calculated again.
+        // Back to the wind clears the map; on again, with nothing changed, it is not calculated again.
         fireEvent.click(screen.getByRole('button', {name: 'Back'}));
-        expect(screen.getByText('Step 2 of 3: Choose the targets')).toBeTruthy();
+        expect(screen.getByText('Step 3 of 4: The wind')).toBeTruthy();
         expect(map.layer).toBe(false);
+        fireEvent.click(screen.getByRole('button', {name: 'Back'}));
+        expect(screen.getByText('Step 2 of 4: Choose the targets')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
         fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
         await waitFor(() => expect(map.layer).toBe(true));
         expect(screen.queryByText(/Calculating/)).toBeNull();
@@ -414,8 +425,8 @@ describe('the fallout panel\'s steps', () => {
     test('go straight to the fallout of a burst being tried out', () => {
         renderWithProviders(<FalloutPanel map={fakeMap()} targets={[]} burst={{lat: 40, lon: -100}}
                                           onClose={() => null}/>);
-        expect(screen.getByText('Step 3 of 3: The fallout')).toBeTruthy();
-        expect(screen.getByRole('list', {name: 'Steps'}).textContent).toMatch(/✓ Nuclear.*✓ Targets.*3\. Fallout/);
+        expect(screen.getByText('Step 4 of 4: The fallout')).toBeTruthy();
+        expect(screen.getByRole('list', {name: 'Steps'}).textContent).toMatch(/✓ Nuclear.*✓ Targets.*✓ Wind.*4\. Fallout/);
     });
 });
 

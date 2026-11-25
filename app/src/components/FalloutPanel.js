@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from "react";
 import {Button, Checkbox, NumberInput, Progress, Select} from "./ui";
-import {doseGrid, landedGrid, profileFromTable} from "../map-shared/fallout/model.js";
+import {decayFromH1, doseGrid, landedGrid, profileFromTable} from "../map-shared/fallout/model.js";
 import shots from "../map-shared/fallout/nts-shots.json";
 import {loadTerrainGrid} from "./falloutTerrain";
 import {formatYield, formatYieldAndFission, WEAPON_GROUPS} from "../map-shared/fallout/weapons.js";
@@ -22,9 +22,9 @@ import {burstSpots, burstsFrame, burstWinds, gridPart, gridParts, joinParts, por
 import {isJobFinished, useJob} from "./VideoEditMenu";
 import {StatusContext} from "../contexts/contexts";
 
-// The map's fallout view (nuclear mode): the fallout of every saved target at once, and of a burst
-// the user is trying out, in the most recently fetched winds aloft.  Drawn as the dose rate at H+1
-// hour.
+// The map's fallout view (nuclear mode), in steps: the targets (and how their fallout is carried),
+// then the fallout of every saved target at once, and of a burst the user is trying out: hour by
+// hour as it lands and weakens, or the total dose of the first two weeks.
 
 const SOURCE = "fallout-dose";
 const LAYER = "fallout-dose";
@@ -48,16 +48,15 @@ export const TOTAL_BANDS = [
     {rate: 25, color: DOSE_BANDS[3].color, meaning: "no sickness; a higher cancer risk"},
     {rate: 5, color: DOSE_BANDS[4].color, meaning: "a radiation worker's yearly limit"},
 ];
-// What the map shows: the dose rate, or the total dose of someone outdoors.
+// What the map shows: the dose rate hour by hour, or the total dose of someone outdoors.
 const RATE = "rate";
 const TOTAL = "total";
-const SHOW = [
-    {value: RATE, label: "Dose rate (R/hr)"},
-    {value: TOTAL, label: "Total dose, outdoors (R)"},
-];
-// The total dose with the timeline at its start: over the first two weeks, when fallout does most
-// of its harm.
+// The total dose is over the first two weeks, when fallout does most of its harm.
 const TWO_WEEKS = 336;
+// The steps of the panel: the targets (and how the fallout is carried), then what is shown.  The
+// first step is the nuclear button, which opens the panel.
+const TARGETS = "targets";
+const VIEW = "view";
 
 // The weapons, grouped by country, then a yield of the user's own.
 export const WEAPON_CHOICES = [
@@ -95,10 +94,10 @@ const CLIMATE_SMOOTH = 1;
 
 // The Job which fetches a field of winds.
 const WINDS_JOB = "fallout_winds";
-// The hours after the bursts the fallout can be watched landing in, and how long each is shown (ms)
-// when it plays.
-const LAST_HOUR = 48;
-const FRAME_MS = 700;
+// The hours after the bursts the fallout can be watched in: landing in the first hours, then
+// weakening over days and weeks.  And how long each is shown (ms) when they play.
+export const HOURS = [1, 2, 3, 6, 12, 24, 48, 72, 120, 168, 336];
+const FRAME_MS = 900;
 // Rain this heavy in the hours ahead (mm) is worth a warning.
 const RAIN_WARNING_MM = 0.5;
 
@@ -158,6 +157,14 @@ export function gridCorners(grid, lon, lat) {
     const west = toLon(grid.x0), east = toLon(grid.x0 + grid.nx * grid.cell);
     const south = toLat(grid.y0), north = toLat(grid.y0 + grid.ny * grid.cell);
     return [[west, north], [east, north], [east, south], [west, south]];
+}
+
+// The image of the fallout `ran` ({grid, spots, origin}) as shown: the dose rate `after` hours after
+// the bursts, of the fallout landed by then; or the total dose outdoors in the first two weeks.
+export function frameOf(ran, show, after) {
+    const grid = show === TOTAL ? doseGrid(ran.spots, ran.grid, TWO_WEEKS) : landedGrid(ran.spots, ran.grid, after);
+    const url = gridImage(grid, ran.origin.lat, show === TOTAL ? TOTAL_BANDS : DOSE_BANDS);
+    return {url, coordinates: gridCorners(grid, ran.origin.lon, ran.origin.lat)};
 }
 
 // The wind profile the model takes, for a wind not of the forecast: one wind at every height (also
@@ -230,7 +237,7 @@ function yielder() {
 // {grid, spots (as combineBursts gives them, for the fallout hour by hour), origin, terrainStatus}.
 // `winds` are the winds over them, as burstWinds takes them.  The bursts are spread over `workers`
 // workers (on the page, without them, or if they fail).  `onProgress(done, total)` hears how far it
-// has got, `onFlat(grid)` gets the fallout on flat ground while the terrain is read, and it stops
+// has got, `onFlat({grid, spots, origin})` gets the fallout on flat ground while the terrain is read, and it stops
 // (null) once `signal` (an AbortSignal) is aborted or `cancelled()`.
 export async function simulateBursts(bursts, {winds, useTerrain = true, workers = 0, signal = null,
     cancelled = () => false, onProgress = () => null, onFlat = () => null, makeWorker = makeFalloutWorker}) {
@@ -315,7 +322,7 @@ export async function simulateBursts(bursts, {winds, useTerrain = true, workers 
     if (!ran) return null;
     let terrainStatus = "Flat ground (terrain is off).";
     if (useTerrain) {
-        onFlat(ran.grid);
+        onFlat({...ran, origin});
         let loaded = null;
         try {
             loaded = await loadTerrainGrid(plumeBounds(ran.grid, origin.lon, origin.lat), origin.lon, origin.lat);
@@ -447,6 +454,8 @@ function TargetRow({target, onWeapon}) {
 // `onTargetWeapon(target, weapon)` keeps a target's weapon.
 export default function FalloutPanel({map, targets = [], burst = null, onSaveBurst, onTargetWeapon,
                                          onAllTargetsWeapon, onClose}) {
+    // A burst to try out goes straight to its fallout; otherwise the targets come first.
+    const [step, setStep] = useState(burst ? VIEW : TARGETS);
     const [burstWeapon, setBurstWeapon] = useState({weapon: DEFAULT_WEAPON});
     const [wind, setWind] = useState(FORECAST);
     // The climatology: which months are kept, the month and dose rate shown, and the months read.
@@ -473,17 +482,18 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     const running = useRef(null);
     const [stopped, setStopped] = useState(false);
     const [again, setAgain] = useState(0);
-    // The hour after the bursts shown, or 0 for all the fallout as at H+1; and whether the hours play.
-    const [after, setAfter] = useState(0);
+    // The hour after the bursts shown (one of HOURS), and whether the hours play.
+    const [after, setAfter] = useState(1);
     const [show, setShow] = useState(RATE);
     const [playing, setPlaying] = useState(false);
-    // The fallout last calculated ({grid, spots, origin}), and its images by the hour (0: all of it).
+    // The fallout last calculated ({grid, spots, origin}), and its images by what is shown.
     const result = useRef(null);
     const frames = useRef(new Map());
     const [calculated, setCalculated] = useState(0);
     const {status} = useContext(StatusContext) || {};
     const online = !!status?.flags?.have_internet;
     const drawn = useRef(null);
+    const calculatedFor = useRef(null);
 
     const bursts = useMemo(() => [
         ...targets.map((t) => ({lat: t.lat, lon: t.lon, ...targetWeapon(t)})),
@@ -491,6 +501,14 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     ], [targets, burst, burstWeapon]);
     // What the fallout depends on, as one value an effect can watch.
     const burstsKey = JSON.stringify(bursts.map((b) => [b.lat, b.lon, b.yieldKt, b.fissionFraction]));
+
+    // A new burst to try out is shown at once; with nothing to burst, the targets are needed first.
+    useEffect(() => {
+        if (burst) setStep(VIEW);
+    }, [burst]);
+    useEffect(() => {
+        if (!bursts.length) setStep(TARGETS);
+    }, [bursts.length]);
 
     // The forecast fetched most recently.
     useEffect(() => {
@@ -547,16 +565,29 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
 
     useEffect(() => {
         let cancelled = false;
-        if (!bursts.length) {
-            drawn.current = null;
-            result.current = null;
-            frames.current = new Map();
+        // What the fallout is calculated from: the same again is drawn as it was.
+        const inputs = JSON.stringify([burstsKey, wind, direction, speed, useTerrain, forecast?.fetched_at,
+            hour, climateMonth, climateRate, again]);
+        // Nothing is calculated until the user has chosen the targets, and the map is clear meanwhile.
+        if (!bursts.length || step !== VIEW) {
+            if (!bursts.length) {
+                drawn.current = null;
+                result.current = null;
+                frames.current = new Map();
+                calculatedFor.current = null;
+                setTerrainStatus(null);
+            }
             erase();
-            setTerrainStatus(null);
             setBusy(false);
             setProgress(null);
             return;
         }
+        if (calculatedFor.current === inputs && drawn.current) {
+            if (result.current) setCalculated((n) => n + 1);
+            else draw();
+            return;
+        }
+        calculatedFor.current = null;
         const controller = new AbortController();
         running.current = controller;
         setStopped(false);
@@ -589,6 +620,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 frames.current = new Map();
                 drawn.current = ran.grid ? {url: gridImage(ran.grid, ran.origin.lat, CLIMATE_BANDS),
                     coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)} : null;
+                calculatedFor.current = inputs;
                 if (drawn.current) draw();
                 else erase();
                 setBusy(false);
@@ -609,17 +641,18 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 winds, useTerrain, workers: workerCount(typeof navigator === "undefined" ? {} : navigator),
                 signal: controller.signal, cancelled: () => cancelled,
                 onProgress: everySoOften((done, total) => !cancelled && setProgress({done, total})),
-                // Something to look at while the terrain is read.
-                onFlat: (grid) => {
+                // Something to look at while the terrain is read: what is shown, on flat ground.
+                onFlat: (flat) => {
                     if (cancelled) return;
-                    drawn.current = {url: gridImage(grid, bursts[0].lat), coordinates: gridCorners(grid, bursts[0].lon, bursts[0].lat)};
+                    drawn.current = frameOf(flat, show, after);
                     draw();
                 },
             });
             if (cancelled || !ran) return;
             setProgress(null);
             result.current = ran;
-            frames.current = new Map([[`${RATE}:0`, {url: gridImage(ran.grid, ran.origin.lat), coordinates: gridCorners(ran.grid, ran.origin.lon, ran.origin.lat)}]]);
+            frames.current = new Map();
+            calculatedFor.current = inputs;
             // The hour shown is drawn from it.
             setCalculated((n) => n + 1);
             setTerrainStatus(ran.terrainStatus);
@@ -631,7 +664,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             clearTimeout(timer);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour, climateMonth, climateRate, again]);
+    }, [burstsKey, wind, direction, speed, useTerrain, forecast, hour, climateMonth, climateRate, again, step]);
 
     // Stop the calculation running (and its workers); what was drawn before stays.
     function cancel() {
@@ -652,19 +685,13 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [forecastChecked, climateKept, forecast]);
 
-    // The hour shown: all the fallout, or what has landed by then, as strong as it is then; or the
-    // total dose of someone outdoors by then (by two weeks, at the start).
+    // What is shown: the fallout landed by the hour, as strong as it is then; or the total dose of
+    // someone outdoors in the first two weeks.
     useEffect(() => {
         const ran = result.current;
         if (!ran) return;
-        const key = `${show}:${after}`;
-        if (!frames.current.has(key)) {
-            const grid = show === TOTAL
-                ? doseGrid(ran.spots, ran.grid, after || TWO_WEEKS)
-                : landedGrid(ran.spots, ran.grid, after);
-            const url = gridImage(grid, ran.origin.lat, show === TOTAL ? TOTAL_BANDS : DOSE_BANDS);
-            frames.current.set(key, {url, coordinates: gridCorners(grid, ran.origin.lon, ran.origin.lat)});
-        }
+        const key = show === TOTAL ? TOTAL : `${RATE}:${after}`;
+        if (!frames.current.has(key)) frames.current.set(key, frameOf(ran, show, after));
         drawn.current = frames.current.get(key);
         draw();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -673,7 +700,7 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     // Playing, the next hour is shown after this one; from the last, it starts over.
     useEffect(() => {
         if (!playing) return;
-        const timer = setTimeout(() => setAfter((h) => (h >= LAST_HOUR ? 1 : h + 1)), FRAME_MS);
+        const timer = setTimeout(() => setAfter((h) => HOURS[(HOURS.indexOf(h) + 1) % HOURS.length]), FRAME_MS);
         return () => clearTimeout(timer);
     }, [playing, after, calculated]);
 
@@ -711,25 +738,31 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
     }, [map]);
 
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
-    return <div style={{
+    const panelStyle = {
         position: "absolute", left: "0.75rem", bottom: "2.5rem", zIndex: 1002, width: "20rem",
         maxHeight: "calc(100% - 7rem)", overflowY: "auto",
         background: "var(--panel)", border: "1px solid var(--border)", color: "var(--text)", padding: "0.75rem",
         fontSize: "0.8125rem",
-    }}>
-        <div style={{fontWeight: 600}}>Fallout</div>
+    };
+    const targetCount = (targets.length === 1 ? "1 target" : `${targets.length} targets`)
+        + (burst ? ", and a burst not saved" : "");
+    // How the fallout is carried, in a few words.
+    const carried = wind === CLIMATE ? `past ${MONTHS[climateMonth - 1]} days' winds`
+        : useField ? `forecast winds, ${hourLabel(forecast.hours[hour], false)}`
+            : wind === "manual" || wind === FORECAST ? `one wind from ${Number(direction) || 0}° at ${Number(speed) || 0} mph`
+                : WINDS.find((w) => w.value === wind)?.label || wind;
+    const ground = wind === CLIMATE ? "" : useTerrain ? "; the terrain" : "; flat ground";
+    const close = <Button role="cancel" size="sm" onClick={onClose}>Close</Button>;
+
+    if (step === TARGETS) return <div style={panelStyle}>
+        <FalloutSteps step={step}/>
+        <div style={{fontWeight: 600}}>Step 2 of 3: Choose the targets</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
-            {targets.length === 1 ? "1 target" : `${targets.length} targets`}
-            {burst ? ", and a burst not saved" : ""}; surface bursts.
+            Right-click the map and choose Add Target Here. Each target keeps its weapon.
         </div>
-        <FalloutProgress busy={busy} progress={progress} onCancel={cancel}/>
-        {stopped && !busy && <div style={{...muted, display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
-            Calculation cancelled.
-            <Button size="xs" onClick={() => setAgain((n) => n + 1)}>Calculate</Button>
-        </div>}
-        {!targets.length && !burst && <div style={muted}>
-            No targets yet: right-click the map and choose Add Target Here.
-        </div>}
+        <div style={{marginBottom: "0.25rem"}}>
+            <strong>{bursts.length ? targetCount : "No targets yet"}</strong>; surface bursts.
+        </div>
         {targets.length > 1 && <div style={{marginBottom: "0.5rem"}}>
             {/* Empty until chosen, and always applied: the targets may have any weapons now. */}
             <Select label="Set every target's weapon" size="xs" data={WEAPON_CHOICES.slice(0, -1)} value={null}
@@ -750,34 +783,57 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 Save as target
             </Button>
         </div>}
-        <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
-                data={climateStatus?.months?.length
-                    ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
-                    : WINDS}
-                allowDeselect={false} comboboxProps={DROPDOWN}/>
-        {wind === CLIMATE && <div style={{display: "flex", gap: "0.5rem"}}>
-            <Select label="Month" size="xs" value={String(climateMonth)} allowDeselect={false} comboboxProps={DROPDOWN}
-                    data={MONTHS.map((name, k) => ({value: String(k + 1), label: name,
-                        disabled: !climateStatus?.months?.includes(k + 1)}))}
-                    onChange={(v) => v && setClimateMonth(Number(v))}/>
-            <Select label="Count days with" size="xs" value={climateRate} data={CLIMATE_RATES}
-                    allowDeselect={false} comboboxProps={DROPDOWN} onChange={(v) => v && setClimateRate(v)}/>
+        <details style={{marginBottom: "0.5rem"}}>
+            <summary style={{cursor: "pointer"}}>
+                Options <span style={muted}>({carried}{ground})</span>
+            </summary>
+            <Select label="Wind" size="xs" value={wind} onChange={(v) => v && setWind(v)}
+                    data={climateStatus?.months?.length
+                        ? [WINDS[0], {value: CLIMATE, label: "Past days of a month (no forecast needed)"}, ...WINDS.slice(1)]
+                        : WINDS}
+                    allowDeselect={false} comboboxProps={DROPDOWN}/>
+            {wind === CLIMATE && <div style={{display: "flex", gap: "0.5rem"}}>
+                <Select label="Month" size="xs" value={String(climateMonth)} allowDeselect={false} comboboxProps={DROPDOWN}
+                        data={MONTHS.map((name, k) => ({value: String(k + 1), label: name,
+                            disabled: !climateStatus?.months?.includes(k + 1)}))}
+                        onChange={(v) => v && setClimateMonth(Number(v))}/>
+                <Select label="Count days with" size="xs" value={climateRate} data={CLIMATE_RATES}
+                        allowDeselect={false} comboboxProps={DROPDOWN} onChange={(v) => v && setClimateRate(v)}/>
+            </div>}
+            {wind === CLIMATE && !climateKept && <div style={{...muted, color: "var(--warning)"}}>
+                {MONTHS[climateMonth - 1]}'s past winds are not on this WROLPi yet: they are fetched once, while
+                there is the Internet.
+            </div>}
+            {wind === FORECAST && <ForecastControls
+                forecast={forecast} hour={hour} onHour={setHour} online={online}
+                fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
+                onFetch={fetchForecast}/>}
+            {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
+                <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
+                <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
+            </div>}
+            {wind !== CLIMATE && <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}}
+                                           checked={useTerrain} onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>}
+        </details>
+        <div style={{display: "flex", justifyContent: "space-between"}}>
+            {close}
+            <Button role="primary" size="sm" disabled={!bursts.length} onClick={() => setStep(VIEW)}>
+                Next: the fallout
+            </Button>
+        </div>
+    </div>;
+
+    return <div style={panelStyle}>
+        <FalloutSteps step={step}/>
+        <div style={{fontWeight: 600}}>Step 3 of 3: The fallout</div>
+        <div style={{...muted, marginBottom: "0.5rem"}}>{targetCount}; {carried}{ground}.</div>
+        <FalloutProgress busy={busy} progress={progress} onCancel={cancel}/>
+        {stopped && !busy && <div style={{...muted, display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
+            Calculation cancelled.
+            <Button size="xs" onClick={() => setAgain((n) => n + 1)}>Calculate</Button>
         </div>}
-        {wind === CLIMATE && !climateKept && <div style={{...muted, color: "var(--warning)"}}>
-            {MONTHS[climateMonth - 1]}'s past winds are not on this WROLPi yet: they are fetched once, while
-            there is the Internet.
-        </div>}
-        {wind === FORECAST && <ForecastControls
-            forecast={forecast} prepared={prepared} bursts={bursts} hour={hour} onHour={setHour} online={online}
-            fetching={!!fetchJob} fetchPercent={fetchProgress?.progress || 0} fetchError={fetchError}
-            onFetch={fetchForecast}/>}
-        {(wind === "manual" || (wind === FORECAST && !forecast)) && <div style={{display: "flex", gap: "0.5rem"}}>
-            <NumberInput label="From (degrees)" size="xs" min={0} max={359} value={direction} onChange={setDirection}/>
-            <NumberInput label="Speed (mph)" size="xs" min={0} max={200} value={speed} onChange={setSpeed}/>
-        </div>}
-        {wind !== CLIMATE && <Checkbox label="Follow the terrain" size="xs" style={{marginTop: "0.5rem"}}
-                                       checked={useTerrain} onChange={(e) => setUseTerrain(e.currentTarget.checked)}/>}
         {terrainStatus && <div style={muted}>{terrainStatus}</div>}
+        {wind === FORECAST && prepared && <ForecastWarnings prepared={prepared} bursts={bursts} hour={hour}/>}
         {wind === CLIMATE ? <div style={{margin: "0.5rem 0"}}>
             <div style={{fontWeight: 600}}>Typical {MONTHS[climateMonth - 1]}: not today's winds</div>
             <div style={muted}>
@@ -791,17 +847,22 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
                 {b.label}
             </div>)}
         </div> : <div style={{margin: "0.5rem 0"}}>
-            <Select label="Show" size="xs" data={SHOW} value={show} onChange={(v) => v && setShow(v)}
-                    allowDeselect={false} comboboxProps={DROPDOWN}/>
-            <div style={{fontWeight: 600, marginTop: "0.25rem"}}>{legendHeading(show, after)}</div>
-            <Timeline show={show} after={after} onAfter={(h) => {
+            <div style={{display: "flex", gap: "0.5rem"}}>
+                <Button size="xs" role={show === RATE ? "primary" : "cancel"} aria-pressed={show === RATE}
+                        style={{flex: 1}} onClick={() => setShow(RATE)}>Hour by hour</Button>
+                <Button size="xs" role={show === TOTAL ? "primary" : "cancel"} aria-pressed={show === TOTAL}
+                        style={{flex: 1}} onClick={() => {
+                            setPlaying(false);
+                            setShow(TOTAL);
+                        }}>Total dose</Button>
+            </div>
+            <div style={{fontWeight: 600, marginTop: "0.5rem"}}>{legendHeading(show, after)}</div>
+            {show === RATE && <Timeline after={after} onAfter={(h) => {
                 setPlaying(false);
                 setAfter(h);
-            }} playing={playing} onPlaying={(p) => {
-                setPlaying(p);
-                if (p && !after) setAfter(1);
-            }} startMs={wind === FORECAST && forecast ? Date.parse(forecast.hours[hour]) : null}/>
-            <div style={muted}>{legendText(show, after)}</div>
+            }} playing={playing} onPlaying={setPlaying}
+                                        startMs={useField ? Date.parse(forecast.hours[hour]) : null}/>}
+            <div style={muted}>{legendText(show)}</div>
             {(show === TOTAL ? TOTAL_BANDS : DOSE_BANDS).map((b) => <div key={b.rate}
                                                                           style={{display: "flex", alignItems: "center", gap: "0.375rem"}}>
                 <span style={{display: "inline-block", width: "0.875rem", height: "0.875rem", flexShrink: 0,
@@ -813,10 +874,28 @@ export default function FalloutPanel({map, targets = [], burst = null, onSaveBur
             An estimate, not a forecast. Prototype: on six Nevada test bursts it showed about 4
             times the areas measured (from 2 to 8 times), more than was measured on every one.
         </div>
-        <div style={{display: "flex", justifyContent: "flex-end"}}>
-            <Button role="cancel" size="sm" onClick={onClose}>Close</Button>
+        <div style={{display: "flex", justifyContent: "space-between"}}>
+            <Button role="cancel" size="sm" onClick={() => {
+                setPlaying(false);
+                setStep(TARGETS);
+            }}>Back</Button>
+            {close}
         </div>
     </div>;
+}
+
+// Where the user is in the panel's steps: the nuclear button (done once the panel is open), the
+// targets, and the fallout.
+export function FalloutSteps({step}) {
+    const names = [["Nuclear", null], ["Targets", TARGETS], ["Fallout", VIEW]];
+    const at = names.findIndex(([, s]) => s === step);
+    return <ol aria-label="Steps" style={{display: "flex", gap: "0.75rem", listStyle: "none", padding: 0,
+        margin: "0 0 0.5rem 0", fontSize: "0.75rem"}}>
+        {names.map(([name], k) => <li key={name} aria-current={k === at ? "step" : undefined}
+                                      style={{color: k === at ? "var(--text)" : "var(--muted)", fontWeight: k === at ? 600 : 400}}>
+            {k < at ? "✓" : `${k + 1}.`} {name}
+        </li>)}
+    </ol>;
 }
 
 // How far the calculation has got, while it runs: a bar filled as far as the bursts are done
@@ -835,51 +914,63 @@ export function FalloutProgress({busy, progress, onCancel}) {
     </div>;
 }
 
-// The heading of the legend, for what is shown and the hour.
-export function legendHeading(show, after) {
-    const hours = after === 1 ? "1 hour" : `${after} hours`;
-    if (show === TOTAL) return after ? `Total dose by ${hours} after the bursts` : "Total dose in the first two weeks";
-    return after ? `Dose rate ${hours} after the bursts` : "Dose rate, as at 1 hour after the bursts";
+// `hours` after the bursts, as the user reads it: hours, then days, then weeks.
+export function afterLabel(hours) {
+    if (hours < 24) return hours === 1 ? "1 hour" : `${hours} hours`;
+    if (hours % 168 === 0) return hours === 168 ? "1 week" : `${hours / 168} weeks`;
+    return hours === 24 ? "1 day" : `${hours / 24} days`;
 }
 
-// What the legend's bands are, for what is shown and the hour.
-export function legendText(show, after) {
+// How many times weaker fallout is `hours` after the bursts than at H+1, as the user reads it.
+export function weakerThanH1(hours) {
+    return Number((1 / decayFromH1(hours)).toPrecision(2)).toLocaleString();
+}
+
+// The heading of the legend, for what is shown and the hour.
+export function legendHeading(show, after) {
+    if (show === TOTAL) return "Total dose outdoors in the first two weeks";
+    return `Dose rate ${afterLabel(after)} after the bursts`;
+}
+
+// What the legend's bands are, for what is shown.
+export function legendText(show) {
     if (show === TOTAL) {
         return "R: roentgens, about 10 mSv each. The dose of someone outdoors the whole time, from when the "
             + "fallout arrives, with the usual decay; real fallout can decay faster or slower, which only "
             + "readings can tell. Indoors is less: about 2 to 3 times in a house, 10 or more in a basement.";
     }
-    return "R/hr: roentgens an hour, about 10 mSv each. " + (after
-        ? "Only the fallout which has landed by then is shown, as strong as it is then: it weakens about 10 times for every 7 times longer since the bursts. That is the usual decay; real fallout can decay faster or slower, which only readings can tell."
-        : "All the fallout is shown as if it were already down 1 hour after the bursts. Downwind it arrives hours later, and has weakened by then: about 10 times less 7 hours after the bursts.");
+    return "R/hr: roentgens an hour, about 10 mSv each. Only the fallout which has landed by then is shown, "
+        + "as strong as it is then. Downwind it lands hours after the bursts, and everywhere it weakens: about "
+        + "10 times for every 7 times longer since the bursts. That is the usual decay; real fallout can decay "
+        + "faster or slower, which only readings can tell.";
 }
 
-// Which hour after the bursts is shown, 0 for all the fallout as at H+1, and playing them in turn.
-// `startMs` is when the bursts are (the forecast hour), if known.
-export function Timeline({show = RATE, after, onAfter, playing, onPlaying, startMs}) {
+// Which hour after the bursts is shown (one of HOURS), and playing them in turn.  `startMs` is when
+// the bursts are (the forecast hour), if known.
+export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
-    const when = after && startMs !== null
+    const when = startMs !== null && startMs !== undefined
         ? `, ${new Date(startMs + after * 3600000).toLocaleString(undefined, {weekday: "short", hour: "numeric", minute: "2-digit"})}`
         : "";
+    const at = Math.max(HOURS.indexOf(after), 0);
     return <div style={{margin: "0.25rem 0"}}>
         <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
             <Button size="xs" onClick={() => onPlaying(!playing)} aria-label={playing ? "Pause" : "Play"}>
                 {playing ? "❚❚" : "▶"}
             </Button>
-            <input type="range" min={0} max={LAST_HOUR} step={1} value={after} style={{flex: 1}}
-                   aria-label="Hours after the bursts" onChange={(e) => onAfter(Number(e.target.value))}/>
+            <input type="range" min={0} max={HOURS.length - 1} step={1} value={at} style={{flex: 1}}
+                   aria-label="Time after the bursts" aria-valuetext={afterLabel(after)}
+                   onChange={(e) => onAfter(HOURS[Number(e.target.value)])}/>
         </div>
         <div style={muted}>
-            {show === TOTAL
-                ? (after ? `H+${after}${when}: the dose by then` : "The first two weeks. Play to watch the dose build.")
-                : (after ? `H+${after}${when}: the fallout landed by then` : "All the fallout, as at H+1. Play to watch it land.")}
+            H+{after}{when}: the fallout landed by then
+            {after > 1 ? `, about ${weakerThanH1(after)} times weaker than at H+1` : ""}.
         </div>
     </div>;
 }
 
 // The forecast winds aloft: which hour, how old, where they reach, and fetching a new field.
-function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fetching, fetchPercent, fetchError,
-                              onFetch}) {
+function ForecastControls({forecast, hour, onHour, online, fetching, fetchPercent, fetchError, onFetch}) {
     const muted = {color: "var(--muted)", fontSize: "0.75rem"};
     // Not again while the panel shows its progress: the hours' labels are slow to write.
     // Written again at half past each hour, when the hour nearest now moves on.
@@ -889,10 +980,6 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
         const nearest = nearestHour(forecast.hours, new Date(nowHour * 3600000));
         return forecast.hours.map((time, i) => ({value: String(i), label: hourLabel(time, i === nearest)}));
     }, [forecast, nowHour]);
-    const outside = useMemo(() => prepared ? bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length : 0,
-        [prepared, bursts]);
-    const rainy = useMemo(() => prepared ? bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length : 0,
-        [prepared, bursts, hour]);
     const fetchButton = <div>
         <Button size="xs" onClick={onFetch} disabled={!online || fetching} style={{marginTop: "0.25rem"}}>
             {fetching ? `Fetching… ${Math.round(fetchPercent)}%` : forecast ? "Fetch again" : "Fetch winds aloft"}
@@ -923,15 +1010,26 @@ function ForecastControls({forecast, prepared, bursts, hour, onHour, online, fet
             {!forecastExpired(forecast) && forecastRunsOut(forecast, hour) !== null && ` It ends at ${hourLabel(
                 forecast.hours[forecast.hours.length - 1], false)}, before all the fallout is down: its last hour's winds are held from then on.`}
         </div>
-        {outside > 0 && <div style={{...muted, color: "var(--warning)"}}>
-            {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside these winds: the nearest are
-            used. Fetch again to cover {outside === 1 ? "it" : "them"}.
+        {fetchButton}
+    </div>;
+}
+
+// What the user should know of the forecast, beside its fallout: bursts outside its winds, and rain.
+function ForecastWarnings({prepared, bursts, hour}) {
+    const warning = {color: "var(--warning)", fontSize: "0.75rem"};
+    const outside = useMemo(() => bursts.filter((b) => !fieldCovers(prepared, b.lat, b.lon)).length,
+        [prepared, bursts]);
+    const rainy = useMemo(() => bursts.filter((b) => rainNear(prepared, b.lat, b.lon, hour) >= RAIN_WARNING_MM).length,
+        [prepared, bursts, hour]);
+    return <>
+        {outside > 0 && <div style={warning}>
+            {outside === 1 ? "1 burst is" : `${outside} bursts are`} outside the forecast's winds: the nearest
+            are used. Fetch again (Back, then Options) to cover {outside === 1 ? "it" : "them"}.
         </div>}
-        {rainy > 0 && <div style={{...muted, color: "var(--warning)"}}>
+        {rainy > 0 && <div style={warning}>
             Rain is forecast near {rainy === 1 ? "1 burst" : `${rainy} bursts`} in the 6 hours from then.
             Rain washes fallout out of the air where it falls, which this map shows roughly; real rain is
             patchier than a forecast, and its hot spots may be hotter.
         </div>}
-        {fetchButton}
-    </div>;
+    </>;
 }

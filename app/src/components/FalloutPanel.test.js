@@ -4,6 +4,14 @@ import {loadTerrainGrid} from './falloutTerrain';
 
 // No terrain files under Jest, until a test gives a grid.
 jest.mock('./falloutTerrain', () => ({loadTerrainGrid: jest.fn(async () => null)}));
+// No forecast, past days or fetches under Jest.
+jest.mock('../api', () => ({
+    fetchFalloutWinds: async () => null,
+    getFalloutClimatology: async () => null,
+    getFalloutClimatologyMonth: async () => null,
+    getJobs: async () => [],
+    getLatestFalloutWinds: async () => null,
+}));
 
 // Fallout workers serving their tasks (as fallout.worker.js does) here, as a browser's would on
 // another thread: messages arrive later, copied.  `made` are those made since it was emptied.
@@ -248,22 +256,40 @@ describe('the fallout image', () => {
 describe('the fallout timeline', () => {
     const {screen, fireEvent} = require('@testing-library/react');
     const {renderWithProviders} = require('../test-utils');
-    const {Timeline} = require('./FalloutPanel');
+    const {Timeline, HOURS, afterLabel, weakerThanH1} = require('./FalloutPanel');
+
+    test('runs from the first hour to two weeks, in longer steps as it goes', () => {
+        expect(HOURS[0]).toBe(1);
+        expect(HOURS[HOURS.length - 1]).toBe(336);
+        for (let k = 1; k < HOURS.length; k++) expect(HOURS[k]).toBeGreaterThan(HOURS[k - 1]);
+        expect(HOURS.map(afterLabel)).toEqual(['1 hour', '2 hours', '3 hours', '6 hours', '12 hours', '1 day',
+            '2 days', '3 days', '5 days', '1 week', '2 weeks']);
+    });
+
+    test('says how much the fallout has weakened since H+1', () => {
+        // t^-1.2: about 10 times weaker for every 7 times longer.
+        expect(weakerThanH1(7)).toBe('10');
+        expect(weakerThanH1(3)).toBe('3.7');
+        expect(weakerThanH1(48)).toBe('100');
+        expect(weakerThanH1(336)).toBe('1,100');
+    });
 
     test('says what it shows, and moves and plays the hours', () => {
         const onAfter = jest.fn(), onPlaying = jest.fn();
-        const {unmount} = renderWithProviders(<Timeline after={0} onAfter={onAfter} playing={false}
+        const {unmount} = renderWithProviders(<Timeline after={1} onAfter={onAfter} playing={false}
                                                         onPlaying={onPlaying} startMs={null}/>);
-        expect(screen.getByText(/All the fallout, as at H\+1/)).toBeTruthy();
-        fireEvent.change(screen.getByLabelText('Hours after the bursts'), {target: {value: '6'}});
-        expect(onAfter).toHaveBeenCalledWith(6);
+        expect(screen.getByText(/^H\+1: the fallout landed by then\.$/)).toBeTruthy();
+        // Each step of the slider is one of the hours.
+        fireEvent.change(screen.getByLabelText('Time after the bursts'), {target: {value: String(HOURS.indexOf(48))}});
+        expect(onAfter).toHaveBeenCalledWith(48);
         fireEvent.click(screen.getByLabelText('Play'));
         expect(onPlaying).toHaveBeenCalledWith(true);
 
         unmount();
         renderWithProviders(<Timeline after={6} onAfter={onAfter} playing={true} onPlaying={onPlaying}
                                       startMs={Date.parse('2026-11-22T00:00Z')}/>);
-        expect(screen.getByText(/^H\+6, .*: the fallout landed by then$/)).toBeTruthy();
+        expect(screen.getByText(/^H\+6, .*: the fallout landed by then, about 8\.6 times weaker than at H\+1\.$/)).toBeTruthy();
+        expect(screen.getByLabelText('Time after the bursts').getAttribute('aria-valuetext')).toBe('6 hours');
         fireEvent.click(screen.getByLabelText('Pause'));
         expect(onPlaying).toHaveBeenLastCalledWith(false);
     });
@@ -280,21 +306,111 @@ describe('the total dose view', () => {
     });
 
     test('says what is shown, by the hour', () => {
-        expect(legendHeading('total', 0)).toBe('Total dose in the first two weeks');
-        expect(legendHeading('total', 6)).toBe('Total dose by 6 hours after the bursts');
-        expect(legendHeading('rate', 0)).toBe('Dose rate, as at 1 hour after the bursts');
+        expect(legendHeading('total', 6)).toBe('Total dose outdoors in the first two weeks');
         expect(legendHeading('rate', 1)).toBe('Dose rate 1 hour after the bursts');
-        expect(legendText('total', 0)).toMatch(/outdoors the whole time/);
-        expect(legendText('rate', 3)).toMatch(/landed by then/);
+        expect(legendHeading('rate', 120)).toBe('Dose rate 5 days after the bursts');
+        expect(legendText('total')).toMatch(/outdoors the whole time/);
+        expect(legendText('rate')).toMatch(/landed by then/);
+        expect(legendText('rate')).toMatch(/weakens/);
+    });
+});
+
+describe('the fallout panel\'s steps', () => {
+    const {screen, fireEvent, waitFor, act, cleanup} = require('@testing-library/react');
+    const {renderWithProviders} = require('../test-utils');
+    const FalloutPanel = require('./FalloutPanel').default;
+
+    // A map which keeps the one image source and layer the panel draws.
+    function fakeMap() {
+        const map = {
+            source: null, layer: false, added: 0,
+            getSource: () => map.source,
+            addSource: (id, s) => {
+                map.added++;
+                map.source = {...s, updateImage: (i) => Object.assign(map.source, i)};
+            },
+            addLayer: () => {
+                map.layer = true;
+            },
+            getLayer: () => map.layer,
+            removeLayer: () => {
+                map.layer = false;
+            },
+            removeSource: () => {
+                map.source = null;
+            },
+            on: () => null, off: () => null,
+            getCenter: () => ({lat: 40, lng: -100}),
+        };
+        return map;
+    }
+    const target = {id: 1, label: 'Somewhere', lat: 40, lon: -100, weapon: 'w88'};
+    let getContext, toDataURL;
+    beforeEach(() => {
+        loadTerrainGrid.mockClear();
+        // jsdom draws no canvas: an image of the right size is all the map is given.
+        getContext = jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+            createImageData: (w, h) => ({data: new Uint8ClampedArray(w * h * 4)}),
+            putImageData: () => null,
+        }));
+        toDataURL = jest.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => 'data:');
+    });
+    afterEach(() => {
+        cleanup();
+        getContext.mockRestore();
+        toDataURL.mockRestore();
     });
 
-    test('labels the timeline as a dose', () => {
-        const {screen} = require('@testing-library/react');
-        const {renderWithProviders} = require('../test-utils');
-        const {Timeline} = require('./FalloutPanel');
-        renderWithProviders(<Timeline show="total" after={0} onAfter={() => null} playing={false}
-                                      onPlaying={() => null} startMs={null}/>);
-        expect(screen.getByText(/The first two weeks/)).toBeTruthy();
+    test('ask for targets first, and calculate nothing until there are some', async () => {
+        const map = fakeMap();
+        renderWithProviders(<FalloutPanel map={map} targets={[]} onClose={() => null}/>);
+        expect(screen.getByText('Step 2 of 3: Choose the targets')).toBeTruthy();
+        expect(screen.getByText('No targets yet')).toBeTruthy();
+        expect(screen.getByText(/right-click the map and choose Add Target Here/i)).toBeTruthy();
+        expect(screen.getByRole('button', {name: 'Next: the fallout'}).disabled).toBe(true);
+        // The winds and terrain wait under Options, with what is used said beside it.
+        expect(screen.getByText('Options').closest('details').open).toBe(false);
+        await act(async () => new Promise((r) => setTimeout(r, 60)));
+        expect(map.added).toBe(0);
+    });
+
+    test('show the targets\' fallout only once the user goes on, hour by hour or in total', async () => {
+        const map = fakeMap();
+        renderWithProviders(<FalloutPanel map={map} targets={[target]} onClose={() => null}/>);
+        expect(screen.getByText('1 target')).toBeTruthy();
+        await act(async () => new Promise((r) => setTimeout(r, 60)));
+        expect(map.added).toBe(0);
+
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
+        expect(screen.getByText('Step 3 of 3: The fallout')).toBeTruthy();
+        expect(screen.getByRole('button', {name: 'Hour by hour'}).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByText('Dose rate 1 hour after the bursts')).toBeTruthy();
+        await waitFor(() => expect(loadTerrainGrid).toHaveBeenCalledTimes(1), {timeout: 20000});
+        await waitFor(() => expect(screen.queryByText(/Calculating/)).toBeNull(), {timeout: 20000});
+        expect(map.layer).toBe(true);
+
+        // A later hour, then the total, which has no timeline.
+        fireEvent.change(screen.getByLabelText('Time after the bursts'), {target: {value: '5'}});
+        expect(screen.getByText('Dose rate 1 day after the bursts')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', {name: 'Total dose'}));
+        expect(screen.getByText('Total dose outdoors in the first two weeks')).toBeTruthy();
+        expect(screen.queryByLabelText('Time after the bursts')).toBeNull();
+
+        // Back to the targets clears the map; on again, with nothing changed, it is not calculated again.
+        fireEvent.click(screen.getByRole('button', {name: 'Back'}));
+        expect(screen.getByText('Step 2 of 3: Choose the targets')).toBeTruthy();
+        expect(map.layer).toBe(false);
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
+        await waitFor(() => expect(map.layer).toBe(true));
+        expect(screen.queryByText(/Calculating/)).toBeNull();
+        expect(loadTerrainGrid).toHaveBeenCalledTimes(1);
+    }, 60000);
+
+    test('go straight to the fallout of a burst being tried out', () => {
+        renderWithProviders(<FalloutPanel map={fakeMap()} targets={[]} burst={{lat: 40, lon: -100}}
+                                          onClose={() => null}/>);
+        expect(screen.getByText('Step 3 of 3: The fallout')).toBeTruthy();
+        expect(screen.getByRole('list', {name: 'Steps'}).textContent).toMatch(/✓ Nuclear.*✓ Targets.*3\. Fallout/);
     });
 });
 

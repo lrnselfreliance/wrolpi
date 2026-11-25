@@ -1323,7 +1323,7 @@ export default function MapViewer() {
             button.setAttribute("aria-pressed", String(nuclear));
         }
         showPins();
-        // Nuclear mode opens on the fallout of the saved targets; leaving it closes the view.
+        // Nuclear mode opens the fallout panel on its targets step; leaving it closes the panel.
         setFalloutOpen(nuclear);
         if (!nuclear) setFalloutBurst(null);
     }, [nuclear, showPins]);

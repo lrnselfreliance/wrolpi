@@ -1501,7 +1501,10 @@ export default function MapViewer() {
                 left: contextMenu.x,
                 top: contextMenu.y,
                 zIndex: 1001,
-                background: "white",
+                // App chrome, not map data: token-colored in every theme, like the map's other panels.
+                background: "var(--panel)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
                 borderRadius: "0.375rem",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
                 padding: "0.25rem 0",
@@ -1509,7 +1512,7 @@ export default function MapViewer() {
                 minWidth: "11.25rem",
             }}
         >
-            <div style={{padding: "0.375rem 0.75rem", color: "#666", fontSize: '0.75rem', borderBottom: "1px solid #eee"}}>
+            <div style={{padding: "0.375rem 0.75rem", color: "var(--muted)", fontSize: '0.75rem', borderBottom: "1px solid var(--table-line)"}}>
                 {(() => {
                     const map = mapRef.current;
                     const zoom = map ? map.getZoom() : 10;
@@ -1519,7 +1522,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleCopyCoords}
             >
@@ -1527,7 +1530,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleExportPng}
             >
@@ -1535,7 +1538,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleExportQuad}
             >
@@ -1543,7 +1546,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleAddPin}
             >
@@ -1551,7 +1554,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleSolar}
             >
@@ -1559,7 +1562,7 @@ export default function MapViewer() {
             </div>
             <div
                 style={{padding: "0.5rem 0.75rem", cursor: "pointer", userSelect: "none"}}
-                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseEnter={e => e.target.style.background = "var(--head)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
                 onClick={handleSetDefaultLocation}
             >

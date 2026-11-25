@@ -39,5 +39,5 @@ selenium==4.50.0
 tqdm==4.70.1
 vininfo[cli]==1.11.0
 webvtt-py==0.5.1
-yt-dlp[default,curl-cffi]>=2026.08.19
+yt-dlp[default,curl-cffi]>=2026.11.23
 yt-dlp-ejs>=0.8.0

@@ -188,6 +188,27 @@ async def test_fetch_wind_field_failure(test_directory):
 
 
 @pytest.mark.asyncio
+async def test_fetch_wind_field_says_why(test_directory):
+    """A request which takes too long, or fails without a message, still says why."""
+    import asyncio
+
+    async def slow(url):
+        raise asyncio.TimeoutError()
+
+    with mock.patch('modules.map.winds.request_forecast', slow):
+        with pytest.raises(winds.WindsError, match=f'did not answer within {winds.TIMEOUT} seconds'):
+            await winds.fetch_wind_field([(61, -149)])
+
+    async def silent(url):
+        raise ConnectionResetError()
+
+    with mock.patch('modules.map.winds.request_forecast', silent):
+        with pytest.raises(winds.WindsError, match='ConnectionResetError'):
+            await winds.fetch_wind_field([(61, -149)])
+    assert winds.TIMEOUT >= 120
+
+
+@pytest.mark.asyncio
 async def test_fetch_wind_field_slows_down(test_directory):
     """Told too many have been asked of it, the service is asked again a minute later, once."""
     answers = [winds.WindsError('The forecast service answered HTTP 429')]

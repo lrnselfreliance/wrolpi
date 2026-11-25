@@ -51,7 +51,9 @@ HUMIDITY_LEVELS = (1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 
 # CLOUD_TOP_RH (percent): HYSPLIT's rule (Moroz et al. 2010, after Draxler and Hess 1997).
 CLOUD_BOTTOM_RH = 80
 CLOUD_TOP_RH = 60
-TIMEOUT = 60
+# How long (s) the forecast service may take to answer one request: it takes most of a minute for a
+# batch of places at times.
+TIMEOUT = 180
 # How far around each target the field reaches (degrees): as far as fallout which shows is carried.
 MARGIN = 6
 # No more points than this in a field: up to about 4,000 of the free service's 5,000 calls an hour and
@@ -202,8 +204,10 @@ async def request_batch(url: str) -> list:
                 raise
             logger.warning('The forecast service asked us to slow down; trying again in a minute')
             await asyncio.sleep(BATCH_SECONDS)
+        except asyncio.TimeoutError as e:
+            raise WindsError(f'The forecast service did not answer within {TIMEOUT} seconds') from e
         except Exception as e:
-            raise WindsError(f'Could not reach the forecast service: {e}') from e
+            raise WindsError(f'Could not reach the forecast service: {str(e) or type(e).__name__}') from e
 
 
 async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None, cancelled=None) -> dict:

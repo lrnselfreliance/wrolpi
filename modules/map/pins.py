@@ -8,33 +8,6 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 logger = logger.getChild(__name__)
 
 
-class TargetsChanged(ValueError):
-    """The saved targets are not the ones the user started from."""
-
-
-# What a pin marks: a place, or a likely detonation site (a target, shown in the map's nuclear mode).
-PIN_KINDS = ('pin', 'target')
-
-
-def check_weapon(weapon: str = None, yield_kt: float = None, fission_fraction: float = None) -> dict:
-    """A target's weapon, as it is kept: the key of a weapon the simulator offers (or "custom"), its
-    yield (kt) when it is a yield of the user's own, and the share of the yield from fission."""
-    fields = dict()
-    if weapon is not None:
-        if not isinstance(weapon, str) or not weapon.strip():
-            raise ValueError('A weapon is named by its key')
-        fields['weapon'] = weapon.strip()
-    if yield_kt is not None:
-        if not 0 < yield_kt <= 1e5:
-            raise ValueError('A yield is more than 0 and at most 100,000 kt')
-        fields['yield_kt'] = yield_kt
-    if fission_fraction is not None:
-        if not 0 < fission_fraction <= 1:
-            raise ValueError('A fission share is more than 0 and at most 1')
-        fields['fission_fraction'] = fission_fraction
-    return fields
-
-
 @dataclass
 class MapPinsConfigValidator:
     version: int = None
@@ -64,13 +37,7 @@ class MapPinsConfig(ConfigFile):
             return 1
         return max(p.get('id', 0) for p in pins) + 1
 
-    def add_pin(self, lat: float, lon: float, label: str, color: str = 'red', kind: str = 'pin',
-                weapon: str = None, yield_kt: float = None, fission_fraction: float = None) -> dict:
-        if kind not in PIN_KINDS:
-            raise ValueError(f'A pin is one of {", ".join(PIN_KINDS)}, not {kind!r}')
-        weapon_fields = check_weapon(weapon, yield_kt, fission_fraction)
-        if weapon_fields and kind != 'target':
-            raise ValueError('Only a target has a weapon')
+    def add_pin(self, lat: float, lon: float, label: str, color: str = 'red') -> dict:
         pin = dict(
             id=self._next_pin_id(),
             lat=round(lat, 6),
@@ -79,10 +46,6 @@ class MapPinsConfig(ConfigFile):
             color=color,
             created=str(now().date()),
         )
-        # A pin without a kind is a plain pin, as every pin was before targets.
-        if kind != 'pin':
-            pin['kind'] = kind
-        pin.update(weapon_fields)
         pins = self.pins
         pins.append(pin)
         self.pins = pins
@@ -98,62 +61,14 @@ class MapPinsConfig(ConfigFile):
         save_map_pins_config.activate_switch()
         return True
 
-    def replace_targets(self, targets: List[dict], loaded_ids: List[int]) -> List[dict]:
-        """Make `targets` the saved targets, in one change of the config; plain pins are left be.
-
-        Each target is {lat, lon, label, weapon?, yield_kt?, fission_fraction?, id?}: a target with
-        the id of a saved target keeps that target's id and date, the others are new.  `loaded_ids`
-        are the ids of the saved targets the user started from: if the saved targets are not those
-        (they were not loaded, or have changed since), nothing is saved, so none are lost unseen.
-        Returns the saved targets."""
-        pins = self.pins
-        saved = {p['id']: p for p in pins if p.get('kind') == 'target'}
-        if set(saved) != set(loaded_ids):
-            raise TargetsChanged('The saved targets are not the ones loaded: load them again, then save')
-        next_id = self._next_pin_id()
-        kept = []
-        for target in targets:
-            label = str(target.get('label') or '').strip()
-            if not label:
-                raise ValueError('Every target has a name')
-            lat, lon = target.get('lat'), target.get('lon')
-            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)) \
-                    or not -90 <= lat <= 90 or not -180 <= lon <= 180:
-                raise ValueError(f'{label} is not at a latitude and longitude')
-            weapon_fields = check_weapon(target.get('weapon'), target.get('yield_kt'), target.get('fission_fraction'))
-            old = saved.get(target.get('id'))
-            if old:
-                pin_id, created, color = old['id'], old.get('created'), old.get('color', 'red')
-            else:
-                pin_id, created, color = next_id, str(now().date()), 'red'
-                next_id += 1
-            pin = dict(id=pin_id, lat=round(lat, 6), lon=round(lon, 6), label=label, color=color, created=created,
-                       kind='target')
-            pin.update(weapon_fields)
-            kept.append(pin)
-        if len({p['id'] for p in kept}) != len(kept):
-            raise ValueError('A saved target is given more than once')
-        self.pins = [p for p in pins if p.get('kind') != 'target'] + kept
-        save_map_pins_config.activate_switch()
-        return kept
-
-    def update_pin(self, pin_id: int, label: str = None, color: str = None, weapon: str = None,
-                   yield_kt: float = None, fission_fraction: float = None) -> bool:
-        weapon_fields = check_weapon(weapon, yield_kt, fission_fraction)
+    def update_pin(self, pin_id: int, label: str = None, color: str = None) -> bool:
         pins = self.pins
         for pin in pins:
             if pin.get('id') == pin_id:
-                if weapon_fields and pin.get('kind') != 'target':
-                    raise ValueError('Only a target has a weapon')
                 if label is not None:
                     pin['label'] = label
                 if color is not None:
                     pin['color'] = color
-                if weapon is not None:
-                    # A new weapon replaces the old one's yield and fission share.
-                    for key in ('weapon', 'yield_kt', 'fission_fraction'):
-                        pin.pop(key, None)
-                pin.update(weapon_fields)
                 self.pins = pins
                 save_map_pins_config.activate_switch()
                 return True

@@ -1000,19 +1000,25 @@ export function Timeline({after, onAfter, playing, onPlaying, startMs}) {
     </div>;
 }
 
-// Whether the forecast's winds run out before the fallout of bursts at `hour` is down: a warning
-// saying so, or null.
+// A warning about the forecast for bursts at its hour `hour` (an index), or null: whether it is out of
+// date, and whether its winds run out before their fallout is down.  The winds follow the hour chosen,
+// so the last hour is held for the whole simulation only when it is the hour chosen.
 export function forecastShortText(forecast, hour) {
     if (!forecast) return null;
+    const last = forecast.hours.length - 1;
+    let held = null;
+    if (hour >= last) {
+        held = "Its last hour's winds are held for the whole simulation.";
+    } else if (forecastRunsOut(forecast, hour) !== null) {
+        held = `It ends at ${hourLabel(forecast.hours[last], false)}, before all the fallout is down: `
+            + "its last hour's winds are held from then on.";
+    }
     if (forecastExpired(forecast)) {
-        return "This forecast has run out: its last hour's winds are held for the whole simulation. "
-            + "Download a new one on the map's Manage tab, or use one wind at every height.";
+        return ["This forecast is out of date: its winds are past ones, not today's.", held,
+            "Download a new one on the map's Manage tab, or use one wind at every height."]
+            .filter(Boolean).join(" ");
     }
-    if (forecastRunsOut(forecast, hour) !== null) {
-        return `This forecast ends at ${hourLabel(forecast.hours[forecast.hours.length - 1], false)}, before `
-            + "all the fallout is down: its last hour's winds are held from then on.";
-    }
-    return null;
+    return held && `This forecast is short. ${held}`;
 }
 
 // The forecast winds aloft: which hour, how old, where they reach, and whether they last until the

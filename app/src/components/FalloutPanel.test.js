@@ -328,11 +328,21 @@ describe('the forecast\'s warning', () => {
     const hourMs = Math.floor(Date.now() / 3600000) * 3600000;
     const of = (from, count) => ({hours: Array.from({length: count}, (_, h) => new Date(hourMs + (from + h) * 3600000).toISOString())});
 
-    test('says when it has run out, or ends before the fallout is down, and else nothing', () => {
+    test('says when it is out of date, or ends before the fallout is down, and else nothing', () => {
         expect(forecastShortText(null, 0)).toBeNull();
-        expect(forecastShortText(of(-30, 10), 9)).toMatch(/has run out/);
+        expect(forecastShortText(of(-30, 10), 9)).toMatch(/out of date.*last hour's winds are held for the whole simulation/);
         expect(forecastShortText(of(-1, 30), 1)).toMatch(/ends at .*, before all the fallout is down/);
         expect(forecastShortText(of(-1, 96), 1)).toBeNull();
+    });
+
+    test('says the last hour is held only from when it is, for the hour chosen', () => {
+        // Out of date, but its first hour still has 48 hours of winds after it: none is held.
+        const old = of(-200, 96);
+        expect(forecastShortText(old, 0)).toMatch(/out of date/);
+        expect(forecastShortText(old, 0)).not.toMatch(/held/);
+        expect(forecastShortText(old, 60)).toMatch(/held from then on/);
+        expect(forecastShortText(old, 60)).not.toMatch(/whole simulation/);
+        expect(forecastShortText(old, 95)).toMatch(/held for the whole simulation/);
     });
 });
 
@@ -543,9 +553,9 @@ describe('the fallout panel\'s steps', () => {
             await act(async () => new Promise((r) => setTimeout(r, 50)));
             fireEvent.click(screen.getByRole('textbox', {name: 'Wind'}));
             fireEvent.click([...document.querySelectorAll('[role=option]')].find((o) => o.textContent === 'Forecast winds aloft'));
-            expect(screen.getByText(/This forecast has run out: its last hour's winds are held/)).toBeTruthy();
+            expect(screen.getByText(/This forecast is out of date: .*last hour's winds are held/)).toBeTruthy();
             fireEvent.click(screen.getByRole('button', {name: 'Next: the fallout'}));
-            expect(screen.getByText(/This forecast has run out/)).toBeTruthy();
+            expect(screen.getByText(/This forecast is out of date/)).toBeTruthy();
         } finally {
             mockLatestWinds = null;
         }

@@ -758,6 +758,10 @@ export default function MapViewer() {
     const [loadedIds, setLoadedIds] = useState(null);
     const nextTargetKey = useRef(1);
     const targetMarkersRef = useRef([]);
+    // Placing a target: the next click on the map is where it is.  The ref tells the map's own click
+    // handlers to stand by.
+    const [placingTarget, setPlacingTarget] = useState(false);
+    const placingTargetRef = useRef(false);
     const pinsVisibleRef = useRef(true);
     // Choosing a quadrangle to export: null, or {quad} (the quadrangle to start with, if any).  While
     // choosing, a click on the map chooses, so the ref tells the map's own click handlers to stand by.
@@ -981,7 +985,7 @@ export default function MapViewer() {
                 const featuresAt = (point, layers) =>
                     layers.length ? map.queryRenderedFeatures(point, {layers}) : [];
                 map.on("click", (e) => {
-                    if (destroyed || pickingQuadRef.current) return;
+                    if (destroyed || pickingQuadRef.current || placingTargetRef.current) return;
                     const html = overlayPopupHtml(featuresAt(e.point, overlayLayerIds()))
                         || poiPopupHtml(featuresAt(e.point, poiLayerIds()), e.lngLat);
                     if (!html) return;
@@ -992,7 +996,7 @@ export default function MapViewer() {
                 });
                 map.on("mousemove", (e) => {
                     if (destroyed) return;
-                    if (pickingQuadRef.current) {
+                    if (pickingQuadRef.current || placingTargetRef.current) {
                         map.getCanvas().style.cursor = "crosshair";
                         return;
                     }
@@ -1152,6 +1156,26 @@ export default function MapViewer() {
         const map = mapRef.current;
         if (map) map.getCanvas().style.cursor = pickingQuad ? "crosshair" : "";
     }, [pickingQuad]);
+
+    // Placing a target: a click on the map opens the dialog which adds it there; Escape stops.
+    useEffect(() => {
+        placingTargetRef.current = placingTarget;
+        const map = mapRef.current;
+        if (!map || !placingTarget) return;
+        map.getCanvas().style.cursor = "crosshair";
+        const onClick = (e) => {
+            setPlacingTarget(false);
+            setAddingPin({lat: e.lngLat.lat, lon: e.lngLat.lng, kind: "target"});
+        };
+        const onKey = (e) => e.key === "Escape" && setPlacingTarget(false);
+        map.on("click", onClick);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            map.off("click", onClick);
+            document.removeEventListener("keydown", onKey);
+            map.getCanvas().style.cursor = "";
+        };
+    }, [placingTarget]);
 
     const handleExportQuad = useCallback(() => {
         if (!contextMenu) return;
@@ -1384,6 +1408,7 @@ export default function MapViewer() {
         showPins();
         // Nuclear mode opens the fallout panel on its targets step; leaving it closes the panel.
         setFalloutOpen(nuclear);
+        if (!nuclear) setPlacingTarget(false);
     }, [nuclear, showPins]);
 
     // Global callback for popup delete buttons.
@@ -1569,7 +1594,12 @@ export default function MapViewer() {
             onRemoveTarget={handleRemoveTarget}
             onTargetWeapon={handleTargetWeapon}
             onAllTargetsWeapon={handleAllTargetsWeapon}
-            onClose={() => setFalloutOpen(false)}
+            placingTarget={placingTarget}
+            onPlaceTarget={setPlacingTarget}
+            onClose={() => {
+                setPlacingTarget(false);
+                setFalloutOpen(false);
+            }}
         />}
         {addingPin && <AddPinDialog
             lat={addingPin.lat}

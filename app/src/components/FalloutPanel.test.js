@@ -416,7 +416,7 @@ describe('the fallout panel\'s steps', () => {
         renderWithProviders(<FalloutPanel map={map} targets={[]} onClose={() => null}/>);
         expect(screen.getByText('Step 2 of 4: Choose the targets')).toBeTruthy();
         expect(screen.getByText('No targets yet')).toBeTruthy();
-        expect(screen.getByText(/right-click the map and choose Add Target Here/i)).toBeTruthy();
+        expect(screen.getByText(/Right-clicking the map adds one too/)).toBeTruthy();
         expect(screen.getByRole('button', {name: 'Next: the wind'}).disabled).toBe(true);
         // The wind is a step of its own.
         expect(screen.queryByRole('textbox', {name: 'Wind'})).toBeNull();
@@ -549,6 +549,25 @@ describe('the fallout panel\'s steps', () => {
         } finally {
             mockLatestWinds = null;
         }
+    });
+
+    test('add a target where the map is clicked next, until stopped', () => {
+        const onPlaceTarget = jest.fn();
+        const {rerender} = renderWithProviders(<FalloutPanel map={fakeMap()} targets={[]}
+                                                             onPlaceTarget={onPlaceTarget}/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Add a target'}));
+        expect(onPlaceTarget).toHaveBeenLastCalledWith(true);
+        rerender(<FalloutPanel map={fakeMap()} targets={[]} placingTarget onPlaceTarget={onPlaceTarget}/>);
+        expect(screen.getByText('Click the map where the target is.')).toBeTruthy();
+        expect(screen.queryByRole('button', {name: 'Add a target'})).toBeNull();
+        fireEvent.click(screen.getByRole('button', {name: 'Stop'}));
+        expect(onPlaceTarget).toHaveBeenLastCalledWith(false);
+
+        // Going on to the wind stops it too.
+        onPlaceTarget.mockClear();
+        rerender(<FalloutPanel map={fakeMap()} targets={[target]} placingTarget onPlaceTarget={onPlaceTarget}/>);
+        fireEvent.click(screen.getByRole('button', {name: 'Next: the wind'}));
+        expect(onPlaceTarget).toHaveBeenCalledWith(false);
     });
 
     test('load the saved targets before saving over them', () => {

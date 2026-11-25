@@ -475,10 +475,12 @@ function TargetRow({target, onWeapon, onRemove}) {
 // yield_kt?, fission_fraction?}): tried out, and the saved ones once the user loads them
 // (`onLoad`; there are `savedCount`, and `loaded` says whether they were).  `onSave` saves them in
 // place of the saved ones, which is refused until those are loaded; `unsaved` says whether the list
-// differs from what is saved.
+// differs from what is saved.  `onPlaceTarget(true)` asks for the next click on the map to add a target
+// there (`placingTarget` while it waits), `onPlaceTarget(false)` stops.
 // `onTargetWeapon(target, weapon)` keeps a target's weapon.
 export default function FalloutPanel({map, targets = [], savedCount = 0, loaded = false, unsaved = false, onLoad,
-                                         onSave, onRemoveTarget, onTargetWeapon, onAllTargetsWeapon, onClose}) {
+                                         onSave, onRemoveTarget, onTargetWeapon, onAllTargetsWeapon,
+                                         placingTarget = false, onPlaceTarget, onClose}) {
     const [step, setStep] = useState(TARGETS);
     const [saving, setSaving] = useState(false);
     const [wind, setWind] = useState(FORECAST);
@@ -521,6 +523,12 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
     ], [targets]);
     // What the fallout depends on, as one value an effect can watch.
     const burstsKey = JSON.stringify(bursts.map((b) => [b.lat, b.lon, b.yieldKt, b.fissionFraction]));
+
+    // Placing a target is of the targets step.
+    useEffect(() => {
+        if (step !== TARGETS && placingTarget) onPlaceTarget?.(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step]);
 
     // With nothing to burst, the targets are needed first.
     useEffect(() => {
@@ -764,12 +772,18 @@ export default function FalloutPanel({map, targets = [], savedCount = 0, loaded 
         <FalloutSteps step={step}/>
         <div style={{fontWeight: 600}}>Step 2 of 4: Choose the targets</div>
         <div style={{...muted, marginBottom: "0.5rem"}}>
-            Right-click the map and choose Add Target Here. Targets you add are tried out, not saved, until
-            you save the targets.
+            Targets you add are tried out, not saved, until you save the targets. Right-clicking the map adds
+            one too.
         </div>
-        {mustLoad && <Button size="xs" style={{marginBottom: "0.5rem"}} onClick={onLoad}>
-            Load Saved Targets ({savedCount})
-        </Button>}
+        {placingTarget
+            ? <div style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem"}}>
+                <strong style={{flex: 1}}>Click the map where the target is.</strong>
+                <Button size="xs" role="cancel" onClick={() => onPlaceTarget?.(false)}>Stop</Button>
+            </div>
+            : <div style={{display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.5rem"}}>
+                <Button size="xs" role="primary" onClick={() => onPlaceTarget?.(true)}>Add a target</Button>
+                {mustLoad && <Button size="xs" onClick={onLoad}>Load Saved Targets ({savedCount})</Button>}
+            </div>}
         <div style={{marginBottom: "0.25rem"}}>
             <strong>{bursts.length ? targetCount : "No targets yet"}</strong>; surface bursts.
             {unsaved && <span style={muted}> Not saved.</span>}

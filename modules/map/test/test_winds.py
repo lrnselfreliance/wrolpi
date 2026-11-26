@@ -2,6 +2,7 @@ import json
 from http import HTTPStatus
 from unittest import mock
 
+import aiohttp
 import pytest
 
 from modules.map import winds
@@ -236,6 +237,41 @@ async def test_fetch_wind_field_slows_down(test_directory):
             mock.patch('modules.map.winds.asyncio.sleep', sleep):
         with pytest.raises(winds.WindsError, match='429'):
             await winds.fetch_wind_field([(10, 10)])
+
+
+@pytest.mark.asyncio
+async def test_fetch_wind_field_reconnects(test_directory):
+    """A request which cannot connect is asked again a minute later, once, rather than losing the
+    batches already fetched."""
+    unreachable = aiohttp.ClientConnectorError(mock.Mock(host='api.open-meteo.com', port=443, ssl='default'),
+                                               OSError('Connect call failed'))
+    answers = [unreachable]
+    slept = []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+
+    service = fake_service([])
+
+    async def unreachable_then_fine(url):
+        if answers:
+            raise answers.pop()
+        return await service(url)
+
+    with mock.patch('modules.map.winds.request_forecast', unreachable_then_fine), \
+            mock.patch('modules.map.winds.asyncio.sleep', sleep):
+        field = await winds.fetch_wind_field([(10, 10)])
+    assert slept == [winds.BATCH_SECONDS] and field['points']
+
+    async def always_unreachable(url):
+        raise unreachable
+
+    slept.clear()
+    with mock.patch('modules.map.winds.request_forecast', always_unreachable), \
+            mock.patch('modules.map.winds.asyncio.sleep', sleep):
+        with pytest.raises(winds.WindsError, match='Could not reach the forecast service'):
+            await winds.fetch_wind_field([(10, 10)])
+    assert slept == [winds.BATCH_SECONDS]
 
 
 @pytest.mark.asyncio

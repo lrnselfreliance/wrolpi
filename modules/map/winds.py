@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
 
+import aiohttp
 from sqlalchemy.orm import Session
 
 from modules.map.lib import get_map_directory
@@ -195,7 +196,8 @@ async def request_forecast(url: str) -> list:
 
 async def request_batch(url: str) -> list:
     """The forecasts of a request; asked once more, a minute later, when the service says too many
-    have been asked of it."""
+    have been asked of it, or could not be connected to (so the batches already fetched are not lost
+    to a moment's outage)."""
     for attempt in range(2):
         try:
             return await request_forecast(url)
@@ -207,7 +209,11 @@ async def request_batch(url: str) -> list:
         except asyncio.TimeoutError as e:
             raise WindsError(f'The forecast service did not answer within {TIMEOUT} seconds') from e
         except Exception as e:
-            raise WindsError(f'Could not reach the forecast service: {str(e) or type(e).__name__}') from e
+            error = WindsError(f'Could not reach the forecast service: {str(e) or type(e).__name__}')
+            if attempt or not isinstance(e, aiohttp.ClientConnectionError):
+                raise error from e
+            logger.warning(f'{error}; trying again in a minute')
+            await asyncio.sleep(BATCH_SECONDS)
 
 
 async def fetch_wind_field(places: Sequence[Tuple[float, float]], progress=None, cancelled=None) -> dict:

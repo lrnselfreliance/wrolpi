@@ -4,7 +4,6 @@ The tiles are of the basemap: the Protomaps files in the map directory, over the
 zoom 0 to 6) as the web map draws them.  A file is a basemap by the rule of `modules.map.pmtiles.classify`, read
 here without importing it (see `tiles`); a test holds the two to the same answer.
 """
-import gzip
 import json
 import os
 import struct
@@ -27,6 +26,16 @@ PMTILES_GZIP = 2
 MAX_METADATA_SIZE = 16 * 1024 * 1024
 BASEMAP_LAYERS = frozenset({'earth', 'water', 'roads'})
 TERRAIN_PREFIX = 'terrain-'
+
+
+def gunzip(raw: bytes) -> bytes:
+    """Decompress at most `MAX_METADATA_SIZE`: a few bytes of a downloaded file must not fill the memory.  Raises
+    ValueError for more."""
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    out = decompressor.decompress(raw, MAX_METADATA_SIZE)
+    if decompressor.unconsumed_tail:
+        raise ValueError('Decompresses to more than MAX_METADATA_SIZE')
+    return out
 
 
 def get_map_directory(media_directory: Path = None) -> Path:
@@ -57,12 +66,12 @@ def is_basemap(path: Path) -> bool:
             fh.seek(offset)
             raw = fh.read(length)
         if compression == PMTILES_GZIP:
-            raw = gzip.decompress(raw)[:MAX_METADATA_SIZE + 1]
+            raw = gunzip(raw)
         metadata = json.loads(raw)
         layers = metadata.get('vector_layers') if isinstance(metadata, dict) else None
         ids = {str(i['id']) for i in layers if isinstance(i, dict) and i.get('id')} if isinstance(layers, list) else set()
         return BASEMAP_LAYERS <= ids
-    except (OSError, ValueError, EOFError, struct.error, gzip.BadGzipFile):
+    except (OSError, ValueError, EOFError, struct.error, zlib.error):
         return False
 
 
@@ -84,9 +93,9 @@ def is_drawable(path: Path) -> bool:
         if len(raw) != length:
             return False
         if header[97] == PMTILES_GZIP:
-            raw = gzip.decompress(raw)
+            raw = gunzip(raw)
         return len(raw) > 0
-    except (OSError, EOFError, struct.error, gzip.BadGzipFile, zlib.error):
+    except (OSError, ValueError, EOFError, struct.error, zlib.error):
         return False
 
 

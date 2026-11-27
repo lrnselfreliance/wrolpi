@@ -111,6 +111,18 @@ def test_is_drawable(tmp_path):
     assert maps.find_basemaps(tmp_path / 'map') == [tmp_path / 'map/good.pmtiles']
 
 
+def test_decompression_is_bounded(tmp_path, monkeypatch):
+    """Metadata or a directory which decompresses to more than MAX_METADATA_SIZE is not read."""
+    monkeypatch.setattr(maps, 'MAX_METADATA_SIZE', 1000)
+    bomb = gzip.compress(b'0' * 100_000)  # small, but 100 KB decompressed
+    with pytest.raises(ValueError):
+        maps.gunzip(bomb)
+    assert maps.gunzip(gzip.compress(b'ok')) == b'ok'
+    # Metadata padded past the limit.
+    path = write_header_only(tmp_path / 'big.pmtiles', vector_metadata(*PROTOMAPS_LAYERS, padding='x' * 100_000))
+    assert not maps.is_basemap(path)
+
+
 def test_find_maps(tmp_path):
     write_pmtiles(tmp_path / 'map/b.pmtiles')
     write_pmtiles(tmp_path / 'map/region/a.pmtiles')

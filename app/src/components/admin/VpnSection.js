@@ -24,6 +24,7 @@ const kindLabels = {wireguard: 'WireGuard', openvpn: 'OpenVPN'};
 const portForwardingOptions = [
     {value: 'none', label: 'None (download only; seed to peers who accept connections)'},
     {value: 'fixed', label: 'A port my VPN provider forwards to me'},
+    {value: 'natpmp', label: 'Ask the VPN for a port (NAT-PMP, e.g. Proton P2P servers)'},
 ];
 
 const STATUS_INTERVAL_MS = 10000;

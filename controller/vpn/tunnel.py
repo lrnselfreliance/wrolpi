@@ -27,6 +27,7 @@ import os
 import pathlib
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -46,13 +47,16 @@ VPN_DEFAULTS = {
     'config_file': None,
     # OpenVPN only: a file holding the username line and the password line.
     'auth_file': None,
-    # How peers reach this WROLPi through the VPN: none, or a port the provider forwards (fixed).
+    # How peers reach this WROLPi through the VPN: none; a port the provider forwards (fixed); or a port the tunnel
+    # asks the VPN for with NAT-PMP (natpmp, e.g. Proton's P2P servers).
     'port_forwarding': 'none',
     'forwarded_port': None,
+    # Where NAT-PMP asks for the port.  None: OpenVPN's pushed gateway, else the VPN's first IPv4 DNS server (Proton).
+    'natpmp_gateway': None,
     # Fetched through the tunnel to show the address peers see.  None disables the check.
     'public_ip_url': 'https://api.ipify.org',
 }
-PORT_FORWARDING_MODES = ('none', 'fixed')
+PORT_FORWARDING_MODES = ('none', 'fixed', 'natpmp')
 
 TUNNEL_INTERFACE = 'vpn0'
 # The torrent client's WebUI, which WROLPi reaches from the uplink's network.
@@ -466,6 +470,17 @@ def sanitize_openvpn(config: OpenVPNConfig, hosts: dict[str, list[str]]) -> str:
     return '\n'.join(lines) + '\n'
 
 
+def pushed_gateway(line: str) -> str | None:
+    """The VPN's gateway in OpenVPN's log of the server's PUSH_REPLY (`route-gateway 10.8.0.1`)."""
+    if 'PUSH_REPLY' not in line:
+        return None
+    for option in line.split('PUSH_REPLY', 1)[1].split(','):
+        parts = option.split()
+        if len(parts) >= 2 and parts[0] == 'route-gateway' and is_ip(parts[1]):
+            return parts[1]
+    return None
+
+
 def pushed_dns(line: str) -> list[str]:
     """The DNS servers in OpenVPN's log of the server's PUSH_REPLY, e.g.
     `PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.8.0.1,dhcp-option DNS 10.8.0.1,...'`."""
@@ -495,6 +510,7 @@ class OpenVPNProcess:
                                         errors='replace')
         self.connected = threading.Event()
         self.dns: list[str] = []
+        self.gateway: str | None = None
         threading.Thread(target=self._read_log, daemon=True).start()
 
     def _read_log(self):
@@ -502,6 +518,7 @@ class OpenVPNProcess:
             # OpenVPN's log still reaches the journal (or `docker logs`).
             sys.stdout.write(line)
             self.dns.extend(d for d in pushed_dns(line) if d not in self.dns)
+            self.gateway = pushed_gateway(line) or self.gateway
             if OPENVPN_CONNECTED in line:
                 self.connected.set()
 
@@ -608,6 +625,59 @@ def build_ruleset(uplink: Uplink, endpoints: list[Endpoint], tunnel: str = TUNNE
         f'\t}}\n'
         f'}}\n'
     )
+
+
+# --- NAT-PMP (RFC 6886) ---
+#
+# How a VPN (e.g. Proton) forwards a port: the tunnel asks the VPN's gateway for a mapping, and must ask again before
+# the mapping's lifetime ends.  Peers then reach the forwarded port on the VPN's public address.
+
+NATPMP_PORT = 5351
+# Proton grants 60 seconds; a mapping is renewed at half its lifetime.
+NATPMP_LIFETIME = 60
+NATPMP_RESULTS = {1: 'unsupported version', 2: 'not authorized (port forwarding is off for this server or plan)',
+                  3: 'network failure', 4: 'out of resources', 5: 'unsupported request'}
+
+
+class NATPMPError(Exception):
+    """The VPN did not forward a port.  The message is shown to the user."""
+
+
+def natpmp_request(gateway: str, request: bytes, timeout: float = 1.0, tries: int = 3) -> bytes:
+    """Send a NAT-PMP request, retrying with a doubling timeout, and return the reply to it."""
+    expected_op = request[1] + 128
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect((gateway, NATPMP_PORT))
+        for attempt in range(tries):
+            sock.send(request)
+            sock.settimeout(timeout * 2 ** attempt)
+            try:
+                while True:
+                    reply = sock.recv(64)
+                    # Ignore anything which is not the answer to this request (e.g. a late answer to a retry).
+                    if len(reply) >= 4 and reply[0] == 0 and reply[1] == expected_op:
+                        break
+            except (socket.timeout, ConnectionRefusedError):
+                continue
+            result = struct.unpack('!H', reply[2:4])[0]
+            if result:
+                raise NATPMPError(f'The VPN refused to forward a port: {NATPMP_RESULTS.get(result, result)}')
+            return reply
+    raise NATPMPError(f'The VPN ({gateway}) did not answer a port forwarding request.  It may not forward ports '
+                      f'(for Proton, use a P2P server, and a config made with NAT-PMP on).')
+
+
+def natpmp_map(gateway: str, proto: str, lifetime: int = NATPMP_LIFETIME) -> tuple[int, int]:
+    """Ask the VPN to forward a port of its choosing; returns (port, lifetime granted).  As Proton documents
+    (`natpmpc -a 1 0 udp 60`), the request names no ports, and the tunnel listens on the port it is given."""
+    op = 1 if proto == 'udp' else 2
+    reply = natpmp_request(gateway, struct.pack('!BBHHHI', 0, op, 0, 0, 1, lifetime))
+    if len(reply) < 16:
+        raise NATPMPError('The VPN sent a broken port forwarding reply')
+    *_, port, granted = struct.unpack('!BBHIHHI', reply[:16])
+    if not port:
+        raise NATPMPError('The VPN forwarded no port')
+    return port, granted
 
 
 # --- Commands ---
@@ -743,6 +813,13 @@ class Tunnel:
         self.locked_down = False
         self.public_ip = None
         self.public_ip_checked = 0.0
+        self.reset_port_forwarding()
+
+    def reset_port_forwarding(self):
+        self.forwarded_port: int | None = None
+        self.port_forwarding_error: str | None = None
+        self.port_forwarding_renewed = 0.0
+        self.port_forwarding_lifetime = 0
 
     def lock_down(self):
         """The kill switch with no endpoints: nothing leaves the namespace except replies to WROLPi."""
@@ -795,6 +872,7 @@ class Tunnel:
         logger.info('Bringing up the %s VPN to %s', plan.kind, ', '.join(e.ip for e in plan.endpoints))
         self.plan = plan
         self.public_ip, self.public_ip_checked = None, 0.0
+        self.reset_port_forwarding()
         # IPv6 servers are only reachable when the uplink has IPv6.
         endpoints = [e for e in plan.endpoints if ip_version(e.ip) == 4 or self.uplink.gateway6]
         if not endpoints:
@@ -867,6 +945,8 @@ class Tunnel:
         self.routes = []
         self.plan = None
         self.addresses, self.dns = [], []
+        # The VPN drops a mapping which is not renewed.
+        self.reset_port_forwarding()
         if self.uplink:
             self.lock_down()
 
@@ -898,6 +978,42 @@ class Tunnel:
         else:
             logger.warning('The public address check did not answer with an address')
 
+    def natpmp_gateway(self) -> str | None:
+        if gateway := self.plan.settings.get('natpmp_gateway'):
+            return gateway
+        if self.openvpn and self.openvpn.gateway:
+            return self.openvpn.gateway
+        return next((d for d in self.dns if ip_version(d) == 4), None)
+
+    def renew_port_forwarding(self):
+        """Ask the VPN for a forwarded port, again at half the lifetime it granted."""
+        if self.forwarded_port and \
+                time.monotonic() - self.port_forwarding_renewed < self.port_forwarding_lifetime / 2:
+            return
+        gateway = self.natpmp_gateway()
+        if not gateway:
+            self.forwarded_port = None
+            self.port_forwarding_error = 'Port forwarding needs the VPN gateway; set natpmp_gateway in controller.yaml'
+            return
+        try:
+            udp_port, udp_lifetime = natpmp_map(gateway, 'udp')
+            tcp_port, tcp_lifetime = natpmp_map(gateway, 'tcp')
+        except (NATPMPError, OSError) as e:
+            if self.forwarded_port:
+                logger.warning('The VPN stopped forwarding port %s: %s', self.forwarded_port, e)
+            self.forwarded_port = None
+            self.port_forwarding_error = str(e)
+            return
+        if udp_port != tcp_port:
+            # Torrents listen on one port for both; TCP carries most peer connections.
+            logger.warning('The VPN forwarded UDP port %s and TCP port %s; using %s', udp_port, tcp_port, tcp_port)
+        if tcp_port != self.forwarded_port:
+            logger.info('The VPN forwards port %s', tcp_port)
+        self.forwarded_port = tcp_port
+        self.port_forwarding_error = None
+        self.port_forwarding_renewed = time.monotonic()
+        self.port_forwarding_lifetime = min(udp_lifetime, tcp_lifetime) or NATPMP_LIFETIME
+
     def report(self):
         # Traffic through the tunnel also makes WireGuard handshake, so check before asking if it connected.
         self.check_public_ip()
@@ -909,6 +1025,14 @@ class Tunnel:
         warnings = []
         if not self.dns:
             warnings.append('The VPN gave no DNS server, so torrents cannot look up names')
+        forwarded_port = None
+        if settings.get('port_forwarding') == 'fixed':
+            forwarded_port = settings.get('forwarded_port')
+        elif settings.get('port_forwarding') == 'natpmp' and connected:
+            self.renew_port_forwarding()
+            forwarded_port = self.forwarded_port
+            if self.port_forwarding_error:
+                warnings.append(self.port_forwarding_error)
         self.write_status(
             'connected' if connected else 'connecting',
             kind=self.plan.kind,
@@ -916,7 +1040,7 @@ class Tunnel:
             dns=self.dns,
             endpoints=[dataclasses.asdict(e) for e in self.plan.endpoints],
             public_ip=self.public_ip if connected else None,
-            forwarded_port=settings.get('forwarded_port') if settings.get('port_forwarding') == 'fixed' else None,
+            forwarded_port=forwarded_port,
             warnings=warnings,
         )
 

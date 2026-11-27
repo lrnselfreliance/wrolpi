@@ -589,7 +589,7 @@ class VpnStatusResponse(BaseModel):
     addresses: list[str] = Field(default_factory=list, description="The tunnel's addresses")
     dns: list[str] = Field(default_factory=list, description="The VPN's DNS servers")
     public_ip: Optional[str] = Field(default=None, description="The address peers see")
-    port_forwarding: str = Field(description="none or fixed")
+    port_forwarding: str = Field(description="none, fixed, or natpmp")
     forwarded_port: Optional[int] = Field(default=None, description="The port peers can connect to")
     warnings: list[str] = Field(default_factory=list, description="Problems which do not stop the tunnel")
     error: Optional[str] = Field(default=None, description="Why the tunnel is not up")
@@ -604,18 +604,21 @@ class VpnSettingsResponse(BaseModel):
     servers: list[str] = Field(default_factory=list, description="The VPN servers named by the config")
     needs_auth: bool = Field(description="Whether the OpenVPN config needs a username and password")
     has_auth: bool = Field(description="Whether an OpenVPN username and password are saved")
-    port_forwarding: str = Field(description="none or fixed")
-    forwarded_port: Optional[int] = Field(default=None, description="The port the provider forwards")
+    port_forwarding: str = Field(description="none, fixed, or natpmp")
+    forwarded_port: Optional[int] = Field(default=None, description="The port the provider forwards (fixed)")
     public_ip_url: Optional[str] = Field(default=None, description="Fetched through the tunnel to show its address")
+    natpmp_gateway: Optional[str] = Field(
+        default=None, description="Where NAT-PMP asks for a port; None: the VPN's gateway or first DNS server")
 
 
 class VpnSettingsRequest(BaseModel):
     """Change VPN settings; omitted fields are unchanged."""
 
     enabled: Optional[bool] = Field(default=None, description="Turn the VPN on or off")
-    port_forwarding: Optional[str] = Field(default=None, description="none or fixed")
-    forwarded_port: Optional[int] = Field(default=None, description="The port the provider forwards")
+    port_forwarding: Optional[str] = Field(default=None, description="none, fixed, or natpmp")
+    forwarded_port: Optional[int] = Field(default=None, description="The port the provider forwards (fixed)")
     public_ip_url: Optional[str] = Field(default=None, description="Empty to stop checking the public address")
+    natpmp_gateway: Optional[str] = Field(default=None, description="An IPv4 address; empty for the default")
 
 
 class VpnConfigUploadRequest(BaseModel):

@@ -123,6 +123,28 @@ describe('VpnSection', () => {
             {port_forwarding: 'fixed', forwarded_port: 51414}));
     });
 
+    test('NAT-PMP asks for no port, and shows the one the VPN forwards', async () => {
+        getVpnSettings.mockResolvedValue({...wireguard, enabled: true, port_forwarding: 'natpmp'});
+        getVpnStatus.mockResolvedValue({
+            enabled: true, state: 'connected', public_ip: '203.0.113.99', forwarded_port: 51413, warnings: []});
+        updateVpnSettings.mockResolvedValue({...wireguard, enabled: true, port_forwarding: 'natpmp'});
+        renderSection();
+        const status = await screen.findByTestId('vpn-status');
+        await waitFor(() => expect(status).toHaveTextContent('Port 51413'));
+        expect(screen.queryByLabelText('Forwarded port')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(updateVpnSettings).toHaveBeenCalledWith(
+            {port_forwarding: 'natpmp', forwarded_port: null}));
+    });
+
+    test('a VPN which will not forward a port says why', async () => {
+        getVpnSettings.mockResolvedValue({...wireguard, enabled: true, port_forwarding: 'natpmp'});
+        getVpnStatus.mockResolvedValue({enabled: true, state: 'connected', public_ip: '203.0.113.99',
+            forwarded_port: null, warnings: ['The VPN (10.2.0.1) did not answer a port forwarding request.']});
+        renderSection();
+        expect(await screen.findByText(/did not answer a port forwarding request/)).toBeInTheDocument();
+    });
+
     test('turning the VPN on', async () => {
         getVpnSettings.mockResolvedValue(wireguard);
         updateVpnSettings.mockResolvedValue({...wireguard, enabled: true});

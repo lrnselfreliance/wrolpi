@@ -138,6 +138,16 @@ class TestSettings:
         # Only differences from the defaults are saved.
         assert saved_vpn_settings(drive) == {'port_forwarding': 'fixed', 'forwarded_port': 51413}
 
+    def test_natpmp(self, drive):
+        response = vpn.update_vpn_settings(port_forwarding='natpmp')
+        assert response['port_forwarding'] == 'natpmp'
+        with pytest.raises(VPNConfigError, match='IPv4'):
+            vpn.update_vpn_settings(natpmp_gateway='vpn.example.com')
+        with pytest.raises(VPNConfigError, match='IPv4'):
+            vpn.update_vpn_settings(natpmp_gateway='fd00::1')
+        assert vpn.update_vpn_settings(natpmp_gateway='10.64.0.1')['natpmp_gateway'] == '10.64.0.1'
+        assert vpn.update_vpn_settings(natpmp_gateway='')['natpmp_gateway'] is None
+
     @pytest.mark.parametrize('url', ['file:///etc/shadow', 'ftp://example.com/', 'https://', 'example.com'])
     def test_public_ip_url_must_be_a_web_address(self, drive, url):
         with pytest.raises(VPNConfigError, match='http'):

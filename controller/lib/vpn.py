@@ -99,7 +99,7 @@ def save_openvpn_auth(username: str, password: str) -> dict:
 
 
 def update_vpn_settings(enabled: bool = None, port_forwarding: str = None, forwarded_port: int = None,
-                        public_ip_url: str = None) -> dict:
+                        public_ip_url: str = None, natpmp_gateway: str = None) -> dict:
     settings = get_vpn_settings()
     values = {}
     if port_forwarding is not None:
@@ -113,6 +113,10 @@ def update_vpn_settings(enabled: bool = None, port_forwarding: str = None, forwa
     if (values.get('port_forwarding', settings['port_forwarding']) == 'fixed'
             and not values.get('forwarded_port', settings['forwarded_port'])):
         raise tunnel.VPNConfigError('Enter the port your VPN provider forwards to you')
+    if natpmp_gateway is not None:
+        if natpmp_gateway and not (tunnel.is_ip(natpmp_gateway) and tunnel.ip_version(natpmp_gateway) == 4):
+            raise tunnel.VPNConfigError('The port forwarding gateway must be an IPv4 address')
+        values['natpmp_gateway'] = natpmp_gateway or None
     if public_ip_url is not None:
         if public_ip_url:
             tunnel.check_public_ip_url(public_ip_url)
@@ -162,6 +166,7 @@ def get_vpn_settings_response() -> dict:
         'port_forwarding': settings['port_forwarding'],
         'forwarded_port': settings['forwarded_port'],
         'public_ip_url': settings['public_ip_url'],
+        'natpmp_gateway': settings['natpmp_gateway'],
     }
 
 

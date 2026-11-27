@@ -551,3 +551,144 @@ class TestInstalled:
                    if line.startswith(('import ', 'from '))}
         assert 'controller' not in imports
         assert imports - {'yaml'} <= set(__import__('sys').stdlib_module_names)
+
+
+class FakeNATPMPGateway:
+    """A NAT-PMP gateway on localhost which forwards `port`, or answers with `result`."""
+
+    def __init__(self, port=51413, result=0, lifetime=60, stray_first=False, answer=True):
+        import socket
+        import threading
+        self.port, self.result, self.lifetime, self.stray_first, self.answer = port, result, lifetime, stray_first, \
+            answer
+        self.requests = []
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('127.0.0.1', 0))
+        self.address = self.sock.getsockname()
+        threading.Thread(target=self.serve, daemon=True).start()
+
+    def serve(self):
+        import struct
+        while True:
+            try:
+                request, client = self.sock.recvfrom(64)
+            except OSError:
+                return
+            self.requests.append(struct.unpack('!BBHHHI', request))
+            if not self.answer:
+                continue
+            op = request[1]
+            if self.stray_first:
+                # An answer to some other request comes first; it must be ignored.
+                self.sock.sendto(struct.pack('!BBHI', 0, 128, 0, 1) + bytes(4), client)
+            self.sock.sendto(struct.pack('!BBHIHHI', 0, 128 + op, self.result, 1, 0, self.port, self.lifetime), client)
+
+    def close(self):
+        self.sock.close()
+
+
+@pytest.fixture
+def natpmp_gateway(monkeypatch):
+    gateways = []
+
+    def make(**kwargs):
+        gateway = FakeNATPMPGateway(**kwargs)
+        gateways.append(gateway)
+        monkeypatch.setattr(tunnel, 'NATPMP_PORT', gateway.address[1])
+        return gateway
+
+    yield make
+    for gateway in gateways:
+        gateway.close()
+
+
+class TestNATPMP:
+
+    def test_map(self, natpmp_gateway):
+        gateway = natpmp_gateway(port=51413, stray_first=True)
+        assert tunnel.natpmp_map('127.0.0.1', 'udp') == (51413, 60)
+        assert tunnel.natpmp_map('127.0.0.1', 'tcp') == (51413, 60)
+        # As Proton documents (`natpmpc -a 1 0 udp 60`): no internal port, external port 1, 60 seconds.
+        assert gateway.requests == [(0, 1, 0, 0, 1, 60), (0, 2, 0, 0, 1, 60)]
+
+    def test_refused(self, natpmp_gateway):
+        natpmp_gateway(result=2)
+        with pytest.raises(tunnel.NATPMPError, match='not authorized'):
+            tunnel.natpmp_map('127.0.0.1', 'tcp')
+
+    def test_no_answer(self, natpmp_gateway):
+        gateway = natpmp_gateway(answer=False)
+        with pytest.raises(tunnel.NATPMPError, match='P2P server'):
+            tunnel.natpmp_request('127.0.0.1', bytes([0, 2]) + bytes(10), timeout=0.05, tries=3)
+        # Retried.
+        assert len(gateway.requests) == 3
+
+    def test_pushed_gateway(self):
+        line = "PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.8.0.1,topology subnet'"
+        assert tunnel.pushed_gateway(line) == '10.8.0.1'
+        assert tunnel.pushed_gateway('Initialization Sequence Completed') is None
+
+
+class TestPortForwarding:
+
+    @pytest.fixture
+    def connected_tunnel(self, media, tmp_path, fake_system):
+        (media / 'config/vpn/wireguard.conf').write_text(WIREGUARD)
+        write_endpoints(tunnel.RUN_DIR, WIREGUARD, {'vpn.example.com': ['203.0.113.5']})
+        write_settings(media, enabled=True, config_file='vpn/wireguard.conf', port_forwarding='natpmp')
+        t = tunnel.Tunnel(media, tunnel.RUN_DIR, tmp_path / 'resolv.conf')
+        t.start()
+        return t
+
+    def test_forwarded_port_is_renewed_at_half_its_lifetime(self, connected_tunnel, monkeypatch):
+        calls = []
+        monkeypatch.setattr(tunnel, 'natpmp_map', lambda gateway, proto: calls.append((gateway, proto)) or (51413, 60))
+        now = [1000.0]
+        monkeypatch.setattr(tunnel.time, 'monotonic', lambda: now[0])
+
+        connected_tunnel.step()
+        # Proton's gateway is its DNS server.
+        assert calls == [('10.2.0.1', 'udp'), ('10.2.0.1', 'tcp')]
+        assert read_status()['forwarded_port'] == 51413
+
+        now[0] += 29
+        connected_tunnel.step()
+        assert len(calls) == 2
+        now[0] += 2
+        connected_tunnel.step()
+        assert len(calls) == 4
+        assert read_status()['forwarded_port'] == 51413
+
+    def test_a_changed_port_is_reported(self, connected_tunnel, monkeypatch):
+        ports = iter([51413, 51413, 60000, 60000])
+        monkeypatch.setattr(tunnel, 'natpmp_map', lambda gateway, proto: (next(ports), 60))
+        connected_tunnel.step()
+        connected_tunnel.port_forwarding_renewed = 0.0
+        connected_tunnel.step()
+        assert read_status()['forwarded_port'] == 60000
+
+    def test_refused_keeps_the_vpn_up_and_says_why(self, connected_tunnel, monkeypatch):
+        def refuse(gateway, proto):
+            raise tunnel.NATPMPError('The VPN refused to forward a port: not authorized')
+
+        monkeypatch.setattr(tunnel, 'natpmp_map', refuse)
+        connected_tunnel.step()
+        status = read_status()
+        assert status['state'] == 'connected'
+        assert status['forwarded_port'] is None
+        assert status['warnings'] == ['The VPN refused to forward a port: not authorized']
+
+    def test_gateway_setting_wins(self, connected_tunnel, media, monkeypatch):
+        calls = []
+        monkeypatch.setattr(tunnel, 'natpmp_map', lambda gateway, proto: calls.append(gateway) or (51413, 60))
+        write_settings(media, enabled=True, config_file='vpn/wireguard.conf', port_forwarding='natpmp',
+                       natpmp_gateway='10.64.0.1')
+        connected_tunnel.step()
+        assert set(calls) == {'10.64.0.1'}
+
+    def test_not_asked_unless_natpmp(self, connected_tunnel, media, monkeypatch):
+        monkeypatch.setattr(tunnel, 'natpmp_map', mock.Mock(side_effect=AssertionError('asked')))
+        write_settings(media, enabled=True, config_file='vpn/wireguard.conf', port_forwarding='fixed',
+                       forwarded_port=51413)
+        connected_tunnel.step()
+        assert read_status()['forwarded_port'] == 51413

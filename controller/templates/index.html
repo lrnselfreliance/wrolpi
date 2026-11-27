@@ -1104,6 +1104,7 @@
                     <select id="vpn-port-forwarding" onchange="showVpnPort()" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
                         <option value="none">None (download only; seed to peers who accept connections)</option>
                         <option value="fixed">A port my VPN provider forwards to me</option>
+                        <option value="natpmp">Ask the VPN for a port (NAT-PMP, e.g. Proton P2P servers)</option>
                     </select>
                 </label>
                 <label id="vpn-port-label" style="display: none;">Forwarded port

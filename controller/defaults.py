@@ -82,6 +82,14 @@ DEFAULT_CONFIG = {
             "description": "Kiwix/Zim server",
         },
         {
+            "name": "wrolpi-tiles",
+            "systemd_name": "wrolpi-tiles",
+            "port": 8088,
+            "viewable": False,
+            "use_https": False,
+            "description": "Map tiles for ATAK and iTAK",
+        },
+        {
             "name": "wrolpi-rsyncd",
             "systemd_name": "wrolpi-rsyncd",
             "port": 8873,

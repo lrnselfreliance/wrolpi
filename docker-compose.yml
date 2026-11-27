@@ -58,6 +58,27 @@ services:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
       interval: 2m
 
+  tiles: # Map tiles for ATAK and iTAK, drawn from the map's PMTiles (tiles/).  The api image, another command.
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    entrypoint: [ 'python3', '-O', '-m', 'tiles', '--host', '0.0.0.0', '--port', '9088' ]
+    command: [ ]
+    environment:
+      - CACHE_DIRECTORY=/var/cache/wrolpi-tiles
+    volumes:
+      - './tiles:/opt/wrolpi/tiles'
+      - './modules/map/static:/opt/wrolpi/modules/map/static:ro'
+      - './test:/media/wrolpi:ro'
+    user: '${UID-1000}:${GID-1000}'
+    # Two render processes are about 600 MB; a phone taking an area offline keeps them busy for minutes, so it
+    # gets less of the CPU than the API.
+    mem_limit: 1200m
+    cpu_shares: 512
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl -f http://127.0.0.1:9088/tiles/status' ]
+      interval: 2m
+
   archive: # Python/Sanic wrapper around Singlefile and Readability.
     build:
       context: .
@@ -111,6 +132,7 @@ services:
       - app
       - zim
       - help
+      - tiles
     build:
       context: .
       dockerfile: docker/web/Dockerfile
@@ -119,6 +141,7 @@ services:
       - '8084:8084'
       - '8085:8085'
       - '8086:8086'
+      - '8088:8088'
     volumes:
       - './docker/web/Caddyfile:/etc/caddy/Caddyfile'
       - './icon.ico:/etc/caddy/favicon.ico'

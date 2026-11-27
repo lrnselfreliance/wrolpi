@@ -314,6 +314,15 @@ if ! command -v dnsmasq &>/dev/null || ! command -v iw &>/dev/null || ! command 
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dnsmasq-base iw rfkill
 fi
 
+# Install Mesa's EGL and GL drivers if missing (the map tile service draws with them).
+if ! ldconfig -p | grep -q 'libEGL.so.1 ' || ! ldconfig -p | grep -q libEGL_mesa \
+    || ! ldconfig -p | grep -q 'libGLESv2.so.2 '; then
+  echo "Installing libegl1, libegl-mesa0, libgl1-mesa-dri, libgles2..."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
+fi
+
 # Clean up stale landing page (Controller now serves port 80 directly).
 rm -f /var/www/landing.html
 

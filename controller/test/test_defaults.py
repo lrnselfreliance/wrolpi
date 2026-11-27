@@ -57,7 +57,7 @@ class TestManagedServicesConfig:
     def test_managed_services_count(self):
         """Should have expected number of managed services."""
         services = DEFAULT_CONFIG["managed_services"]
-        assert len(services) == 12
+        assert len(services) == 13
 
     @pytest.mark.parametrize("name,expected", [
         ("wrolpi-api",
@@ -65,6 +65,7 @@ class TestManagedServicesConfig:
         ("wrolpi-api-dev",
          {"systemd_name": "wrolpi-api-dev", "port": 8081, "viewable": True, "show_only_when_running": True}),
         ("wrolpi-app", {"port": 3000, "viewable": False}),
+        ("wrolpi-tiles", {"systemd_name": "wrolpi-tiles", "port": 8088, "viewable": False}),
         ("wrolpi-app-dev", {"port": 3000, "viewable": False, "show_only_when_running": True}),
         ("caddy", {"port": 443}),
         ("wrolpi-upgrade", {"port": None, "viewable": False, "show_only_when_running": True}),

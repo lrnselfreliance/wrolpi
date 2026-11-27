@@ -28,6 +28,7 @@ import maplibregl from "maplibre-gl";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import {planMapFiles, pmtilesUrl} from "./mapOverlays";
+import {MapAtak} from "./MapAtak";
 
 // Ensure PMTiles protocol is registered (may already be registered by MapViewer).
 try { maplibregl.addProtocol("pmtiles", new Protocol().tile); } catch (e) { /* already registered */ }
@@ -861,6 +862,7 @@ export function MapRoute() {
         {text: 'Map', to: '/map', key: 'map', end: true},
         {text: 'Pins', to: '/map/pins', key: 'pins'},
         {text: 'Manage', to: '/map/manage', key: 'manage'},
+        {text: 'ATAK', to: '/map/atak', key: 'atak'},
     ];
 
     // `wrolpi-stack`: as in ZimRoute, this route wraps its own content instead of using
@@ -871,6 +873,7 @@ export function MapRoute() {
             <Route path='/' exact element={<MapPage/>}/>
             <Route path='pins' exact element={<MapPins/>}/>
             <Route path='manage' exact element={<ManageMap/>}/>
+            <Route path='atak' exact element={<MapAtak/>}/>
         </Routes>
     </div>
 }

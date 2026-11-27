@@ -57,6 +57,11 @@
 	}
 
 
+	# Map tiles for ATAK and iTAK (tiles/).  Also plain HTTP on 8088, below.
+	handle /tiles/* {
+		reverse_proxy 127.0.0.1:9088
+	}
+
 	# WROLPi blobs (planet overview map, fonts, etc.)
 	handle_path /blobs/* {
 		root * /opt/wrolpi-blobs
@@ -123,6 +128,15 @@
 	header ?Access-Control-Allow-Origin "*"
 	header ?Access-Control-Allow-Methods "GET, OPTIONS"
 	reverse_proxy 0.0.0.0:9086
+}
+
+# Map tiles for ATAK and iTAK over plain HTTP: a phone must trust WROLPi's CA for HTTPS, and only once it has
+# is the HTTPS map source (/tiles/ on 443) usable.
+http://:8088 {
+	handle /tiles/* {
+		reverse_proxy 127.0.0.1:9088
+	}
+	respond 404
 }
 
 # Map viewer - serves MapLibre static assets and PMTiles data via Caddy.

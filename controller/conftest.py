@@ -94,6 +94,18 @@ def _patch_status_worker():
         yield
 
 
+async def _noop_rsync_daemon_loop():
+    await asyncio.Event().wait()
+
+
+@pytest.fixture(autouse=True)
+def _patch_rsync_daemon_loop():
+    """A Docker-mode app must not manage the real rsync helper container of whatever Docker runs these tests: a
+    branch whose rsyncd.conf differs would replace a developer's container, while other tests list containers."""
+    with mock.patch("controller.main.rsync_daemon_loop", _noop_rsync_daemon_loop):
+        yield
+
+
 @pytest.fixture
 def test_directory() -> Generator[Path, None, None]:
     """Create a temporary directory for testing."""

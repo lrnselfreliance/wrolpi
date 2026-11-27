@@ -30,7 +30,9 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.parse
 import urllib.request
 
 import yaml
@@ -63,7 +65,6 @@ RUN_DIR = pathlib.Path(os.environ.get('WROLPI_VPN_RUN_DIR', '/run/wrolpi-vpn'))
 STATUS_FILE = 'status.json'
 ENDPOINTS_FILE = 'endpoints.json'
 OPENVPN_CONFIG_FILE = 'openvpn.ovpn'
-OPENVPN_UP_FILE = 'openvpn-up.json'
 
 LOOP_SECONDS = 15
 # WireGuard re-handshakes every two minutes while traffic flows.
@@ -136,6 +137,13 @@ def config_kind(filename: str) -> str:
     if suffix == '.ovpn':
         return 'openvpn'
     raise VPNConfigError('A VPN config must be a WireGuard .conf or an OpenVPN .ovpn file')
+
+
+def check_public_ip_url(url: str):
+    """Only a web address: urllib would also read a `file:` URL, as root."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        raise VPNConfigError('The public address check must be an http:// or https:// URL')
 
 
 def is_ip(host: str) -> bool:
@@ -276,51 +284,95 @@ def wireguard_setconf(config: WireGuardConfig, hosts: dict[str, list[str]]) -> s
 
 
 # --- OpenVPN ---
+#
+# A provider's .ovpn is read with an allowlist.  OpenVPN options can run commands (up, iproute, plugin, engine...),
+# read or write files as root (log, status, askpass...), or send the VPN's own traffic around the kill switch
+# (http-proxy).  The tunnel keeps only the client options below, drops those providers commonly ship which the tunnel
+# replaces or which do nothing on Linux, and refuses anything else by name.  OpenVPN also always runs with
+# `--script-security 1` given after the config, so no script runs even if one got through.
 
-# Directives which would run commands, change users, detach, or name the device.  The tunnel sets what it needs on
-# the command line.
-OPENVPN_DROPPED = {
-    'auth-user-pass', 'auth-user-pass-verify', 'cd', 'chroot', 'client-connect', 'client-disconnect', 'config',
-    'daemon', 'dev', 'dev-node', 'dev-type', 'down', 'down-pre', 'group', 'ifconfig-noexec', 'ipchange',
-    'learn-address', 'log', 'log-append', 'management', 'management-hold', 'management-query-passwords', 'plugin',
-    'route-noexec', 'route-pre-down', 'route-up', 'script-security', 'status', 'tls-verify', 'up', 'up-delay',
-    'up-restart', 'user', 'writepid',
+OPENVPN_ALLOWED = {
+    'allow-compression', 'auth', 'auth-nocache', 'auth-retry', 'bind', 'cipher', 'client', 'comp-lzo', 'compress',
+    'connect-retry', 'connect-retry-max', 'connect-timeout', 'data-ciphers', 'data-ciphers-fallback', 'dhcp-option',
+    'disable-occ', 'explicit-exit-notify', 'fast-io', 'float', 'fragment', 'hand-window', 'ifconfig-nowarn',
+    'inactive', 'keepalive', 'key-direction', 'key-method', 'link-mtu', 'lport', 'mssfix', 'mtu-disc', 'mute',
+    'mute-replay-warnings', 'ncp-ciphers', 'ncp-disable', 'nobind', 'ns-cert-type', 'persist-key',
+    'persist-remote-ip', 'persist-tun', 'ping', 'ping-exit', 'ping-restart', 'ping-timer-rem', 'port', 'proto', 'pull',
+    'pull-filter', 'push-peer-info', 'rcvbuf', 'redirect-gateway', 'remote', 'remote-cert-eku', 'remote-cert-ku',
+    'remote-cert-tls', 'remote-random', 'remote-random-hostname', 'reneg-bytes', 'reneg-pkts', 'reneg-sec',
+    'replay-window', 'resolv-retry', 'route', 'route-delay', 'route-ipv6', 'route-nopull', 'rport',
+    'server-poll-timeout', 'setenv', 'sndbuf', 'static-challenge', 'tls-cipher', 'tls-ciphersuites', 'tls-client',
+    'tls-groups', 'tls-timeout', 'tls-version-max', 'tls-version-min', 'tran-window', 'tun-ipv6', 'tun-mtu',
+    'tun-mtu-extra', 'txqueuelen', 'verify-x509-name',
+    # Key material, only accepted inline (<ca>...</ca>); a path would read any file on the WROLPi.
+    'ca', 'cert', 'crl-verify', 'extra-certs', 'key', 'pkcs12', 'tls-auth', 'tls-crypt', 'tls-crypt-v2',
 }
-# These would send the VPN's own traffic somewhere other than the endpoints the kill switch allows.
-OPENVPN_REJECTED = {'http-proxy', 'socks-proxy'}
+OPENVPN_INLINE_ONLY = {'ca', 'cert', 'crl-verify', 'extra-certs', 'key', 'pkcs12', 'tls-auth', 'tls-crypt',
+                       'tls-crypt-v2'}
+OPENVPN_INLINE_TAGS = OPENVPN_INLINE_ONLY | {'connection'}
+# Common in providers' configs, and replaced by the tunnel (the device, the login, logging) or Windows-only.  Scripts
+# are dropped, not run: the tunnel sets DNS itself.
+OPENVPN_DROPPED = {
+    'auth-user-pass', 'block-outside-dns', 'daemon', 'dev', 'dev-node', 'dev-type', 'dhcp-release', 'dhcp-renew',
+    'down', 'down-pre', 'group', 'ip-win32', 'log', 'log-append', 'register-dns', 'route-method', 'route-noexec',
+    'route-up', 'route-pre-down', 'script-security', 'status', 'tap-sleep', 'up', 'up-delay', 'up-restart', 'user',
+    'verb', 'win-sys', 'writepid',
+}
+# OpenVPN prints this once the tunnel is up, and the server's pushed options (DNS) before it.
+OPENVPN_CONNECTED = 'Initialization Sequence Completed'
 
 
 def _openvpn_directive(line: str) -> tuple[str, list[str]]:
     tokens = line.split()
-    return tokens[0].lstrip('-').lower(), tokens[1:]
+    name = tokens[0]
+    # OpenVPN un-quotes and un-escapes option names, so `"up"` is `up`.  No real config quotes a name.
+    if any(c in name for c in '"\\\'') or '\0' in line:
+        raise VPNConfigError(f'Cannot read the OpenVPN option {name!r}')
+    name = name[2:] if name.startswith('--') else name
+    if name == 'setenv' and tokens[1:2] and tokens[1].lower() == 'opt':
+        # `setenv opt X` applies the option X; it is judged as X.
+        return _openvpn_directive(' '.join(tokens[2:])) if len(tokens) > 2 else ('setenv', [])
+    return name, tokens[1:]
 
 
 def _openvpn_lines(text: str):
     """Yield (line, directive, args, in_connection) for each line; directive is None for comments, blank lines and
-    inline data (e.g. <ca>...</ca>), which are passed through unchanged."""
+    inline data (e.g. <ca>...</ca>), which are passed through unchanged.  Raises VPNConfigError for any option or
+    inline block the tunnel does not allow."""
     inline = None
     in_connection = False
     for line in text.splitlines():
         stripped = line.strip()
         if inline:
-            if stripped.lower() == f'</{inline}>':
+            if stripped == f'</{inline}>':
                 inline = None
             yield line, None, [], in_connection
             continue
         if stripped.startswith('<') and stripped.endswith('>'):
-            tag = stripped[1:-1].strip().lower()
+            tag = stripped[1:-1].strip()
             if tag == 'connection':
                 in_connection = True
             elif tag == '/connection':
                 in_connection = False
-            elif not tag.startswith('/'):
+            elif tag in OPENVPN_INLINE_TAGS:
                 inline = tag
+            else:
+                raise VPNConfigError(f'OpenVPN configs with an inline <{tag}> are not supported')
             yield line, None, [], in_connection
             continue
         if not stripped or stripped[0] in '#;':
             yield line, None, [], in_connection
             continue
         directive, args = _openvpn_directive(stripped)
+        if directive in ('http-proxy', 'socks-proxy'):
+            raise VPNConfigError(f'OpenVPN configs which use {directive} are not supported')
+        if directive in ('dev', 'dev-type') and args and args[0].startswith('tap'):
+            raise VPNConfigError('TAP VPNs are not supported; use a TUN config')
+        if directive in OPENVPN_INLINE_ONLY and args and args[0] != '[inline]':
+            raise VPNConfigError(f'The OpenVPN {directive} must be inside the config (<{directive}>...'
+                                 f'</{directive}>), not in another file')
+        if directive not in OPENVPN_ALLOWED and directive not in OPENVPN_DROPPED:
+            raise VPNConfigError(f'The OpenVPN option {directive} is not supported')
         yield line, directive, args, in_connection
 
 
@@ -338,6 +390,8 @@ class OpenVPNConfig:
     text: str
     remotes: list[Remote]
     wants_auth: bool
+    # Set by the config itself; servers usually push theirs.
+    dns: list[str]
 
 
 def parse_openvpn(text: str) -> OpenVPNConfig:
@@ -347,6 +401,7 @@ def parse_openvpn(text: str) -> OpenVPNConfig:
     blocks = []
     pending = []  # (host, port or None, proto or None, its <connection> block or None)
     wants_auth = False
+    dns = []
     was_in_connection = False
     for _, directive, args, in_connection in _openvpn_lines(text):
         if in_connection and not was_in_connection:
@@ -355,12 +410,10 @@ def parse_openvpn(text: str) -> OpenVPNConfig:
         if directive is None:
             continue
         scope = blocks[-1] if in_connection else defaults
-        if directive in OPENVPN_REJECTED:
-            raise VPNConfigError(f'OpenVPN configs which use {directive} are not supported')
-        if directive in ('dev', 'dev-type') and args and args[0].lower().startswith('tap'):
-            raise VPNConfigError('TAP VPNs are not supported; use a TUN config')
         if directive == 'auth-user-pass':
             wants_auth = True
+        elif directive == 'dhcp-option' and len(args) >= 2 and args[0].upper() in ('DNS', 'DNS6') and is_ip(args[1]):
+            dns.append(args[1])
         elif directive == 'proto' and args:
             scope['proto'] = normalize_proto(args[0])
         elif directive in ('port', 'rport') and args and args[0].isdigit():
@@ -378,12 +431,12 @@ def parse_openvpn(text: str) -> OpenVPNConfig:
                for host, remote_port, remote_proto, block in pending]
     if not remotes:
         raise VPNConfigError('The OpenVPN config has no remote server')
-    return OpenVPNConfig(text, remotes, wants_auth)
+    return OpenVPNConfig(text, remotes, wants_auth, dns)
 
 
 def sanitize_openvpn(config: OpenVPNConfig, hosts: dict[str, list[str]]) -> str:
-    """The config the tunnel runs: no commands, and each `remote` names an address (one line per address) so OpenVPN
-    never needs DNS behind the kill switch."""
+    """The config the tunnel runs: only allowed options, and each `remote` names an address (one line per address) so
+    OpenVPN never needs DNS behind the kill switch."""
     remotes = iter(config.remotes)
     lines = []
     for line, directive, _, _ in _openvpn_lines(config.text):
@@ -398,23 +451,55 @@ def sanitize_openvpn(config: OpenVPNConfig, hosts: dict[str, list[str]]) -> str:
     return '\n'.join(lines) + '\n'
 
 
-def openvpn_up_hook(run_dir: pathlib.Path):
-    """Called by OpenVPN (`--up`) once the tunnel device has its address; records what the server pushed."""
+def pushed_dns(line: str) -> list[str]:
+    """The DNS servers in OpenVPN's log of the server's PUSH_REPLY, e.g.
+    `PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.8.0.1,dhcp-option DNS 10.8.0.1,...'`."""
+    if 'PUSH_REPLY' not in line:
+        return []
     dns = []
-    options = sorted((k for k in os.environ if k.startswith('foreign_option_')),
-                     key=lambda k: int(k.rpartition('_')[2]) if k.rpartition('_')[2].isdigit() else 0)
-    for key in options:
-        parts = os.environ[key].split()
-        if len(parts) >= 3 and parts[0] == 'dhcp-option' and parts[1].upper() in ('DNS', 'DNS6') and is_ip(parts[2]):
-            dns.append(parts[2])
-    addresses = []
-    if local := os.environ.get('ifconfig_local'):
-        netmask = os.environ.get('ifconfig_netmask')
-        prefix = ipaddress.ip_network(f'0.0.0.0/{netmask}').prefixlen if netmask else 32
-        addresses.append(f'{local}/{prefix}')
-    if local6 := os.environ.get('ifconfig_ipv6_local'):
-        addresses.append(f"{local6}/{os.environ.get('ifconfig_ipv6_netbits', '128')}")
-    write_json(run_dir / OPENVPN_UP_FILE, {'dev': os.environ.get('dev'), 'addresses': addresses, 'dns': dns})
+    for option in line.split('PUSH_REPLY', 1)[1].strip(" ,'\"\n").split(','):
+        parts = option.split()
+        if len(parts) >= 3 and parts[0] == 'dhcp-option' and parts[1].upper() in ('DNS', 'DNS6'):
+            candidates = [parts[2]]
+        elif len(parts) >= 5 and parts[:2] == ['dns', 'server'] and parts[3] == 'address':
+            # OpenVPN 2.6: `dns server 0 address 10.8.0.1 [::1]:53`
+            candidates = [a[1:a.index(']')] if a.startswith('[') else a.split(':')[0] if a.count(':') == 1 else a
+                          for a in parts[4:]]
+        else:
+            continue
+        dns.extend(c for c in candidates if is_ip(c) and c not in dns)
+    return dns
+
+
+class OpenVPNProcess:
+    """OpenVPN, with its log read for the moment it connects and the DNS servers it is given (no `--up` script, so
+    OpenVPN never needs permission to run one)."""
+
+    def __init__(self, cmd: list[str]):
+        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                        errors='replace')
+        self.connected = threading.Event()
+        self.dns: list[str] = []
+        threading.Thread(target=self._read_log, daemon=True).start()
+
+    def _read_log(self):
+        for line in self.process.stdout:
+            # OpenVPN's log still reaches the journal (or `docker logs`).
+            sys.stdout.write(line)
+            self.dns.extend(d for d in pushed_dns(line) if d not in self.dns)
+            if OPENVPN_CONNECTED in line:
+                self.connected.set()
+
+    def poll(self):
+        return self.process.poll()
+
+    def stop(self):
+        self.process.terminate()
+        try:
+            self.process.wait(10)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
 
 
 # --- Endpoints ---
@@ -566,6 +651,16 @@ def find_uplink() -> Uplink:
     return Uplink(interface, gateway, gateway6, networks)
 
 
+def interface_addresses(interface: str) -> list[str]:
+    """The global addresses of an interface, e.g. ['10.8.0.6/24']."""
+    addresses = []
+    for entry in json.loads(run('ip', '-j', 'addr', 'show', 'dev', interface).stdout or '[]'):
+        for address in entry.get('addr_info', []):
+            if address.get('scope') == 'global':
+                addresses.append(f"{address['local']}/{address['prefixlen']}")
+    return addresses
+
+
 def apply_ruleset(ruleset: str):
     run('nft', '-f', '-', input_=ruleset)
 
@@ -582,6 +677,7 @@ class Plan:
     fingerprint: str
     wireguard: WireGuardConfig = None
     openvpn_text: str = None
+    openvpn_dns: list[str] = dataclasses.field(default_factory=list)
 
 
 def make_plan(settings: dict, config_directory: pathlib.Path, run_dir: pathlib.Path) -> Plan | None:
@@ -605,7 +701,7 @@ def make_plan(settings: dict, config_directory: pathlib.Path, run_dir: pathlib.P
     else:
         openvpn = parse_openvpn(text)
         endpoints = endpoints_of(openvpn.remotes, hosts)
-        plan_kwargs = {'openvpn_text': sanitize_openvpn(openvpn, hosts)}
+        plan_kwargs = {'openvpn_text': sanitize_openvpn(openvpn, hosts), 'openvpn_dns': openvpn.dns}
         if openvpn.wants_auth:
             if not settings.get('auth_file') or not (config_directory / settings['auth_file']).is_file():
                 raise VPNConfigError('This OpenVPN config needs a username and password')
@@ -624,7 +720,7 @@ class Tunnel:
         self.resolv_conf = resolv_conf
         self.uplink: Uplink | None = None
         self.plan: Plan | None = None
-        self.openvpn: subprocess.Popen | None = None
+        self.openvpn: OpenVPNProcess | None = None
         # (family flag, destination) of each route to a VPN server.
         self.routes: list[tuple[str, str]] = []
         self.addresses: list[str] = []
@@ -728,35 +824,26 @@ class Tunnel:
     def up_openvpn(self, plan: Plan) -> tuple[list[str], list[str]]:
         config = self.run_dir / OPENVPN_CONFIG_FILE
         write_private(config, plan.openvpn_text)
-        up_file = self.run_dir / OPENVPN_UP_FILE
-        up_file.unlink(missing_ok=True)
-        hook = f'{sys.executable} {pathlib.Path(__file__).resolve()} openvpn-up --run-dir {self.run_dir}'
-        cmd = ['openvpn', '--config', str(config), '--dev', TUNNEL_INTERFACE, '--dev-type', 'tun',
-               '--disable-dco', '--route-noexec', '--persist-tun', '--persist-key', '--auth-nocache',
-               '--script-security', '2', '--up', hook, '--verb', '3']
+        # Given after --config, so these win over anything in it.  `--script-security 1` lets OpenVPN run only `ip`,
+        # never a script.
+        cmd = ['openvpn', '--config', str(config), '--script-security', '1', '--dev', TUNNEL_INTERFACE,
+               '--dev-type', 'tun', '--disable-dco', '--route-noexec', '--persist-tun', '--persist-key',
+               '--auth-nocache', '--verb', '3']
         if plan.auth_path:
             cmd.extend(['--auth-user-pass', str(plan.auth_path)])
-        # OpenVPN logs to this program's output (the journal, or `docker logs`).
-        self.openvpn = subprocess.Popen(cmd)
+        self.openvpn = OpenVPNProcess(cmd)
         deadline = time.monotonic() + OPENVPN_CONNECT_SECONDS
-        while time.monotonic() < deadline:
+        while not self.openvpn.connected.wait(1):
             if self.openvpn.poll() is not None:
-                raise TunnelError(f'OpenVPN exited ({self.openvpn.returncode}); see its log for why')
-            if up_file.is_file():
-                data = json.loads(up_file.read_text())
-                return data.get('addresses') or [], data.get('dns') or []
-            time.sleep(1)
-        raise TunnelError(f'OpenVPN did not connect within {OPENVPN_CONNECT_SECONDS} seconds')
+                raise TunnelError(f'OpenVPN exited ({self.openvpn.poll()}); see its log for why')
+            if time.monotonic() > deadline:
+                raise TunnelError(f'OpenVPN did not connect within {OPENVPN_CONNECT_SECONDS} seconds')
+        return interface_addresses(TUNNEL_INTERFACE), list(dict.fromkeys(self.openvpn.dns + plan.openvpn_dns))
 
     def down(self):
         """Take the tunnel down and close the kill switch to everything."""
         if self.openvpn:
-            self.openvpn.terminate()
-            try:
-                self.openvpn.wait(10)
-            except subprocess.TimeoutExpired:
-                self.openvpn.kill()
-                self.openvpn.wait()
+            self.openvpn.stop()
             self.openvpn = None
         if self.plan or self.routes:
             run_quietly('ip', 'link', 'del', TUNNEL_INTERFACE)
@@ -783,12 +870,18 @@ class Tunnel:
         if not url or time.monotonic() - self.public_ip_checked < PUBLIC_IP_SECONDS:
             return
         self.public_ip_checked = time.monotonic()
+        self.public_ip = None
         try:
+            check_public_ip_url(url)  # Also when controller.yaml was edited by hand.
             with urllib.request.urlopen(url, timeout=10) as response:
-                self.public_ip = response.read(64).decode().strip() or None
+                reply = response.read(64).decode(errors='replace').strip()
         except (OSError, ValueError) as e:
             logger.warning('Could not read the public address through the VPN: %s', e)
-            self.public_ip = None
+            return
+        if is_ip(reply):
+            self.public_ip = reply
+        else:
+            logger.warning('The public address check did not answer with an address')
 
     def report(self):
         # Traffic through the tunnel also makes WireGuard handshake, so check before asking if it connected.
@@ -837,14 +930,7 @@ def main(argv=None):
     run_parser.add_argument('--resolv-conf', type=pathlib.Path, required=True,
                             help="The namespace's resolv.conf, which gets the VPN's DNS servers")
     run_parser.add_argument('--run-dir', type=pathlib.Path, default=RUN_DIR)
-    up_parser = sub.add_parser('openvpn-up', help="OpenVPN's --up hook")
-    up_parser.add_argument('--run-dir', type=pathlib.Path, default=RUN_DIR)
-    # OpenVPN appends the device, MTUs and addresses; the hook reads its environment instead.
-    args, _ = parser.parse_known_args(argv)
-
-    if args.command == 'openvpn-up':
-        openvpn_up_hook(args.run_dir)
-        return
+    args = parser.parse_args(argv)
 
     def stop(signum, frame):
         raise SystemExit(0)

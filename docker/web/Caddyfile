@@ -87,6 +87,9 @@
 
 	# Static media files with directory browsing.
 	handle_path /media/* {
+		# The VPN's private key and login (controller/lib/vpn.py) are never served.
+		@vpn_secrets path /config/vpn /config/vpn/*
+		respond @vpn_secrets 403
 		root * /opt/media
 		header Content-Disposition "inline"
 		file_server browse
@@ -97,6 +100,9 @@
 
 	# Downloads with Content-Disposition header.
 	handle_path /download/* {
+		# The VPN's private key and login (controller/lib/vpn.py) are never served.
+		@vpn_secrets path /config/vpn /config/vpn/*
+		respond @vpn_secrets 403
 		root * /opt/media
 		header Content-Disposition "attachment"
 		file_server browse

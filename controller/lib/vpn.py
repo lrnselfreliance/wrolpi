@@ -114,6 +114,8 @@ def update_vpn_settings(enabled: bool = None, port_forwarding: str = None, forwa
             and not values.get('forwarded_port', settings['forwarded_port'])):
         raise tunnel.VPNConfigError('Enter the port your VPN provider forwards to you')
     if public_ip_url is not None:
+        if public_ip_url:
+            tunnel.check_public_ip_url(public_ip_url)
         values['public_ip_url'] = public_ip_url or None
     if enabled is not None:
         if enabled:

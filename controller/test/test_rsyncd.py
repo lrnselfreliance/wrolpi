@@ -93,10 +93,10 @@ class TestConfig:
     ["rsync", "--version"], capture_output=True).stdout, reason="needs rsync 3")
 def test_daemon_serves_the_library_read_only(tmp_path):
     """The daemon run with the real config (only its port and path changed) lists the library, never serves the
-    database in use or the TLS keys, serves the snapshot, and refuses a write."""
+    database in use, the TLS keys or the VPN keys, serves the snapshot, and refuses a write."""
     media = tmp_path / "media"
     for path in ("videos/a.mp4", "config/tags.yaml", "config/wrolpi.db", "config/wrolpi.db-wal",
-                 "config/ssl/ca.key", "config/cookies.txt.enc", "config/.sync/config/wrolpi.db",
+                 "config/ssl/ca.key", "config/vpn/wireguard.conf", "config/cookies.txt.enc", "config/.sync/config/wrolpi.db",
                  "config/.sync/config/.wrolpi.db.backup"):
         (media / path).parent.mkdir(parents=True, exist_ok=True)
         (media / path).write_text(path)

@@ -149,17 +149,47 @@ class TestOpenVPN:
         with pytest.raises(VPNConfigError, match=message):
             tunnel.parse_openvpn(text)
 
-    def test_up_hook_records_what_the_server_pushed(self, tmp_path):
-        env = {
-            'dev': 'vpn0', 'ifconfig_local': '10.8.0.6', 'ifconfig_netmask': '255.255.255.0',
-            'ifconfig_ipv6_local': 'fd00::6', 'ifconfig_ipv6_netbits': '64',
-            'foreign_option_2': 'dhcp-option DNS 10.8.0.2', 'foreign_option_1': 'dhcp-option DNS 10.8.0.1',
-            'foreign_option_3': 'dhcp-option DOMAIN example.com',
-        }
-        with mock.patch.dict(os.environ, env):
-            tunnel.openvpn_up_hook(tmp_path)
-        assert json.loads((tmp_path / tunnel.OPENVPN_UP_FILE).read_text()) == {
-            'dev': 'vpn0', 'addresses': ['10.8.0.6/24', 'fd00::6/64'], 'dns': ['10.8.0.1', '10.8.0.2']}
+    @pytest.mark.parametrize('line', [
+        # OpenVPN un-quotes and un-escapes option names, so these are `up`.
+        '"up" /bin/evil', "'up' /bin/evil", 'u\\p /bin/evil', '--"up" /bin/evil',
+        # Run commands without needing --script-security.
+        'iproute /bin/evil', 'plugin /usr/lib/openvpn/openvpn-plugin-down-root.so /bin/evil', 'engine evil',
+        'providers evil',
+        # Wrapped in `setenv opt`, an option is still judged as itself.
+        'setenv opt iproute /bin/evil',
+        # Read or write files as root.
+        'askpass /etc/shadow', 'tmp-dir /etc', 'tls-export-cert /etc', 'replay-persist /etc/passwd',
+        'ca /etc/shadow', 'tls-auth /etc/shadow 1', 'config /etc/openvpn/other.conf',
+        # Unknown options are refused, by name.
+        'ignore-unknown-option up', 'management 0.0.0.0 7505',
+    ])
+    def test_refuses_options_which_could_escape(self, line):
+        with pytest.raises(VPNConfigError):
+            tunnel.parse_openvpn(f'client\nremote 198.51.100.7\n{line}\n')
+
+    @pytest.mark.parametrize('block', ['auth-user-pass', 'up', 'secret-stuff'])
+    def test_refuses_unknown_inline_blocks(self, block):
+        with pytest.raises(VPNConfigError, match=f'<{block}>'):
+            tunnel.parse_openvpn(f'remote 198.51.100.7\n<{block}>\nx\n</{block}>\n')
+
+    def test_drops_scripts_and_what_the_tunnel_replaces(self):
+        text = ('client\nremote 198.51.100.7\nsetenv opt up /bin/evil\nsetenv CLIENT_CERT 0\nverb 1\n'
+                'user nobody\nlog /etc/passwd\nblock-outside-dns\ndhcp-option DNS 10.8.0.1\n')
+        config = tunnel.parse_openvpn(text)
+        lines = tunnel.sanitize_openvpn(config, {}).splitlines()
+        assert lines == ['client', 'remote 198.51.100.7 1194 udp', 'setenv CLIENT_CERT 0', 'dhcp-option DNS 10.8.0.1']
+        assert config.dns == ['10.8.0.1']
+
+    def test_inline_key_material(self):
+        text = 'remote 198.51.100.7\ntls-auth [inline] 1\nkey-direction 1\n<tls-auth>\nkey\n</tls-auth>\n'
+        assert '<tls-auth>' in tunnel.sanitize_openvpn(tunnel.parse_openvpn(text), {})
+
+    def test_pushed_dns(self):
+        line = ("2026-11-27 PUSH: Received control message: 'PUSH_REPLY,redirect-gateway def1,dhcp-option DNS "
+                "10.8.0.1,dhcp-option DNS6 fd00::1,dhcp-option DOMAIN example.com,dns server 0 address 10.8.0.2 "
+                "[fd00::2]:53 10.8.0.3:53,route-gateway 10.8.0.1,ifconfig 10.8.0.6 255.255.255.0,peer-id 0'")
+        assert tunnel.pushed_dns(line) == ['10.8.0.1', 'fd00::1', '10.8.0.2', 'fd00::2', '10.8.0.3']
+        assert tunnel.pushed_dns('Initialization Sequence Completed') == []
 
 
 class TestKillSwitch:
@@ -392,36 +422,67 @@ class TestTunnel:
         assert 'vpn.example.com' in status['error']
         assert fake_system.rulesets() == [tunnel.build_ruleset(UPLINK, [])]
 
-    def test_openvpn_config_is_private_and_run_without_its_commands(self, media, tmp_path, fake_system,
-                                                                      monkeypatch):
-        text = 'client\nremote 198.51.100.7 1194\nup /bin/evil\n'
+    def test_openvpn_config_is_private_and_run_without_scripts(self, media, tmp_path, fake_system, monkeypatch):
+        text = 'client\nremote 198.51.100.7 1194\nup /bin/evil\nscript-security 3\n'
         (media / 'config/vpn/openvpn.ovpn').write_text(text)
         write_settings(media, enabled=True, config_file='vpn/openvpn.ovpn')
         t = self.make_tunnel(media, tmp_path)
 
-        def popen(cmd):
-            # OpenVPN brings up the device, then calls the --up hook.
-            fake_system.links.add('vpn0')
-            tunnel.write_json(tunnel.RUN_DIR / tunnel.OPENVPN_UP_FILE,
-                              {'dev': 'vpn0', 'addresses': ['10.8.0.6/24'], 'dns': ['10.8.0.1']})
-            process = mock.Mock()
-            process.poll.return_value = None
-            process.cmd = cmd
-            return process
+        class FakeOpenVPN:
+            def __init__(self, cmd):
+                self.cmd = cmd
+                self.connected = __import__('threading').Event()
+                # OpenVPN brings up the device, logs the pushed DNS, then that it is connected.
+                fake_system.links.add('vpn0')
+                self.dns = ['10.8.0.1']
+                self.connected.set()
 
-        monkeypatch.setattr(tunnel.subprocess, 'Popen', popen)
+            def poll(self):
+                return None
+
+            def stop(self):
+                fake_system.links.discard('vpn0')
+
+        monkeypatch.setattr(tunnel, 'OpenVPNProcess', FakeOpenVPN)
+        monkeypatch.setattr(tunnel, 'interface_addresses', lambda interface: ['10.8.0.6/24'])
         monkeypatch.setattr(tunnel.Tunnel, 'alive', lambda self: self.openvpn is not None)
         t.step()
 
         cmd = t.openvpn.cmd
+        # After the config, so they win over it: OpenVPN may run `ip`, never a script.
+        assert cmd.index('--script-security') > cmd.index('--config')
+        assert cmd[cmd.index('--script-security') + 1] == '1'
+        assert '--up' not in cmd
         assert cmd[cmd.index('--dev') + 1] == 'vpn0'
         assert '--route-noexec' in cmd
-        assert '/bin/evil' not in ' '.join(cmd)
         config = tunnel.RUN_DIR / tunnel.OPENVPN_CONFIG_FILE
         assert stat.S_IMODE(config.stat().st_mode) == 0o600
-        assert 'up /bin/evil' not in config.read_text()
+        assert '/bin/evil' not in config.read_text()
+        assert 'script-security' not in config.read_text()
         assert (tmp_path / 'resolv.conf').read_text() == 'nameserver 10.8.0.1\n'
-        assert read_status()['state'] == 'connected'
+        status = read_status()
+        assert status['state'] == 'connected'
+        assert status['addresses'] == ['10.8.0.6/24']
+
+    def test_public_ip_must_be_a_web_address_and_an_address(self, media, tmp_path, monkeypatch):
+        t = tunnel.Tunnel(media, tunnel.RUN_DIR, tmp_path / 'resolv.conf')
+        t.plan = mock.Mock(settings={'public_ip_url': 'file:///etc/shadow'})
+        urlopen = mock.MagicMock()
+        monkeypatch.setattr(tunnel.urllib.request, 'urlopen', urlopen)
+        t.check_public_ip()
+        urlopen.assert_not_called()
+        assert t.public_ip is None
+
+        t.plan.settings['public_ip_url'] = 'https://ip.example.com'
+        t.public_ip_checked = 0.0
+        urlopen.return_value.__enter__.return_value.read.return_value = b'<html>not an address</html>'
+        t.check_public_ip()
+        assert t.public_ip is None
+
+        t.public_ip_checked = 0.0
+        urlopen.return_value.__enter__.return_value.read.return_value = b'203.0.113.99\n'
+        t.check_public_ip()
+        assert t.public_ip == '203.0.113.99'
 
 
 class TestInstalled:

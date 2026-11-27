@@ -138,6 +138,13 @@ class TestSettings:
         # Only differences from the defaults are saved.
         assert saved_vpn_settings(drive) == {'port_forwarding': 'fixed', 'forwarded_port': 51413}
 
+    @pytest.mark.parametrize('url', ['file:///etc/shadow', 'ftp://example.com/', 'https://', 'example.com'])
+    def test_public_ip_url_must_be_a_web_address(self, drive, url):
+        with pytest.raises(VPNConfigError, match='http'):
+            vpn.update_vpn_settings(public_ip_url=url)
+        # Empty turns the check off.
+        assert vpn.update_vpn_settings(public_ip_url='')['public_ip_url'] is None
+
     def test_delete(self, drive, resolver):
         vpn.save_vpn_config('a.ovpn', OPENVPN)
         vpn.save_openvpn_auth('user', 'secret')

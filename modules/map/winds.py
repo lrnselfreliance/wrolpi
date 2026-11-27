@@ -20,6 +20,7 @@ a whole country takes a few minutes.
 import asyncio
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 import time
 import math
 from pathlib import Path
@@ -299,6 +300,9 @@ _summary_cache = dict()
 # The weather subscription: one recurring Download of a field around the saved targets.
 WEATHER_URL = OPEN_METEO_URL
 WEATHER_DOWNLOADER = 'open_meteo'
+# The minute past the hour the daily download is made: the forecast service is busy with requests
+# made on the hour, sometimes too busy to answer a connection for minutes.
+WEATHER_MINUTE = 23
 
 
 def target_places() -> List[Tuple[float, float]]:
@@ -403,7 +407,12 @@ class WeatherDownloader(Downloader):
     def finalize_download(self, session: Session, download: Download, executed: ExecutedWeather) -> DownloadResult:
         if executed.error:
             return DownloadResult(success=False, error=executed.error)
-        return DownloadResult(success=True, location='/map/manage')
+        # The next day's download is at WEATHER_MINUTE past the hour this one finished in, rather than in
+        # a daily slot (which are on the hour).
+        finished = now()
+        tomorrow = (finished + timedelta(days=1)).replace(minute=WEATHER_MINUTE, second=0, microsecond=0)
+        return DownloadResult(success=True, location='/map/manage',
+                              retry_seconds=int((tomorrow - finished).total_seconds()))
 
 
 weather_downloader = WeatherDownloader()

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from unittest import mock
 
@@ -318,6 +319,21 @@ async def test_weather_subscription(async_client, test_session, test_directory, 
     assert test_session.query(Download).count() == 0
     request, response = await async_client.post('/api/map/weather/download')
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.parametrize('finished,expected', [
+    ('2026-11-27T00:07:30+00:00', '2026-11-28T00:23:00+00:00'),
+    ('2026-11-27T14:00:11+00:00', '2026-11-28T14:23:00+00:00'),
+    ('2026-11-27T14:59:59+00:00', '2026-11-28T14:23:00+00:00'),
+])
+def test_weather_downloader_avoids_the_hour(finished, expected):
+    """The next day's download is at WEATHER_MINUTE past an hour, when the forecast service is not
+    busy with requests made on the hour."""
+    with mock.patch('modules.map.winds.now', lambda: datetime.fromisoformat(finished)):
+        result = winds.weather_downloader.finalize_download(None, None, winds.ExecutedWeather(points=1))
+    assert result.success is True
+    assert datetime.fromisoformat(finished) + timedelta(seconds=result.retry_seconds) \
+           == datetime.fromisoformat(expected)
 
 
 @pytest.mark.asyncio

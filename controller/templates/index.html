@@ -1069,6 +1069,51 @@
         </div>
     </section>
 
+    <section id="vpn">
+        <h2>VPN</h2>
+        <p style="color: #aaa; font-size: 0.9rem;">
+            Torrents only use this VPN, so peers never see this WROLPi's own address. When the VPN is down, torrents
+            stop; they never fall back to this WROLPi's own Internet connection.
+        </p>
+        <p id="vpn-status">Loading...</p>
+        <p id="vpn-error" style="color: #f0ad4e;" hidden></p>
+        <p id="vpn-config-summary" style="color: #aaa;"></p>
+        <div class="action-buttons" style="margin-bottom: 1rem;">
+            <input type="file" id="vpn-config-file" accept=".conf,.ovpn" hidden onchange="uploadVpnConfig(this)">
+            <button id="vpn-upload-btn" class="btn btn-primary"
+                    onclick="document.getElementById('vpn-config-file').click()">Upload VPN Config</button>
+            <button id="vpn-remove-btn" class="btn btn-danger" onclick="removeVpnConfig()" style="display: none;">Remove</button>
+            <button id="vpn-toggle-btn" class="btn" onclick="toggleVpn()" disabled>Turn VPN On</button>
+        </div>
+        <details id="vpn-login" style="margin-bottom: 1rem; display: none;">
+            <summary style="cursor: pointer;">OpenVPN Login</summary>
+            <div class="modal-form" style="max-width: 24rem; margin-top: 0.5rem;">
+                <label>Username
+                    <input type="text" id="vpn-username" autocomplete="off">
+                </label>
+                <label>Password
+                    <input type="password" id="vpn-password" autocomplete="off" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
+                </label>
+                <button class="btn btn-primary" onclick="saveVpnLogin()">Save Login</button>
+            </div>
+        </details>
+        <details style="margin-bottom: 1rem;">
+            <summary style="cursor: pointer;">Port Forwarding</summary>
+            <div class="modal-form" style="max-width: 24rem; margin-top: 0.5rem;">
+                <label>Mode
+                    <select id="vpn-port-forwarding" onchange="showVpnPort()" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
+                        <option value="none">None (download only; seed to peers who accept connections)</option>
+                        <option value="fixed">A port my VPN provider forwards to me</option>
+                    </select>
+                </label>
+                <label id="vpn-port-label" style="display: none;">Forwarded port
+                    <input type="text" id="vpn-forwarded-port" inputmode="numeric">
+                </label>
+                <button class="btn btn-primary" onclick="saveVpnSettings()">Save</button>
+            </div>
+        </details>
+    </section>
+
     {% macro service_row(service, docker_mode, host) %}
     <tr>
         <td>
@@ -3088,6 +3133,113 @@
         }
     }
 
+    // --- VPN (controller/lib/vpn.py).  Torrents reach the Internet only through it. ---
+    const vpnStateLabels = {
+        connected: 'Connected', connecting: 'Connecting', waiting: 'Waiting', disabled: 'Off',
+        stopped: 'Not running', error: 'Error',
+    };
+    const vpnKindLabels = {wireguard: 'WireGuard', openvpn: 'OpenVPN'};
+    let vpnSettings = null;
+
+    // `hidden` loses to this page's display rules (e.g. .btn), so toggle display itself.
+    function setShown(id, shown) {
+        document.getElementById(id).style.display = shown ? '' : 'none';
+    }
+
+    function showVpnPort() {
+        setShown('vpn-port-label', document.getElementById('vpn-port-forwarding').value === 'fixed');
+    }
+
+    function applyVpnSettings(settings) {
+        vpnSettings = settings;
+        document.getElementById('vpn-config-summary').textContent = settings.kind
+            ? `Config: ${vpnKindLabels[settings.kind]} to ${settings.servers.join(', ')}`
+            : 'Upload the WireGuard (.conf) or OpenVPN (.ovpn) file from your VPN provider.';
+        document.getElementById('vpn-upload-btn').textContent = settings.kind ? 'Replace VPN Config' : 'Upload VPN Config';
+        setShown('vpn-remove-btn', !!settings.kind);
+        const toggle = document.getElementById('vpn-toggle-btn');
+        toggle.disabled = !settings.kind;
+        toggle.textContent = settings.enabled ? 'Turn VPN Off' : 'Turn VPN On';
+        toggle.className = settings.enabled ? 'btn btn-danger' : 'btn btn-primary';
+        setShown('vpn-login', settings.needs_auth);
+        document.getElementById('vpn-login').querySelector('summary').textContent = settings.has_auth ? 'OpenVPN Login (saved)' : 'OpenVPN Login';
+        document.getElementById('vpn-port-forwarding').value = settings.port_forwarding || 'none';
+        document.getElementById('vpn-forwarded-port').value = settings.forwarded_port || '';
+        showVpnPort();
+    }
+
+    async function loadVpnStatus() {
+        try {
+            const status = await apiCall('api/vpn/status');
+            let text = `Status: ${vpnStateLabels[status.state] || status.state}`;
+            if (status.public_ip) text += ` · Peers see ${status.public_ip}`;
+            if (status.forwarded_port) text += ` · Port ${status.forwarded_port}`;
+            document.getElementById('vpn-status').textContent = text;
+            const problems = [status.error, ...(status.warnings || [])].filter(Boolean);
+            const error = document.getElementById('vpn-error');
+            error.textContent = problems.join(' · ');
+            error.hidden = !problems.length;
+        } catch (e) {
+            console.error('Failed to load VPN status', e);
+        }
+    }
+
+    async function loadVpn() {
+        try {
+            applyVpnSettings(await apiCall('api/vpn/settings'));
+        } catch (e) {
+            console.error('Failed to load VPN settings', e);
+        }
+        await loadVpnStatus();
+    }
+
+    async function vpnAction(url, method, body) {
+        try {
+            applyVpnSettings(await apiCall(url, method, body));
+            await loadVpnStatus();
+            return true;
+        } catch (e) {
+            alert(`VPN: ${e.message}`);
+            return false;
+        }
+    }
+
+    async function uploadVpnConfig(input) {
+        const file = input.files && input.files[0];
+        input.value = '';
+        if (!file) return;
+        await vpnAction('api/vpn/config', 'POST', {filename: file.name, content: await file.text()});
+    }
+
+    async function removeVpnConfig() {
+        if (!confirm('Remove the VPN config and login, and turn the VPN off? Torrents will stop until a new config is uploaded.')) return;
+        await vpnAction('api/vpn/config', 'DELETE');
+    }
+
+    async function toggleVpn() {
+        await vpnAction('api/vpn/settings', 'POST', {enabled: !(vpnSettings && vpnSettings.enabled)});
+    }
+
+    async function saveVpnLogin() {
+        const username = document.getElementById('vpn-username');
+        const password = document.getElementById('vpn-password');
+        if (await vpnAction('api/vpn/auth', 'POST', {username: username.value, password: password.value})) {
+            username.value = '';
+            password.value = '';
+        }
+    }
+
+    async function saveVpnSettings() {
+        const mode = document.getElementById('vpn-port-forwarding').value;
+        const port = parseInt(document.getElementById('vpn-forwarded-port').value, 10);
+        if (await vpnAction('api/vpn/settings', 'POST', {
+            port_forwarding: mode,
+            forwarded_port: mode === 'fixed' && port ? port : null,
+        })) {
+            alert('VPN settings saved.');
+        }
+    }
+
     function startPeriodicUpdates() {
         // Update every 10 seconds
         const updateInterval = 10000;
@@ -3095,6 +3247,7 @@
         // Fetch hardware button status immediately
         refreshToggleButtons();
         loadHotspotSettings();
+        loadVpn();
 
         // Initial update after a short delay (to not overlap with initial load)
         setTimeout(() => {
@@ -3111,6 +3264,7 @@
             loadDisks();
             loadSmart();
             refreshToggleButtons();
+            loadVpnStatus();
         }, updateInterval);
     }
 

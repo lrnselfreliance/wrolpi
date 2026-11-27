@@ -108,6 +108,8 @@ systemctl enable wrolpi-first-startup.service
 systemctl enable wrolpi-controller.service
 # Serve the library to secondary WROLPis.
 systemctl enable wrolpi-rsyncd.service
+# The VPN for torrents; idles until a VPN is set up.
+systemctl enable wrolpi-vpn.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
 

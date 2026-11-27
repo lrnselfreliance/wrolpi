@@ -78,6 +78,13 @@ def _isolate_hotspot_boot_marker(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_vpn_run_dir(tmp_path_factory, monkeypatch):
+    """Tests never read or write the real VPN status or server addresses in /run."""
+    import controller.vpn.tunnel as tunnel
+    monkeypatch.setattr(tunnel, "RUN_DIR", tmp_path_factory.mktemp("wrolpi-vpn"))
+
+
+@pytest.fixture(autouse=True)
 def _patch_status_worker():
     """Replace the real status worker with a no-op for every test.
 

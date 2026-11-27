@@ -49,6 +49,7 @@ import {
 import QRCode from "react-qr-code";
 import {RestartButton, ShutdownButton} from "./Settings";
 import {CONTROLLER_URI} from "../Vars";
+import {VpnSection} from "./VpnSection";
 
 
 // Service status kind mapping. Status only knows complete/active/pending/failed,
@@ -1695,6 +1696,7 @@ export function ControllerPage() {
             <AdminControlsSection/>
             <ServicesSection/>
             <SambaSection/>
+            <VpnSection/>
             <DiskSection/>
         </div>
     );

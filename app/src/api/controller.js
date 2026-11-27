@@ -294,3 +294,29 @@ export async function runSync() {
 export async function cancelSync() {
     return controllerFetch('/sync/cancel', {method: 'POST'});
 }
+
+// --- VPN (torrents reach the Internet only through it) ---
+
+export async function getVpnStatus() {
+    return controllerFetch('/vpn/status');
+}
+
+export async function getVpnSettings() {
+    return controllerFetch('/vpn/settings');
+}
+
+export async function updateVpnSettings(settings) {
+    return controllerFetch('/vpn/settings', {method: 'POST', body: JSON.stringify(settings)});
+}
+
+export async function uploadVpnConfig(filename, content) {
+    return controllerFetch('/vpn/config', {method: 'POST', body: JSON.stringify({filename, content})});
+}
+
+export async function deleteVpnConfig() {
+    return controllerFetch('/vpn/config', {method: 'DELETE'});
+}
+
+export async function saveVpnAuth(username, password) {
+    return controllerFetch('/vpn/auth', {method: 'POST', body: JSON.stringify({username, password})});
+}

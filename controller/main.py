@@ -34,6 +34,7 @@ from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
 from controller.api.sync import router as sync_router
+from controller.api.vpn import router as vpn_router
 from controller.lib.config import (
     get_ca_certificate_path,
     get_config_value,
@@ -61,6 +62,7 @@ from controller.lib.status import (
 from controller.lib.status_worker import status_worker_loop
 from controller.lib.sync import sync_schedule_loop
 from controller.lib.systemd import get_all_services_status
+from controller.lib.vpn import vpn_endpoints_loop
 
 # Templates directory
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -138,6 +140,9 @@ async def lifespan(app: FastAPI):
     from controller.lib.admin import start_hotspot_on_boot
     app.state.hotspot_on_boot_task = asyncio.create_task(asyncio.to_thread(start_hotspot_on_boot))
 
+    # The VPN's kill switch blocks DNS until the tunnel is up, so the Controller looks up the VPN's servers.
+    app.state.vpn_endpoints_task = asyncio.create_task(vpn_endpoints_loop())
+
     # Initialize cached status
     app.state.cached_status = {}
 
@@ -153,7 +158,7 @@ async def lifespan(app: FastAPI):
         await status_task
     except asyncio.CancelledError:
         pass
-    for name in ("rsync_daemon_task", "sync_schedule_task"):
+    for name in ("rsync_daemon_task", "sync_schedule_task", "vpn_endpoints_task"):
         if task := getattr(app.state, name, None):
             task.cancel()
 
@@ -184,6 +189,7 @@ app.include_router(scripts_router)
 app.include_router(services_router)
 app.include_router(status_router)
 app.include_router(sync_router)
+app.include_router(vpn_router)
 
 
 def get_host(request: Request) -> str:

@@ -156,7 +156,8 @@ class TestOpenVPN:
         'iproute /bin/evil', 'plugin /usr/lib/openvpn/openvpn-plugin-down-root.so /bin/evil', 'engine evil',
         'providers evil',
         # Wrapped in `setenv opt`, an option is still judged as itself.
-        'setenv opt iproute /bin/evil',
+        'setenv opt iproute /bin/evil', 'setenv "opt" up /bin/evil', "setenv 'opt' iproute /bin/evil",
+        'setenv o\\pt up /bin/evil', 'remote 198.51.100.8 "1194"',
         # Read or write files as root.
         'askpass /etc/shadow', 'tmp-dir /etc', 'tls-export-cert /etc', 'replay-persist /etc/passwd',
         'ca /etc/shadow', 'tls-auth /etc/shadow 1', 'config /etc/openvpn/other.conf',
@@ -171,6 +172,28 @@ class TestOpenVPN:
     def test_refuses_unknown_inline_blocks(self, block):
         with pytest.raises(VPNConfigError, match=f'<{block}>'):
             tunnel.parse_openvpn(f'remote 198.51.100.7\n<{block}>\nx\n</{block}>\n')
+
+    @pytest.mark.parametrize('text', [
+        # OpenVPN would end the block here and read the next line as an option.
+        '<ca>\ncert\n</ca> trailing\nup /bin/evil\n',
+        '<ca>\ncert\n</ca>junk\n',
+        # A block left open hides nothing from OpenVPN, but cannot be read either.
+        '<ca>\ncert\n',
+        '<connection>\nremote 198.51.100.8\n',
+    ])
+    def test_inline_blocks_must_close_cleanly(self, text):
+        with pytest.raises(VPNConfigError):
+            tunnel.parse_openvpn(f'remote 198.51.100.7\n{text}')
+
+    def test_inline_block_closing_tag_however_written(self):
+        # Closed by any line which starts with the closing tag, so what follows is always checked.
+        with pytest.raises(VPNConfigError, match='iproute'):
+            tunnel.parse_openvpn('remote 198.51.100.7\n<ca>\ncert\n   </CA>\niproute /bin/evil\n')
+
+    def test_quotes_in_harmless_options(self):
+        text = ('remote 198.51.100.7\npull-filter ignore "route-ipv6"\n'
+                "verify-x509-name 'C=US, CN=vpn' subject\n")
+        assert 'pull-filter ignore "route-ipv6"' in tunnel.sanitize_openvpn(tunnel.parse_openvpn(text), {})
 
     def test_drops_scripts_and_what_the_tunnel_replaces(self):
         text = ('client\nremote 198.51.100.7\nsetenv opt up /bin/evil\nsetenv CLIENT_CERT 0\nverb 1\n'

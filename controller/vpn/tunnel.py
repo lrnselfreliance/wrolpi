@@ -322,13 +322,21 @@ OPENVPN_DROPPED = {
 OPENVPN_CONNECTED = 'Initialization Sequence Completed'
 
 
+# Options whose arguments providers quote (e.g. `pull-filter ignore "route-ipv6"`), and which cannot run anything.
+OPENVPN_QUOTED_ARGS = {'pull-filter', 'static-challenge', 'verify-x509-name'}
+OPENVPN_QUOTES = ('"', "'", '\\')
+
+
 def _openvpn_directive(line: str) -> tuple[str, list[str]]:
     tokens = line.split()
     name = tokens[0]
-    # OpenVPN un-quotes and un-escapes option names, so `"up"` is `up`.  No real config quotes a name.
-    if any(c in name for c in '"\\\'') or '\0' in line:
+    # OpenVPN un-quotes and un-escapes every word, so `"up"` is `up`, and `setenv "opt" up` is `setenv opt up`.
+    # Quotes are only allowed in the arguments of options which are harmless whatever they say.
+    if any(c in name for c in OPENVPN_QUOTES) or '\0' in line:
         raise VPNConfigError(f'Cannot read the OpenVPN option {name!r}')
     name = name[2:] if name.startswith('--') else name
+    if name not in OPENVPN_QUOTED_ARGS and any(c in line for c in OPENVPN_QUOTES):
+        raise VPNConfigError(f'Quotes are not supported in the OpenVPN option {name}')
     if name == 'setenv' and tokens[1:2] and tokens[1].lower() == 'opt':
         # `setenv opt X` applies the option X; it is judged as X.
         return _openvpn_directive(' '.join(tokens[2:])) if len(tokens) > 2 else ('setenv', [])
@@ -339,12 +347,17 @@ def _openvpn_lines(text: str):
     """Yield (line, directive, args, in_connection) for each line; directive is None for comments, blank lines and
     inline data (e.g. <ca>...</ca>), which are passed through unchanged.  Raises VPNConfigError for any option or
     inline block the tunnel does not allow."""
+    # A block of inline data is never checked, so it must never be open while OpenVPN reads options: it opens only on
+    # an exact allowed tag, and closes on any line which starts with its closing tag (however OpenVPN reads that line).
     inline = None
     in_connection = False
     for line in text.splitlines():
         stripped = line.strip()
         if inline:
-            if stripped == f'</{inline}>':
+            close = f'</{inline}>'
+            if stripped.lower().startswith(close):
+                if stripped[len(close):].strip():
+                    raise VPNConfigError(f'Cannot read the OpenVPN line {stripped!r}')
                 inline = None
             yield line, None, [], in_connection
             continue
@@ -374,6 +387,8 @@ def _openvpn_lines(text: str):
         if directive not in OPENVPN_ALLOWED and directive not in OPENVPN_DROPPED:
             raise VPNConfigError(f'The OpenVPN option {directive} is not supported')
         yield line, directive, args, in_connection
+    if inline or in_connection:
+        raise VPNConfigError(f'The OpenVPN config ends inside <{inline or "connection"}>')
 
 
 def normalize_proto(proto: str) -> str:

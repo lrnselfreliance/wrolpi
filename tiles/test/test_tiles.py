@@ -276,7 +276,8 @@ def test_mobac_xml():
     assert root.findtext('url') == 'http://192.0.2.8:8088/tiles/{$z}/{$x}/{$y}.jpg'
     # ATAK requires a maxZoom.
     assert (root.findtext('minZoom'), root.findtext('maxZoom')) == ('0', '17')
-    assert root.find('backgroundColor') is None
+    # iTAK refuses a map source without one.
+    assert root.findtext('backgroundColor') == '#cccccc'
 
 
 # The service, with a renderer which draws nothing.

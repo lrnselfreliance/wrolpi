@@ -52,8 +52,11 @@ DEFAULT_MAX_ZOOM = 17
 NAME = 'WROLPi Map'
 
 
-def mobac_xml(base_url: str, name: str, max_zoom: int) -> str:
-    """The MOBAC map source ATAK and iTAK import.  (No `backgroundColor`: ATAK reads only `#` and one digit.)"""
+def mobac_xml(base_url: str, name: str, max_zoom: int, background: str = '#cccccc') -> str:
+    """The MOBAC map source ATAK and iTAK import.
+
+    `backgroundColor` is required by iTAK: without it, it refuses the file ("The data couldn't be read because it
+    is missing").  ATAK ignores it (it reads only `#` and one digit)."""
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <customMapSource>
     <name>{escape(name)}</name>
@@ -62,6 +65,7 @@ def mobac_xml(base_url: str, name: str, max_zoom: int) -> str:
     <tileType>jpg</tileType>
     <tileUpdate>None</tileUpdate>
     <url>{escape(base_url)}/tiles/{{$z}}/{{$x}}/{{$y}}.jpg</url>
+    <backgroundColor>{escape(background)}</backgroundColor>
 </customMapSource>
 '''
 
@@ -327,7 +331,9 @@ def create_app(service: TileService, name: str = 'wrolpi_tiles') -> Sanic:
         https = base_url.startswith('https:')
         name = f'{NAME} (HTTPS)' if https else NAME
         filename = 'wrolpi-map-https.xml' if https else 'wrolpi-map.xml'
-        return response.text(mobac_xml(base_url, name, app.ctx.service.max_zoom), content_type='application/xml',
+        service_ = app.ctx.service
+        background = background_color(service_.style) if service_.style else '#cccccc'
+        return response.text(mobac_xml(base_url, name, service_.max_zoom, background), content_type='application/xml',
                              headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
     @app.get('/tiles/status')

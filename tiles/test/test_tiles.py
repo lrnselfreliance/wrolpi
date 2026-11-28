@@ -18,7 +18,7 @@ from modules.map import pmtiles as map_pmtiles
 from modules.map.conftest import PROTOMAPS_LAYERS, pmtiles_bytes, vector_metadata
 from tiles import maps, render, service as tile_service
 from tiles.blocks import BLOCK, Block, block_center, block_of, is_tile, tile_corner
-from tiles.cache import TileCache
+from tiles.cache import TileCache, disk_size
 from tiles.service import TileService, create_app, mobac_xml
 from tiles.style import SKIP_SECONDARY, background_color, basemap_layers, build_style, style_id
 
@@ -242,13 +242,22 @@ def test_blocks():
 
 # Cache.
 
+def du(directory: Path) -> int:
+    """What the tiles in a directory take of the disk, as `du` counts it."""
+    return sum(disk_size(i.stat()) for i in directory.rglob('*.jpg'))
+
+
 def test_cache(tmp_path):
-    cache = TileCache(tmp_path / 'cache', max_bytes=10_000, min_free_bytes=0)
+    cache = TileCache(tmp_path / 'cache', max_bytes=10_000_000, min_free_bytes=0)
     cache.use_style('a')
     cache.put(15, {(1, 2): b'one', (1, 3): b'two'}, 'a')
     assert cache.get(15, 1, 2) == b'one' and cache.get(15, 1, 3) == b'two'
     assert cache.get(15, 9, 9) is None
-    assert cache.size == 6
+    # Measured as the disk measures it: a whole block for each little file, not its bytes.
+    assert cache.size == du(tmp_path / 'cache/a') >= 2 * 512
+    # A tile drawn again replaces itself; it is not counted twice.
+    cache.put(15, {(1, 2): b'one again'}, 'a')
+    assert cache.size == du(tmp_path / 'cache/a')
 
     # Tiles of a style no longer drawn are not kept, and a new style removes the old.
     cache.put(15, {(5, 5): b'old'}, 'gone')
@@ -257,33 +266,57 @@ def test_cache(tmp_path):
     assert cache.get(15, 1, 2) is None
     assert not (tmp_path / 'cache/a').exists()
     assert cache.size == 0
+    cache.wait_for_deletes(5)
+    assert [i.name for i in (tmp_path / 'cache').iterdir()] == []
 
     # A kept cache is counted again when the service starts.
     cache.put(3, {(0, 0): b'x' * 100}, 'b')
-    again = TileCache(tmp_path / 'cache', 10_000, 0)
+    again = TileCache(tmp_path / 'cache', 10_000_000, 0)
     again.use_style('b')
-    assert again.size == 100
+    assert again.size == du(tmp_path / 'cache/b') > 0
 
 
 def test_cache_clear(tmp_path):
-    cache = TileCache(tmp_path / 'cache', max_bytes=10_000, min_free_bytes=0)
+    """Clearing is at once: the tiles are moved out of the way, and deleted in the background."""
+    cache = TileCache(tmp_path / 'cache', max_bytes=10_000_000, min_free_bytes=0)
     cache.use_style('a')
-    cache.put(15, {(1, 2): b'one', (1, 3): b'two'}, 'a')
-    assert cache.clear() == 6
-    assert cache.size == 0 and cache.get(15, 1, 2) is None
-    # Tiles are kept again after.
-    cache.put(15, {(1, 2): b'one'}, 'a')
-    assert cache.get(15, 1, 2) == b'one' and cache.size == 3
+    cache.put(15, {(x, 0): b'tile' for x in range(50)}, 'a')
+    size = cache.size
+
+    assert cache.clear() == size > 0
+    assert cache.size == 0 and cache.get(15, 1, 0) is None
+    assert not (tmp_path / 'cache/a').exists()
+    # Tiles are kept again at once, beside the old ones being deleted.
+    cache.put(15, {(1, 0): b'new'}, 'a')
+    assert cache.get(15, 1, 0) == b'new' and cache.size == du(tmp_path / 'cache/a')
+    cache.wait_for_deletes(5)
+    assert sorted(i.name for i in (tmp_path / 'cache').iterdir()) == ['a']
     assert TileCache(tmp_path / 'off', 0, 0).clear() == 0
 
 
+def test_cache_finishes_deleting_at_start(tmp_path):
+    """A deletion cut short (the service restarted) is finished when the service starts again."""
+    leftover = tmp_path / 'cache/.trash-a-1234abcd/15/1'
+    leftover.mkdir(parents=True)
+    (leftover / '2.jpg').write_bytes(b'old')
+    cache = TileCache(tmp_path / 'cache', max_bytes=10_000_000, min_free_bytes=0)
+    cache.use_style('b')
+    cache.wait_for_deletes(5)
+    assert list((tmp_path / 'cache').iterdir()) == []
+
+
 def test_cache_evicts_oldest(tmp_path):
-    cache = TileCache(tmp_path / 'cache', max_bytes=1000, min_free_bytes=0)
+    probe = TileCache(tmp_path / 'probe', max_bytes=10_000_000, min_free_bytes=0)
+    probe.use_style('a')
+    probe.put(10, {(0, 0): b'x' * 200}, 'a')
+    tile = probe.size  # one tile, on this disk
+
+    cache = TileCache(tmp_path / 'cache', max_bytes=5 * tile, min_free_bytes=0)
     cache.use_style('a')
     for x in range(10):
         cache.put(10, {(x, 0): b'x' * 200}, 'a')
         time.sleep(0.01)
-    assert cache.size <= 1000 * 0.8
+    assert cache.size == du(tmp_path / 'cache/a') <= 5 * tile * 0.8
     assert cache.get(10, 9, 0)  # the newest are kept
     assert cache.get(10, 0, 0) is None
 
@@ -386,7 +419,7 @@ async def test_service_warms_render_processes(make_service):
     """Every render process draws when the service starts, not when the first tile is asked for; the world it
     draws is kept."""
     renderer = FakeRenderer()
-    service = await make_service(renderer, processes=2, cache_bytes=10_000)
+    service = await make_service(renderer, processes=2, cache_bytes=10_000_000)
     assert service.cache.get(0, 0, 0) == b'0/0/0'
     assert await service.tile(0, 0, 0, 'phone') == (b'0/0/0', True)
     assert renderer.blocks == []  # from the cache
@@ -396,7 +429,7 @@ async def test_service_late_tile(make_service, monkeypatch):
     """A tile not drawn before ATAK gives up on it is not sent at all (a downloader would keep a blank in its
     place for good): the phone asks again, and then the tile has been drawn."""
     monkeypatch.setattr(tile_service, 'DEADLINE', 0.05)
-    service = await make_service(FakeRenderer(delay=0.3), cache_bytes=10_000)
+    service = await make_service(FakeRenderer(delay=0.3), cache_bytes=10_000_000)
 
     data, keep = await service.tile(12, 1, 1, 'phone')
     assert (data, keep) == (None, False)
@@ -441,7 +474,7 @@ async def test_service_drops_tiles_a_phone_gave_up_on(make_service, monkeypatch)
 
 
 async def test_service_http(make_service):
-    service = await make_service(cache_bytes=100_000)
+    service = await make_service(cache_bytes=10_000_000)
     app = create_app(service, name=f'tiles_{uuid.uuid4().hex}')
     # The service is started by the fixture.
     app.ctx.service.start = app.ctx.service.stop = lambda: asyncio.sleep(0)

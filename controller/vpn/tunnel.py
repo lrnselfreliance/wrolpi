@@ -60,7 +60,7 @@ PORT_FORWARDING_MODES = ('none', 'fixed', 'natpmp')
 
 TUNNEL_INTERFACE = 'vpn0'
 # The torrent client's WebUI, which WROLPi reaches from the uplink's network.
-WEBUI_PORT = 8090
+WEBUI_PORT = 8091
 NFT_TABLE = 'wrolpi_vpn'
 # Docker's embedded DNS server.  It forwards to the host's resolver, which would leak queries around the tunnel.
 DOCKER_DNS = '127.0.0.11'

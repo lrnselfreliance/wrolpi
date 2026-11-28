@@ -22,6 +22,7 @@ systemctl stop wrolpi-controller.service || :
 systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
+systemctl stop wrolpi-tiles.service || :
 systemctl stop caddy || :
 
 # Clear Python bytecode cache from virtual environments to fix potential corruption.
@@ -92,6 +93,7 @@ systemctl enable wrolpi-controller.service
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
+systemctl enable wrolpi-tiles.service
 systemctl enable wrolpi-help.service
 systemctl enable wrolpi-mounts.service
 systemctl enable wrolpi-rsyncd.service

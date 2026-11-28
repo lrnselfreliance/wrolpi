@@ -1,0 +1,30 @@
+[Unit]
+Description=WROLPi map tiles for ATAK and iTAK
+PartOf=wrolpi.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+# Caddy serves it: HTTPS at /tiles/ on 443, plain HTTP on 8088.
+ExecStart=/opt/wrolpi/venv/bin/python -O -m tiles --host 127.0.0.1 --port 9088
+Group=wrolpi
+User=wrolpi
+# The GPU (/dev/dri/renderD128); without it tiles are drawn in software, a little slower.
+SupplementaryGroups=render
+WorkingDirectory=/opt/wrolpi/
+# Drawn tiles are kept in /var/cache/wrolpi-tiles (CACHE_DIRECTORY), not on the media drive.
+CacheDirectory=wrolpi-tiles
+Restart=on-failure
+RestartSec=5
+# A phone taking an area offline keeps this busy for minutes; the API, the App and the user come first.
+Nice=10
+CPUWeight=50
+IOWeight=50
+# Two render processes are about 600 MB.  Past this the service is restarted, rather than the kernel killing
+# something else.  Raspberry Pi OS boots with the memory cgroup disabled (cgroup_disable=memory), so there these
+# do nothing; OOMScoreAdjust makes this the first the kernel kills when a 4 GB Pi runs out, not the API.
+MemoryHigh=900M
+MemoryMax=1200M
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=default.target

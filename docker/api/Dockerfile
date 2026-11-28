@@ -6,7 +6,9 @@ WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
 RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip rsync \
-    build-essential libsqlite3-dev zlib1g-dev git
+    build-essential libsqlite3-dev zlib1g-dev git \
+    # Mesa's EGL and GL drivers: the map tile service (tiles/) draws with them, in software here (no GPU).
+    libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
 
 # Install tippecanoe (for map search index building via tippecanoe-decode).
 RUN git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
@@ -36,6 +38,14 @@ RUN DENO_VERSION="v2.8.3" \
 
 # yt-dlp needs cache directory
 RUN mkdir /.cache && chown -R 1000:1000 /.cache
+# The planet overview (the world at zoom 0-6) the map tile service draws under the regional maps; Raspberry Pi and
+# Debian installs have it at the same path.  The web image has its own copy, which Caddy serves to the web map.
+RUN mkdir -p /opt/wrolpi-blobs && \
+    curl -fsSL https://wrolpi.nyc3.cdn.digitaloceanspaces.com/maps/map-overview.pmtiles \
+    -o /opt/wrolpi-blobs/map-overview.pmtiles && \
+    [ -s /opt/wrolpi-blobs/map-overview.pmtiles ]
+# Where the map tile service keeps drawn tiles (systemd's CacheDirectory on a Raspberry Pi).
+RUN mkdir -p /var/cache/wrolpi-tiles && chown 1000:1000 /var/cache/wrolpi-tiles
 
 # Install dependencies from the hash-locked requirements.
 COPY requirements.txt requirements.lock /opt/wrolpi/
@@ -46,6 +56,7 @@ RUN /opt/wrolpi/scripts/install_python_requirements.sh pip3 /opt/wrolpi/requirem
 COPY main.py /opt/wrolpi/
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
+COPY tiles /opt/wrolpi/tiles
 
 ENTRYPOINT [ "python3", "/opt/wrolpi/main.py"]
 # Log level controlled by LOG_LEVEL env var or wrolpi.yaml config (default: info)

@@ -14,6 +14,8 @@ feedparser==6.0.14
 jc==1.26.0
 libzim==3.13.1
 mock==5.2.0
+# MapLibre Native, for the map tile service (tiles/).  Linux only: no wheels for macOS.
+mapli==0.5.0 ; sys_platform == "linux"
 psutil==7.2.2
 pydantic>=2.0.0
 PyMuPDF>=2.0

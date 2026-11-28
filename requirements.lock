@@ -1558,6 +1558,11 @@ mako==1.4.3 \
     --hash=sha256:723296007c870bfd6b3f0c3230dba7198096e5269297ebf5e4eff9e7ffa39d4f \
     --hash=sha256:cd6537fe88d5fec315c55c2f8529bc4ce7a9a352ad7db3eeaa6a66e2dd4ec37a
     # via alembic
+mapli==0.5.0 ; sys_platform == 'linux' \
+    --hash=sha256:3233570f57df1e86b7d53910af543ca00c9a7d2b3c0c108eed7e99ccdae8c6c0 \
+    --hash=sha256:a99f4a9a9855dca828220c10c9e729835b1801c132db04cb3f6c8cbfe912c24b \
+    --hash=sha256:c2e2961f7a48d3bbce86c9ec93c03c7a962e6266215bf2695ad6343d5aa19b09
+    # via -r requirements.txt
 markupsafe==3.0.4 \
     --hash=sha256:007e1ffd9bf65bb6ee96df7b258fc632a4868dd5566037986c64781f35a36e98 \
     --hash=sha256:02fa4acbc6a3fc5c693c34d4dd8c1130b7fe99cc915181b0ddd6f72aeb296002 \

@@ -28,21 +28,22 @@ jobs:
           - name: core
             paths: wrolpi/test
           - name: media
-            paths: modules/videos modules/zim modules/docs modules/map modules/inventory modules/flasher
+            paths: modules/videos modules/zim modules/docs modules/map modules/inventory modules/flasher tiles
           - name: files
             paths: wrolpi/files wrolpi/collections
           - name: rest
             paths: >-
               --ignore=wrolpi/test
               --ignore=modules/videos --ignore=modules/zim --ignore=modules/docs --ignore=modules/map
-              --ignore=modules/inventory --ignore=modules/flasher
+              --ignore=modules/inventory --ignore=modules/flasher --ignore=tiles
               --ignore=wrolpi/files --ignore=wrolpi/collections
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install system packages
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg catdoc
+        # Mesa's EGL and GL drivers: the map tile service (tiles/) draws with them.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg catdoc libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
 
       - name: Setup Python
         uses: actions/setup-python@v5

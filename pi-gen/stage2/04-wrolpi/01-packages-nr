@@ -76,3 +76,7 @@ vlc
 wget
 zim-tools
 zlib1g-dev
+libegl1
+libegl-mesa0
+libgl1-mesa-dri
+libgles2

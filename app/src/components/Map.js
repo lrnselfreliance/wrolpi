@@ -28,6 +28,7 @@ import maplibregl from "maplibre-gl";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import {planMapFiles, pmtilesUrl} from "./mapOverlays";
+import {MapAtak} from "./MapAtak";
 
 // Ensure PMTiles protocol is registered (may already be registered by MapViewer).
 try { maplibregl.addProtocol("pmtiles", new Protocol().tile); } catch (e) { /* already registered */ }
@@ -860,6 +861,8 @@ export function MapRoute() {
     const links = [
         {text: 'Map', to: '/map', key: 'map', end: true},
         {text: 'Pins', to: '/map/pins', key: 'pins'},
+        // Manage (and Statistics, on pages which have one) are the last tabs.
+        {text: 'ATAK', to: '/map/atak', key: 'atak'},
         {text: 'Manage', to: '/map/manage', key: 'manage'},
     ];
 
@@ -870,6 +873,7 @@ export function MapRoute() {
         <Routes>
             <Route path='/' exact element={<MapPage/>}/>
             <Route path='pins' exact element={<MapPins/>}/>
+            <Route path='atak' exact element={<MapAtak/>}/>
             <Route path='manage' exact element={<ManageMap/>}/>
         </Routes>
     </div>

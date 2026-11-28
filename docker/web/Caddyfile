@@ -121,6 +121,15 @@
 	}
 }
 
+# qBittorrent's WebUI (torrents), in the VPN's network namespace.  Its settings are refused: they can run programs,
+# and WROLPi manages them (it reaches qBittorrent directly, not through here).
+:8091 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+	@qbittorrent_settings path /api/v2/app/setPreferences /api/v2/app/shutdown
+	respond @qbittorrent_settings "qBittorrent's settings are managed by WROLPi" 403
+	reverse_proxy vpn:8091
+}
+
 # Kiwix HTTPS proxy (replaces zim_https container).
 :8085 {
 	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key

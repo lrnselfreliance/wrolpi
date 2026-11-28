@@ -314,12 +314,14 @@ if ! command -v dnsmasq &>/dev/null || ! command -v iw &>/dev/null || ! command 
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dnsmasq-base iw rfkill
 fi
 
-# Install the VPN tools torrents use (the kill switch is nftables) if not already installed.
-if ! command -v nft &>/dev/null || ! command -v openvpn &>/dev/null || ! command -v wg &>/dev/null; then
-  echo "Installing nftables, openvpn, wireguard-tools..."
+# Install torrents (qBittorrent) and the VPN tools they use (the kill switch is nftables) if not already installed.
+if ! command -v nft &>/dev/null || ! command -v openvpn &>/dev/null || ! command -v wg &>/dev/null \
+    || ! command -v qbittorrent-nox &>/dev/null; then
+  echo "Installing nftables, openvpn, wireguard-tools, qbittorrent-nox..."
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold nftables openvpn wireguard-tools
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold nftables openvpn wireguard-tools \
+    qbittorrent-nox
 fi
 
 # Clean up stale landing page (Controller now serves port 80 directly).

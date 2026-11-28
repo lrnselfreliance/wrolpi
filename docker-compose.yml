@@ -91,6 +91,22 @@ services:
     restart: unless-stopped
     init: true
 
+  torrent: # qBittorrent.  It joins the `vpn` container's network, so it reaches the Internet only through the VPN.
+    build:
+      context: .
+      dockerfile: docker/torrent/Dockerfile
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_started
+        # A recreated `vpn` container is a new network; this one must join it.
+        restart: true
+    volumes:
+      - './test:/media/wrolpi'
+    user: '${UID-1000}:${GID-1000}'
+    restart: unless-stopped
+    init: true
+
   app: # React App
     depends_on:
       - api
@@ -136,6 +152,8 @@ services:
       - '8084:8084'
       - '8085:8085'
       - '8086:8086'
+      # qBittorrent's WebUI (torrents).
+      - '8091:8091'
     volumes:
       - './docker/web/Caddyfile:/etc/caddy/Caddyfile'
       - './icon.ico:/etc/caddy/favicon.ico'

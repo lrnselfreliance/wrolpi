@@ -92,6 +92,14 @@ DEFAULT_CONFIG = {
             "description": "VPN for torrents (fail-closed network namespace)",
         },
         {
+            "name": "wrolpi-torrent",
+            "systemd_name": "wrolpi-torrent",
+            "port": 8091,
+            "viewable": True,
+            "use_https": True,
+            "description": "Torrents (qBittorrent, inside the VPN)",
+        },
+        {
             "name": "wrolpi-rsyncd",
             "systemd_name": "wrolpi-rsyncd",
             "port": 8873,

@@ -63,6 +63,7 @@ python3-doc
 python3-full
 python3-pip
 python3-venv
+qbittorrent-nox
 rsync
 samba
 smartmontools

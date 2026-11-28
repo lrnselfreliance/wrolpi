@@ -242,6 +242,13 @@ class TestKillSwitch:
         ruleset = tunnel.build_ruleset(UPLINK, [], listen_ports=[36523])
         assert '\t\telements = { 36523 }\n' in ruleset
 
+    @pytest.mark.parametrize('port', ['1 }\nflush ruleset\n', '36523', 0, 70000, True, None, 1.5])
+    def test_only_port_numbers_reach_nftables(self, port):
+        with pytest.raises(VPNConfigError):
+            tunnel.build_ruleset(UPLINK, [], listen_ports=[port])
+        with pytest.raises(VPNConfigError):
+            tunnel.set_listen_ports([port])
+
     def test_without_endpoints_nothing_leaves_the_uplink(self):
         ruleset = tunnel.build_ruleset(UPLINK, [])
         output = ruleset[ruleset.index('chain output'):ruleset.index('chain forward')]
@@ -313,6 +320,14 @@ class TestPlan:
         plan = tunnel.make_plan(tunnel.load_settings(media), media / 'config', tunnel.RUN_DIR)
         assert plan.auth_path == media / 'config/vpn/openvpn-auth.txt'
         assert plan.endpoints == [Endpoint('198.51.100.7', 1194, 'udp')]
+
+    def test_fixed_port_must_be_a_port(self, media):
+        (media / 'config/vpn/wireguard.conf').write_text(WIREGUARD)
+        write_endpoints(tunnel.RUN_DIR, WIREGUARD, {'vpn.example.com': ['203.0.113.5']})
+        write_settings(media, enabled=True, config_file='vpn/wireguard.conf', port_forwarding='fixed',
+                       forwarded_port='1 }\nflush ruleset\n')
+        with pytest.raises(VPNConfigError, match='not a port'):
+            tunnel.make_plan(tunnel.load_settings(media), media / 'config', tunnel.RUN_DIR)
 
     def test_missing_config(self, media):
         write_settings(media, enabled=True, config_file='vpn/wireguard.conf')

@@ -154,6 +154,13 @@ def check_public_ip_url(url: str):
         raise VPNConfigError('The public address check must be an http:// or https:// URL')
 
 
+def check_port(port) -> int:
+    """A port number, or VPNConfigError.  Ports are written into nftables commands, so nothing else may pass."""
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise VPNConfigError(f'{port!r} is not a port number')
+    return port
+
+
 def is_ip(host: str) -> bool:
     try:
         ipaddress.ip_address(host)
@@ -594,6 +601,7 @@ def build_ruleset(uplink: Uplink, endpoints: list[Endpoint], listen_ports: list[
                   tunnel: str = TUNNEL_INTERFACE, webui_port: int = WEBUI_PORT) -> str:
     """The kill switch.  The first two lines make replacing the table one atomic transaction."""
     up = uplink.interface
+    listen_ports = [check_port(p) for p in listen_ports]
     elements = f'\t\telements = {{ {", ".join(map(str, listen_ports))} }}\n' if listen_ports else ''
     inbound, outbound = [], []
     for network in uplink.networks:
@@ -762,6 +770,7 @@ def apply_ruleset(ruleset: str):
 
 def set_listen_ports(ports: list[int]):
     """Change which ports the Internet can reach through the tunnel, in one transaction."""
+    ports = [check_port(p) for p in ports]
     commands = f'flush set inet {NFT_TABLE} {LISTEN_PORTS}\n'
     if ports:
         commands += f'add element inet {NFT_TABLE} {LISTEN_PORTS} {{ {", ".join(map(str, ports))} }}\n'
@@ -789,6 +798,8 @@ def make_plan(settings: dict, config_directory: pathlib.Path, run_dir: pathlib.P
         return None
     if not settings.get('config_file'):
         raise VPNConfigError('No VPN config has been uploaded')
+    if settings.get('port_forwarding') == 'fixed':
+        check_port(settings.get('forwarded_port'))
     config_path = config_directory / settings['config_file']
     kind = config_kind(config_path.name)
     try:

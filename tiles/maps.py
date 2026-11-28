@@ -50,6 +50,17 @@ def get_map_directory(media_directory: Path = None) -> Path:
     return media_directory / destination
 
 
+def get_ignored_files(media_directory: Path = None) -> set:
+    """The map files the user hid on the Manage tab (`ignored_files` of maps.yaml, relative to the map directory,
+    see `modules.map.config.MapsConfig`): the web map does not draw them, so neither do the tiles."""
+    media_directory = media_directory or MEDIA_DIRECTORY
+    try:
+        config = yaml.safe_load((media_directory / 'config/maps.yaml').read_text()) or dict()
+        return {str(i) for i in config.get('ignored_files') or []}
+    except (OSError, yaml.YAMLError, AttributeError, TypeError):
+        return set()
+
+
 def is_basemap(path: Path) -> bool:
     """Whether a PMTiles file is a Protomaps basemap: vector tiles with the layers the basemap theme draws."""
     if path.name.startswith(TERRAIN_PREFIX):
@@ -99,14 +110,16 @@ def is_drawable(path: Path) -> bool:
         return False
 
 
-def find_basemaps(map_directory: Path) -> List[Path]:
-    """The basemap files in the map directory (at any depth), sorted.  Hidden directories are skipped: an
-    unfinished download waits in one."""
+def find_basemaps(map_directory: Path, ignored: set = frozenset()) -> List[Path]:
+    """The basemap files in the map directory (at any depth), sorted, but those `ignored` (paths relative to the
+    map directory).  Hidden directories are skipped: an unfinished download waits in one."""
     paths = []
     for root, directories, files in os.walk(map_directory):
         directories[:] = sorted(i for i in directories if not i.startswith('.'))
         for name in files:
             path = Path(root) / name
+            if str(path.relative_to(map_directory)) in ignored:
+                continue
             if name.endswith('.pmtiles') and path.is_file() and is_basemap(path) and is_drawable(path):
                 paths.append(path)
     return sorted(paths)
@@ -127,9 +140,10 @@ def signature(paths: List[Path]) -> Signature:
     return tuple(entries)
 
 
-def find_maps(map_directory: Path, overview: Optional[Path] = OVERVIEW) -> List[Path]:
-    """The files the tiles are drawn from, in the order they are drawn: the overview, then each basemap."""
-    maps = find_basemaps(map_directory)
+def find_maps(map_directory: Path, overview: Optional[Path] = OVERVIEW, media_directory: Path = None) -> List[Path]:
+    """The files the tiles are drawn from, in the order they are drawn: the overview, then each basemap the user
+    has not hidden."""
+    maps = find_basemaps(map_directory, get_ignored_files(media_directory))
     if overview and overview.is_file() and is_drawable(overview):
         maps.insert(0, overview)
     return maps

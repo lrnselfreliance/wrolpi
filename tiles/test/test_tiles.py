@@ -23,6 +23,13 @@ from tiles.service import TileService, create_app, mobac_xml
 from tiles.style import SKIP_SECONDARY, background_color, basemap_layers, build_style, style_id
 
 
+@pytest.fixture(autouse=True)
+def media_directory(tmp_path, monkeypatch) -> Path:
+    """The tile service reads configs (wrolpi.yaml, maps.yaml) from a media directory of the test's own."""
+    monkeypatch.setattr(maps, 'MEDIA_DIRECTORY', tmp_path / 'media')
+    return tmp_path / 'media'
+
+
 def write_header_only(path: Path, metadata=None, **kwargs) -> Path:
     """A PMTiles file with a header and metadata but no tiles (as modules.map's tests make)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -135,6 +142,20 @@ def test_find_maps(tmp_path):
     # The overview is under every other file.
     assert maps.find_maps(tmp_path / 'map', overview)[0] == overview
     assert maps.find_maps(tmp_path / 'map', tmp_path / 'missing.pmtiles') == maps.find_basemaps(tmp_path / 'map')
+
+
+def test_find_maps_leaves_out_hidden_files(tmp_path):
+    """A map file hidden on the Manage tab (maps.yaml's ignored_files) is not drawn, as on the web map."""
+    write_pmtiles(tmp_path / 'map/a.pmtiles')
+    write_pmtiles(tmp_path / 'map/region/b.pmtiles')
+    assert len(maps.find_maps(tmp_path / 'map', None, tmp_path)) == 2
+
+    (tmp_path / 'config').mkdir()
+    (tmp_path / 'config/maps.yaml').write_text('version: 1\nignored_files:\n- region/b.pmtiles\n')
+    assert maps.find_maps(tmp_path / 'map', None, tmp_path) == [tmp_path / 'map/a.pmtiles']
+    # A broken config hides nothing.
+    (tmp_path / 'config/maps.yaml').write_text('ignored_files: [')
+    assert len(maps.find_maps(tmp_path / 'map', None, tmp_path)) == 2
 
 
 def test_get_map_directory(tmp_path):

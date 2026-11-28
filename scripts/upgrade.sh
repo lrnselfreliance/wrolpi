@@ -324,6 +324,18 @@ if ! command -v nft &>/dev/null || ! command -v openvpn &>/dev/null || ! command
     qbittorrent-nox
 fi
 
+# qBittorrent faces the Internet (the VPN forwards a port to it): keep it, and libtorrent, as patched as Debian makes
+# them, on every upgrade.
+if command -v qbittorrent-nox &>/dev/null; then
+  echo "Upgrading qbittorrent-nox and libtorrent..."
+  apt-get update
+  # shellcheck disable=SC2046
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold qbittorrent-nox \
+    $(dpkg-query -W -f='${binary:Package}\n' 'libtorrent-rasterbar*' 2>/dev/null) || \
+    echo "Upgrading qbittorrent-nox failed, continuing..."
+fi
+
 # Clean up stale landing page (Controller now serves port 80 directly).
 rm -f /var/www/landing.html
 

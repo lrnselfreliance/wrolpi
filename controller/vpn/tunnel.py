@@ -62,11 +62,15 @@ TUNNEL_INTERFACE = 'vpn0'
 # The torrent client's WebUI, which WROLPi reaches from the uplink's network.
 WEBUI_PORT = 8091
 NFT_TABLE = 'wrolpi_vpn'
+# The ports the Internet may reach through the tunnel: the one the VPN forwards to the torrent client.
+LISTEN_PORTS = 'listen_ports'
 # Docker's embedded DNS server.  It forwards to the host's resolver, which would leak queries around the tunnel.
 DOCKER_DNS = '127.0.0.11'
 
 RUN_DIR = pathlib.Path(os.environ.get('WROLPI_VPN_RUN_DIR', '/run/wrolpi-vpn'))
 STATUS_FILE = 'status.json'
+# The API writes this into config/ while WROL Mode is on; the tunnel stays down until it is gone.
+WROL_MODE_FLAG = '.wrol_mode'
 ENDPOINTS_FILE = 'endpoints.json'
 OPENVPN_CONFIG_FILE = 'openvpn.ovpn'
 
@@ -586,10 +590,11 @@ def read_endpoint_hosts(run_dir: pathlib.Path, text: str) -> dict[str, list[str]
 
 # --- Kill switch ---
 
-def build_ruleset(uplink: Uplink, endpoints: list[Endpoint], tunnel: str = TUNNEL_INTERFACE,
-                  webui_port: int = WEBUI_PORT) -> str:
+def build_ruleset(uplink: Uplink, endpoints: list[Endpoint], listen_ports: list[int] = (),
+                  tunnel: str = TUNNEL_INTERFACE, webui_port: int = WEBUI_PORT) -> str:
     """The kill switch.  The first two lines make replacing the table one atomic transaction."""
     up = uplink.interface
+    elements = f'\t\telements = {{ {", ".join(map(str, listen_ports))} }}\n' if listen_ports else ''
     inbound, outbound = [], []
     for network in uplink.networks:
         family = 'ip6' if ip_version(network) == 6 else 'ip'
@@ -606,11 +611,16 @@ def build_ruleset(uplink: Uplink, endpoints: list[Endpoint], tunnel: str = TUNNE
         f'table inet {NFT_TABLE}\n'
         f'delete table inet {NFT_TABLE}\n'
         f'table inet {NFT_TABLE} {{\n'
+        f'\tset {LISTEN_PORTS} {{\n'
+        f'\t\ttype inet_service;\n'
+        f'{elements}'
+        f'\t}}\n'
         f'\tchain input {{\n'
         f'\t\ttype filter hook input priority filter; policy drop;\n'
         f'\t\tiifname "lo" accept\n'
         f'\t\tct state established,related accept\n'
-        f'\t\tiifname "{tunnel}" accept\n'
+        # From the Internet, only the port the VPN forwards (the torrent client's) is reachable.
+        f'\t\tiifname "{tunnel}" meta l4proto {{ tcp, udp }} th dport @{LISTEN_PORTS} accept\n'
         f'{rules(inbound)}'
         f'\t}}\n'
         f'\tchain output {{\n'
@@ -750,6 +760,14 @@ def apply_ruleset(ruleset: str):
     run('nft', '-f', '-', input_=ruleset)
 
 
+def set_listen_ports(ports: list[int]):
+    """Change which ports the Internet can reach through the tunnel, in one transaction."""
+    commands = f'flush set inet {NFT_TABLE} {LISTEN_PORTS}\n'
+    if ports:
+        commands += f'add element inet {NFT_TABLE} {LISTEN_PORTS} {{ {", ".join(map(str, ports))} }}\n'
+    run('nft', '-f', '-', input_=commands)
+
+
 @dataclasses.dataclass
 class Plan:
     """What the tunnel should be, from the settings and the config."""
@@ -811,6 +829,8 @@ class Tunnel:
         self.addresses: list[str] = []
         self.dns: list[str] = []
         self.locked_down = False
+        # The port the kill switch lets the Internet reach (None: none).
+        self.open_port: int | None = None
         self.public_ip = None
         self.public_ip_checked = 0.0
         self.reset_port_forwarding()
@@ -826,6 +846,7 @@ class Tunnel:
         if not self.locked_down:
             apply_ruleset(build_ruleset(self.uplink, []))
             self.locked_down = True
+            self.open_port = None
 
     def start(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -836,6 +857,11 @@ class Tunnel:
 
     def step(self):
         """Bring the tunnel to what the settings ask for, then report its status."""
+        if (self.config_directory / WROL_MODE_FLAG).exists():
+            # Nothing reaches the Internet, and nothing from it reaches this WROLPi, while WROL Mode is on.
+            self.down()
+            self.write_status('wrol_mode', error='WROL Mode is on, so the VPN (and torrents) are off')
+            return
         try:
             plan = make_plan(load_settings(self.media_directory), self.config_directory, self.run_dir)
         except Waiting as e:
@@ -879,6 +905,7 @@ class Tunnel:
             raise TunnelError('The VPN servers are IPv6 only, and this network has no IPv6')
         apply_ruleset(build_ruleset(self.uplink, endpoints))
         self.locked_down = False
+        self.open_port = None
         # The VPN's own traffic reaches its servers through the uplink, not through the tunnel.
         for endpoint in endpoints:
             if ip_version(endpoint.ip) == 6:
@@ -1033,6 +1060,9 @@ class Tunnel:
             forwarded_port = self.forwarded_port
             if self.port_forwarding_error:
                 warnings.append(self.port_forwarding_error)
+        if forwarded_port != self.open_port:
+            set_listen_ports([forwarded_port] if forwarded_port else [])
+            self.open_port = forwarded_port
         self.write_status(
             'connected' if connected else 'connecting',
             kind=self.plan.kind,

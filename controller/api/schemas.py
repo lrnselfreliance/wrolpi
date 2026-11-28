@@ -582,7 +582,7 @@ class VpnStatusResponse(BaseModel):
     enabled: bool = Field(description="Whether the VPN is turned on in controller.yaml")
     state: Optional[str] = Field(
         default=None,
-        description="stopped, disabled, waiting, connecting, connected, or error.  Torrents can only reach the "
+        description="stopped, disabled, wrol_mode, waiting, connecting, connected, or error.  Torrents can only reach the "
                     "Internet while connected.")
     kind: Optional[str] = Field(default=None, description="wireguard or openvpn")
     interface: Optional[str] = Field(default=None, description="The tunnel's network interface")

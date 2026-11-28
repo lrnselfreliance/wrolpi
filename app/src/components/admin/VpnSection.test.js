@@ -70,6 +70,16 @@ describe('VpnSection', () => {
         expect(screen.getByLabelText('Turn on the VPN')).toBeChecked();
     });
 
+    test('says the VPN is off for WROL Mode', async () => {
+        getVpnSettings.mockResolvedValue({...wireguard, enabled: true});
+        getVpnStatus.mockResolvedValue({...stopped, enabled: true, state: 'wrol_mode',
+            error: 'WROL Mode is on, so the VPN (and torrents) are off'});
+        renderSection();
+        const status = await screen.findByTestId('vpn-status');
+        await waitFor(() => expect(status).toHaveTextContent('Off (WROL Mode)'));
+        expect(screen.getByText(/WROL Mode is on/)).toBeInTheDocument();
+    });
+
     test('shows why the tunnel is down', async () => {
         getVpnStatus.mockResolvedValue({...stopped, state: 'error', error: 'wg setconf failed: Invalid key'});
         renderSection();

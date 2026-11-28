@@ -107,6 +107,14 @@ services:
       - './test/config:/media/wrolpi/config:ro'
       - torrent-profile:/profile
     user: '${UID-1000}:${GID-1000}'
+    # It is reachable from the Internet (the VPN forwards a port to it): if it were taken over, it gets nothing more.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     restart: unless-stopped
     init: true
 

@@ -15,6 +15,7 @@ export const vpnStates = {
     connecting: {label: 'Connecting', kind: 'active'},
     waiting: {label: 'Waiting', kind: 'pending'},
     disabled: {label: 'Off', kind: 'pending'},
+    wrol_mode: {label: 'Off (WROL Mode)', kind: 'pending'},
     stopped: {label: 'Not running', kind: 'pending'},
     error: {label: 'Error', kind: 'failed'},
 };

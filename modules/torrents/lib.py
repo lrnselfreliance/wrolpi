@@ -128,6 +128,8 @@ def desired_preferences(vpn_status: dict) -> dict:
         'incomplete_files_ext': True,
         'save_path': str(get_media_directory() / DEFAULT_SAVE_PATH),
         'random_port': False,
+        # Peers are not told which client (and version) this is, so a known flaw in one cannot be aimed at it.
+        'anonymous_mode': True,
         # Running a program would be code execution for anyone who can reach the WebUI.
         'autorun_enabled': False,
         'autorun_on_torrent_added_enabled': False,

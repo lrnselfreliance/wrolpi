@@ -14,6 +14,8 @@
     * `git pull origin master --ff`
 3. Build all docker containers
     * `docker-compose build --parallel`
+    * Rebuild the torrent container without its cache, so it gets the latest qBittorrent (it faces the Internet
+      through the VPN): `docker compose build --pull --no-cache torrent`
 4. Create the map volumes
     * `docker volume create --name=openstreetmap-data`
     * `docker volume create --name=openstreetmap-rendered-tiles`

@@ -33,6 +33,7 @@ async def test_preferences(test_directory, fake_qbittorrent):
     assert changed['lsd'] is False
     assert changed['listen_port'] == 36523
     assert changed['autorun_enabled'] is False and changed['autorun_on_torrent_added_enabled'] is False
+    assert changed['anonymous_mode'] is True
     assert changed['save_path'] == str(test_directory / 'torrents')
     # Already right: not set again.
     assert 'current_network_interface' not in changed
@@ -219,6 +220,9 @@ class TestInstalled:
         assert 'ReadOnlyPaths=/media/wrolpi/config' in unit
         assert '--profile=/var/lib/wrolpi-torrent' in unit and 'StateDirectory=wrolpi-torrent' in unit
         assert 'User=wrolpi' in unit
+        for hardening in ('CapabilityBoundingSet=\n', 'PrivateDevices=yes', 'SystemCallFilter=@system-service',
+                          'RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK', 'RestrictNamespaces=yes'):
+            assert hardening in unit, hardening
         for script in ('repair.sh', 'pi-gen/stage2/04-wrolpi/03-run-chroot.sh',
                        'debian-live-config/config/includes.chroot/usr/local/sbin/wrolpi-bootstrap.sh',
                        'etc/raspberrypios/wrolpi.target'):
@@ -227,6 +231,11 @@ class TestInstalled:
                          'debian-live-config/config/package-lists/wrolpi.list.chroot'):
             assert 'qbittorrent-nox' in (REPOSITORY / packages).read_text().splitlines()
 
+    def test_upgrades_keep_qbittorrent_patched(self):
+        upgrade = (REPOSITORY / 'scripts/upgrade.sh').read_text()
+        assert '--only-upgrade' in upgrade and "'libtorrent-rasterbar*'" in upgrade
+        assert 'docker compose build --pull --no-cache torrent' in (REPOSITORY / 'UPGRADE.md').read_text()
+
     def test_docker(self):
         compose = yaml.safe_load((REPOSITORY / 'docker-compose.yml').read_text())
         torrent = compose['services']['torrent']
@@ -234,6 +243,8 @@ class TestInstalled:
         assert torrent['depends_on']['vpn']['restart'] is True
         assert './test/config:/media/wrolpi/config:ro' in torrent['volumes']
         assert 'torrent-profile:/profile' in torrent['volumes']
+        assert torrent['cap_drop'] == ['ALL'] and torrent['read_only'] is True
+        assert 'no-new-privileges:true' in torrent['security_opt']
         assert '8091:8091' in compose['services']['web']['ports']
         assert 'qbittorrent_prepare.py' in (REPOSITORY / 'docker/torrent/Dockerfile').read_text()
 

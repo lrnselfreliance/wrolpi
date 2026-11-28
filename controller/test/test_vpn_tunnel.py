@@ -224,6 +224,11 @@ class TestKillSwitch:
         for chain in ('input', 'output', 'forward'):
             assert f'type filter hook {chain} priority filter; policy drop;' in ruleset
         assert 'oifname "vpn0" accept' in ruleset
+        # From the Internet only the forwarded port; nothing else arriving on the tunnel is accepted.
+        input_chain = ruleset[ruleset.index('chain input'):ruleset.index('chain output')]
+        assert 'iifname "vpn0" meta l4proto { tcp, udp } th dport @listen_ports accept' in input_chain
+        assert 'iifname "vpn0" accept' not in input_chain
+        assert 'set listen_ports {\n\t\ttype inet_service;\n\t}' in ruleset
         assert 'oifname "eth0" ip daddr 203.0.113.5 udp dport 51820 accept' in ruleset
         assert 'oifname "eth0" ip6 daddr 2001:db8::5 tcp dport 443 accept' in ruleset
         # WROLPi reaches the torrent WebUI from the uplink's network; the namespace only answers.
@@ -232,6 +237,10 @@ class TestKillSwitch:
         # Docker's DNS would resolve through the host, around the tunnel.  It is dropped before loopback is allowed.
         output = ruleset[ruleset.index('chain output'):]
         assert output.index('ip daddr 127.0.0.11 drop') < output.index('oifname "lo" accept')
+
+    def test_listen_ports(self):
+        ruleset = tunnel.build_ruleset(UPLINK, [], listen_ports=[36523])
+        assert '\t\telements = { 36523 }\n' in ruleset
 
     def test_without_endpoints_nothing_leaves_the_uplink(self):
         ruleset = tunnel.build_ruleset(UPLINK, [])
@@ -685,6 +694,48 @@ class TestPortForwarding:
                        natpmp_gateway='10.64.0.1')
         connected_tunnel.step()
         assert set(calls) == {'10.64.0.1'}
+
+    def test_only_the_forwarded_port_is_open(self, connected_tunnel, monkeypatch, fake_system):
+        ports = iter([51413, 51413, 60000, 60000])
+        monkeypatch.setattr(tunnel, 'natpmp_map', lambda gateway, proto: (next(ports), 60))
+        connected_tunnel.step()
+        assert fake_system.rulesets()[-1] == \
+            'flush set inet wrolpi_vpn listen_ports\nadd element inet wrolpi_vpn listen_ports { 51413 }\n'
+        # Unchanged: the kill switch is left alone.
+        count = len(fake_system.rulesets())
+        connected_tunnel.step()
+        assert len(fake_system.rulesets()) == count
+        # A new port replaces the old one.
+        connected_tunnel.port_forwarding_renewed = 0.0
+        connected_tunnel.step()
+        assert fake_system.rulesets()[-1].endswith('listen_ports { 60000 }\n')
+
+    def test_refused_port_closes_it(self, connected_tunnel, monkeypatch, fake_system):
+        monkeypatch.setattr(tunnel, 'natpmp_map', lambda gateway, proto: (51413, 60))
+        connected_tunnel.step()
+
+        def refuse(gateway, proto):
+            raise tunnel.NATPMPError('refused')
+
+        monkeypatch.setattr(tunnel, 'natpmp_map', refuse)
+        connected_tunnel.port_forwarding_renewed = 0.0
+        connected_tunnel.step()
+        assert fake_system.rulesets()[-1] == 'flush set inet wrolpi_vpn listen_ports\n'
+
+    def test_wrol_mode_takes_the_tunnel_down(self, connected_tunnel, media, fake_system):
+        connected_tunnel.step()
+        assert 'vpn0' in fake_system.links
+        (media / 'config' / '.wrol_mode').touch()
+        connected_tunnel.step()
+        assert 'vpn0' not in fake_system.links
+        assert fake_system.rulesets()[-1] == tunnel.build_ruleset(UPLINK, [])
+        status = read_status()
+        assert status['state'] == 'wrol_mode'
+        assert 'WROL Mode' in status['error']
+        # Back up once WROL Mode ends.
+        (media / 'config' / '.wrol_mode').unlink()
+        connected_tunnel.step()
+        assert 'vpn0' in fake_system.links
 
     def test_not_asked_unless_natpmp(self, connected_tunnel, media, monkeypatch):
         monkeypatch.setattr(tunnel, 'natpmp_map', mock.Mock(side_effect=AssertionError('asked')))

@@ -401,6 +401,15 @@ async def test_service_failed_tile(make_service):
     assert await service.tile(3, 8, 8, 'phone') == (service.blank_tile, False)  # not a tile
 
 
+async def test_service_forgets_old_serve_times(make_service, monkeypatch):
+    """Tiles per second counts the last minute; older times are not kept, whether or not anyone asks."""
+    service = await make_service()
+    now = time.time()
+    service.served.extend([now - 120] * 1000)
+    await service.tile(12, 1, 1, 'phone')
+    assert len(service.served) == 1
+
+
 async def test_service_new_map_file(make_service, tmp_path):
     service = await make_service()
     first = service.style_id

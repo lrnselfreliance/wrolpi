@@ -48,6 +48,10 @@ MAX_QUEUED_PER_CLIENT = 64
 WATCH_SECONDS = 30
 # Tiles per second is counted over this long.
 RATE_SECONDS = 60
+# A render process is replaced after drawing this many blocks.  MapLibre keeps what it has read and drawn, and
+# nothing bounds it: on a Raspberry Pi 4 a process grew from about 270 MB to 370 MB over 8,000 blocks (a phone
+# taking 120,000 tiles offline).  Starting one is about 2 seconds, a few minutes apart at most.
+BLOCKS_PER_PROCESS = 2000
 DEFAULT_MAX_ZOOM = 17
 NAME = 'WROLPi Map'
 
@@ -123,7 +127,7 @@ class TileService:
     def _new_executor(self) -> ProcessPoolExecutor:
         # spawn, not fork: a fork of this process would copy its event loop and threads.
         return ProcessPoolExecutor(max_workers=self.processes, mp_context=multiprocessing.get_context('spawn'),
-                                   initializer=render.init_process)
+                                   initializer=render.init_process, max_tasks_per_child=BLOCKS_PER_PROCESS)
 
     async def start(self):
         self.condition = asyncio.Condition()
@@ -254,11 +258,17 @@ class TileService:
         entry['tiles'] += 1
         entry['last_seen'] = now
         self.served.append(now)
+        self._forget_served(now)
+
+    def _forget_served(self, now: float):
+        """Tiles per second is of the last minute: forget tiles served before it (or a long download would keep a
+        time for every tile it took)."""
+        while self.served and self.served[0] < now - RATE_SECONDS:
+            self.served.popleft()
 
     def status(self) -> dict:
         now = time.time()
-        while self.served and self.served[0] < now - RATE_SECONDS:
-            self.served.popleft()
+        self._forget_served(now)
         for client in [k for k, v in self.clients.items() if v['last_seen'] < now - 24 * 60 * 60]:
             del self.clients[client]
         drawn = self.stats['blocks_drawn']

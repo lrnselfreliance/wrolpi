@@ -861,8 +861,9 @@ export function MapRoute() {
     const links = [
         {text: 'Map', to: '/map', key: 'map', end: true},
         {text: 'Pins', to: '/map/pins', key: 'pins'},
-        {text: 'Manage', to: '/map/manage', key: 'manage'},
+        // Manage (and Statistics, on pages which have one) are the last tabs.
         {text: 'ATAK', to: '/map/atak', key: 'atak'},
+        {text: 'Manage', to: '/map/manage', key: 'manage'},
     ];
 
     // `wrolpi-stack`: as in ZimRoute, this route wraps its own content instead of using
@@ -872,8 +873,8 @@ export function MapRoute() {
         <Routes>
             <Route path='/' exact element={<MapPage/>}/>
             <Route path='pins' exact element={<MapPins/>}/>
-            <Route path='manage' exact element={<ManageMap/>}/>
             <Route path='atak' exact element={<MapAtak/>}/>
+            <Route path='manage' exact element={<ManageMap/>}/>
         </Routes>
     </div>
 }

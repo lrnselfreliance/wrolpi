@@ -311,6 +311,9 @@ def make_service(tmp_path, monkeypatch):
         monkeypatch.setattr(service, '_new_executor', lambda: ThreadPoolExecutor(processes))
         await service.start()
         services.append(service)
+        await service.tasks[-1]  # the render processes are warmed
+        if isinstance(render.render_block, FakeRenderer):
+            render.render_block.blocks.clear()
         return service
 
     yield _
@@ -345,23 +348,34 @@ async def test_service_serves_phones_in_turn(make_service):
     await asyncio.gather(*downloading)
 
 
-async def test_service_late_tile_is_blank(make_service, monkeypatch):
-    """A tile not drawn before ATAK gives up on it is sent blank and not kept; it is drawn for the next ask."""
+async def test_service_warms_render_processes(make_service):
+    """Every render process draws when the service starts, not when the first tile is asked for; the world it
+    draws is kept."""
+    renderer = FakeRenderer()
+    service = await make_service(renderer, processes=2, cache_bytes=10_000)
+    assert service.cache.get(0, 0, 0) == b'0/0/0'
+    assert await service.tile(0, 0, 0, 'phone') == (b'0/0/0', True)
+    assert renderer.blocks == []  # from the cache
+
+
+async def test_service_late_tile(make_service, monkeypatch):
+    """A tile not drawn before ATAK gives up on it is not sent at all (a downloader would keep a blank in its
+    place for good): the phone asks again, and then the tile has been drawn."""
     monkeypatch.setattr(tile_service, 'DEADLINE', 0.05)
     service = await make_service(FakeRenderer(delay=0.3), cache_bytes=10_000)
 
     data, keep = await service.tile(12, 1, 1, 'phone')
-    assert (data, keep) == (service.blank_tile, False)
+    assert (data, keep) == (None, False)
     await asyncio.sleep(0.5)
     assert await service.tile(12, 1, 1, 'phone') == (b'12/1/1', True)
     assert service.stats['tiles_late'] == 1 and service.stats['tiles_cached'] == 1
 
 
-async def test_service_failed_tile_is_blank(make_service):
-    """Never an error: five failed tiles in a row stop an ATAK download."""
+async def test_service_failed_tile(make_service):
+    """A tile which could not be drawn is not sent (not as a blank a downloader would keep); a tile outside the
+    world is the background."""
     service = await make_service(FakeRenderer(fail=True))
-    assert await service.tile(12, 1, 1, 'phone') == (service.blank_tile, False)
-    assert await service.tile(12, 99, 99, 'phone') == (service.blank_tile, False)
+    assert await service.tile(12, 1, 1, 'phone') == (None, False)
     assert await service.tile(3, 8, 8, 'phone') == (service.blank_tile, False)  # not a tile
 
 
@@ -380,7 +394,7 @@ async def test_service_drops_tiles_a_phone_gave_up_on(make_service, monkeypatch)
     service = await make_service(FakeRenderer(delay=0.2), processes=1)
     results = await asyncio.gather(*(service.tile(15, 4 * i, 0, 'phone') for i in range(5)))
     assert service.stats['blocks_dropped'] >= 1
-    assert (service.blank_tile, False) in results
+    assert (None, False) in results
 
 
 async def test_service_http(make_service):
@@ -404,6 +418,15 @@ async def test_service_http(make_service):
 
     _, resp = await app.asgi_client.get('/tiles/10/5/6.png')
     assert resp.status == 404
+
+    # Not drawn in time: a 503 (never a 401 or 403, which stop an ATAK map source), never a blank to keep.
+    async def late(*args):
+        return None, False
+
+    app.ctx.service.tile = late
+    _, resp = await app.asgi_client.get('/tiles/10/5/7.jpg')
+    assert resp.status == 503 and resp.headers['retry-after'] == '1'
+    assert resp.headers['cache-control'] == 'no-store'
 
     _, resp = await app.asgi_client.get('/tiles/status')
     assert resp.status == 200

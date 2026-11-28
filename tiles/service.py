@@ -7,9 +7,12 @@
 What ATAK does with a tile server (read from its source, `TileScraper` and `CustomMobacMapSource`), and what this
 must do because of it:
 
-- It waits 5 seconds for a tile.  A tile not drawn by then is sent blank, never kept (`DEADLINE`).
-- Five tiles in a row which fail stop a whole download, and one 401 or 403 stops the map source.  So a tile is
-  always a 200: blank where there is no map, or when drawing failed.
+- A downloader keeps whatever a tile request returns, whatever the response's headers say: a blank tile sent in
+  place of one which was late would be a hole in the phone's map for good.  So a tile not drawn in time
+  (`DEADLINE`, under ATAK's 5 seconds), or which failed, is a 503: ATAK tries each tile twice, and the second
+  try finds the block drawn.  Only five tiles in a row failing both tries stop a download, and only a 401 or
+  403 stops a map source; this sends neither.  Where there is no map, a tile is drawn of the background.
+- The render processes are started with the service, not by the first tile: starting one is seconds.
 - It asks for 4 tiles at a time (iTAK: 6), of the same block.  A block is drawn once however many ask for it.
 - Phones are served in turn, a block of one then a block of the next, so one phone's download does not keep
   another's tiles waiting past the deadline.
@@ -124,6 +127,23 @@ class TileService:
         self.executor = self._new_executor()
         self.tasks = [asyncio.create_task(self._render_loop()) for _ in range(self.processes)]
         self.tasks.append(asyncio.create_task(self._watch()))
+        self.tasks.append(asyncio.create_task(self._warm()))
+
+    async def _warm(self):
+        """Start every render process now, by drawing the world (zoom 0) in each, rather than when the first
+        tiles are asked for."""
+        loop = asyncio.get_running_loop()
+        sid, style, block = self.style_id, self.style, Block(0, 0, 0)
+        started = time.perf_counter()
+        results = await asyncio.gather(
+            *(loop.run_in_executor(self.executor, render.render_block, sid, style, block)
+              for _ in range(self.processes)), return_exceptions=True)
+        errors = [i for i in results if isinstance(i, BaseException)]
+        if errors:
+            logger.error('A render process could not draw', exc_info=errors[0])
+            return
+        await asyncio.to_thread(self.cache.put, block.z, results[0], sid)
+        logger.info(f'{self.processes} render processes ready in {time.perf_counter() - started:.1f}s')
 
     async def stop(self):
         for task in self.tasks:
@@ -193,8 +213,9 @@ class TileService:
             self.condition.notify()
         return future
 
-    async def tile(self, z: int, x: int, y: int, client: str) -> Tuple[bytes, bool]:
-        """A tile, and whether it may be kept (a blank tile sent in place of one is not)."""
+    async def tile(self, z: int, x: int, y: int, client: str) -> Tuple[Optional[bytes], bool]:
+        """A tile, and whether it may be kept.  None when it was not drawn in time or could not be drawn: the
+        phone must ask again (see the top of this module)."""
         self._seen(client)
         if not is_tile(z, x, y):
             self.stats['tiles_outside'] += 1
@@ -213,13 +234,13 @@ class TileService:
             tiles = await asyncio.wait_for(asyncio.shield(future), DEADLINE)
         except asyncio.TimeoutError:
             self.stats['tiles_late'] += 1
-            return self.blank_tile, False
+            return None, False
         except Exception:
             self.stats['tiles_failed'] += 1
-            return self.blank_tile, False
+            return None, False
         if not tiles:
             self.stats['tiles_dropped'] += 1
-            return self.blank_tile, False
+            return None, False
         self.stats['tiles_drawn'] += 1
         return tiles[(x, y)], True
 
@@ -271,6 +292,8 @@ def base_url_of(request) -> str:
 
 def create_app(service: TileService, name: str = 'wrolpi_tiles') -> Sanic:
     app = Sanic(name)
+    # sanic-ext (installed for the API) would add OpenAPI docs and more, for nothing: seconds of startup on a Pi.
+    app.config.AUTO_EXTEND = False
     app.ctx.service = service
 
     @app.before_server_start
@@ -287,6 +310,10 @@ def create_app(service: TileService, name: str = 'wrolpi_tiles') -> Sanic:
         if suffix != 'jpg' or not y.isdigit():
             return response.text('not found', status=404)
         data, keep = await app.ctx.service.tile(z, x, int(y), client_of(request))
+        if data is None:
+            # Not a 401 or 403: those stop an ATAK map source.
+            return response.text('Not drawn yet, try again', status=503,
+                                 headers={'Retry-After': '1', 'Cache-Control': 'no-store'})
         if keep:
             headers = {'Cache-Control': f'max-age={EXPIRES_SECONDS}',
                        'Expires': formatdate(time.time() + EXPIRES_SECONDS, usegmt=True)}

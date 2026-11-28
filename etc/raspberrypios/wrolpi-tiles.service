@@ -20,9 +20,11 @@ Nice=10
 CPUWeight=50
 IOWeight=50
 # Two render processes are about 600 MB.  Past this the service is restarted, rather than the kernel killing
-# something else on a 4 GB Raspberry Pi.
+# something else.  Raspberry Pi OS boots with the memory cgroup disabled (cgroup_disable=memory), so there these
+# do nothing; OOMScoreAdjust makes this the first the kernel kills when a 4 GB Pi runs out, not the API.
 MemoryHigh=900M
 MemoryMax=1200M
+OOMScoreAdjust=500
 
 [Install]
 WantedBy=default.target

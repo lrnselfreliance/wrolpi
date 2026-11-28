@@ -84,8 +84,8 @@ LOCAL_PATHS = (
     "/config/wrolpi.yaml", "/config/sync.yaml", "/config/controller.yaml", "/config/fstab.yaml",
     "/config/.fstab-migrated", "/config/smb.conf", f"/{STATE_FILE}", "/config/.wrol_mode", "/config/ssl",
     "/config/cookies.txt", "/config/cookies.txt.enc", "/config/backup", "/config/vpn",
-    # This machine's torrents, and qBittorrent's own state.
-    "/config/torrents", "/config/qbittorrent",
+    # This machine's torrents.
+    "/config/torrents",
     # The database arrives as a snapshot, in its own step.
     "/config/wrolpi.db", "/config/wrolpi.db-wal", "/config/wrolpi.db-shm", "/config/wrolpi.db.lock",
     f"/{SYNC_DIRECTORY}",

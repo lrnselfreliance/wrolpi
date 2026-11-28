@@ -8,5 +8,8 @@ RUN apt-get update \
 
 COPY modules/torrents/qbittorrent_prepare.py /app/qbittorrent_prepare.py
 
-ENV PROFILE=/media/wrolpi/config/qbittorrent
+# qBittorrent's own state, outside the library (a named volume, which takes this owner when it is first used).  A new
+# one re-adds every torrent from config/torrents/.
+RUN mkdir /profile && chown 1000:1000 /profile
+ENV PROFILE=/profile
 CMD ["sh", "-c", "python3 /app/qbittorrent_prepare.py --profile \"$PROFILE\" && exec qbittorrent-nox --confirm-legal-notice --profile=\"$PROFILE\""]

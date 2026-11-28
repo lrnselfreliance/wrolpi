@@ -103,6 +103,9 @@ services:
         restart: true
     volumes:
       - './test:/media/wrolpi'
+      # qBittorrent never writes WROLPi's config, whatever a torrent or its WebUI asks for.
+      - './test/config:/media/wrolpi/config:ro'
+      - torrent-profile:/profile
     user: '${UID-1000}:${GID-1000}'
     restart: unless-stopped
     init: true
@@ -213,3 +216,5 @@ services:
 volumes:
   # The VPN status file, and the VPN server addresses the Controller looks up for the tunnel.
   vpn-run:
+  # qBittorrent's own state.
+  torrent-profile:

@@ -182,6 +182,8 @@ class TestPrepare:
         assert preferences['WebUI\\AuthSubnetWhitelist'] == '10.211.0.1/32'
         assert preferences['WebUI\\AuthSubnetWhitelistEnabled'] == 'true'
         assert config['BitTorrent']['Session\\Interface'] == 'vpn0'
+        assert config['AutoRun']['enabled'] == 'false'
+        assert config['AutoRun']['OnTorrentAdded\\Enabled'] == 'false'
         # qBittorrent's own settings are kept, case and all.
         assert preferences['Downloads\\SavePath'] == '/media/wrolpi/x/'
         assert config['Network']['Cookies'] == '@Invalid()'
@@ -213,6 +215,9 @@ class TestInstalled:
         assert 'BindReadOnlyPaths=/etc/netns/wrolpi-vpn/resolv.conf:/etc/resolv.conf' in unit
         assert '--allow 10.211.0.1/32' in unit
         assert 'ProtectSystem=strict' in unit and 'ReadWritePaths=/media/wrolpi' in unit
+        # Never WROLPi's config; qBittorrent's own state is outside the library.
+        assert 'ReadOnlyPaths=/media/wrolpi/config' in unit
+        assert '--profile=/var/lib/wrolpi-torrent' in unit and 'StateDirectory=wrolpi-torrent' in unit
         assert 'User=wrolpi' in unit
         for script in ('repair.sh', 'pi-gen/stage2/04-wrolpi/03-run-chroot.sh',
                        'debian-live-config/config/includes.chroot/usr/local/sbin/wrolpi-bootstrap.sh',
@@ -227,6 +232,8 @@ class TestInstalled:
         torrent = compose['services']['torrent']
         assert torrent['network_mode'] == 'service:vpn'
         assert torrent['depends_on']['vpn']['restart'] is True
+        assert './test/config:/media/wrolpi/config:ro' in torrent['volumes']
+        assert 'torrent-profile:/profile' in torrent['volumes']
         assert '8091:8091' in compose['services']['web']['ports']
         assert 'qbittorrent_prepare.py' in (REPOSITORY / 'docker/torrent/Dockerfile').read_text()
 
@@ -237,5 +244,7 @@ class TestInstalled:
         block = text[text.index(':8091 {'):]
         block = block[:block.index('\n}\n')]
         assert f'reverse_proxy {upstream}' in block
-        assert '/api/v2/app/setPreferences' in block and 'respond @qbittorrent_settings' in block
+        for refused in ('/api/v2/app/setPreferences', '/api/v2/app/shutdown', '/api/v2/search/*'):
+            assert refused in block, refused
+        assert 'respond @qbittorrent_settings' in block
         assert 'tls ' in block

@@ -9,14 +9,17 @@ After=wrolpi-vpn.service wrolpi-mounts.service
 NetworkNamespacePath=/run/netns/wrolpi-vpn
 # The namespace's resolv.conf (the VPN's DNS servers); `ip netns exec` would bind it, systemd does not.
 BindReadOnlyPaths=/etc/netns/wrolpi-vpn/resolv.conf:/etc/resolv.conf
-ExecStartPre=/usr/bin/python3 /opt/wrolpi/modules/torrents/qbittorrent_prepare.py --profile /media/wrolpi/config/qbittorrent --allow 10.211.0.1/32
-ExecStart=/usr/bin/qbittorrent-nox --confirm-legal-notice --profile=/media/wrolpi/config/qbittorrent
+ExecStartPre=/usr/bin/python3 /opt/wrolpi/modules/torrents/qbittorrent_prepare.py --profile /var/lib/wrolpi-torrent --allow 10.211.0.1/32
+ExecStart=/usr/bin/qbittorrent-nox --confirm-legal-notice --profile=/var/lib/wrolpi-torrent
 User=wrolpi
 Group=wrolpi
-Environment=HOME=/media/wrolpi/config/qbittorrent
-# qBittorrent writes only to the library, whatever a torrent or its WebUI asks for.
+# qBittorrent's own state, outside the library.  A new one re-adds every torrent from config/torrents/.
+StateDirectory=wrolpi-torrent
+Environment=HOME=/var/lib/wrolpi-torrent
+# qBittorrent writes only to the library, never WROLPi's config, whatever a torrent or its WebUI asks for.
 ProtectSystem=strict
 ReadWritePaths=/media/wrolpi
+ReadOnlyPaths=/media/wrolpi/config
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes

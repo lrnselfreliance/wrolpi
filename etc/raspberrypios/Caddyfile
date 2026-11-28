@@ -115,11 +115,11 @@
 	}
 }
 
-# qBittorrent's WebUI (torrents), in the VPN's network namespace.  Its settings are refused: they can run programs,
-# and WROLPi manages them (it reaches qBittorrent directly, not through here).
+# qBittorrent's WebUI (torrents), in the VPN's network namespace.  Refused: its settings (they can run programs; WROLPi
+# manages them, reaching qBittorrent directly, not through here), and its search (its plugins are programs it runs).
 :8091 {
 	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
-	@qbittorrent_settings path /api/v2/app/setPreferences /api/v2/app/shutdown
+	@qbittorrent_settings path /api/v2/app/setPreferences /api/v2/app/shutdown /api/v2/search/*
 	respond @qbittorrent_settings "qBittorrent's settings are managed by WROLPi" 403
 	reverse_proxy 10.211.0.2:8091
 }

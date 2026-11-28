@@ -66,6 +66,11 @@ def prepare(profile: pathlib.Path, address: str, allowed: list[str]) -> pathlib.
             'Session\\Interface': TUNNEL_INTERFACE,
             'Session\\InterfaceName': TUNNEL_INTERFACE,
         },
+        # Never run a program (WROLPi also forces these off, and Caddy refuses the WebUI's settings).
+        'AutoRun': {
+            'enabled': 'false',
+            'OnTorrentAdded\\Enabled': 'false',
+        },
         'LegalNotice': {
             'Accepted': 'true',
         },

@@ -37,6 +37,8 @@ describe('MapAtak', () => {
         expect(screen.getByText(httpMapSourceUrl())).toHaveAttribute('href', httpMapSourceUrl());
         expect(screen.getByText(httpsMapSourceUrl())).toHaveAttribute('href', httpsMapSourceUrl());
         expect(screen.getByText("this WROLPi's certificate")).toHaveAttribute('href', '/ca.crt');
+        // Both apps take an area offline (tested with iTAK on an iPhone).
+        expect(screen.getByText(/download an area of it with the app's map download tool/)).toBeInTheDocument();
 
         expect(await screen.findByText('31.5 per second (last minute)')).toBeInTheDocument();
         expect(global.fetch).toHaveBeenCalledWith('/tiles/status');

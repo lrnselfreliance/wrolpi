@@ -60,7 +60,7 @@ function HowTo() {
         <Header as='h3'>Use this map in ATAK or iTAK</Header>
         <p>
             ATAK (Android) and iTAK (iPhone) can draw this WROLPi's map while the phone is on this
-            WROLPi's network. ATAK can also download an area of the map to use when it is not.
+            WROLPi's network, and download an area of it to use when it is not.
         </p>
         <Table>
             <Table.Body>
@@ -76,8 +76,8 @@ function HowTo() {
             </li>
             <li>Open that file with ATAK or iTAK (or import it with the app's import tool).</li>
             <li>Choose <b>WROLPi Map</b> in the app's list of maps.</li>
-            <li>ATAK only: to use the map away from this WROLPi, download an area of it with ATAK's
-                map download tool while still connected.
+            <li>To use the map away from this WROLPi, download an area of it with the app's map
+                download tool while still connected.
             </li>
         </ol>
         <p>

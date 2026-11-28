@@ -1,8 +1,8 @@
 import React from 'react';
-import {screen, waitFor} from '@testing-library/react';
+import {fireEvent, screen, waitFor, within} from '@testing-library/react';
 import {mockFetch, renderWithProviders} from '../test-utils';
 import {humanFileSize} from './Common';
-import {httpMapSourceUrl, httpsMapSourceUrl, MapAtak} from './MapAtak';
+import {clearTileCache, httpMapSourceUrl, httpsMapSourceUrl, MapAtak} from './MapAtak';
 
 const STATUS = {
     renderer: true,
@@ -61,6 +61,44 @@ describe('MapAtak', () => {
         renderWithProviders(<MapAtak/>);
         expect(await screen.findByText(/There are no map files/)).toBeInTheDocument();
         expect(screen.getByText('No phone has asked for tiles.')).toBeInTheDocument();
+    });
+
+    it('clears the kept tiles after asking, then shows the new size', async () => {
+        let bytes = 25 * 1024 * 1024;
+        global.fetch = jest.fn(async (url, options) => {
+            if (url === '/tiles/cache/clear') {
+                expect(options).toEqual({method: 'POST'});
+                const freed = bytes;
+                bytes = 0;
+                return {ok: true, status: 200, json: async () => ({freed_bytes: freed})};
+            }
+            return {ok: true, status: 200, json: async () => ({...STATUS, cache: {...STATUS.cache, bytes}})};
+        });
+        renderWithProviders(<MapAtak/>);
+        await screen.findByText('31.5 per second (last minute)');
+
+        fireEvent.click(screen.getByRole('button', {name: /Clear/}));
+        // Nothing is removed until it is confirmed.
+        expect(await screen.findByText(/a phone keeps its own copy/)).toBeInTheDocument();
+        expect(global.fetch).not.toHaveBeenCalledWith('/tiles/cache/clear', expect.anything());
+
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', {name: 'Clear'}));
+        await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/tiles/cache/clear', {method: 'POST'}));
+        expect(await screen.findByText(`${humanFileSize(0)} of ${humanFileSize(1024 * 1024 * 1024)}`))
+            .toBeInTheDocument();
+    });
+
+    it('cannot clear when no tiles are kept', async () => {
+        global.fetch = mockFetch({...STATUS, cache: {...STATUS.cache, bytes: 0}});
+        renderWithProviders(<MapAtak/>);
+        await screen.findByText('31.5 per second (last minute)');
+        expect(screen.getByRole('button', {name: /Clear/})).toBeDisabled();
+    });
+
+    it('clearTileCache fails loudly when the service refuses', async () => {
+        global.fetch = jest.fn(async () => ({ok: false, status: 502, json: async () => ({})}));
+        await expect(clearTileCache()).rejects.toThrow('502');
     });
 
     it('polls the status while open', async () => {

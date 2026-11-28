@@ -56,6 +56,17 @@ class TileCache:
             logger.error(f'Tile cache {self.root} is not usable, tiles will not be kept', exc_info=e)
             self.max_bytes = 0
 
+    def clear(self) -> int:
+        """Remove every kept tile, return how many bytes that freed.  Blocking; call it in a thread.  Tiles are
+        drawn again when next asked for."""
+        if not self.enabled or not self.style_id:
+            return 0
+        with self._lock:
+            freed, self.size = self.size, 0
+        shutil.rmtree(self.root / self.style_id, ignore_errors=True)
+        logger.info(f'Tile cache cleared ({freed // 2 ** 20} MiB)')
+        return freed
+
     def get(self, z: int, x: int, y: int) -> Optional[bytes]:
         if not self.enabled:
             return None

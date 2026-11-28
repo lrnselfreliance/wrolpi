@@ -265,6 +265,18 @@ def test_cache(tmp_path):
     assert again.size == 100
 
 
+def test_cache_clear(tmp_path):
+    cache = TileCache(tmp_path / 'cache', max_bytes=10_000, min_free_bytes=0)
+    cache.use_style('a')
+    cache.put(15, {(1, 2): b'one', (1, 3): b'two'}, 'a')
+    assert cache.clear() == 6
+    assert cache.size == 0 and cache.get(15, 1, 2) is None
+    # Tiles are kept again after.
+    cache.put(15, {(1, 2): b'one'}, 'a')
+    assert cache.get(15, 1, 2) == b'one' and cache.size == 3
+    assert TileCache(tmp_path / 'off', 0, 0).clear() == 0
+
+
 def test_cache_evicts_oldest(tmp_path):
     cache = TileCache(tmp_path / 'cache', max_bytes=1000, min_free_bytes=0)
     cache.use_style('a')
@@ -429,7 +441,7 @@ async def test_service_drops_tiles_a_phone_gave_up_on(make_service, monkeypatch)
 
 
 async def test_service_http(make_service):
-    service = await make_service()
+    service = await make_service(cache_bytes=100_000)
     app = create_app(service, name=f'tiles_{uuid.uuid4().hex}')
     # The service is started by the fixture.
     app.ctx.service.start = app.ctx.service.stop = lambda: asyncio.sleep(0)
@@ -463,6 +475,17 @@ async def test_service_http(make_service):
     assert resp.status == 200
     assert resp.json['clients'][0]['client'] == '192.0.2.34'
     assert resp.json['stats']['blocks_drawn'] >= 1
+
+    # The ATAK tab clears the kept tiles.  (The tile drawn above is kept in the background; wait for it, or it
+    # would be kept after the clear.)
+    for _ in range(100):
+        if service.cache.get(10, 5, 6):
+            break
+        await asyncio.sleep(0.01)
+    assert service.cache.get(10, 5, 6) == b'10/5/6'
+    _, resp = await app.asgi_client.post('/tiles/cache/clear')
+    assert resp.status == 200 and resp.json['freed_bytes'] >= 4
+    assert service.cache.get(10, 5, 6) is None and service.cache.size == 0
 
 
 # Real drawing.  mapli has wheels for Linux only: everywhere WROLPi runs.

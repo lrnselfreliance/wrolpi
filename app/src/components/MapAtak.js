@@ -1,8 +1,8 @@
 // The map's ATAK tab: how to use this WROLPi's map in ATAK (Android) and iTAK (iPhone), and what the
 // tile service (tiles/, wrolpi-tiles) is doing.
-import React, {useEffect, useState} from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
 import {APIButton, ErrorMessage, humanFileSize, InfoMessage} from "./Common";
-import {Header, Panel, Table} from "./ui";
+import {Group, Header, Panel, Table} from "./ui";
 
 // How often the status is asked for while the tab is open.
 const STATUS_INTERVAL_MS = 5000;
@@ -17,31 +17,42 @@ export function httpsMapSourceUrl(origin = window.location.origin) {
     return `${origin}/tiles/wrolpi.xml`;
 }
 
-// The status of the tile service.  null while the first request is pending, undefined when the
-// service did not answer.
+// Remove the tiles the tile service keeps; they are drawn again when a phone next asks for them.
+export async function clearTileCache() {
+    const response = await fetch('/tiles/cache/clear', {method: 'POST'});
+    if (!response.ok) {
+        throw new Error(`Could not clear the kept tiles: ${response.status}`);
+    }
+    return await response.json();
+}
+
+// The status of the tile service, and a function which asks for it now.  The status is null while
+// the first request is pending, undefined when the service did not answer.
 export function useTileStatus(interval = STATUS_INTERVAL_MS) {
     const [status, setStatus] = useState(null);
+    const cancelled = useRef(false);
+
+    const fetchStatus = useCallback(async () => {
+        try {
+            const response = await fetch('/tiles/status');
+            const data = response.ok ? await response.json() : undefined;
+            if (!cancelled.current) setStatus(data);
+        } catch (e) {
+            if (!cancelled.current) setStatus(undefined);
+        }
+    }, []);
 
     useEffect(() => {
-        let cancelled = false;
-        const fetchStatus = async () => {
-            try {
-                const response = await fetch('/tiles/status');
-                const data = response.ok ? await response.json() : undefined;
-                if (!cancelled) setStatus(data);
-            } catch (e) {
-                if (!cancelled) setStatus(undefined);
-            }
-        };
+        cancelled.current = false;
         fetchStatus();
         const timer = setInterval(fetchStatus, interval);
         return () => {
-            cancelled = true;
+            cancelled.current = true;
             clearInterval(timer);
         };
-    }, [interval]);
+    }, [interval, fetchStatus]);
 
-    return status;
+    return [status, fetchStatus];
 }
 
 function MapSourceRow({label, url, note}) {
@@ -98,7 +109,7 @@ function secondsAgo(timestamp) {
     return `${Math.round(seconds / 3600)}h ago`;
 }
 
-function TileServiceStatus({status}) {
+function TileServiceStatus({status, refresh}) {
     if (status === null) {
         return <Panel><Header as='h3'>Tile service</Header><p>Loading...</p></Panel>;
     }
@@ -133,9 +144,28 @@ function TileServiceStatus({status}) {
                 </Table.Row>
                 <Table.Row>
                     <Table.Cell>Kept tiles</Table.Cell>
-                    <Table.Cell>{cache.enabled
-                        ? `${humanFileSize(cache.bytes)} of ${humanFileSize(cache.max_bytes)}`
-                        : 'Not kept'}</Table.Cell>
+                    <Table.Cell>
+                        {cache.enabled
+                            ? <Group gap='sm'>
+                                <span>{humanFileSize(cache.bytes)} of {humanFileSize(cache.max_bytes)}</span>
+                                <APIButton
+                                    size='xs'
+                                    role='danger'
+                                    icon='trash'
+                                    disabled={!cache.bytes}
+                                    confirmHeader='Clear kept tiles?'
+                                    confirmContent={'The tiles this WROLPi keeps are removed, and drawn again when a ' +
+                                        'phone next asks for them. Maps already downloaded to phones are not ' +
+                                        'changed: a phone keeps its own copy.'}
+                                    confirmButton='Clear'
+                                    onClick={async () => {
+                                        await clearTileCache();
+                                        await refresh();
+                                    }}
+                                >Clear</APIButton>
+                            </Group>
+                            : 'Not kept'}
+                    </Table.Cell>
                 </Table.Row>
             </Table.Body>
         </Table>
@@ -162,9 +192,9 @@ function TileServiceStatus({status}) {
 }
 
 export function MapAtak() {
-    const status = useTileStatus();
+    const [status, refresh] = useTileStatus();
     return <>
         <HowTo/>
-        <TileServiceStatus status={status}/>
+        <TileServiceStatus status={status} refresh={refresh}/>
     </>;
 }

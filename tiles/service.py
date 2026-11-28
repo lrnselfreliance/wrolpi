@@ -3,6 +3,7 @@
     GET /tiles/{z}/{x}/{y}.jpg   a 256 px tile
     GET /tiles/wrolpi.xml        the map source for ATAK and iTAK (MOBAC XML), with this server's address in it
     GET /tiles/status            what the service is doing (the map's ATAK tab shows it)
+    POST /tiles/cache/clear      remove the kept tiles (the map's ATAK tab); they are drawn again when asked for
 
 What ATAK does with a tile server (read from its source, `TileScraper` and `CustomMobacMapSource`), and what this
 must do because of it:
@@ -349,5 +350,10 @@ def create_app(service: TileService, name: str = 'wrolpi_tiles') -> Sanic:
     @app.get('/tiles/status')
     async def get_status(request):
         return response.json(app.ctx.service.status())
+
+    @app.post('/tiles/cache/clear')
+    async def post_clear_cache(request):
+        freed = await asyncio.to_thread(app.ctx.service.cache.clear)
+        return response.json(dict(freed_bytes=freed))
 
     return app

@@ -5,6 +5,8 @@ Controller starts with these defaults and loads overrides from
 /media/wrolpi/config/controller.yaml after the drive is mounted.
 """
 
+from controller.vpn.tunnel import VPN_DEFAULTS
+
 DEFAULT_CONFIG = {
     "port": 80,
     "media_directory": "/media/wrolpi",
@@ -82,6 +84,22 @@ DEFAULT_CONFIG = {
             "description": "Kiwix/Zim server",
         },
         {
+            "name": "wrolpi-vpn",
+            "systemd_name": "wrolpi-vpn",
+            "port": None,
+            "viewable": False,
+            "use_https": False,
+            "description": "VPN for torrents (fail-closed network namespace)",
+        },
+        {
+            "name": "wrolpi-torrent",
+            "systemd_name": "wrolpi-torrent",
+            "port": 8091,
+            "viewable": True,
+            "use_https": True,
+            "description": "Torrents (qBittorrent, inside the VPN)",
+        },
+        {
             "name": "wrolpi-rsyncd",
             "systemd_name": "wrolpi-rsyncd",
             "port": 8873,
@@ -138,6 +156,9 @@ DEFAULT_CONFIG = {
         # Start the hotspot when WROLPi boots.  Set false to never start it unless asked.
         "on_startup": True,
     },
+
+    # Torrents reach the Internet only through this VPN; see controller/vpn/tunnel.py.
+    "vpn": dict(VPN_DEFAULTS),
 
     "throttle": {
         "default_governor": "ondemand",

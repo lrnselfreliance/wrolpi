@@ -83,7 +83,9 @@ LOCAL_PATHS = (
     # This machine's settings and state.
     "/config/wrolpi.yaml", "/config/sync.yaml", "/config/controller.yaml", "/config/fstab.yaml",
     "/config/.fstab-migrated", "/config/smb.conf", f"/{STATE_FILE}", "/config/.wrol_mode", "/config/ssl",
-    "/config/cookies.txt", "/config/cookies.txt.enc", "/config/backup",
+    "/config/cookies.txt", "/config/cookies.txt.enc", "/config/backup", "/config/vpn",
+    # This machine's torrents.
+    "/config/torrents",
     # The database arrives as a snapshot, in its own step.
     "/config/wrolpi.db", "/config/wrolpi.db-wal", "/config/wrolpi.db-shm", "/config/wrolpi.db.lock",
     f"/{SYNC_DIRECTORY}",
@@ -94,7 +96,7 @@ LOCAL_PATHS = (
 # path is never deleted, so a secondary kept the write-ahead log of a map search database whose database the
 # primary had replaced, and SQLite would apply that log to the new database.  (rsync keeps its own partial
 # directory itself.)
-UNFINISHED_PATTERNS = (".partial", "*.part", "*.aria2", "*.ytdl", "*.db-wal", "*.db-shm")
+UNFINISHED_PATTERNS = (".partial", "*.part", "*.aria2", "*.ytdl", "*.!qB", "*.db-wal", "*.db-shm")
 
 
 class SyncError(Exception):

@@ -19,6 +19,7 @@ from modules.flasher.api import flasher_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
 from modules.repos.api import repos_bp
+from modules.torrents import torrents_bp
 from modules.videos.api import videos_bp
 from modules.zim.api import zim_bp
 from wrolpi import flags, schema, dates
@@ -72,6 +73,7 @@ api_app.blueprint(map_bp)
 api_app.blueprint(repos_bp)
 api_app.blueprint(speedtest_bp)
 api_app.blueprint(sync_bp)
+api_app.blueprint(torrents_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
 

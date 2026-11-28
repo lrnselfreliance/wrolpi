@@ -29,6 +29,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.wrolpi_config = manager.dict()
     app.shared_ctx.tags_config = manager.dict()
     app.shared_ctx.inventories_config = manager.dict()
+    app.shared_ctx.torrents_config = manager.dict()
     app.shared_ctx.catalog_config = manager.dict()
     app.shared_ctx.channels_config = manager.dict()
     app.shared_ctx.download_manager_config = manager.dict()
@@ -130,6 +131,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.wrolpi_config.clear()
     app.shared_ctx.tags_config.clear()
     app.shared_ctx.inventories_config.clear()
+    app.shared_ctx.torrents_config.clear()
     app.shared_ctx.catalog_config.clear()
     app.shared_ctx.channels_config.clear()
     app.shared_ctx.download_manager_config.clear()
@@ -270,6 +272,13 @@ def initialize_configs_contexts(app: Sanic):
         get_inventory_configs().initialize(app.shared_ctx.inventories_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory inventories config: {e}')
+
+    try:
+        # Torrents are config-only (no DB); the shared dict is keyed by the torrent's hash.
+        from modules.torrents.lib import get_torrents_config
+        get_torrents_config().initialize(app.shared_ctx.torrents_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory torrents config: {e}')
 
     try:
         from modules.inventory.catalog import get_catalog_config

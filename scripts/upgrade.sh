@@ -314,6 +314,28 @@ if ! command -v dnsmasq &>/dev/null || ! command -v iw &>/dev/null || ! command 
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dnsmasq-base iw rfkill
 fi
 
+# Install torrents (qBittorrent) and the VPN tools they use (the kill switch is nftables) if not already installed.
+if ! command -v nft &>/dev/null || ! command -v openvpn &>/dev/null || ! command -v wg &>/dev/null \
+    || ! command -v qbittorrent-nox &>/dev/null; then
+  echo "Installing nftables, openvpn, wireguard-tools, qbittorrent-nox..."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold nftables openvpn wireguard-tools \
+    qbittorrent-nox
+fi
+
+# qBittorrent faces the Internet (the VPN forwards a port to it): keep it, and libtorrent, as patched as Debian makes
+# them, on every upgrade.
+if command -v qbittorrent-nox &>/dev/null; then
+  echo "Upgrading qbittorrent-nox and libtorrent..."
+  apt-get update
+  # shellcheck disable=SC2046
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold qbittorrent-nox \
+    $(dpkg-query -W -f='${binary:Package}\n' 'libtorrent-rasterbar*' 2>/dev/null) || \
+    echo "Upgrading qbittorrent-nox failed, continuing..."
+fi
+
 # Clean up stale landing page (Controller now serves port 80 directly).
 rm -f /var/www/landing.html
 

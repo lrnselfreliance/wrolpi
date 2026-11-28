@@ -64,10 +64,12 @@ lxpolkit
 netcat-openbsd
 network-manager
 network-manager-gnome
+nftables
 nicstat
 nodejs
 npm
 ntfs-3g
+openvpn
 parted
 pavucontrol
 pkg-config
@@ -79,6 +81,7 @@ python3-doc
 python3-full
 python3-pip
 python3-venv
+qbittorrent-nox
 rfkill
 rsync
 samba
@@ -95,6 +98,7 @@ unzip
 vim
 vlc
 wget
+wireguard-tools
 wpasupplicant
 zenity
 zim-tools

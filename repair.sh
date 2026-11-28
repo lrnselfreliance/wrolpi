@@ -95,6 +95,10 @@ systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
 systemctl enable wrolpi-mounts.service
 systemctl enable wrolpi-rsyncd.service
+# Idles until a VPN is set up; torrents only reach the Internet through it.
+systemctl enable wrolpi-vpn.service
+# Torrents, inside the VPN; they stop whenever the VPN does.
+systemctl enable wrolpi-torrent.service
 systemctl enable wrolpi-cert-renew.timer
 
 # Repair Controller (offline-safe - no pip install)

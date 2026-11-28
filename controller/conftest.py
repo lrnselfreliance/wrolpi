@@ -78,12 +78,31 @@ def _isolate_hotspot_boot_marker(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_vpn_run_dir(tmp_path_factory, monkeypatch):
+    """Tests never read or write the real VPN status or server addresses in /run."""
+    import controller.vpn.tunnel as tunnel
+    monkeypatch.setattr(tunnel, "RUN_DIR", tmp_path_factory.mktemp("wrolpi-vpn"))
+
+
+@pytest.fixture(autouse=True)
 def _patch_status_worker():
     """Replace the real status worker with a no-op for every test.
 
     See _noop_status_worker for why this is necessary.
     """
     with mock.patch("controller.main.status_worker_loop", _noop_status_worker):
+        yield
+
+
+async def _noop_rsync_daemon_loop():
+    await asyncio.Event().wait()
+
+
+@pytest.fixture(autouse=True)
+def _patch_rsync_daemon_loop():
+    """A Docker-mode app must not manage the real rsync helper container of whatever Docker runs these tests: a
+    branch whose rsyncd.conf differs would replace a developer's container, while other tests list containers."""
+    with mock.patch("controller.main.rsync_daemon_loop", _noop_rsync_daemon_loop):
         yield
 
 

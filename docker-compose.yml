@@ -19,6 +19,8 @@ services:
       - /sys:/host/sys:ro
       # Media directory (needed for Samba share path validation)
       - ${MEDIA_DIRECTORY:-./test}:/media/wrolpi
+      # The VPN's status, and the server addresses the Controller looks up for it.
+      - vpn-run:/run/wrolpi-vpn
     environment:
       - DOCKERIZED=true
       - MEDIA_DIRECTORY=/media/wrolpi
@@ -74,6 +76,48 @@ services:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8080/' ]
       interval: 2m
 
+  vpn: # The VPN torrents use.  Its network namespace is fail-closed: nothing leaves except through the tunnel.
+    build:
+      context: .
+      dockerfile: docker/vpn/Dockerfile
+    volumes:
+      # Reads the `vpn` section of controller.yaml and the VPN config.
+      - '${MEDIA_DIRECTORY:-./test}/config:/media/wrolpi/config:ro'
+      - vpn-run:/run/wrolpi-vpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: unless-stopped
+    init: true
+
+  torrent: # qBittorrent.  It joins the `vpn` container's network, so it reaches the Internet only through the VPN.
+    build:
+      context: .
+      dockerfile: docker/torrent/Dockerfile
+    network_mode: service:vpn
+    depends_on:
+      vpn:
+        condition: service_started
+        # A recreated `vpn` container is a new network; this one must join it.
+        restart: true
+    volumes:
+      - './test:/media/wrolpi'
+      # qBittorrent never writes WROLPi's config, whatever a torrent or its WebUI asks for.
+      - './test/config:/media/wrolpi/config:ro'
+      - torrent-profile:/profile
+    user: '${UID-1000}:${GID-1000}'
+    # It is reachable from the Internet (the VPN forwards a port to it): if it were taken over, it gets nothing more.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    init: true
+
   app: # React App
     depends_on:
       - api
@@ -119,6 +163,8 @@ services:
       - '8084:8084'
       - '8085:8085'
       - '8086:8086'
+      # qBittorrent's WebUI (torrents).
+      - '8091:8091'
     volumes:
       - './docker/web/Caddyfile:/etc/caddy/Caddyfile'
       - './icon.ico:/etc/caddy/favicon.ico'
@@ -174,3 +220,9 @@ services:
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]  # mkdocs serves on 80; 8086 is Caddy's proxy.
       interval: 1m
+
+volumes:
+  # The VPN status file, and the VPN server addresses the Controller looks up for the tunnel.
+  vpn-run:
+  # qBittorrent's own state.
+  torrent-profile:

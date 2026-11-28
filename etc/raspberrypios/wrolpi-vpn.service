@@ -1,0 +1,20 @@
+[Unit]
+Description=WROLPi VPN for torrents (fail-closed network namespace)
+PartOf=wrolpi.target
+After=network-online.target wrolpi-mounts.service
+Wants=network-online.target
+
+[Service]
+# Follows the `vpn` section of controller.yaml; idles while the VPN is off.  The namespace and its kill switch outlive
+# this service, so torrents have no way out while the tunnel is down.
+ExecStartPre=/opt/wrolpi/etc/raspberrypios/wrolpi-vpn-netns.sh up
+ExecStart=/usr/bin/ip netns exec wrolpi-vpn /opt/wrolpi/controller/venv/bin/python /opt/wrolpi/controller/vpn/tunnel.py run --resolv-conf /etc/netns/wrolpi-vpn/resolv.conf
+Environment=MEDIA_DIRECTORY=/media/wrolpi
+RuntimeDirectory=wrolpi-vpn
+RuntimeDirectoryPreserve=yes
+User=root
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

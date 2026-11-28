@@ -152,6 +152,7 @@ def config_classes() -> list:
     import modules.inventory.common  # noqa
     import modules.map.pins  # noqa
     import modules.repos.lib  # noqa
+    import modules.torrents.lib  # noqa
     import modules.videos.lib  # noqa
     import wrolpi.bookmarks  # noqa
     import wrolpi.collections.config  # noqa

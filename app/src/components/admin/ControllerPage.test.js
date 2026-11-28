@@ -124,6 +124,11 @@ jest.mock('../ui', () => ({
     toast: jest.fn(),
 }));
 
+// The VPN section has its own tests (VpnSection.test.js).
+jest.mock('./VpnSection', () => ({
+    VpnSection: () => <div data-testid="vpn-section">VpnSection</div>,
+}));
+
 // Mock Settings.js components
 jest.mock('./Settings', () => ({
     RestartButton: () => <button data-testid="restart-button">Restart</button>,
@@ -188,6 +193,11 @@ describe('ControllerPage', () => {
         await waitFor(() => {
             expect(screen.getByText('Disk Management')).toBeInTheDocument();
         });
+    });
+
+    test('renders the VPN section', async () => {
+        renderControllerPage();
+        expect(await screen.findByTestId('vpn-section')).toBeInTheDocument();
     });
 
     test('renders Hardware Controls section', async () => {

@@ -87,6 +87,9 @@
 
 	# Static media files with directory browsing.
 	handle_path /media/* {
+		# The VPN's private key and login (controller/lib/vpn.py) are never served.
+		@vpn_secrets path /config/vpn /config/vpn/*
+		respond @vpn_secrets 403
 		root * /opt/media
 		header Content-Disposition "inline"
 		file_server browse
@@ -97,6 +100,9 @@
 
 	# Downloads with Content-Disposition header.
 	handle_path /download/* {
+		# The VPN's private key and login (controller/lib/vpn.py) are never served.
+		@vpn_secrets path /config/vpn /config/vpn/*
+		respond @vpn_secrets 403
 		root * /opt/media
 		header Content-Disposition "attachment"
 		file_server browse
@@ -113,6 +119,15 @@
 	handle_errors 502 503 504 {
 		redir * "http://{host}:8080/?fallback=true" 302
 	}
+}
+
+# qBittorrent's WebUI (torrents), in the VPN's network namespace.  Refused: its settings (they can run programs; WROLPi
+# manages them, reaching qBittorrent directly, not through here), and its search (its plugins are programs it runs).
+:8091 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+	@qbittorrent_settings path /api/v2/app/setPreferences /api/v2/app/shutdown /api/v2/search/*
+	respond @qbittorrent_settings "qBittorrent's settings are managed by WROLPi" 403
+	reverse_proxy vpn:8091
 }
 
 # Kiwix HTTPS proxy (replaces zim_https container).

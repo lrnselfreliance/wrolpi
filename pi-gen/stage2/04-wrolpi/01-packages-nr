@@ -50,10 +50,12 @@ libtool
 libxml2-dev
 netcat-openbsd
 network-manager
+nftables
 nicstat
 nodejs
 npm
 ntfs-3g
+openvpn
 pkg-config
 pv
 python3-dev
@@ -61,6 +63,7 @@ python3-doc
 python3-full
 python3-pip
 python3-venv
+qbittorrent-nox
 rsync
 samba
 smartmontools
@@ -74,5 +77,6 @@ unzip
 vim
 vlc
 wget
+wireguard-tools
 zim-tools
 zlib1g-dev

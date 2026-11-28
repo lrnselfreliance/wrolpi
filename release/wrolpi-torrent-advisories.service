@@ -1,0 +1,10 @@
+[Unit]
+Description=Warn about security problems in the torrent client WROLPis run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# WROLPI_ADVISORY_NOTIFY (e.g. a Pushover script) is set in a drop-in.
+ExecStart=/usr/bin/python3 /home/roland/projects/wrolpi/release/torrent-advisories.py
+StateDirectory=wrolpi-torrent-advisories

@@ -40,7 +40,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 - [x] Universal search
 - [x] Food Inventory management
 - [x] One-Time pad generator, encrypter/decrypter
-- [ ] Synchronizer/duplicator
+- [x] Sync to a second WROLPi, and backup to a second drive
 - [ ] Food storage calculator
 
 ## Module features matrix
